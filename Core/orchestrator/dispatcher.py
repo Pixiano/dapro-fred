@@ -96,6 +96,24 @@ class Dispatcher:
                 re.compile(r"^(?:take a |take )?screenshot$", re.IGNORECASE),
                 self._route_screenshot,
             ),
+            # Destructive — routed here deterministically so the
+            # confirmation gate ALWAYS fires, instead of relying on a
+            # small model to choose to call kill_process/close_window
+            # (which it may instead just claim it did, in plain text).
+            (
+                re.compile(
+                    r"^(?:kill|terminate|end)\s+(?P<target>.+?)(?:\s+process)?$",
+                    re.IGNORECASE,
+                ),
+                self._route_kill_process,
+            ),
+            (
+                re.compile(
+                    r"^close\s+(?P<target>.+?)(?:\s+window)?$",
+                    re.IGNORECASE,
+                ),
+                self._route_close_window,
+            ),
         ]
 
     def match(self, user_input: str) -> dict | None:
@@ -197,3 +215,19 @@ class Dispatcher:
     def _route_screenshot(match: re.Match) -> dict:
 
         return {"tool": "take_screenshot", "arguments": {}}
+
+    @staticmethod
+    def _route_kill_process(match: re.Match) -> dict:
+
+        return {
+            "tool": "kill_process",
+            "arguments": {"name_or_pid": match.group("target").strip()},
+        }
+
+    @staticmethod
+    def _route_close_window(match: re.Match) -> dict:
+
+        return {
+            "tool": "close_window",
+            "arguments": {"title": match.group("target").strip()},
+        }

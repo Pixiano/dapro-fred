@@ -12,6 +12,7 @@ from config.settings import (
     MODEL_TIERS,
     DEFAULT_TIER,
     CONTEXT_WINDOW,
+    CONTEXT_WINDOW_BY_TIER,
     GPU_LAYERS,
     TEMPERATURE,
     TOP_P,
@@ -141,9 +142,11 @@ class LLMClient:
                 f"Model file not found for tier '{tier}': {model_path}"
             )
 
+        n_ctx = CONTEXT_WINDOW_BY_TIER.get(tier, CONTEXT_WINDOW)
+
         model = Llama(
             model_path=str(model_path),
-            n_ctx=CONTEXT_WINDOW,
+            n_ctx=n_ctx,
             n_gpu_layers=GPU_LAYERS,
             verbose=False,
             # Most local GGUFs' own embedded chat templates have no
@@ -182,6 +185,12 @@ class LLMClient:
         if not text:
             return self.default_tier
 
+        extreme_signals = (
+            "comprehensive", "thorough", "in depth", "in-depth",
+            "deep dive", "extensive", "exhaustive", "detailed analysis",
+            "write a full", "entire codebase", "step-by-step plan",
+        )
+
         deep_signals = (
             "why", "explain", "debug", "code", "plan", "design",
             "compare", "analyze", "architecture", "refactor",
@@ -194,15 +203,26 @@ class LLMClient:
             "remind me", "volume", "mute", "screenshot",
         )
 
+        low_signals = (
+            "hi", "hey", "hello", "thanks", "thank you", "ok", "okay",
+            "cool", "lol", "yes", "no", "bye", "sup", "yo",
+        )
+
         word_count = len(text.split())
 
-        if any(sig in text for sig in nano_signals) and word_count <= 8:
+        if any(sig in text for sig in extreme_signals) and word_count >= 65:
+            return "extreme"
+
+        if any(sig in text for sig in nano_signals) and word_count <= 25 and word_count >= 12:
             return "nano"
 
-        if any(sig in text for sig in deep_signals) or word_count > 60:
+        if any(sig in text for sig in deep_signals) and word_count >= 45:
             return "deep"
 
-        return "standard"
+        if word_count >= 25 and word_count < 45:
+            return "standard"
+
+        return "low"
 
     # =========================================================
     # INFERENCE

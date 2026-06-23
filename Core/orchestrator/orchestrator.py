@@ -535,7 +535,16 @@ class FREDOrchestrator:
             tool_calls = self._parse_text_tool_calls(message.get("content") or "")
 
         if not tool_calls:
-            return message.get("content") or self.llm.generate(messages)
+            content = message.get("content") or ""
+
+            # Weaker models sometimes spit out broken tool-call syntax
+            # ("functions.get_current_time:") that's neither a real call
+            # nor a real answer. Never show that — regenerate once as a
+            # plain reply with no tools to tempt it.
+            if self._looks_like_leaked_tool_syntax(content):
+                return self.llm.generate(messages)
+
+            return content or self.llm.generate(messages)
 
         # If the model wants to run anything destructive, stop here
         # and ask first — don't execute any call in this batch yet,
@@ -588,15 +597,20 @@ class FREDOrchestrator:
         # rather than a generic "Done." that says nothing real.
         return follow_up.get("content") or " ".join(tool_results)
 
-    @staticmethod
-    def _parse_text_tool_calls(content: str) -> list:
+    def _parse_text_tool_calls(self, content: str) -> list:
         """
         Best-effort parser for models that emit tool calls as plain
         text instead of llama.cpp's structured tool_calls field.
         Returns the same shape generate_with_tools would, so the
         rest of the pipeline doesn't need to know which path fired.
+
+        Only emits a call when the name matches a really-registered
+        tool — so leaked-but-meaningless syntax (e.g. gemma-2-2b's
+        "functions.get_current_time:" with no real intent) is ignored
+        here and handled as junk by _looks_like_leaked_tool_syntax.
         """
 
+        valid = set(self.tools.list_tools())
         calls = []
 
         for block in re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL):
@@ -619,13 +633,42 @@ class FREDOrchestrator:
                 except (json.JSONDecodeError, AttributeError):
                     continue
 
-            if name:
+            if name in valid:
                 calls.append({
                     "id": f"text_call_{len(calls)}",
                     "function": {"name": name, "arguments": raw_args},
                 })
 
+        # Gemma style: functions.NAME: {args}  or  functions.NAME(args)
+        for name, raw_args in re.findall(
+            r"functions\.([\w_]+)\s*[:\(]\s*(\{.*?\})?", content, re.DOTALL
+        ):
+            if name in valid:
+                calls.append({
+                    "id": f"text_call_{len(calls)}",
+                    "function": {"name": name, "arguments": raw_args or "{}"},
+                })
+
         return calls
+
+    def _looks_like_leaked_tool_syntax(self, content: str) -> bool:
+        """
+        True when content is leaked tool-call scaffolding rather than a
+        real answer — e.g. "functions.get_current_time:" or a stray
+        <tool_call> tag that _parse_text_tool_calls couldn't turn into
+        a valid call. Such fragments must never reach the user.
+        """
+
+        text = (content or "").strip()
+
+        if not text:
+            return False
+
+        return bool(
+            re.search(r"functions\.[\w_]+\s*[:\(]", text)
+            or "<tool_call>" in text
+            or re.match(r"^<function=", text)
+        )
 
     def _execute_tool_call(self, call: dict) -> str:
 

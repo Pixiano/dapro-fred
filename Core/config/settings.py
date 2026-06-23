@@ -38,6 +38,10 @@ MODELS_DIR = Path(
 )
 
 MODEL_TIERS = {
+    # tremendously quick - simple greetings, etc
+    "low": MODELS_DIR / "lmstudio-community" / "gemma-2-2b-it-GGUF"
+            / "gemma-2-2b-it.gguf",
+    
     # routing, OS commands, quick facts — fast, cheap
     "nano": MODELS_DIR / "lmstudio-community" / "NVIDIA-Nemotron-3-Nano-4B-GGUF"
              / "NVIDIA-Nemotron-3-Nano-4B-Q8_0.gguf",
@@ -57,15 +61,28 @@ MODEL_TIERS = {
 
 DEFAULT_TIER = "standard"
 
+# Default context window, capped per-tier below. Asking for more than
+# a model was trained on triggers llama.cpp's "training context
+# overflow" warning and degrades quality — gemma-2-2b in particular
+# only trained on 8192, so it must not get the global 16384.
 CONTEXT_WINDOW = 16384
+
+CONTEXT_WINDOW_BY_TIER = {
+    "low": 8192,      # gemma-2-2b native context
+    "nano": 16384,
+    "standard": 16384,
+    "deep": 16384,
+    "extreme": 16384,
+}
+
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
 
-TEMPERATURE = 0.7
+TEMPERATURE = 0.5
 TOP_P = 0.9
 # Generous headroom: some models (Nemotron/R1-style) emit a full
 # <think>...</think> block before the real answer — too low a limit
 # cuts them off mid-thought, leaking raw reasoning to the user.
-MAX_TOKENS = 2000
+MAX_TOKENS = 4096
 
 # =========================================================
 # MEMORY SETTINGS — fully local embeddings via llama.cpp
