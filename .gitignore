@@ -22,6 +22,9 @@ Legacy/FRED/Main/API/Faiss_Index/
 # Logs
 Core/data/logs/
 
+# Scheduled reminders (personal, runtime-generated)
+Core/data/reminders.sqlite
+
 # Audio runtime artifacts
 fred_tts_output.mp3
 

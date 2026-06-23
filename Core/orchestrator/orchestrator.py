@@ -542,6 +542,26 @@ class FREDOrchestrator:
             },
         )
 
+        self.tools.register(
+            name="list_scheduled",
+            function=self.scheduler.list_scheduled,
+            description="List every pending reminder and file watch.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="cancel_scheduled",
+            function=self.scheduler.cancel_scheduled,
+            description="Cancel a pending reminder or file watch by id, by a word from its message, or 'all'.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Job id, message substring, or 'all'."}
+                },
+                "required": ["identifier"],
+            },
+        )
+
     def shutdown(self):
         """
         Stops the background scheduler. Call on process exit so

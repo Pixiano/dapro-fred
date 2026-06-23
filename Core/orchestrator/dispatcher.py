@@ -124,6 +124,28 @@ class Dispatcher:
                 ),
                 self._route_file_watch,
             ),
+            (
+                re.compile(
+                    r"^(?:list|show)(?: my)? (?:reminders|timers)$|"
+                    r"^what reminders do i have\??$",
+                    re.IGNORECASE,
+                ),
+                self._route_list_scheduled,
+            ),
+            (
+                re.compile(
+                    r"^cancel (?:the |my )?(?:reminder|timer)(?: for)? (?P<target>.+)$",
+                    re.IGNORECASE,
+                ),
+                self._route_cancel_scheduled,
+            ),
+            (
+                re.compile(
+                    r"^cancel (?:all (?:reminders|timers)|everything)$",
+                    re.IGNORECASE,
+                ),
+                self._route_cancel_all_scheduled,
+            ),
             # Destructive — routed here deterministically so the
             # confirmation gate ALWAYS fires, instead of relying on a
             # small model to choose to call kill_process/close_window
@@ -302,3 +324,21 @@ class Dispatcher:
             "tool": "schedule_file_watch",
             "arguments": {"path": match.group("target").strip()},
         }
+
+    @staticmethod
+    def _route_list_scheduled(match: re.Match) -> dict:
+
+        return {"tool": "list_scheduled", "arguments": {}}
+
+    @staticmethod
+    def _route_cancel_scheduled(match: re.Match) -> dict:
+
+        return {
+            "tool": "cancel_scheduled",
+            "arguments": {"identifier": match.group("target").strip()},
+        }
+
+    @staticmethod
+    def _route_cancel_all_scheduled(match: re.Match) -> dict:
+
+        return {"tool": "cancel_scheduled", "arguments": {"identifier": "all"}}

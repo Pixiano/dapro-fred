@@ -20,6 +20,10 @@ INDEX_DIR.mkdir(exist_ok=True)
 LOG_DIR = DATA_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
+# One-off reminders persist here so they survive a restart — see
+# orchestrator/scheduler.py. File-watches stay in-memory only.
+SCHEDULER_DB_PATH = DATA_DIR / "reminders.sqlite"
+
 # =========================================================
 # USER SETTINGS
 # =========================================================
