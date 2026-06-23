@@ -90,11 +90,26 @@ TTS_VOICE = "David"
 STT_MODEL_PATH = BASE_DIR / "models" / "vosk-model-small-en-us-0.15"
 STT_SAMPLE_RATE = 16000
 
-# openWakeWord ships a pretrained "hey jarvis" model out of the box —
-# fitting, given the whole point of this project.
+# Wake detection via Vosk transcription + text matching, not a
+# trained acoustic model (openWakeWord only ships fixed pretrained
+# phrases like "hey jarvis" - "Fred"/"F" would need training a new
+# model from scratch). Trade-off: short/common words below mean this
+# triggers easily, including on background speech - that's the
+# intentional choice here over precision.
 WAKE_WORD_ENABLED = True
-WAKE_WORD = "hey_jarvis"
-WAKE_WORD_THRESHOLD = 0.5
+
+WAKE_PHRASES = [
+    "hey fred",
+    "fred",
+    "freddie",
+    "f",
+    "hey",
+    "hi",
+    "hello",
+    "what's up",
+    "whats up",
+    "yo",
+]
 
 # =========================================================
 # TOOL SETTINGS

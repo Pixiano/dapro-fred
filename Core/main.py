@@ -46,11 +46,12 @@ def run_voice_loop(orchestrator: FREDOrchestrator):
     wake_word = None
     if WAKE_WORD_ENABLED:
         from audio.wake_word import WakeWordListener
-        wake_word = WakeWordListener()
+        wake_word = WakeWordListener(stt=stt)
 
     print(
         "\nVoice mode active. "
-        + ("Say \"Hey Jarvis\" to talk. " if wake_word else "Listening — speak now. ")
+        + ("Say \"Fred\", \"hey\", or just start talking. "
+           if wake_word else "Listening — speak now. ")
         + "Say 'exit voice mode' or press Ctrl+C to return to text.\n"
     )
 
