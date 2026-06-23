@@ -88,14 +88,11 @@ def create_folder(folder_name: str) -> str:
 # SYSTEM INFO TOOLS
 # =========================================================
 
-def get_current_time() -> dict:
+def get_current_time() -> str:
     """
     Get local system time.
     """
 
     now = datetime.now()
 
-    return {
-        "date": now.strftime("%Y-%m-%d"),
-        "time": now.strftime("%H:%M:%S")
-    }
+    return f"It's {now.strftime('%H:%M:%S')} on {now.strftime('%Y-%m-%d')}."

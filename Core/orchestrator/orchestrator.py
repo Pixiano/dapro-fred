@@ -9,6 +9,8 @@ from llm.llm_client import LLMClient
 from personality.system_prompt import SYSTEM_PROMPT
 from tools.registry import ToolRegistry
 from tools import system_tools
+from tools import web_tools
+from orchestrator.dispatcher import Dispatcher
 from config.settings import TOOLS_ENABLED
 
 
@@ -32,9 +34,16 @@ class FREDOrchestrator:
         self.tools = ToolRegistry()
         self._register_tools()
 
+        self.dispatcher = Dispatcher()
+
     def process(self, user_input: str) -> str:
         """
         Main orchestration pipeline.
+
+        The dispatcher gets first look: obvious commands ("open
+        Spotify", "what time is it") are executed directly, no LLM
+        involved at all. Anything it doesn't recognize falls through
+        to the full memory + LLM + tool-calling pipeline.
         """
 
         # -----------------------------
@@ -43,44 +52,54 @@ class FREDOrchestrator:
         self.state.add_message("user", user_input)
 
         # -----------------------------
-        # 2. Retrieve relevant memories
+        # 2. Try the deterministic fast path first
         # -----------------------------
+        dispatch = self.dispatcher.match(user_input)
+
+        if dispatch:
+            try:
+                assistant_reply = str(self.tools.execute(
+                    dispatch["tool"], **dispatch["arguments"]
+                ))
+            except Exception as error:
+                assistant_reply = f"Couldn't do that: {error}"
+        else:
+            assistant_reply = self._process_with_llm(user_input)
+
+        # -----------------------------
+        # 3. Store assistant response
+        # -----------------------------
+        self.state.add_message("assistant", assistant_reply)
+
+        # -----------------------------
+        # 4. Persist memory
+        # -----------------------------
+        self.memory.store("user", user_input)
+        self.memory.store("assistant", assistant_reply)
+
+        return assistant_reply
+
+    def _process_with_llm(self, user_input: str) -> str:
+        """
+        Full pipeline for anything the dispatcher couldn't resolve
+        on its own: memory retrieval, prompt building, and the LLM
+        (with tool-calling) generating the actual reply.
+        """
+
         relevant_memories = self.memory.retrieve_relevant(
             query=user_input,
             top_k=5
         )
 
-        # -----------------------------
-        # 3. Retrieve recent conversation
-        # -----------------------------
         recent_messages = self.state.get_recent_messages(limit=10)
 
-        # -----------------------------
-        # 4. Build structured context
-        # -----------------------------
         messages = self._build_messages(
             recent_messages=recent_messages,
             memories=relevant_memories,
             user_input=user_input
         )
 
-        # -----------------------------
-        # 5. Generate response, acting on any tool calls
-        # -----------------------------
-        assistant_reply = self._generate_with_tools(messages)
-
-        # -----------------------------
-        # 6. Store assistant response
-        # -----------------------------
-        self.state.add_message("assistant", assistant_reply)
-
-        # -----------------------------
-        # 7. Persist memory
-        # -----------------------------
-        self.memory.store("user", user_input)
-        self.memory.store("assistant", assistant_reply)
-
-        return assistant_reply
+        return self._generate_with_tools(messages)
 
     # =========================================================
     # TOOL REGISTRATION
@@ -163,6 +182,40 @@ class FREDOrchestrator:
             parameters={
                 "type": "object",
                 "properties": {},
+            },
+        )
+
+        self.tools.register(
+            name="web_search",
+            function=web_tools.web_search,
+            description=(
+                "Search the live web for current information, news, "
+                "or anything outside the model's training data."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for.",
+                    }
+                },
+                "required": ["query"],
+            },
+        )
+
+        self.tools.register(
+            name="get_weather",
+            function=web_tools.get_weather,
+            description="Get the current weather for a location.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "City name, e.g. 'Mumbai'. Leave blank for current location.",
+                    }
+                },
             },
         )
 
