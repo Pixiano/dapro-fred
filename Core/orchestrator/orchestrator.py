@@ -10,6 +10,7 @@ from personality.system_prompt import SYSTEM_PROMPT
 from tools.registry import ToolRegistry
 from tools import system_tools
 from tools import web_tools
+from tools import machine_tools
 from orchestrator.dispatcher import Dispatcher
 from config.settings import TOOLS_ENABLED
 
@@ -36,6 +37,11 @@ class FREDOrchestrator:
 
         self.dispatcher = Dispatcher()
 
+        # Set whenever a destructive tool is awaiting a yes/no before
+        # it's allowed to run. See _request_confirmation /
+        # _handle_pending_confirmation.
+        self.pending_action = None
+
     def process(self, user_input: str) -> str:
         """
         Main orchestration pipeline.
@@ -44,40 +50,79 @@ class FREDOrchestrator:
         Spotify", "what time is it") are executed directly, no LLM
         involved at all. Anything it doesn't recognize falls through
         to the full memory + LLM + tool-calling pipeline.
+
+        If a destructive tool (delete, kill process, close a window)
+        is awaiting confirmation, this turn is treated as the yes/no
+        answer instead of a new request — FRED doesn't act on
+        anything irreversible without that explicit confirmation.
         """
 
-        # -----------------------------
-        # 1. Store user message in state
-        # -----------------------------
         self.state.add_message("user", user_input)
 
-        # -----------------------------
-        # 2. Try the deterministic fast path first
-        # -----------------------------
-        dispatch = self.dispatcher.match(user_input)
-
-        if dispatch:
-            try:
-                assistant_reply = str(self.tools.execute(
-                    dispatch["tool"], **dispatch["arguments"]
-                ))
-            except Exception as error:
-                assistant_reply = f"Couldn't do that: {error}"
+        if self.pending_action:
+            assistant_reply = self._handle_pending_confirmation(user_input)
         else:
-            assistant_reply = self._process_with_llm(user_input)
+            dispatch = self.dispatcher.match(user_input)
 
-        # -----------------------------
-        # 3. Store assistant response
-        # -----------------------------
+            if dispatch:
+                assistant_reply = self._run_or_confirm(
+                    dispatch["tool"], dispatch["arguments"]
+                )
+            else:
+                assistant_reply = self._process_with_llm(user_input)
+
         self.state.add_message("assistant", assistant_reply)
 
-        # -----------------------------
-        # 4. Persist memory
-        # -----------------------------
         self.memory.store("user", user_input)
         self.memory.store("assistant", assistant_reply)
 
         return assistant_reply
+
+    # =========================================================
+    # CONFIRMATION GATE
+    # =========================================================
+
+    def _run_or_confirm(self, tool_name: str, arguments: dict) -> str:
+        """
+        Runs a tool immediately if it's safe, or halts and asks for
+        confirmation first if it's destructive.
+        """
+
+        if self.tools.is_destructive(tool_name):
+            return self._request_confirmation(tool_name, arguments)
+
+        try:
+            return str(self.tools.execute(tool_name, **arguments))
+        except Exception as error:
+            return f"Couldn't do that: {error}"
+
+    def _request_confirmation(self, tool_name: str, arguments: dict) -> str:
+
+        self.pending_action = {"tool": tool_name, "arguments": arguments}
+
+        description = ", ".join(f"{k}={v}" for k, v in arguments.items())
+
+        return (
+            f"This can't be undone — about to run '{tool_name}'"
+            f"{f' ({description})' if description else ''}. "
+            "Confirm? (yes/no)"
+        )
+
+    def _handle_pending_confirmation(self, user_input: str) -> str:
+
+        action = self.pending_action
+        self.pending_action = None
+
+        affirmative = {"yes", "y", "yeah", "yep", "yup", "confirm", "do it", "go ahead", "sure", "ok", "okay"}
+
+        if user_input.strip().lower() in affirmative:
+            try:
+                result = str(self.tools.execute(action["tool"], **action["arguments"]))
+                return result
+            except Exception as error:
+                return f"Couldn't do that: {error}"
+
+        return "Cancelled — didn't run it."
 
     def _process_with_llm(self, user_input: str) -> str:
         """
@@ -219,6 +264,249 @@ class FREDOrchestrator:
             },
         )
 
+        # ---------------------------------------------------
+        # Phase 14 — Hands on the Machine
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="list_windows",
+            function=machine_tools.list_windows,
+            description="List titles of all open windows.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="focus_window",
+            function=machine_tools.focus_window,
+            description="Bring a window to the foreground by (partial) title.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Window title or part of it."}
+                },
+                "required": ["title"],
+            },
+        )
+
+        self.tools.register(
+            name="minimize_window",
+            function=machine_tools.minimize_window,
+            description="Minimize a window by (partial) title.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Window title or part of it."}
+                },
+                "required": ["title"],
+            },
+        )
+
+        self.tools.register(
+            name="maximize_window",
+            function=machine_tools.maximize_window,
+            description="Maximize a window by (partial) title.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Window title or part of it."}
+                },
+                "required": ["title"],
+            },
+        )
+
+        self.tools.register(
+            name="close_window",
+            function=machine_tools.close_window,
+            description="Close a window by (partial) title. May discard unsaved work.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Window title or part of it."}
+                },
+                "required": ["title"],
+            },
+            destructive=True,
+        )
+
+        self.tools.register(
+            name="get_volume",
+            function=machine_tools.get_volume,
+            description="Get the current system volume and mute state.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="set_volume",
+            function=machine_tools.set_volume,
+            description="Set system volume to a percentage (0-100).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "level": {"type": "integer", "description": "Volume percentage, 0-100."}
+                },
+                "required": ["level"],
+            },
+        )
+
+        self.tools.register(
+            name="mute",
+            function=machine_tools.mute,
+            description="Mute or unmute system audio.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "should_mute": {"type": "boolean", "description": "True to mute, false to unmute."}
+                },
+            },
+        )
+
+        self.tools.register(
+            name="get_brightness",
+            function=machine_tools.get_brightness,
+            description="Get current screen brightness (0-100).",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="set_brightness",
+            function=machine_tools.set_brightness,
+            description="Set screen brightness to a percentage (0-100).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "level": {"type": "integer", "description": "Brightness percentage, 0-100."}
+                },
+                "required": ["level"],
+            },
+        )
+
+        self.tools.register(
+            name="get_clipboard",
+            function=machine_tools.get_clipboard,
+            description="Read the current clipboard contents.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="set_clipboard",
+            function=machine_tools.set_clipboard,
+            description="Write text to the clipboard.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Text to copy to the clipboard."}
+                },
+                "required": ["text"],
+            },
+        )
+
+        self.tools.register(
+            name="take_screenshot",
+            function=machine_tools.take_screenshot,
+            description="Capture the screen and save it as a PNG.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "save_path": {"type": "string", "description": "Where to save it. Optional."}
+                },
+            },
+        )
+
+        self.tools.register(
+            name="list_processes",
+            function=machine_tools.list_processes,
+            description="List running processes, optionally filtered by name.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "filter_name": {"type": "string", "description": "Name substring to filter by. Optional."}
+                },
+            },
+        )
+
+        self.tools.register(
+            name="kill_process",
+            function=machine_tools.kill_process,
+            description="Kill a process by name or PID. Unsaved work in it is lost.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name_or_pid": {"type": "string", "description": "Process name or PID."}
+                },
+                "required": ["name_or_pid"],
+            },
+            destructive=True,
+        )
+
+        self.tools.register(
+            name="search_files",
+            function=machine_tools.search_files,
+            description="Search for files by name under a directory.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Filename substring to search for."},
+                    "directory": {"type": "string", "description": "Directory to search under. Optional, defaults to home."},
+                },
+                "required": ["query"],
+            },
+        )
+
+        self.tools.register(
+            name="move_file",
+            function=machine_tools.move_file,
+            description="Move or rename a file/folder to a new location.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string", "description": "Current path."},
+                    "destination": {"type": "string", "description": "New path."},
+                },
+                "required": ["source", "destination"],
+            },
+        )
+
+        self.tools.register(
+            name="rename_file",
+            function=machine_tools.rename_file,
+            description="Rename a file or folder in place.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to the file/folder."},
+                    "new_name": {"type": "string", "description": "New name (not full path)."},
+                },
+                "required": ["path", "new_name"],
+            },
+        )
+
+        self.tools.register(
+            name="read_file",
+            function=machine_tools.read_file,
+            description="Read a text file's contents.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to the file."}
+                },
+                "required": ["path"],
+            },
+        )
+
+        self.tools.register(
+            name="delete_file",
+            function=machine_tools.delete_file,
+            description="Delete a file or folder. Irreversible.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to delete."}
+                },
+                "required": ["path"],
+            },
+            destructive=True,
+        )
+
     # =========================================================
     # TOOL-CALLING LOOP
     # =========================================================
@@ -248,6 +536,23 @@ class FREDOrchestrator:
 
         if not tool_calls:
             return message.get("content") or self.llm.generate(messages)
+
+        # If the model wants to run anything destructive, stop here
+        # and ask first — don't execute any call in this batch yet,
+        # including the safe ones, to keep the turn simple to reason
+        # about. The confirmed action resumes via
+        # _handle_pending_confirmation on the next turn.
+        for call in tool_calls:
+            function = call.get("function", {})
+            name = function.get("name")
+
+            if self.tools.is_destructive(name):
+                try:
+                    arguments = json.loads(function.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    arguments = {}
+
+                return self._request_confirmation(name, arguments)
 
         # Echo the assistant's tool-call request, then append one
         # result message per call, per the tool-calling protocol.

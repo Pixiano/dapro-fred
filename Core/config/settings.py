@@ -49,11 +49,15 @@ MODEL_TIERS = {
     # reasoning, coding, planning
     "deep": MODELS_DIR / "lmstudio-community" / "Qwen3-14B-GGUF"
             / "Qwen3-14B-Q4_K_M.gguf",
+
+    # extreme uses
+    "extreme": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
+            / "gpt-oss-20b.gguf",
 }
 
 DEFAULT_TIER = "standard"
 
-CONTEXT_WINDOW = 8192
+CONTEXT_WINDOW = 16384
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
 
 TEMPERATURE = 0.7
@@ -61,7 +65,7 @@ TOP_P = 0.9
 # Generous headroom: some models (Nemotron/R1-style) emit a full
 # <think>...</think> block before the real answer — too low a limit
 # cuts them off mid-thought, leaking raw reasoning to the user.
-MAX_TOKENS = 1536
+MAX_TOKENS = 2000
 
 # =========================================================
 # MEMORY SETTINGS — fully local embeddings via llama.cpp
@@ -102,13 +106,12 @@ WAKE_PHRASES = [
     "hey fred",
     "fred",
     "freddie",
-    "f",
-    "hey",
-    "hi",
-    "hello",
-    "what's up",
-    "whats up",
-    "yo",
+    "hey freddie",
+    "hi fred",
+    "hello fred",
+    "what's up fred",
+    "whats up fredie",
+    "yo fredie",
 ]
 
 # =========================================================

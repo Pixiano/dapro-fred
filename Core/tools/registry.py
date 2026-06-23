@@ -24,16 +24,22 @@ class ToolRegistry:
         name: str,
         function,
         description: str,
-        parameters: dict
+        parameters: dict,
+        destructive: bool = False
     ):
         """
         Register a tool.
+
+        destructive: tools that can't be undone (deleting files,
+        killing processes, closing windows with unsaved work) — the
+        orchestrator must confirm with the user before running these.
         """
 
         self.tools[name] = {
             "function": function,
             "description": description,
-            "parameters": parameters
+            "parameters": parameters,
+            "destructive": destructive,
         }
 
     # =========================================================
@@ -92,3 +98,16 @@ class ToolRegistry:
         """
 
         return list(self.tools.keys())
+
+    # =========================================================
+    # DESTRUCTIVE CHECK
+    # =========================================================
+
+    def is_destructive(self, tool_name: str) -> bool:
+        """
+        Whether a tool needs user confirmation before running.
+        """
+
+        tool = self.tools.get(tool_name)
+
+        return bool(tool and tool["destructive"])

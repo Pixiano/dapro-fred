@@ -72,6 +72,30 @@ class Dispatcher:
                 ),
                 self._route_web_search,
             ),
+            (
+                re.compile(r"^mute$", re.IGNORECASE),
+                self._route_mute,
+            ),
+            (
+                re.compile(r"^unmute$", re.IGNORECASE),
+                self._route_unmute,
+            ),
+            (
+                re.compile(
+                    r"^set volume(?: to)? (?P<level>\d+)%?$", re.IGNORECASE
+                ),
+                self._route_set_volume,
+            ),
+            (
+                re.compile(
+                    r"^set brightness(?: to)? (?P<level>\d+)%?$", re.IGNORECASE
+                ),
+                self._route_set_brightness,
+            ),
+            (
+                re.compile(r"^(?:take a |take )?screenshot$", re.IGNORECASE),
+                self._route_screenshot,
+            ),
         ]
 
     def match(self, user_input: str) -> dict | None:
@@ -148,3 +172,28 @@ class Dispatcher:
             "tool": "web_search",
             "arguments": {"query": match.group("target").strip()},
         }
+
+    @staticmethod
+    def _route_mute(match: re.Match) -> dict:
+
+        return {"tool": "mute", "arguments": {"should_mute": True}}
+
+    @staticmethod
+    def _route_unmute(match: re.Match) -> dict:
+
+        return {"tool": "mute", "arguments": {"should_mute": False}}
+
+    @staticmethod
+    def _route_set_volume(match: re.Match) -> dict:
+
+        return {"tool": "set_volume", "arguments": {"level": int(match.group("level"))}}
+
+    @staticmethod
+    def _route_set_brightness(match: re.Match) -> dict:
+
+        return {"tool": "set_brightness", "arguments": {"level": int(match.group("level"))}}
+
+    @staticmethod
+    def _route_screenshot(match: re.Match) -> dict:
+
+        return {"tool": "take_screenshot", "arguments": {}}
