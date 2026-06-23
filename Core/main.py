@@ -1,6 +1,7 @@
 # Core/main.py
 
 from orchestrator.orchestrator import FREDOrchestrator
+from audio.device_info import describe_audio_devices
 from config.settings import TTS_ENABLED, STT_ENABLED, WAKE_WORD_ENABLED
 
 
@@ -86,6 +87,7 @@ def run_voice_loop(orchestrator: FREDOrchestrator):
 def main():
 
     print("\nF.R.E.D. Core Runtime Online.")
+    print(describe_audio_devices())
 
     orchestrator = FREDOrchestrator()
 
