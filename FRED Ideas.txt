@@ -1,0 +1,23 @@
+💡 F.R.E.D. — Ideas & Follow-Ups
+(Things noticed during dev/testing that aren't full phases of their own)
+
+From Phase 14 (Hands on the Machine) testing:
+
+- Window management (focus/minimize/maximize) has no dispatcher
+  shortcuts yet — only reachable via natural LLM phrasing right now.
+  Could add deterministic routes like the volume/brightness ones if
+  it turns out to get used a lot.
+
+- Confirmation gate currently treats anything that isn't a recognized
+  affirmative ("yes"/"yeah"/"do it"/etc.) as a cancel. Worth living
+  with it a bit to see if that feels right, or if it should re-prompt
+  on genuinely ambiguous replies ("wait what?") instead of silently
+  cancelling.
+
+- System volume got left at 25%/unmuted from automated testing during
+  this session — worth resetting to taste.
+
+- Wake phrases were tightened from broad single words ("hey"/"hi") to
+  name-anchored phrases ("hey fred", "hi fred", etc.) to cut down on
+  false triggers from background speech. Keep an eye on whether this
+  is too strict now, in the other direction.
