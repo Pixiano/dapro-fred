@@ -47,3 +47,59 @@ Future idea — contextual app-opening:
     file I had open, probably X" is fuzzy intent, not a deterministic
     pattern) — belongs in the tool-calling path, not the dispatcher.
 
+Future idea — FRED gets Claude-Code-style tools/skills (NOT NOW —
+revisit after Phase 20, this is a separate project on top of the
+roadmap, not a phase in it):
+
+  Goal: give FRED an actual agentic coding loop — read a file, edit
+  it, run it, see the error, retry — instead of just generating code
+  as chat text. Today FRED's models can write code in a reply (any
+  capable LLM can), but there's no read_file-write_file-run_command
+  tool trio plus a retry loop wired to act on the results, so there's
+  no way for FRED to actually verify its own code works.
+
+  Rough shape of what's needed, when the time comes:
+  - read_file/write_file tools already half-exist via machine_tools
+    (read_file does; write needs adding — create_text_file overwrites
+    blind, no diff/patch concept).
+  - A run_command tool (subprocess, captured stdout/stderr/exit code)
+    — currently nothing executes arbitrary code at all, on purpose.
+  - A loop that feeds command output back to the model and lets it
+    decide to retry, distinct from the existing one-shot tool-calling
+    loop (_generate_with_tools currently does at most one
+    call-results-finalize round, not an iterate-until-done loop).
+  - Real scoping/safety questions before this is sane to build:
+    arbitrary code execution is a much bigger blast radius than
+    anything in Phase 14's confirmation gate (that gate handles "are
+    you sure," not "is this code safe to run at all"). Needs its own
+    design pass, not a bolt-on.
+
+STT accuracy — Vosk mishearing simple commands:
+
+  Observed: "open notepad" recognized as "north bay", "not bad", and
+  other near-misses, repeatedly, never the right phrase. This is the
+  STT model itself, not the dispatcher (the dispatcher matched fine
+  once it got correct text — it just wasn't getting correct text).
+
+  Why: Core/models/vosk-model-small-en-us-0.15 is Vosk's SMALLEST
+  English model (~40MB), built for low resource use over accuracy.
+  General-purpose dictation models like this have no bias toward
+  short command-style phrases, so a 2-word phrase like "open notepad"
+  has very little context to disambiguate against — it's exactly the
+  case this model struggles with most.
+
+  Two real fixes, different tradeoffs:
+  1. Swap to a bigger Vosk model (vosk-model-en-us-0.22, ~1.8GB) —
+     meaningfully better general accuracy, same architecture/code,
+     just a bigger download and slightly slower per-utterance.
+  2. Vosk supports a constrained "grammar" mode — give the recognizer
+     a fixed list of expected phrases (app names, dispatcher command
+     patterns) and it only ever matches against those, instead of
+     open-vocabulary dictation. This would make command phrases like
+     "open notepad" extremely reliable, at the cost of needing the
+     grammar list kept in sync with what FRED actually understands,
+     and normal free-form conversation in voice mode would need to
+     either fall back to unconstrained mode or just be worse.
+  Quick win available now without picking either: option 1 is a
+  config change (point STT_MODEL_PATH at the bigger model after
+  downloading it), no code changes needed.
