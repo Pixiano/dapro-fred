@@ -112,7 +112,12 @@ STT_ENABLED = True
 # (run: python -c "import pyttsx3; [print(v.name) for v in pyttsx3.init().getProperty('voices')]")
 TTS_VOICE = "David"
 
-STT_MODEL_PATH = BASE_DIR / "models" / "vosk-model-small-en-us-0.15"
+# Swapped from the 40MB small model — that one was misreading basic
+# commands ("open notepad" -> "north bay"). This one is 128MB but
+# barely worse than the full 1.8GB model on WER (7.82 vs 7.08), and
+# its dynamic-graph design is the same mechanism Phase 20's planned
+# grammar-constrained recognition would build on.
+STT_MODEL_PATH = BASE_DIR / "models" / "vosk-model-en-us-0.22-lgraph"
 STT_SAMPLE_RATE = 16000
 
 # Wake detection via Vosk transcription + text matching, not a
