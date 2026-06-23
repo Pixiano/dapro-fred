@@ -117,6 +117,14 @@ Tasks:
   - Permission tiers — read-only runs free, anything destructive or irreversible asks first, always.
   - Secrets hygiene locked down for good (keys rotated, .env gitignored, nothing exposed) before this ever touches git.
   - Starts on boot, recovers from crashes, falls back to local inference gracefully if the cloud goes down.
+  - Grammar-constrained STT for command phrases — give Vosk a fixed
+    list of expected phrases (app names, dispatcher patterns like
+    "open X" / "kill X" / "remind me...") instead of open dictation,
+    so command-style speech stops getting misheard ("open notepad" as
+    "north bay") at the exact moment reliability stops being optional.
+    Free-form conversation in voice mode falls back to unconstrained
+    mode — this only tightens recognition for the command shapes FRED
+    already knows about.
   - One last personality + voice + visual pass — not for a demo audience, for me, every day.
 Outcome: FRED isn't something I show people anymore. He's something I live with.
 

@@ -88,18 +88,16 @@ STT accuracy — Vosk mishearing simple commands:
   has very little context to disambiguate against — it's exactly the
   case this model struggles with most.
 
-  Two real fixes, different tradeoffs:
-  1. Swap to a bigger Vosk model (vosk-model-en-us-0.22, ~1.8GB) —
-     meaningfully better general accuracy, same architecture/code,
-     just a bigger download and slightly slower per-utterance.
-  2. Vosk supports a constrained "grammar" mode — give the recognizer
-     a fixed list of expected phrases (app names, dispatcher command
-     patterns) and it only ever matches against those, instead of
-     open-vocabulary dictation. This would make command phrases like
-     "open notepad" extremely reliable, at the cost of needing the
-     grammar list kept in sync with what FRED actually understands,
-     and normal free-form conversation in voice mode would need to
-     either fall back to unconstrained mode or just be worse.
-  Quick win available now without picking either: option 1 is a
-  config change (point STT_MODEL_PATH at the bigger model after
-  downloading it), no code changes needed.
+  Near-term fix (quick, just a config change once downloaded): swap
+  to a bigger Vosk model. Real options, not just the 40MB vs 1.8GB
+  extremes:
+    - vosk-model-en-us-0.22-lgraph  — 128MB, best accuracy-per-MB
+      (pruned lookahead graph, not full open dictation)
+    - vosk-model-en-us-daanzu-20200905 — 1.0GB, the "middle ground"
+    - vosk-model-en-us-0.22 — 1.8GB, the full accurate model
+
+  Longer-term fix: grammar-constrained recognition (a fixed expected-
+  phrase list instead of open dictation, for command-style speech
+  specifically) — homed in Phase 20 of the JARVIS roadmap now, since
+  it's exactly the "make voice reliable for daily use" work that
+  phase is already about. See that file for the actual task writeup.
