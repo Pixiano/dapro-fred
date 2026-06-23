@@ -96,6 +96,34 @@ class Dispatcher:
                 re.compile(r"^(?:take a |take )?screenshot$", re.IGNORECASE),
                 self._route_screenshot,
             ),
+            (
+                re.compile(
+                    r"^remind me in (?P<minutes>\d+)\s*(?:min(?:ute)?s?) (?:to )?(?P<message>.+)$",
+                    re.IGNORECASE,
+                ),
+                self._route_reminder_minutes_first,
+            ),
+            (
+                re.compile(
+                    r"^remind me (?:to )?(?P<message>.+?) in (?P<minutes>\d+)\s*(?:min(?:ute)?s?)$",
+                    re.IGNORECASE,
+                ),
+                self._route_reminder_message_first,
+            ),
+            (
+                re.compile(
+                    r"^set a timer for (?P<minutes>\d+)\s*(?:min(?:ute)?s?)$",
+                    re.IGNORECASE,
+                ),
+                self._route_timer,
+            ),
+            (
+                re.compile(
+                    r"^(?:tell me|let me know) when (?P<target>.+?) (?:shows up|appears|exists)$",
+                    re.IGNORECASE,
+                ),
+                self._route_file_watch,
+            ),
             # Destructive — routed here deterministically so the
             # confirmation gate ALWAYS fires, instead of relying on a
             # small model to choose to call kill_process/close_window
@@ -230,4 +258,47 @@ class Dispatcher:
         return {
             "tool": "close_window",
             "arguments": {"title": match.group("target").strip()},
+        }
+
+    @staticmethod
+    def _route_reminder_minutes_first(match: re.Match) -> dict:
+
+        return {
+            "tool": "schedule_reminder",
+            "arguments": {
+                "message": match.group("message").strip(),
+                "minutes": int(match.group("minutes")),
+            },
+        }
+
+    @staticmethod
+    def _route_reminder_message_first(match: re.Match) -> dict:
+
+        return {
+            "tool": "schedule_reminder",
+            "arguments": {
+                "message": match.group("message").strip(),
+                "minutes": int(match.group("minutes")),
+            },
+        }
+
+    @staticmethod
+    def _route_timer(match: re.Match) -> dict:
+
+        minutes = match.group("minutes")
+
+        return {
+            "tool": "schedule_reminder",
+            "arguments": {
+                "message": f"Your {minutes}-minute timer is up.",
+                "minutes": int(minutes),
+            },
+        }
+
+    @staticmethod
+    def _route_file_watch(match: re.Match) -> dict:
+
+        return {
+            "tool": "schedule_file_watch",
+            "arguments": {"path": match.group("target").strip()},
         }

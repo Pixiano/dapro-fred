@@ -56,6 +56,8 @@ _APP_ALIASES = {
     "vscode": "code.exe",
     "vs code": "code.exe",
     "code": "code.exe",
+    "obs": "obs64.exe",
+    "obs studio": "obs64.exe",
     "word": "winword.exe",
     "excel": "excel.exe",
     "powerpoint": "powerpnt.exe",

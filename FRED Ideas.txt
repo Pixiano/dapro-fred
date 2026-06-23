@@ -14,10 +14,36 @@ From Phase 14 (Hands on the Machine) testing:
   on genuinely ambiguous replies ("wait what?") instead of silently
   cancelling.
 
-- System volume got left at 25%/unmuted from automated testing during
-  this session — worth resetting to taste.
+- launch_application resolves apps by alias map -> PATH -> App Paths
+  registry -> install-dir search, but only ever matches an EXACT
+  filename. Already bit OBS once (real exe is obs64.exe, not obs.exe)
+  before that got added as an alias by hand. A fuzzy/substring match
+  in the install-dir search (instead of exact filename equality)
+  would catch this whole class of "close but not exact" mismatch
+  automatically, instead of needing a hand-added alias every time.
 
-- Wake phrases were tightened from broad single words ("hey"/"hi") to
-  name-anchored phrases ("hey fred", "hi fred", etc.) to cut down on
-  false triggers from background speech. Keep an eye on whether this
-  is too strict now, in the other direction.
+Future idea — contextual app-opening:
+
+  "Hey Fred, open VS Code and the last file I had opened, probably
+  settings.py"
+
+  Goal: PC control that isn't just "launch X," but launches X *with*
+  context pulled from recent history/memory — last-opened file,
+  last project folder, etc. — instead of a bare cold launch.
+
+  Sketch of how this could actually work:
+  - Track "recently opened" per-app where the OS/app already exposes
+    it (VS Code keeps its own recent-files list; Windows Recent Items
+    / jump lists cover a lot of apps generically without FRED needing
+    to track anything itself).
+  - launch_application gains an optional second step: after the
+    process starts, pass a resolved file/folder argument (e.g.
+    `code.exe <path>`) instead of just opening the bare app.
+  - The "probably settings.py" part of the phrasing is a fuzzy hint,
+    not a guarantee — needs graceful handling when the guess is wrong
+    or nothing recent is found (fall back to a bare launch + say so,
+    rather than failing the whole request).
+  - This is squarely an LLM-reasoning task (interpreting "the last
+    file I had open, probably X" is fuzzy intent, not a deterministic
+    pattern) — belongs in the tool-calling path, not the dispatcher.
+

@@ -2,6 +2,7 @@
 
 import threading
 
+import pythoncom
 import pyttsx3
 
 from config.settings import TTS_VOICE
@@ -58,6 +59,14 @@ class TTSManager:
 
         with self.lock:
 
+            # pyttsx3's SAPI backend is COM-based, and this always
+            # runs on a freshly spawned thread — explicitly init COM
+            # here rather than relying on it happening implicitly,
+            # which silently fails ("CoInitialize has not been
+            # called") when speak() is triggered from contexts like
+            # the background scheduler.
+            pythoncom.CoInitialize()
+
             try:
 
                 engine = pyttsx3.init()
@@ -73,6 +82,10 @@ class TTSManager:
                 print(
                     f"[TTS ERROR] {str(e)}"
                 )
+
+            finally:
+
+                pythoncom.CoUninitialize()
 
     # =========================================================
     # VOICE SELECTION

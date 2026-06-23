@@ -98,6 +98,9 @@ def main():
     except Exception as e:
         print("\n[FATAL ERROR]", str(e))
 
+    finally:
+        orchestrator.shutdown()
+
 
 if __name__ == "__main__":
     main()

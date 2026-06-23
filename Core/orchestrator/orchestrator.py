@@ -12,6 +12,7 @@ from tools import system_tools
 from tools import web_tools
 from tools import machine_tools
 from orchestrator.dispatcher import Dispatcher
+from orchestrator.scheduler import ReminderScheduler
 from config.settings import TOOLS_ENABLED
 
 
@@ -31,6 +32,8 @@ class FREDOrchestrator:
         self.state = ConversationState()
         self.memory = MemoryManager()
         self.llm = LLMClient()
+
+        self.scheduler = ReminderScheduler()
 
         self.tools = ToolRegistry()
         self._register_tools()
@@ -506,6 +509,46 @@ class FREDOrchestrator:
             },
             destructive=True,
         )
+
+        # ---------------------------------------------------
+        # Phase 15 — He Speaks First
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="schedule_reminder",
+            function=self.scheduler.schedule_reminder,
+            description="Set a one-off reminder that fires after N minutes.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "What to remind about."},
+                    "minutes": {"type": "number", "description": "Minutes from now to fire."},
+                },
+                "required": ["message", "minutes"],
+            },
+        )
+
+        self.tools.register(
+            name="schedule_file_watch",
+            function=self.scheduler.schedule_file_watch,
+            description="Watch for a file/folder to appear, and notify when it does.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File or folder path to watch for."},
+                    "message": {"type": "string", "description": "What to say once it appears. Optional."},
+                },
+                "required": ["path"],
+            },
+        )
+
+    def shutdown(self):
+        """
+        Stops the background scheduler. Call on process exit so
+        pending jobs don't keep the interpreter alive.
+        """
+
+        self.scheduler.shutdown()
 
     # =========================================================
     # TOOL-CALLING LOOP
