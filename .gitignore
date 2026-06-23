@@ -1,0 +1,21 @@
+# Secrets - never commit
+*.env
+.env
+
+# Python
+__pycache__/
+*.pyc
+Core/venv/
+
+# Memory data (personal, runtime-generated)
+Core/memory_data/
+Core/memory_indexes/
+
+# Logs
+Core/data/logs/
+
+# Audio runtime artifacts
+fred_tts_output.mp3
+
+# Large media (track separately or with Git LFS if needed)
+Video/*.mp4
