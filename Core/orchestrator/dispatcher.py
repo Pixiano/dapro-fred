@@ -119,6 +119,13 @@ class Dispatcher:
             ),
             (
                 re.compile(
+                    r"^set a (?P<minutes>\d+)\s*(?:min(?:ute)?s?) timer(?: for (?P<message>.+))?$",
+                    re.IGNORECASE,
+                ),
+                self._route_timer_minutes_first,
+            ),
+            (
+                re.compile(
                     r"^(?:tell me|let me know) when (?P<target>.+?) (?:shows up|appears|exists)$",
                     re.IGNORECASE,
                 ),
@@ -315,6 +322,19 @@ class Dispatcher:
                 "message": f"Your {minutes}-minute timer is up.",
                 "minutes": int(minutes),
             },
+        }
+
+    @staticmethod
+    def _route_timer_minutes_first(match: re.Match) -> dict:
+
+        minutes = match.group("minutes")
+        topic = match.group("message")
+
+        message = f"Timer for {topic.strip()}." if topic else f"Your {minutes}-minute timer is up."
+
+        return {
+            "tool": "schedule_reminder",
+            "arguments": {"message": message, "minutes": int(minutes)},
         }
 
     @staticmethod

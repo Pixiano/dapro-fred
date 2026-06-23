@@ -653,12 +653,19 @@ class FREDOrchestrator:
         # model loses track of what it just did and may contradict
         # the action it actually took.
         follow_up = self.llm.generate_with_tools(messages, tools=tool_definitions)
+        follow_up_content = follow_up.get("content") or ""
+
+        # Same leaked-syntax risk applies to this turn too — a
+        # confused model can echo broken tool syntax here just as
+        # easily as on the first pass. Never show that.
+        if self._looks_like_leaked_tool_syntax(follow_up_content):
+            return " ".join(tool_results)
 
         # llama.cpp's function-calling format sometimes returns empty
         # content for this final turn regardless of model strength —
         # fall back to the tool's own (already human-readable) result
         # rather than a generic "Done." that says nothing real.
-        return follow_up.get("content") or " ".join(tool_results)
+        return follow_up_content or " ".join(tool_results)
 
     def _parse_text_tool_calls(self, content: str) -> list:
         """
@@ -703,14 +710,28 @@ class FREDOrchestrator:
                 })
 
         # Gemma style: functions.NAME: {args}  or  functions.NAME(args)
+        # This pattern is the loosest of the three — a model just
+        # echoing a tool name with no real intent behind it (e.g.
+        # "functions.set_volume:" in response to an unrelated request)
+        # looks identical to a genuine bare call. Only trust it when
+        # there are real captured args, or the tool needs none at all
+        # — a tool with required args but an empty {} here is a
+        # strong signal this is hallucinated noise, not a real call.
         for name, raw_args in re.findall(
             r"functions\.([\w_]+)\s*[:\(]\s*(\{.*?\})?", content, re.DOTALL
         ):
-            if name in valid:
-                calls.append({
-                    "id": f"text_call_{len(calls)}",
-                    "function": {"name": name, "arguments": raw_args or "{}"},
-                })
+            if name not in valid:
+                continue
+
+            required = self.tools.tools[name]["parameters"].get("required", [])
+
+            if not raw_args and required:
+                continue
+
+            calls.append({
+                "id": f"text_call_{len(calls)}",
+                "function": {"name": name, "arguments": raw_args or "{}"},
+            })
 
         return calls
 
