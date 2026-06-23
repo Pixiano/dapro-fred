@@ -1,0 +1,151 @@
+What Is Data Science? Definition, Examples, Jobs, and More | Coursera
+What Is Data Science? Definition, Examples, Jobs, and More
+Written by Coursera Staff â¢
+Updated on
+Oct 16, 2025
+Data science is an in-demand career path for people with an aptitude for research, programming, math, and computers. Discover real-world applications and job opportunities in data science and what it takes to work in this exciting field.
+Data science is an interdisciplinary field that uses algorithms, procedures, and processes to examine large amounts of data in order to uncover hidden patterns, generate insights, and direct decision-making. To create prediction models, data scientists use advanced
+machine learning algorithms
+to sort through, organize, and learn from structured and unstructured data.Â
+As a fast-growing field with applications across numerous industries, data science offers a variety of job opportunitiesâfrom researching to computing. In this article, you'll explore how to use data science in the real world, the job outlook for the field, its required skills, and what credentials you need to land a job. Afterward, if you want to prepare for a career in data, consider enrolling in the
+Google Data Analytics Professional Certificate
+.
+What is data science?
+Data science is the study of data, much like marine biology is the study of sea-dwelling biological life forms.
+Data scientists
+construct questions around specific data sets and then use
+data analytics
+and
+advanced analytics
+to find patterns, create predictive models, and develop insights that guide decision-making within businesses.
+Data science applications
+Although data science is often concerned with making sense of abstract data points to produce meaningful insights, you can see its impact concretely throughout the world today. Examples of data science or data science-powered services that can be found all around us. Some you might have seen include:Â
+1. Health care
+Data science applications are especially beneficial to health care, where itâs used for a wide range of purposes, including:
+Medical image analysis
+Genomics and genetics
+Pharmaceutical research and development
+Bots for health and virtual assistants
+Even medical operations have benefited from data science innovations. Employing a range of methods and frameworks, such as MapReduce, data science has been used to identify malignancies, artery stenosis, and organ demarcation.
+Support vector machines (SVM)
+, content-based health care image indexing, and wavelet analysis are among the machine-learning approaches used to classify solid textures.
+Read more:
+Health Care Analytics: Definition, Impact, and More
+Â Â
+2. E-commerce
+Data science has impacted the e-commerce sector in a variety of ways, helping organizations identify their
+target markets
+, make business deicisions, anticipate goods and services, and optimize price formations.
+Natural language processing (NLP)
+and recommendation engines, in particular, have proven extremely beneficial to the e-commerce companies that employ these methodologies to analyze customer purchases and gain insight into potential growth strategies. Furthermore, professionals often use NLP to analyze texts and online surveys, which helps businesses provide quality services to their customers.
+3. Transportation
+Data science has been at the center of some of the most impactful innovations in transportation over the past two decades.
+While self-driving vehicles are likely the most eye-catching data science development in the world of transportation, data scientists have also been foundational to producing fuel usage statistics, analyzing driver conduct, and monitoring vehicular performance. By combining reinforcement learning with automation, car manufacturers may create smarter, safer vehicles with better logistical routes.
+What is data science in AI?
+Data science uses statistical methods and tools to derive insights from different types of data.
+Artificial intelligence
+goes one step further, using data to solve problems and âlearnâ in a way that mimics human cognition. Both data science and AI are involved in predictive analytics, machine learning, and data quality assurance processes, among other applications.
+Read more:
+AI in Data Science: Uses, Examples, and Tools to Consider
+Data science skills and tools
+Data scientists need to have a well-honed set of workplace and technical skills to ensure they do the best possible job. Some top skills youâll need to be successful include:Â
+Workplace skills
+Receptivity/open-mindedness
+Communication
+Empathy
+An approach to business
+Team spirit
+Innovation
+Technical skills
+Linear algebra
+Machine learning
+techniques
+Multivariable calculus
+Statistics
+Identifying algorithms
+Creating and maintaining algorithms
+Information retrieval data sets
+Read more:
+Hard Skills vs. Soft Skills: Whatâs the Difference?
+Tools
+Data scientists are key decision-makers tasked with evaluating and manipulating massive amounts of unorganized and organized data. To do it, data scientists employ a variety of tools and computer languages, the most common of which include such programs as SAS, Excel, Tableau, and Apache Spark [
+3
+].Â Â
+Data science jobs
+You can find many jobs in the field of data science. Some of the most common positions include:
+Data analyst
+Machine learning engineer
+Data engineer
+Data scientist
+Database administrator
+Business analyst
+Product analyst
+Financial analyst
+Data system developer
+Data science salary and job outlook
+Data scientists earn a higher-than-average salary and have a positive job outlook. According to the US Bureau of Labor Statistics (BLS), the mean annual salary for data scientists is $108,020 as of May 2023 [
+1
+]. Furthermore, the BLS projects that data scientists will see 36 percent job growth between 2023 and 2033, resulting in about 20,800 new job openings [
+2
+].
+Educational requirements
+To qualify for an entry-level data scientist role, you'll most likely need a
+bachelor's degree in data science
+or a related field, such as computer science. But, some jobs may require a
+master's degree
+.
+Read more:
+Data Science Major: What You Need to Know Before Declaring
+Common certifications
+Whether you want to get a certification through an approved university, gain more training as a recent graduate, improve vendor-specific abilities, or showcase your skills in data analytics, there's likely a useful certification program for you. The following are commonly acquired certifications for a career in data science:
+Cloudera Certified Professional (CCP) Data Engineer
+Dell EMC Data Science Track (EMCDS)
+Google Professional Data Engineer Certification
+IBM Data Science Professional Certificate
+Microsoft Certified: Azure Data Scientist Associate
+Open Certified Data Scientist (Open CDS)
+SAS Certified Data Scientist
+Tensorflow Developer Certificate
+Read more:
+Your Guide to Data Science Certifications
+What is the trend of data in science?
+In science, several data-related trends have become more mainstream, including genetic engineering and computation, artificial systems biology, and even artificial neural networks. Plus, data science in health care is changing the way patients are diagnosed and treated to create more effective, personalized approaches.
+Continue learning about data scienceÂ
+Data science combines statistical tools, analytical methods, machine learning algorithms, artificial intelligence, and domain expertise to gain insights into your data. You can use this to inform decision-making and next steps.Â The first step to entering the data science field is to gain the technical skills you need for the job. If you're just getting started, consider taking one of these programs on Coursera:
+To prepare for a career as a data scientist,
+enroll in the
+IBM Data Science Professional Certificate
+. Learn the tools, languages, and libraries used by professional data scientists, including Python and SQL, in as little as six months.
+For data visualization skills,
+try the
+Microsoft Data Visualization Professional Certificate
+. Explore how to create data visualizations, build data models with DAX, and prepare datasets.
+To master fundamental machine learning skills,
+consider Stanford and DeepLearning.AI's
+Machine Learning Specialization
+. Learn how to build ML models, apply ML best practices, and build and train your own neural network.
+Article sources
+1
+.Â
+US Bureau of Labor Statistics. â
+Occupational Outlook Handbook: Data Scientists, Pay
+, https://www.bls.gov/ooh/math/data-scientists.htm#tab-5." Accessed April 4, 2025.
+2
+.Â
+US Bureau of Labor Statistics. "
+Occupational Outlook Handbook: Data Scientists, Job Outlook
+, https://www.bls.gov/ooh/math/data-scientists.htm#tab-6." Accessed April 4, 2025.
+3
+.Â
+Data Flair. â
+14 Most Used Data Science Tools for 2022- Essential Data Science Ingredients
+, https://data-flair.training/blogs/data-science-tools/.â Accessed April 4, 2025.
+View all sources
+Updated on
+Oct 16, 2025
+Written by:
+C
+Coursera Staff
+Editorial Team
+Courseraâs editorial team is comprised of highly experienced professional editors, writers, and fact...
+This content has been made available for informational purposes only. Learners are advised to conduct additional research to ensure that courses and other credentials pursued meet their personal, professional, and financial goals.

@@ -1,0 +1,195 @@
+What is data science
+Skip to main content
+Search
+Help support Harvard John A. Paulson School of Engineering and Applied Sciences.
+Make a gift
+.
+All News Stories
+Blog
+Blog
+What Is Data Science? Definition, Skills, Applications & More
+Facebook
+Twitter
+Email
+LinkedIn
+Table of Contents
+What is Data Science?
+The Data Science Life Cycle
+Data Science Tools and Technologies
+Core Techniques in Data Science
+Career Opportunities in Data Science
+Applications of Data Science Across Industries
+Data Science vs. Related Fields
+Why Is Data Science Important?
+Challenges in Data Science
+The Future of Data Science
+Data Science at Harvard SEAS
+What Is Data Science? A Complete Overview
+Have you noticed how, during election season, predictions about poll results and candidate leads dominate the news feed? They aren't baseless guesses; they're insights from public opinion surveys, voter turnout models, and a variety of advanced tools and methodologies used in data science.
+So, even if you've never worked with algorithms or predictive models, you're guaranteed to have encountered data science in your daily life—think of every time you've checked election forecasts, seen personalized ads, or simply browsed curated movie recommendations. That is data science, and it's all around us!
+Definition and purpose of data science
+The
+U.S. Census Bureau
+defines data science as "a field of study that uses scientific methods, processes, and systems to extract knowledge and insights from data." So, this is a field that works with data that doesn't fit neatly into rows and columns—and, in the end, derives relevant information from it.
+Data science is inherently interdisciplinary as it combines expertise from statistics, computer science, mathematics, and domain-specific knowledge. This makes it incredibly versatile, with applications spanning healthcare, finance, marketing, and even environmental research.
+For instance, a data scientist in public health can analyze demographic data in order to make predictions about the spread of a disease. Similarly, in the business sector, data science guides personalized marketing strategies by working with data related to customer behavior.
+Nowadays, there is an overwhelming amount of data generated—millions of terabytes every day. It's often produced through everyday activities like scrolling through social media or buying something online. Each action leaves behind bits of information, like breadcrumbs, that systems gather and hold onto.
+But here's the thing: all this information doesn't come neatly organized and ready to work with. At first, it's just a chaotic mix of numbers, texts, and signals that need to be sorted and shaped into something meaningful before it's actually useful.
+Therefore, the purpose of data science is to work with some of that data and drive better-informed decision-making.
+History of data science
+Data science is often considered the intersection between statistics and computer science because its history is rooted in these two fields, and they share many of the same principles.
+In 1974, Peter Naur, a computer science pioneer, introduced the term "data science" in his book "Concise Survey of Computer Methods" as an alternative to "computer science." Whereas in 1997, Jeff Wu called for statistics to be renamed data science and statisticians to data scientists. So, it was the convergence of statistics and computer science, coupled with technological advances, that paved the way for modern data science.
+However, when discussing the history of data science, many start with mathematical statistician John W. Tukey's "The Future of Data Analysis." This 1962 paper signaled a call for a reformation of academic statistics, as Tukey argued that what he referred to then as data analysis was more than just mathematics. According to him, it was an empirical science, focusing on deriving meaning from data rather than just theoretical modeling. This perspective set the foundation for what would later become known as data science​.
+Later, in 1977, the
+International Association for Statistical Computing
+(IASC) was created. Their mission statement was "to link traditional statistical methodology, modern computer technology, and the knowledge of domain experts in order to convert data into information and knowledge." Around the same time, advancements in data visualization and exploratory data analysis, particularly with Tukey's publication of "Exploratory Data Analysis," further brought to light the importance of using data for hypothesis generation and testing​.
+The field continued to grow, and by the late 1990s, the term "data science" had gained broader recognition​. In 2001, American computer scientist and professor William S. Cleveland outlined a broader vision for statistics that shifted from the traditional theoretical one to a more applied, data-centric focus​. This way, a new field would emerge that integrated elements of machine learning, visualization, and computing.
+The emergence of big data in the early 21st century truly cemented data science as the discipline for working with and making sense of complex, large-scale information, ultimately becoming what many consider the "
+fourth paradigm
+" of scientific discovery, following experimental, theoretical, and computational science.
+The Data Science Life Cycle
+We're all familiar with life cycles—whether it's the natural stages of growth in living beings or the progression of a product from creation to completion. They're processes that start with one form, go through several phases of development or change, and eventually reach an endpoint or transformation. In the same way, data science has its own life cycle.
+The data science life cycle represents the systematic process data goes through to be transformed into meaningful insights. Like all other life cycles, it's a structured cycle in which each phase builds on the last to reach the final results.
+Step-by-step process in data science
+The data science life cycle encompasses five key steps that data must go through in order to provide valuable insights. These steps are:
+Obtaining data
+The first step in the data science life cycle is obtaining the data. Data scientists can collect data from a variety of sources, including databases, sensors, APIs (application programming interfaces), and online platforms.
+At this stage, the most important thing is ensuring that you have the right information to work with. So, you should gather data that is relevant to the problem you're trying to solve to avoid wasting time and effort with all the other steps that follow.
+Cleaning data
+After the data is collected, data scientists clean and preprocess it. This step, often referred to as data cleaning or wrangling, requires data scientists to format the data for analysis and deal with missing values, duplicates, and other errors.
+Data scientists spend a significant portion of the cycle at this stage, as cleaning and preparing the data guarantees that it will be both usable and reliable—key prerequisites for achieving good results.
+Exploring data
+At this stage, the data is ready, so data scientists begin the so-called exploratory data analysis (EDA) process. The aim is to understand the data's underlying structures and main characteristics and identify patterns.
+Depending on the number of variables analyzed at a time, EDA can utilize univariate, bivariate, or multivariate analysis. The goal is to better understand the data and develop hypotheses to guide model building or further analyses.
+Modeling data
+Next, data scientists use machine learning algorithms or different statistical techniques in order to predict outcomes or explain relationships within the data. Depending on the problem, these models can be predictive, such as forecasting future sales, or descriptive, such as clustering customers by behavior.
+Interpreting results
+If all previous steps are done correctly, data scientists should have produced results by the end of the cycle, and all that is left to do is interpret the conclusions and communicate them to the rest of the team.
+Communication plays a huge role at this stage, as all insights should be presented in a clear and concise manner so that stakeholders can understand them and be able to use them to aid decision-making.
+Data Science Tools and Technologies
+Data scientists have an array of tools and technologies to tackle various challenges. The choice of tools often depends on the type of data, the problem to solve, and the stage of the data science life cycle.
+Tools used in data science:
+Python and R
+Python and R are foundational programming languages in data science. Python is valued for its simplicity, versatility, and extensive libraries for data manipulation, machine learning, and visualization. R excels in statistical analysis and creating high-quality visualizations, making it ideal for research and exploratory analysis.
+SQL
+SQL (Structured Query Language) is essential for working with databases. It allows data scientists to query, retrieve, and manipulate structured data efficiently, making it a cornerstone for organizing and analyzing data.
+Big data technologies
+Technologies like Apache Spark and Databricks enable distributed processing and analysis of massive datasets. Cloud platforms such as AWS, Google Cloud, and Azure amplify these capabilities with scalable infrastructure and tools tailored for modern big data and machine learning workflows.
+Data visualization tools
+Visualization is essential for exploring data and presenting findings. Data scientists often rely on Python libraries like Matplotlib, Seaborn, and Plotly, as well as R's ggplot2, for creating high-quality and customizable visualizations. For building interactive dashboards and sharing insights with non-technical stakeholders, tools like Tableau are popular and widely used.
+Machine learning platforms
+Frameworks such as TensorFlow, scikit-learn, and PyTorch streamline the development of machine learning models. From linear regression to deep neural networks, these platforms provide the tools to extract insights, automate processes, and make predictions.
+Learn about Harvard's Data Science Masters program
+Core Techniques in Data Science
+Depending on the focus and aim, the four core techniques of analysis used in data science are:
+Descriptive analysis
+This kind of analysis focuses on summarizing and describing a dataset's main features through averages, percentages, and frequencies. An example would be a retail company analyzing customer data to determine the average spending per customer.
+Diagnostic analysis
+Data scientists working in hospitals could use diagnostic analysis to investigate data and find out factors that lead to higher patient readmission rates in a specific department. The goal is to understand the causes of certain outcomes or trends.
+Predictive analysis
+By applying statistical models like regression or classification algorithms, data scientists can predict what is likely to happen in the future. For example, a company might use predictive analysis to estimate future sales or anticipate customer behavior based on past data patterns.
+Prescriptive analysis
+Prescriptive analysis goes a step beyond prediction by recommending actions based on data insights. This type of analysis helps businesses make decisions about resource allocation, strategic planning, or personalized customer recommendations.
+Career Opportunities in Data Science
+The skills and knowledge gained in data science are highly transferable. Therefore, with an education and experience in this field, professionals can pursue various careers in data science, including but not limited to the following:
+Data analyst
+Data analysts focus on interpreting and reporting historical data. Their primary responsibility is analyzing trends and patterns to produce insights that inform business decisions. They work with structured datasets, create visualizations, and generate reports that help stakeholders understand what has happened and why.
+Data scientist
+Building on the work of data analysts, data scientists go a step further by applying advanced analytical models and machine learning techniques to predict future trends and solve complex problems. They work with both structured and unstructured data, and their role often involves formulating hypotheses, designing experiments, and creating predictive models. Data scientists bridge the gap between interpreting historical data and generating forward-looking insights.
+Machine learning engineer
+Machine learning engineers specialize in operationalizing the models developed by data scientists. While data scientists focus on research and experimentation, machine learning engineers design, build, and deploy scalable systems that integrate machine learning algorithms into production environments. They also optimize model performance, manage large-scale datasets, and ensure the systems are reliable and efficient.
+Data engineer
+Data engineers provide the foundational infrastructure that supports the entire data life cycle. They design and manage data pipelines, ensure data quality, and integrate data from various sources. Their work enables data analysts, data scientists, and machine learning engineers to access reliable, high-quality data for their tasks. Data engineers are the architects of the data ecosystem, ensuring that data flows seamlessly and is accessible for analysis and modeling.
+Applications of Data Science Across Industries
+When we think of people working with data, the tech sector is often the first that comes to mind. However, while the tech industry is certainly a major hub for data scientists, the truth is that
+data science applications
+extend to a wide variety of industries.
+Data science in healthcare
+Metrics like temperature, heart rate, and brain activity are more easily analyzed when using data science methods. Therefore, data science can be applied in the healthcare industry to monitor patient health, predict outcomes, personalize treatments, and detect anomalies.
+Data science in finance
+Data science also makes a big difference in finance, particularly through insights into customer behaviors. For example, algorithms spot unusual patterns in transactions, thus flagging potential fraudulent activities.
+Many companies also use data science services in finance for algorithmic trading and risk analytics detection.
+Data science in environmental science
+Recently, data science has also become a powerful ally in environmental science. The insights extracted from data help experts deal with climate change modeling, resource management, and biodiversity tracking, among other things.
+Harvard's SEAS
+Environmental Science and Engineering
+program is an excellent degree option that teaches students about the interdisciplinary perspective needed to solve various environmental challenges.
+Data Science vs. Related Fields
+Data science often intersects with and complements other related fields. However, there are usually key differences between each field, defining their roles. Understanding these differences will help further clarify the all-important questions of "What is data science?" and "What do data scientists do?"
+Data science vs. data analytics
+Data science and data analytics both involve working with data, and the distinction between the two is so unclear that they are often used interchangeably. However, the latter is generally seen as a subset of data science since while data science deals with more complex techniques to analyze datasets to make future predictions and automate processes, data analytics tends to focus on interpreting and visualizing the data.
+Data science vs. machine learning
+Machine learning focuses on creating algorithms to learn from data without explicit programming and make predictions, which is crucial for data science.
+However, data science encompasses a broader range of techniques for extracting information from data, including machine learning algorithms, data wrangling, statistical analysis, and more.
+Data science vs. data engineering
+Data science and engineering also work with data, but they usually operate at different stages of the data process. While data engineers build the infrastructure for handling data, data scientists are focused on using that data in order to gain insights and use them for decision-making.
+Data science vs. statistics
+As seen when examining the field's history, statistics was the foundation of data science. However, while statistics focuses on understanding and explaining data, data science takes it a few steps further by using algorithms and computational tools to automate analysis, make predictions, and generate actionable insights.
+So, although data science often applies statistical concepts, it also involves machine learning, programming, and domain expertise.
+Learn about the Master's in Data Science at Harvard
+Why Is Data Science Important?
+Data science is invaluable in helping businesses and industries make better-informed choices. If a retailer uses data science to gain insights into customer purchasing patterns and adjusts inventory levels based on the results, then they can avoid overstocking or understocking.
+There are also instances when data science helps uncover patterns and trends that can inspire new products, services, or business strategies. Think of streaming platforms like Netflix—by analyzing their viewer data they can recommend personalized content, as well as have ideas about the creation of original programming that appeals to specific audiences.
+By identifying such trends, companies innovate and reduce costs by focusing on what truly adds value to their customers, whether that be optimizing supply chains or personalizing marketing efforts to increase conversions.
+Challenges in Data Science
+As we've established, data science brings many advantages to various industries. However, there is no rose without thorns, so to reap the benefits of data science, you must, from time to time, also deal with certain challenges.
+For example, data scientists sometimes struggle to combine data from multiple sources. The issue lies in the fact that data might be collected differently in each source, making it difficult to merge them into a single dataset while still making sure it's all accurate and consistent.
+Depending on the problem, it can be challenging for data scientists to clearly define the question they need to answer through data. Let's say a retail company is struggling with customer retention. In that case, they must transform the question, 'Why are customers leaving?' into a specific, data-driven problem that can be analyzed and addressed.
+There also tends to be bias in data when certain groups or factors are underrepresented or when the data reflects historical inequalities or prejudices. The challenge is actually noticing these biases and finding suitable ways to mitigate them to ensure fair, responsible decision-making. If not addressed, biased data can lead to skewed results and unfair outcomes, which can harm individuals or groups.
+The Future of Data Science
+Data science is projected to have a promising future. The
+Bureau of Labor Statistics
+reports a 36% increase in employment for data scientists from 2023 to 2033. So, for all those interested in joining the field, data suggests it's a wise choice.
+If we focus on the field itself, there are many exciting developments already emerging and expected to continue and be a part of the future. Technologies like deep learning, natural language processing (NLP), and quantum computing hold great potential and are expected to continue advancing, opening up new possibilities for data scientists.
+Additionally, there is growing recognition of the importance of ethical considerations in data science. With the increasing reliance on AI and data-driven decisions, matters of data privacy, fairness, and bias will come to the front. So, the demand for responsible AI practices and frameworks to guide ethical decision-making in data science is also expected to increase.
+As data science continues to grow, new challenges and opportunities will undoubtedly arise. Therefore, it's best to stay engaged and informed about any changes and advancements made in the field.
+Data Science at Harvard SEAS
+Harvard's
+Data Science Master's program
+at the School of Engineering and Applied Sciences (SEAS) focuses on what we've highlighted thus far—the interdisciplinary nature of data science. Therefore, a key feature of the program is its flexibility, which allows students to explore courses from other schools and departments within the larger Harvard ecosystem.
+Through cross-registration with institutions like MIT and access to diverse Harvard departments, students can tailor their education to the industry they're interested in, whether it be related to healthcare, biology, social sciences, engineering, or something else.
+Harvard SEAS also places a strong emphasis on hands-on learning and real-world experience, ensuring students acquire the foundational skills necessary for a successful career in data science.
+The coursework provides opportunities for students to develop practical skills through assignments and projects, and many courses are graded based on final projects. The capstone project, in particular, allows students to engage in independent research. In all cases, students gain valuable experience that will come in handy in the professional world.
+The program also promotes a collaborative environment between students themselves and the
+faculty
+. SEAS attracts individuals who are passionate about data science, and the collaborative, well-organized space encourages them to bounce ideas off each other and grow together.
+Additionally, the
+Mignone Center for Career Success
+presents students with various tools and platforms to secure internships, be better prepared for a career in data science, and build strong networks.
+With the combination of academic rigor, practical experience, and networking opportunities, Harvard SEAS' goal is to set its students up for success.
+Learn about the data science degree at Harvard
+Related News
+Oct 17, 2025
+A Tournament to Treasure
+Harvard coding club triumphs at world championships
+Alumni
+,
+Computer Science
+,
+Student Organizations
+Oct 14, 2025
+Programming Robots with Rubber Bands
+New approach uses robot’s physical structure for function
+Applied Physics
+,
+Computer Science
+,
+Materials Science & Mechanical Engineering
+,
+Robotics
+,
+Technology
+Aug 20, 2025
+Optimizing How Cells Self-Organize
+Computational framework could lead to organ design, cellular programming
+AI / Machine Learning
+,
+Applied Computation
+,
+Applied Mathematics
+,
+Applied Physics
+,
+Computational Science & Engineering
+,
+Computer Science

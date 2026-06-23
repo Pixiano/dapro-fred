@@ -1,0 +1,76 @@
+Google AI -
+      
+      
+        AI Principles
+AI PRINCIPLES
+Our AI Principles
+Our approach to developing and harnessing the potential of AI is grounded in our founding mission â to organize the worldâs information and make it universally accessible and useful.
+We believe
+our approach
+to AI must be both bold and responsible. Bold in rapidly innovating and deploying AI in groundbreaking products used by and benefiting people everywhere, contributing to scientific advances that deepen our understanding of the world, and helping humanity address its most pressing challenges and opportunities. And responsible in developing and deploying AI that addresses both user needs and broader responsibilities, while safeguarding user safety, security, and privacy.
+We approach this work together, by collaborating with a broad range of partners to make breakthroughs and maximize the broad benefits of AI, while empowering others to build their own bold and responsible solutions.
+Our approach to AI is grounded in these three principles:
+1.
+Bold
+innovation
+We develop AI that assists, empowers, and inspires people in almost every field of human endeavor; drives economic progress; and improves lives, enables scientific breakthroughs, and helps address humanityâs biggest challenges.
+a. Developing and deploying models and applications where the likely overall benefits substantially outweigh the foreseeable risks.Â
+b. Advancing the frontier of AI research and innovation through rigorous application of the scientific method, rapid iteration, and open inquiry.Â
+c. Using AI to accelerate scientific discovery and breakthroughs in areas like biology, medicine, chemistry, physics, and mathematics.
+d. Focusing on solving real world problems, measuring the tangible outcomes of our work, and making breakthroughs broadly available, enabling humanity to achieve its most ambitious and beneficial goals.
+2.
+Responsible
+development and deployment
+Because we understand that AI, as a still-emerging transformative technology, poses evolving complexities and risks, we pursue AI responsibly throughout the AI development and deployment lifecycle, from design to testing to deployment to iteration, learning as AI advances and uses evolve.
+a. Implementing appropriate human oversight, due diligence, and feedback mechanisms to align with user goals, social responsibility, and widely accepted principles of international law and human rights.
+b. Investing in industry-leading approaches to advance safety and security research and benchmarks, pioneering technical solutions to address risks, and sharing our learnings with the ecosystem.
+c. Employing rigorous design, testing, monitoring, and safeguards to mitigate unintended or harmful outcomes and avoid unfair bias.
+d. Promoting privacy and security, and respecting intellectual property rights.
+3. Collaborative progress,
+together
+We make tools that empower others to harness AI for individual and collective benefit.
+a. Developing AI as a foundational technology capable of driving creativity, productivity, and innovation across a wide array of fields, and also as a tool that enables others to innovate boldly.
+b. Collaborating with researchers across industry and academia to make breakthroughs in AI, while engaging with governments and civil society to address challenges that canât be solved by any single stakeholder.
+c. Fostering and enabling a vibrant ecosystem that empowers others to build innovative tools and solutions and contribute to progress in the field.
+Other languages
+Download in English
+Descargar en EspaÃ±ol (EspaÃ±a)
+Descargar en EspaÃ±ol (LatinoamÃ©rica)
+Auf Deutsch herunterladen
+TÃ©lÃ©charger en FranÃ§ais
+à¤¹à¤¿à¤¨à¥à¤¦à¥ à¤®à¥à¤ à¤¡à¤¾à¤à¤¨à¤²à¥à¤¡ à¤à¤°à¥à¤
+Download dalam bahasa Indonesia
+æ¥æ¬èªã§ãã¦ã³ã­ã¼ã
+íêµ­ì´ë¡ ë¤ì´ë¡ë
+Baixe em Portugues
+Our AI Principles in action
+Our AI Principles guide the development and deployment of our AI systems. These Principles inform our frameworks and policies, such as the Secure AI Framework for security and privacy, and the Frontier Safety Framework for evolving model capabilities. Our governance process covers model development, application deployment, and post-launch monitoring. We identify and assess AI risks through research, external expert input, and red teaming. We then evaluate our systems against safety, privacy, and security benchmarks. Finally, we build mitigations with techniques such as safety tuning, security controls, and robust provenance solutions.
+Learn about how we develop and deploy responsible AI
+Learn more
+Responsible Generative AI toolkit
+Learn more
+People + AI Guidebook
+Learn more
+AI Responsibility Reports
+2024 (Published February 2025)
+2024 (Published June 2024)
+2023
+2022
+2021
+2020
+2019
+2024 (Published February 2025)
+2024 (Published June 2024)
+2023
+2022
+2021
+2020
+2019
+Open Research on Responsible AI
+Learn more
+Googleâs AI products and services: Guided by our AI Principles
+Learn more
+Simple, structured model information
+Learn more
+Responsible AI: Our 2024 report and ongoing work
+Learn more

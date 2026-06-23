@@ -1,0 +1,373 @@
+What Is ChatGPT? Key Facts About OpenAI’s Chatbot. | Built In
+Image: Vitor Miranda / Shutterstock
+UPDATED BY
+Abel Rodriguez
+| Oct 14, 2025
+REVIEWED BY
+Ellen Glover
+| Oct 14, 2025
+Summary:
+ChatGPT is a generative AI chatbot developed by OpenAI that creates human-like text, writes code, summarizes content and answers questions. Powered by large language models, it supports text, image, audio and video inputs, with evolving capabilities and enterprise tools.
+more
+ChatGPT is a generative AI chatbot developed by OpenAI that creates human-like text, writes code, summarizes content and answers questions. Powered by large language models, it supports text, image, audio and video inputs, with evolving capabilities and enterprise tools.
+ChatGPT is an
+artificial intelligence
+chatbot capable of having conversations with people and generating unique, human-like text responses. By using a
+large language model
+(LLM), which is trained on vast amounts of data from the internet, ChatGPT can answer questions, compose essays, offer advice and
+write code
+in a fluent and natural way.
+ChatGPT Definition
+Released by artificial intelligence company OpenAI in 2022, ChatGPT is a chatbot capable of communicating with users in a human-like way. It can answer questions, create recipes, write code and offer advice.
+The GPT in ChatGPT stands for “general pre-trained transformer,” which is a
+language model
+that uses
+deep learning
+and
+natural language processing
+to
+generate
+natural, human-like text based on a given text input. In short, ChatGPT “allows us to talk to AI, and it allows AI to talk back to us,” Jeff Kagan, a tech industry analyst, told Built In. “It’s got the power to do a sort of computer version of thinking.”
+What Is ChatGPT?
+ChatGPT is a
+generative AI
+chatbot created by OpenAI. It’s capable of carrying on conversations with human users and generating a
+wide range of text outputs
+including recipes, computer code, essays and personal letters. It can also critique the user’s writing, summarize long documents and
+translate text
+from one language to another. The paid version of ChatGPT also offers features like image and voice inputs and integrations with other OpenAI services like the image generator DALL-E.
+How Does ChatGPT Work?
+ChatGPT is powered by a large language model made up of
+neural networks
+trained on a massive amount of information from the internet, including Wikipedia articles and research papers. This allows ChatGPT to take a sequence of words a user gives it, such as a half-completed sentence, and fill in the blanks with the most statistically probable word given the surrounding context — sort of like auto-complete. The process happens iteratively, building from words to sentences, to paragraphs, to pages of text.
+In order to sift through terabytes of internet data and transform that into a text response, ChatGPT uses a technique called
+transformer architecture
+(hence the “T” in its name).
+The language models used in ChatGPT are specifically optimized for dialogue and were trained using
+reinforcement learning from human feedback
+(RLHF). This approach incorporates
+human feedback
+into the training process so it can better align its outputs with user intent (and carry on with more natural-sounding dialogue).
+“It actually integrates and systematizes humans’ subjective judgment into the model training process,” Sam Stone, the director of product management, pricing and data products at real estate tech firm
+Opendoor
+, told Built In. This is used to not only help the model determine the
+best output
+, but it also helps improve the training process, enabling it to answer questions more effectively.
+Related Reading
+What Is Conversational AI?
+Who Created ChatGPT?
+OpenAI, an
+AI research company
+based in San Francisco, created ChatGPT, releasing it publicly on November 30, 2022.
+OpenAI was co-founded in 2015 by billionaire business mogul Elon Musk and former Y Combinator President Sam Altman, along with a handful of other entrepreneurs. Notable investors
+include Microsoft
+and Thrive Capital, as well as Reid Hoffman, Peter Thiel and Jessica Livingston, founding partner of Y Combinator.
+Prior to ChatGPT, OpenAI launched several products, including
+automatic speech recognition
+software Whisper, and DALL-E, an
+AI art generator
+that can produce images based on text prompts.
+Initially, OpenAI was a non-profit focused on developing artificial intelligence “in the way that is more likely to benefit humanity as whole, unconstrained by a need to generate financial return,” according to a
+statement from 2015
+. But the company is shifting toward a more traditional
+for-profit model
+.
+What Can ChatGPT Do?
+ChatGPT is quite practical, particularly in
+business applications
+. And it has affected how everyday people experience the internet in “profound ways,” according to Raghu Ravinutala, the co-founder and CEO of customer experience startup
+Yellow.ai
+.
+“We’ve already seen it,” Ravinutala told Built In. “And I think we are in for much bigger things as this technology develops and gets adopted.”
+Create Content
+ChatGPT is one of many
+AI content generators
+tackling the
+art of the written word
+— whether that be a news article, press release, college essay or sales email.
+All a user has to do is hop on ChatGPT and
+type in a quick prompt
+. If they want to create a blog post about the health benefits of sweet potatoes, they just need to type in “Write an article about the benefits of sweet potatoes.” The model will then generate a draft that the user can edit and refine as needed.
+Edit, Translate and Summarize Content
+ChatGPT can be used for other writing tasks beyond just content creation. It can
+translate a piece of text
+into different languages, summarize several pages of text into a paragraph, finish a partially complete sentence, generate dialogue and more. It can also be
+fine-tuned for specific use cases
+such as legal documents or medical records, where the model is trained on domain-specific data.
+Write Code
+Not only can ChatGPT
+generate working computer code
+of its own (in many different
+languages
+), but it can also translate code from one language to another, and debug existing code. By virtue of its training, ChatGPT has read countless more documentations than any one individual programmer could ever see, which is why it can write code in a matter of seconds, as well as provide step-by-step explanations as it does it.
+Some developers were so excited by ChatGPT’s capabilities that they used it to actually create their own apps, including a
+spreadsheet assistant
+capable of performing complex calculations in response to a simple request.
+Answer Questions
+ChatGPT can be used as a sort of
+search engine
+. Instead of a list of websites, though, it’ll provide users with a simple list of answers. For instance, if you ask ChatGPT a question like “What sites should I see in my upcoming vacation to Paris?” or “What are some gift ideas for Father’s Day?” it’ll offer you its own answers. People can use ChatGPT for advice on their
+relationships
+,
+finances
+and even their
+health
+.
+Help With Customer Service
+ChatGPT and other conversational AI models have generated
+a lot of buzz
+in the
+customer service space
+, offering a way to automate responses to customer queries as opposed to relying on a human agent. Ravinutala said
+chatbots
+like ChatGPT can be used by customer experience companies to automate customer service interactions, allowing companies to better understand user intent and respond accordingly. He added that Yellow.ai’s sales team has already begun using ChatGPT to compose emails to customers, with humans making minor edits when needed.
+How to Access ChatGPT
+To access ChatGPT on a web browser, visit ChatGPT’s website at
+https://chat.openai.com/auth/login
+. If ChatGPT is at capacity, put in your email address to get notified when there is more space.
+ChatGPT can also be accessed as a mobile app on iOS and Android devices. To do so, download the ChatGPT app from the
+App Store
+for iPhone and iPad devices, or from
+Google Play
+for Android devices.
+Before using ChatGPT for the first time, you must create an OpenAI account and accept the terms of service. Once you’re in, you can start using it immediately.
+Is ChatGPT Free?
+ChatGPT is free to use. But for those who want an upgrade over the free version, a paid subscription version, called
+ChatGPT Plus
+, is also available for $20 a month.
+ChatGPT Plus offers:
+Access to ChatGPT, even during peak times when the server is at capacity.
+Faster response times.
+Priority access to the latest ChatGPT
+models
+, features and improvements.
+Ability to generate images using DALL-E.
+In addition, OpenAI has released another plan called
+ChatGPT Pro
+. At $200 per month, the plan is intended to give users access to OpenAI’s latest offering, the
+o1 model family
+.
+ChatGPT Limitations
+Despite its strengths, ChatGPT isn’t perfect. It has its limitations — particularly when it comes to issues of inaccuracy and bias.
+Inaccurate Information
+ChatGPT’s
+reliance on data
+found online makes it vulnerable to false information, which in turn can impact the veracity of its statements. This often leads to what experts call “hallucinations,” where the output generated is stylistically correct, but factually wrong.
+Hallucinations
+can become a huge issue if ChatGPT is being used to, say,
+write a news article
+, or
+ask questions about historical events
+, or
+get healthcare advice
+. Or, in the case of one New York lawyer,
+use ChatGPT for a brief
+in a client’s personal injury case (where it inadvertently cited six non-existent court decisions).
+Instead of asking for clarification on an ambiguous question, or saying that it doesn’t know the answer, ChatGPT will
+just take a guess
+at what the question means and what the answer should be. And, because the model is able to produce incorrect information in such an eloquent way, the fallacies are hard to spot and control.
+Biased Responses
+ChatGPT also produces
+biased results
+. Most people know that, just because something is on the internet, that doesn’t make it true. Racism, sexism and all manner of prejudices run rampant online, and it is up to the individual to decide how much weight to give it. ChatGPT doesn’t have that ability. So, despite the guardrails OpenAI has put in place to prevent it, the chatbot still has a tendency to let
+biases creep into its outputs
+.
+“There are things that have existed in the past that these statistically oriented models will then pick up on, but we don’t want to project those associations into the future. It’s especially dangerous if we don’t even know what those associations are,” Stone said. “We’ve got to be really careful.”
+Job Disruption
+Professional writers and marketers across a variety of industries are worried ChatGPT and other AI writers
+could take their jobs
+.
+Stone doesn’t think this is likely, though: “When technology makes people more productive, more people tend to be employed,” he said, likening it to what the invention of the personal computer or the internet did for the productivity of office workers. Technology like ChatGPT will
+serve as a resource
+, not a replacement, for a lot of professionals. “We’ll use language models to help us write first drafts, to brainstorm. But then the value of domain experts will continue to refine that and make it better than whatever a model can produce.”
+Plagiarism
+ChatGPT’s impressive
+writing abilities
+have not gone without some controversy. Teachers are concerned that students will use it to cheat, prompting some schools to completely
+block access
+to it. And
+several
+authors
+and
+journalists
+have sued OpenAI for
+copyright infringement
+, claiming their work was scraped from the internet and used as training data without their permission.
+Recommended Reading
+AI Art: What Is Is and How It Gets Created
+GPT-5 vs. GPT 4o
+In August 2025,
+OpenAI released GPT-5
+, its
+fastest and smartest model to date
+, and the current language model for ChatGPT. Users can toggle between three settings — “Auto”, “Fast”, and “Thinking” — with Fast being for fast responses, Thinking being for more deep “reasoning” and Auto acting as a router system that automatically switches between Fast and Thinking depending on the complexity of the prompt. OpenAI claims that GPT-5 outperforms past models in math, real-world coding, multimodal understanding and health knowledge, and is also less likely to hallucinate or make false claims.
+The release of GPT-5 provides a sizable update to previous models, at least on paper. For example, the new model doubles its context window from 128,000 tokens in
+GPT-4o
+to 256,000 tokens in GPT-5. This could enable ChatGPT to keep track of larger documents and conversations, and to handle more complex projects. GPT-5 also added enhanced multimodal capabilities with improvements to email, calendar and code environment integrations.
+Despite these clear advances compared to prior models, GPT-5 is still susceptible to the same problems that plagued its predecessors. In fact, many users have reported instances of GPT-5 making simple mistakes. Others have stated that there is no observable difference from its predecessors. This has led to
+users labeling GPT-5 as underwhelming
+.
+Notable ChatGPT Updates
+Since its launch in November 2022, ChatGPT has undergone a slate of significant updates adding new features or enhancing existing capabilities, including:
+Partnership With Walmart (October 2025)
+Following the addition of agentic e-commerce experiences and easy checkout features,
+OpenAI partnered with Walmart
+, the country’s largest retailer to enhance digital shopping experiences. Through the partnership, ChatGPT users will be able to find products sold by Walmart and complete entire purchases without leaving the chatbot’s interface.
+Release of Instant Checkout Feature (September 2025)
+OpenAI
+announced
+that it is letting users buy goods directly in ChatGPT through a feature called Instant Checkout. So far, users can make single-item purchases from domestic sellers on online marketplace Etsy, as well as some merchants on Shopify’s e-commerce platform. The company also unveiled an open-source technical standard called Agentic Commerce Protocol for merchants to build integrations with ChatGPT, essentially making their products available for purchase within the chatbot.
+Release of GPT-5 (August 2025)
+OpenAI released GPT-5, calling it its “fastest” and “smartest” AI model to date. Based on internal evaluations, GPT-5 outperforms its predecessors in multiple areas, including math, coding, visual perception and health knowledge. It is now available to both paying and non-paying ChatGPT users, with usage limitations of course. However, it was labeled underwhelming by some users due its performance shortly after its release.
+Release of Study Mode (July 2025)
+OpenAI has faced quite a bit of criticism for
+how students can use ChatGPT
+to cheat on their homework or exams, and the company.introduced a
+study mode
+tool to directly address those concerns. The new feature helps students engage more effectively with study materials by altering how it responds when it is enabled. For example, ChatGPT will offer hints, organize content into sections and create custom lessons and quizzes instead of providing a direct answer to students. According to OpenAI, study mode is powered by custom system instructions written in collaboration with teachers, scientists and educational experts.
+Launch of ChatGPT Agent (July 2025)
+OpenAI launched agentic capabilities for ChatGPT. The
+new feature
+enables the chatbot to start and complete tasks on behalf of the user with minimal input. For example, it can browse the web and create documents. ChatGPT Agent functions by using a text-based browser to find information related to the action requested by the user. It then uses a terminal to run code or commands, and connects to external APIs to perform real-world actions, such as booking flights or sending emails.
+Addition of E-Commerce Features (April 2025)
+OpenAI announced the addition of
+product recommendations
+on ChatGPT when users implied shopping intent in their queries. While users cannot checkout inside ChatGPT, they are redirected to the merchant’s website when they click on the link. The new features also provide enhanced analytics referral links if they enable their
+robots.txt
+files to interact with OpenAI’s site
+crawler
+.
+Introduction of ChatGPT Pro Plan (December 2024)
+OpenAI announces the
+ChatGPT Pro
+plan, a new premium plan for ChatGPT users to access even more features. The plan costs $200 per month and gives users access to
+Open AI o1
+, o1-mini, GPT-4o and advanced voice mode.
+Expansion of Advanced Voice Mode to Browsers (November 2024)
+Advanced voice mode becomes
+available on web browsers
+— before, it could only be accessed on mobile and desktop formats. The feature is also still exclusive to ChatGPT users who have a Plus, Team, Enterprise or Education plan.
+Advanced Voice Mode (September 2024)
+Advanced voice mode
+enables ChatGPT users to have more natural-sounding conversations when interacting with the chatbot. OpenAI initially releases this feature to users who pay for the Plus, Team or Enterprise plan.
+OpenAI o1 Model Family Announcement (September 2024)
+OpenAI announces the
+release of its o1 model
+, which demonstrates complex reasoning capabilities. To kick off the start of its o1 model family, OpenAI also announces the limited release of its
+o1-preview
+and
+o1-mini
+models.
+Memory (February 2024)
+This update allows ChatGPT to remember details from previous conversations and tailor its future responses accordingly. This can include factual information — like dietary restrictions or relevant details about the
+user’s business
+— as well as stylistic preferences like brevity or a specific kind of outline. According to an
+OpenAI blog post
+, ChatGPT will build memories on its own over time, though users can also prompt the bot to remember specific details — or forget them.
+ChatGPT Team (January 2024)
+ChatGPT Team
+lets companies create shared workspaces with settings that apply to all users, as well as the ability to share proprietary data sets. A
+marketing team
+, for example, might coach the model on its brand voice guidelines and upload campaign analytics so members of the team can use ChatGPT to spot trends.
+GPT Store (January 2024)
+The
+GPT Store
+allows users to share their customized GPT models with others. According to OpenAI, builders based in the United States will be eligible for payments based on the usage of their custom GPTs.
+Custom GPTs (November 2023)
+This update
+allows users to create
+customized GPTs
+that follow specific instructions and knowledge provided by the builder. Custom GPTs can also be connected to real-world data through APIs.
+DALL-E 3 (October 2023)
+The newest version of OpenAI’s image generator, DALL-E, was
+made available
+to ChatGPT Plus and Enterprise users.
+Image and Voice Recognition; Text to Speech (September 2023)
+This update
+allows users to interact with ChatGPT via speech, and to upload images that the model can analyze and use to generate outputs. It also added voice-to-text capabilities, effectively making ChatGPT a full-fledged
+voice assistant
+.
+Custom Instructions Beta (July 2023)
+Custom instructions
+allow users to save directions that apply to all interactions, rather than adding them to every request.
+GPT-4 General Availability (July 2023)
+According to OpenAI
+, GPT-4 is capable of handling “much more nuanced instructions” than its predecessor, and can also accept image inputs. OpenAI also highlighted that GPT-4 scored “around the top 10 percent of test takers” in a simulated bar exam, whereas its predecessor landed in the bottom 10 percent.
+ChatGPT Plus (February 2023)
+This
+paid subscription version
+of ChatGPT provides faster response times, access during peak times and the ability to test out new features early.
+Official Launch (November 2022)
+ChatGPT, powered by OpenAI’s GPT-3.5 model,
+launched in November 2022
+.
+The Future of ChatGPT
+ChatGPT is due for more upgrades in the
+near future
+, with the advanced voice mode potentially receiving a
+live camera feature
+to create even more seamless interactions. But it’s OpenAI’s plan to
+launch AI agents in 2025
+that could bring it close to its
+ultimate goal
+of achieving
+artificial general intelligence
+(AGI), where a machine can behave and perform actions the way humans can.
+AI agents
+represent stage three of AGI, enhancing ChatGPT’s reasoning abilities and enabling it to complete a broader range of tasks without human assistance.
+OpenAI has already gotten a glimpse of this future through its o1 model, and the results have been mixed. According to research conducted by OpenAI and
+AI safety
+organization Apollo Research, o1 provides more intelligent answers than GPT-4o while also
+attempting to deceive users
+more than any major AI model available. These
+new potential dangers
+need to be factored into the continued progression of ChatGPT.
+For now, “this technology is amazing, but it’s still first generation,” Kagan, the tech industry analyst, said, likening ChatGPT to what the
+Ford Model T did for cars
+. “It was a really exciting innovation, but it was nothing compared to what we’re driving today.”
+Frequently Asked Questions
+Does ChatGPT have an app?
+Yes — a ChatGPT app is available for Android, iPhone and iPad devices. It can be downloaded via Google Play for Android or the App Store for iOS devices.
+How does ChatGPT work?
+Similar to a phone’s auto-complete feature, ChatGPT uses a prediction model to guess the most likely next word based on the context it has been provided. The model has been trained through a combination of automated learning and human feedback to generate text that closely matches what you’d expect to see in text written by a human.
+What does ChatGPT stand for?
+The GPT in ChatGPT stands for “generative pre-trained transformer.”
+What are the main ChatGPT competitors?
+Major ChatGPT competitors include Anthropic’s Claude, Google’s Gemini, Meta’s Llama 2 and Jasper AI.
+What is ChatGPT used for?
+ChatGPT can be used in everyday and professional contexts for tasks like:
+Composing emails
+Generating social media copy
+Fielding customer support requests
+Summarizing long documents
+Generating computer code
+Editing or critiquing user-provided text
+Transcribing and summarizing video and audio content
+Generating recipes
+Creating workout plans
+Translating text into different languages
+Looking up information
+Debugging code
+Teaching games
+Matthew Urwin, Andreas Rekdal contributed reporting to this story.
+Recent Artificial Intelligence Articles
+The U.S. Is Counting on Intel to Fuel Its AI Ambitions. Will It Work?
+Meta’s New Job Board Isn’t About You. It’s About AI.
+AI Browsers Are Taking Over the Web — And Competition Is Fierce
+Explore Job Matches
+.
+Job Title or Keyword
+Clear search
+Location
+Job Type
+Clear
+Apply
+See Jobs
+Join
+Log In
+Tech Jobs
+Companies
+Articles
+Remote
+Tech Hubs
+Post Job

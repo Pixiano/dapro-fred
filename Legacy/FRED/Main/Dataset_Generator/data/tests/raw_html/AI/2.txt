@@ -1,0 +1,175 @@
+Google AI -
+      
+      
+        Understanding AI: AI tools, training, and skills
+AI SKILLS
+Learn essential
+AI skills
+We're building AI skills programs, trainings, and tools to address the specific needs of workers everywhere. Discover Google's courses and resources designed to help you succeed in an AI-driven world.
+Learn the basics
+Advance your skills
+Transform your business
+Explore on YouTube
+FAQs
+Learn AI basics
+Explore foundational concepts in artificial intelligence. Learn how AI works and how to effectively use it in your daily work.
+Introduction to Generative AI
+no charge
+Beginner
+Badge
+Earn a completion badge to add to your profile and showcase your AI knowledge.
+Learn generative AI basics in this short video courseâincluding what it is, how itâs used, and how it differs from traditional machine learning.
+Learn more
+Google AI Essentials
+Beginner
+Certificate
+Earn an industry-recognized credential and add it to your resume and online professional profile.
+New to AI? Learn about AI capabilities and how they can assist, empower, and inspire you. Use generative AI tools to speed up daily tasks and develop new ideas and content.
+Learn More
+Google Prompting Essentials
+Beginner
+Certificate
+Earn an industry-recognized credential and add it to your resume and online professional profile.
+Ready to get more out of AI? Learn how to use AI effectively by writing clear and specific instructions called prompts. In 5 easy steps youâll boost your productivity and make AI work for you.
+Learn More
+AI Power-Ups for Google Workspace
+no charge
+Beginner
+Badge
+Get better, faster results from Gemini in Google Workspace in this 15-minute course. Learn how to summarize emails, find information, and draft replies to manage your inbox more efficiently.
+Learn more
+I came into this course knowing very little about AI technology and this course provided me with a really solid foundation. I am looking forward to utilizing AI tools to help me with upcoming projects for work, as well as in my personal life. I highly recommend this course if youâre interested in learning about how AI can help you with a variety of work tasks.
+Candace P.
+Google AI Essentials Graduate
+Google AI Essentials
+This course is a must for anyone looking to maximize the potential of AI. It teaches you how to craft prompts that generate outputs, which truly resonate with your needs.
+Christian W.
+Prompting Essentials Graduate
+Google Prompting Essentials
+NEW
+Upskill in AI, one bite at a time
+Keeping up with the pace of AI can feel like a full-time job. Dig into AI Boost Bites, an AI learning series designed for your busy life, with less than 10 minutes per lesson.  See how Google's own experts apply tools like Gemini, NotebookLM, and Veo to real-world use cases, then apply your skills in hands-on challenges.
+Start learning
+Advance your AI skills
+Take your AI knowledge to the next level. Apply AI skills to your work and learn how to build the next big thing.
+Explore developer resources
+Introduction to Large Language Models
+no charge
+Intermediate
+Badge
+Earn a completion badge to add to your profile and showcase your AI knowledge.
+In this course, learn all about large language models (LLMs) and how to use prompt tuning to enhance LLM performance.
+Learn More
+Introduction to AI Image Generation
+no charge
+Intermediate
+Badge
+Earn a completion badge to add to your profile and showcase your AI knowledge.
+In this course, learn about diffusion models that underpin state-of-the-art image generation models on Google Cloud, including how to train and deploy them on Vertex AI.
+Learn More
+Gemini and the Software Development Lifecycle
+no charge
+Intermediate
+Badge
+Earn a completion badge to add to your profile and showcase your AI knowledge.
+Learn how to use GeminiâGoogleâs next-generation AI modelâin the software development lifecycle to develop, test, deploy, and manage applications.
+Learn More
+Sharpen your AI skills with a certification from Google Cloud
+85%
+of Google learners say that having a cloud certification gives them the skills to fill in-demand roles.
+81%
+of Google learners say that having a cloud certification helps them get promoted faster, and ultimately contributes to their professional success.
+86%
+of decision-makers agree that Google Cloud learning resources have helped their organization stay ahead in the AI era.
+Google/Ipsos, Cloud Learning Services Market Pulse, Fielded Sept 17th - October 23rd 2024 (US, UK, FR, DE, IN, BR, MX, JP, AU/NZ). Significantly outperforming based on an average of competitor platforms.
+certification
+Get certified in generative AI
+Become a certified leader in gen AI. Prove your skills in identifying business cases for gen AI and driving organizational transformation.
+Get started
+Transform your business with AI
+Equip your organization with essential AI skills to drive growth, scalability, and efficiency.
+Innovating with Google Cloud Artificial Intelligence
+Beginner
+Badge
+Earn a completion badge to add to your profile and showcase your AI knowledge.
+This course provides leaders with an overview of how they can use Google products to transform their organization with AI and ML.
+Learn More
+Virtual AI Courses, Led by Product Experts
+Intermediate
+Virtual class
+Upskill employees with remote or in-person AI courses led by Google-authorized instructors.
+Learn More
+Make AI Work for You
+no charge
+Beginner
+Workshop
+This expert-led training is designed to help small business owners tackle real business problems, and will lead you through guided practice solving these challenges using Google AI tools.
+Learn More
+I donât think a day goes by without incorporating what I learned. I love being able to prompt [AI] to write a simple introduction or suggest improvements to awkward sentences. It also helps with organizing information and brainstorming ideas.
+Caroline G.
+Google Prompting Essentials Graduate
+Google Prompting Essentials
+Explore AI resources on YouTube
+Discover a curated collection of AI tutorials, explainers, and demos to deepen your understanding and build practical skills.
+Introduction to Artificial Intelligence
+Discover foundational AI concepts, such as machine learning (ML), and explore how AI works, including the rise of generative AI and how to perform tasks with it.
+Watch now
+Introduction to Responsible AI
+Learn about Googleâs seven AI principles, a framework designed to guide users toward a safer and more ethical use of AI.
+Watch now
+A Developerâs Guide to LLMs
+Explore different AI model options, analyze pricing structures, and dive into essential features of large language models (LLMs).
+Watch now
+Use AI as a Creative or Expert Partner
+Advance your prompting skills with advanced prompting techniques, like prompt-chaining and creating AI agents.
+Watch now
+FAQs
+Why are AI skills important?
+Artificial intelligence (AI) is poised to reshape the way we work. Yet, many organizations donât have the expertise they need to unlock AIâs full potential. Learning AI skills helps future-proof your career, increases your productivity, and opens up new opportunities.
+85% of Google Cloud learners say that cloud learning resources have contributed to their goal of gaining expertise with generative AI tools and services. Meanwhile, 86% of decision makers learning from Google Cloud say it helps their organization stay ahead in AI and 81% said it helped them stay ahead of the competition*.
+*Google/Ipsos, Cloud Learning Services Market Pulse, Fielded Sept 17th - October 23rd 2024 (US, UK, FR, DE, IN, BR, MX, JP, AU/NZ)
+How do I know which Google AI course or credential is right for me?
+It depends on your current AI knowledge and your learning goals. New to AI? Start with introductory resources like
+Google AI Essentials
+or explore more courses on
+Google Skills
+. These will give you a solid foundation in AI concepts.
+Ready to dive deeper? Consider more specialized courses or certifications based on your specific interests or career goals. Google Skills offers AI courses and hands-on labs where you can earn
+Skill Badges
+âdigital credentials to validate your abilities with Google Cloud products.
+What is the difference between a certificate and a certification?
+Certificates generally refer to a program focused on building practical skills in a specific area. Certificates often require less time and financial commitment than certifications. Examples include
+Google Career Certificates
+or
+Google Cloud Certificates
+, which focus on job-ready skills.
+Certifications, including
+Google Cloud Certifications
+typically involve a more rigorous process to validate technical expertise in a particular technology or domain. Certifications often require passing an exam and may demonstrate proficiency in specific tools or platforms.
+Where can I learn more about Googleâs AI learning resources?
+Google offers a variety of resources to help you learn about and develop AI skills. Explore the full catalog on
+Google Skills
+, including AI-related courses and hands-on learning experiences with Google products. You can earn
+Skill Badges
+to demonstrate your proficiency in specific AI technologies or follow
+learning paths
+to learn how to approach AI use cases.
+Grow with Google
+provides practical training, tools, and resources to help you apply AI to your job, business, or classroom. The program features foundational courses like AI Essentials and Prompting Essentials, as well as integrated, field-specific AI training within its Google Career Certificates. To further support career development, the program offers interactive AI-powered tools like
+Career Dreamer
+to help you explore new job paths and
+Interview Warmup
+to assist with interview preparation.
+Do Google Cloud AI learning resources cost money?
+Google offers many learning resources to learn AI skillsâsome paid and some available at no charge to learners. The complementary resources on this page are marked with a âno chargeâ tag. You can also access a library of helpful learning content on
+YouTube
+, or find free courses for small business owners, students and educators on
+grow.google/ai
+.
+Join the
+Google Cloud Innovators
+community and develop new skills with 35 credits at no charge to use on courses and hands-on labs in
+Google Skills
+. These credits renew every month. Non-Innovators can access our full catalog of learning content with a monthly subscription of $29 per month. For higher education, government, nonprofit and workforce development programs, Google Cloud offers a no-charge option thatâs cohort-based and faculty-facilitated. You can learn more at
+g.co/edu/cloudready
+.

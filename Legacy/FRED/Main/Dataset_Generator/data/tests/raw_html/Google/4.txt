@@ -1,0 +1,125 @@
+How to update – Google Chrome
+Menu
+Menu
+icon chrome logo
+Jump to content
+Get Chrome
+Download Chrome
+close drawer
+icon chrome logo
+Get Chrome
+Download Chrome
+Chrome keeps you up to date
+Chrome updates happen in the background automatically – keeping you running smoothly and securely with the latest features.
+How to check your version of Chrome
+Step 1
+On your computer, open Chrome
+See steps for Android or
+iOS
+Step 2
+Click the three dots
+above
+'Download Chrome' in the top-right corner
+Step 3
+Click Help  >  About Chrome
+Here's how you can update Chrome
+Updates automatically
+Chrome checks for new updates regularly, and when an update is available, Chrome applies it automatically when you close and reopen the browser.
+Get more
+help
+Applying a pending update
+If you haven't closed your browser in a while, you might see a pending update in the top-right corner of your browser, next to your profile picture.
+Chrome will automatically update the next time that you close and reopen Chrome. But if you want to apply the update straight away, just click the three dots to the right of the message and select the first menu item.
+Get more
+help
+Why keep Chrome updated
+Keeping Chrome up to date allows you to take advantage of the latest Chrome features and security updates to keep you productive, secure and mobile.
+Security
+Keeps you secure
+Automatic updates ensure that you have the latest security features and fixes as soon as they're available.
+Features
+The latest Google features
+Get new features the minute that they're released by keeping Chrome up to date.
+Improvements
+Improved speed and performance
+Find new performance settings and optimisations to keep Chrome fast and efficient.
+Help when you need it
+Need more assistance with Chrome? Explore our Help Centre to learn more about updates and other ways to use Chrome.
+Visit the Help
+Centre
+Get Chrome for Windows
+For Windows 10 32-bit
+For Windows 11/10 64-bit
+For Windows 11 ARM
+For Windows XP/Vista
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For Windows 8.1/8/7 32-bit
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For Windows 8.1/8/7 64-bit
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+Get Chrome for Mac
+For macOS 12 or later.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+For macOS 10.13/10.14
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For macOS 10.15
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For macOS 11
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+Get Chrome for Linux
+Debian/Ubuntu/Fedora/openSUSE.
+Please select your download package:
+64 bit .deb (For Debian/Ubuntu)
+64 bit .rpm (For Fedora/openSUSE)
+Not Debian/Ubuntu or Fedora/openSUSE? There may be a community-supported version for your distribution
+here
+.
+Get Chrome for iOS
+Get Chrome for chromeOS
+Get Chrome for android
+Set Google Chrome as my default browser
+Help make Google Chrome better by automatically sending usage statistics and crash reports to Google.
+Learn more
+Note:
+Installing Google Chrome will
+add the Google repository
+so that your system will automatically keep Google Chrome up to date. If you don’t want Google's repository, do 'sudo touch/etc/default/google-chrome' before installing the package.
+By downloading Chrome, you agree to the
+Google Terms of Service
+and
+Chrome and ChromeOS Additional Terms of Service
+Accept and Install
+Accept and Install
+Accept and Install
+Get Chrome
+Download for phone or tablet
+Android
+iOS
+Download for another desktop OS
+Windows 11/10 64-bit
+Windows 10 32-bit
+Windows 11 ARM
+macOS 12 or later
+Linux
+Frozen versions
+Windows XP
+Windows Vista
+Windows 8.1/8/7 32-bit
+Windows 8.1/8/7 64-bit
+Mac 10.6 - 10.8
+Mac 10.9
+Mac 10.10
+Mac 10.11 - 10.12
+Mac 10.13 - 10.14
+Mac 10.15
+Mac 11
+Looks like you’re already using Chrome browser. Great!
+The device that you have runs on ChromeOS, which already has Chrome browser built in. No need to manually install or update it – with automatic updates, you’ll always get the latest version.
+Learn more about automatic updates.
+Looking for Chrome for a different operating system?
+See the
+full list of supported operating systems
+.

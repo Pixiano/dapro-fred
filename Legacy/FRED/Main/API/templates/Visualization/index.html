@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>FRED Animation</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.7.0/lib/p5.min.js"></script>
+    <script src="sketch.js"></script>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        font-family: Tahoma;
+      }
+
+      #fredText {
+        position: absolute;
+        top: 800px; /* place below canvas center for 1080p window */
+        width: 100%;
+        text-align: center;
+        font-size: 64px;
+        font-weight: bold;
+        color: #6ef3ff;
+        text-shadow: 
+          0 0 10px #6ef3ff,
+          0 0 20px #6ef3ff,
+          0 0 30px #6ef3ff,
+          0 0 40px #42f569;
+        background: none; /* fully transparent */
+      }
+    </style>
+  </head>
+  <body>
+    <div id="fredText">F.R.E.D.</div>
+  </body>
+</html>

@@ -1,0 +1,219 @@
+Browser features and tools – Google Chrome
+Menu
+Menu
+icon chrome logo
+Jump to content
+Get Chrome
+Download Chrome
+close drawer
+icon chrome logo
+Get Chrome
+Download Chrome
+Innovative features built by Google
+Powerful tools like Google Lens and Google Translate help you do even more. And they're built right into Chrome.
+Play
+Pause
+Replay
+Play
+Pause
+Replay
+Google Lens in Chrome
+See it, search it
+With Google Lens in Chrome, you can search and ask questions about anything that you see – whether it's a photo that you take, an item in an image or text in a video, all without having to open a new tab.
+Watch full video
+Search
+Productivity
+Accessibility
+Media
+Explore
+Search
+Productivity
+Accessibility
+Media
+Tips and tricks for
+fast answers
+Check out these tips that make Google Search better than ever.
+Shortcuts
+Type @ for a toolbox full of shortcuts.
+Quickly start your chat with Gemini right in the address bar and get the result on
+gemini.google.com.
+You can also search your bookmarks, history and open tabs to find what you're looking for in record time.
+Voice search
+Use your voice to ask questions.
+Step up to the mic and use your voice to search. Ask to see pictures, get answers to your pressing questions, say words or phrases to be translated and get definitions for words.
+Learn about Google Voice
+Search
+Instant answers
+Get information instantly.
+Save time and get answers faster than ever with results right in the address bar. Get the current weather, define words and translate words and phrases, all without having to leave the page that you're on.
+Fast solutions
+Calculate equations on the fly.
+The address bar acts as a handy calculator that you can use without leaving the page that you're on. Easily convert units of measurement, get foreign currency exchange rates and solve simple mathematical equations.
+Powerful ways to
+get it all done
+Play
+Pause
+Replay
+Play
+Pause
+Replay
+Google Workspace
+Connect to Google Drive
+Sign in with your Google Account to access Google Drive. With Chrome, you can quickly access your files right from the search bar and work on them while offline, too.
+Sign in with your Google
+Account
+Translate web pages in a single click.
+Read entire websites in your preferred language and even switch between the original and translated versions.
+Learn more about
+Translate
+Translate on the go using Google Lens.
+Translate a sign in a photo or text on a menu without having to retype the words yourself.
+More ways to translate from the address bar.
+Get instant results when you ask to translate words or short phrases by typing '[Word] in [Language]'.
+Caption and translate audio.
+Translate in near real-time while playing audio in a different language, like in a video or podcast.
+Translate web pages in a single click.
+Read entire websites in your preferred language and even switch between the original and translated versions.
+Learn more about
+Translate
+Translate on the go using Google Lens.
+Translate a sign in a photo or text on a menu without having to retype the words yourself.
+More ways to translate from the address bar.
+Get instant results when you ask to translate words or short phrases by typing '[Word] in [Language]'.
+Caption and translate audio.
+Translate in near real-time while playing audio in a different language, like in a video or podcast.
+Google Pay
+Set up in seconds and simplify buying online
+Seamless payments across all of your devices begin with a few quick steps. Add your card details to your Google Account, and they will be stored safely for a smoother checkout experience.
+Explore Google
+Pay
+A more connected
+world for all
+Accessibility
+Features that work for you
+Chrome supports screen readers and magnifiers and offers full-page zoom, high-contrast colour, AI image descriptions, live captioning, keyboard browsing and more – making it easier than ever to surf the web in a way that works for you.
+Learn about Chrome
+accessibility
+100%
+175%
+100%
+175%
+Your media, your way, on any screen
+Google Cast and media controls
+Watch any way that you want
+With Chrome, you can cast content from your computer or phone to your TV with Google Cast built-in. Choose to cast your entire screen or just a specific tab.
+Learn more about
+casting
+Your media, your way, on any screen
+Google Cast and media controls
+Watch any way that you want
+With Chrome, you can cast content from your computer or phone to your TV with Google Cast built-in. Choose to cast your entire screen or just a specific tab.
+Learn more about
+casting
+Additional resources
+Responsible AI practices
+Here at Google, we're committed to developing and using artificial intelligence responsibly.
+Learn about Google
+AI
+What’s new
+Learn about the latest release coming to Chrome. Best of all, you get these features every time with automatic updates.
+Learn what’s new on
+Chrome
+Chrome safety
+Make the most of your browsing experience, while Google Chrome's privacy and security features keep you safe from malware and dangerous sites.
+Learn about safety
+Responsible AI practices
+Here at Google, we're committed to developing and using artificial intelligence responsibly.
+Learn about Google
+AI
+What’s new
+Learn about the latest release coming to Chrome. Best of all, you get these features every time with automatic updates.
+Learn what’s new on
+Chrome
+Chrome safety
+Make the most of your browsing experience, while Google Chrome's privacy and security features keep you safe from malware and dangerous sites.
+Learn about safety
+Take your browser with you
+Download Chrome on your mobile device or tablet and sign into your account for the same browser experience, everywhere.
+Get Chrome
+Download Chrome
+Scan for the Chrome app
+Get Chrome for your phone
+mobile-icon
+chevron-right-color
+Get Chrome for Windows
+For Windows 10 32-bit
+For Windows 11/10 64-bit
+For Windows 11 ARM
+For Windows XP/Vista
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For Windows 8.1/8/7 32-bit
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For Windows 8.1/8/7 64-bit
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+Get Chrome for Mac
+For macOS 12 or later.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+For macOS 10.13/10.14
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For macOS 10.15
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For macOS 11
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+Get Chrome for Linux
+Debian/Ubuntu/Fedora/openSUSE.
+Please select your download package:
+64 bit .deb (For Debian/Ubuntu)
+64 bit .rpm (For Fedora/openSUSE)
+Not Debian/Ubuntu or Fedora/openSUSE? There may be a community-supported version for your distribution
+here
+.
+Get Chrome for iOS
+Get Chrome for chromeOS
+Get Chrome for android
+Set Google Chrome as my default browser
+Help make Google Chrome better by automatically sending usage statistics and crash reports to Google.
+Learn more
+Note:
+Installing Google Chrome will
+add the Google repository
+so that your system will automatically keep Google Chrome up to date. If you don’t want Google's repository, do 'sudo touch/etc/default/google-chrome' before installing the package.
+By downloading Chrome, you agree to the
+Google Terms of Service
+and
+Chrome and ChromeOS Additional Terms of Service
+Accept and Install
+Accept and Install
+Accept and Install
+Get Chrome
+Download for phone or tablet
+Android
+iOS
+Download for another desktop OS
+Windows 11/10 64-bit
+Windows 10 32-bit
+Windows 11 ARM
+macOS 12 or later
+Linux
+Frozen versions
+Windows XP
+Windows Vista
+Windows 8.1/8/7 32-bit
+Windows 8.1/8/7 64-bit
+Mac 10.6 - 10.8
+Mac 10.9
+Mac 10.10
+Mac 10.11 - 10.12
+Mac 10.13 - 10.14
+Mac 10.15
+Mac 11
+Looks like you’re already using Chrome browser. Great!
+The device that you have runs on ChromeOS, which already has Chrome browser built in. No need to manually install or update it – with automatic updates, you’ll always get the latest version.
+Learn more about automatic updates.
+Looking for Chrome for a different operating system?
+See the
+full list of supported operating systems
+.

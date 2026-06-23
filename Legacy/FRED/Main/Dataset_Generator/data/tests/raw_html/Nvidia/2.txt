@@ -1,0 +1,17 @@
+Download Drivers
+NVIDIA Home
+>
+Download Drivers
+>
+Download Confirmation
+Download
+This download includes the NVIDIA graphics driver and an option to additionally install the GeForce Experience application. Details for use of the software can be found in the
+NVIDIA GeForce Software license
+and
+GeForce Experience Software license
+respectively.
+Download
+Keep your drivers up to date
+GeForce Experience
+automatically notifies you of new driver releases from NVIDIA.
+With a single click, you can update the driver directly, without leaving your desktop.

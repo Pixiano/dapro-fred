@@ -1,0 +1,134 @@
+📘 FRED v2.0 — Phases 11–20
+
+(a.k.a. “The Awakening Protocol”)
+Total estimate: ~2 months (speedrun ~4–5 weeks)
+Target: Semi-agentic, multi-modal, self-improving FRED
+
+
+Phase 11 – Central Classifier Integration
+
+⏱ ~1 week
+Tagline: “The Dispatcher Awakens”
+Goal: Unify all FRED modules under one “brainstem” to detect intent.
+Tasks:
+
+Primary classifier distinguishes OS commands vs. general chat/queries.
+Routes input to the correct handler (OS executor, LLM core, or other modules).
+Acts as a traffic controller for every incoming query.
+Outcome: FRED can instantly understand “who should think next.”
+
+Phase 12 – Web Search & API Expansion
+
+⏱ ~1 week
+Tagline: “Hands Beyond the LAN”
+Goal: Give FRED access to live information and external services.
+Tasks:
+
+websearch_handler() for live info (DuckDuckGo/SerpAPI).
+Modular api_agent() for apps like weather, Swiggy, Amazon, etc.
+Triggered only when classifier detects external knowledge intent.
+Outcome: FRED gains “live awareness” and starts acting beyond the PC.
+
+Phase 13 – Presentation & School Demo
+
+⏱ ~1 week
+Tagline: “First Light in Public”
+Goal: Showcase FRED in a school or LAN environment.
+Tasks:
+
+Scripted demo of OS control, chat, and web/API handling.
+Visual UI displays module activation.
+Voice responses enabled for interactivity.
+Outcome: FRED performs smoothly, demonstrating reflexes, intelligence, and personality.
+
+Phase 14 – Fine-Tuning & Core Refinement
+
+⏱ 1–2 weeks
+Tagline: “The Neural Growth”
+Goal: Teach FRED your personal style and task efficiency.
+Tasks:
+
+Collect conversation + task logs for fine-tuning.
+Reinforce reasoning, personality, and context retention.
+Offline QLoRA pipeline for efficient updates.
+Outcome: FRED becomes Vatsal-tuned, learning to think and respond in your style.
+
+Phase 15 – Hardware Expansion (RTX 5060Ti Era)
+
+⏱ 1 week
+Tagline: “Muscles for the Mind”
+Goal: Exploit new GPU power for heavier computations.
+Tasks:
+
+GPU acceleration for local models (PyTorch + CUDA).
+Hardware detection, benchmarking, and monitoring module.
+Prepares FRED for future submodules: voice cloning, real-time vision.
+Outcome: FRED now knows and leverages its own computational body.
+
+Phase 16 – Task Queue & % Autonomy
+
+⏱ 1–2 weeks
+Tagline: “The Semi-Autonomous Mind”
+Goal: Enable multi-tasking with controlled autonomy.
+Tasks:
+
+Task queue system for sequential or parallel execution.
+Internal state tracks pending, active, and completed tasks.
+Configurable autonomy percentage for independent task handling.
+Outcome: FRED moves from reactive to semi-autonomous — it can work while you do.
+
+Phase 17 – Emotional Intelligence
+
+⏱ 1 week
+Tagline: “Feeling in the Wires”
+Goal: Add adaptive emotional responses.
+Tasks:
+
+Fine-tuning with emotional datasets (empathetic dialogues, tone adaptation).
+Sentiment analysis → emotion tagging → tone modulation (text + TTS).
+Store short-term emotional context for influencing replies.
+Outcome: FRED can respond contextually with emotional nuance, enhancing realism.
+
+Phase 18 – Dynamic Memory Fusion
+
+⏱ 1 week
+Tagline: “The Mind Remembers”
+Goal: Merge short-term and long-term memory into an episodic structure.
+Tasks:
+
+Vectorize memory entries for similarity search.
+Auto-forgetting for irrelevant info.
+Supports emotional and task-context recall.
+Outcome: FRED remembers past interactions intelligently, improving context awareness.
+
+Phase 19 – Visual Core: “Orange Mind” UI
+
+⏱ 1 week
+Tagline: “A Face for the Mind”
+Goal: Give FRED a modern, Jarvis-style visual identity.
+Tasks:
+
+Dynamic orange energy blob representing active thought.
+Visual feedback for tasks, queue, and module activations.
+UI built with HTML/CSS + WebSocket, responsive and interactive.
+Outcome: FRED becomes visually alive — a signature identity that matches its intelligence.
+
+Phase 20 – Autonomous Experimentation
+
+⏱ 2 weeks
+Tagline: “The Mind Upgrades Itself”
+Goal: Enable FRED to perform safe autonomous improvements.
+Tasks:
+
+Task queue + emotional + fine-tuning layers combine for emergent behavior.
+Sandbox testing: FRED can create datasets, evaluate accuracy, or optimize modules.
+Optional “Reflection” stage: evaluates task outcomes and improves next iteration.
+Outcome: FRED achieves semi-autonomous operation — your personal AI that learns to upgrade itself.
+
+💡 Phase 11–20 Summary:
+
+FRED evolves from reactive assistant → semi-agentic AI with reflexes, live awareness, and emergent personality.
+
+Architecture is modular, hierarchical, and extensible — perfect foundation for future KojiGPT without mixing them yet.
+
+GPU, task queue, emotional intelligence, and visual identity complete the “god-tier 15-year-old AI” build.

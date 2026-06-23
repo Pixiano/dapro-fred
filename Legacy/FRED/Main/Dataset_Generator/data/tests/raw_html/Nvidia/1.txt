@@ -1,0 +1,200 @@
+Download The Official NVIDIA Drivers | NVIDIA
+This site requires Javascript in order to view all its content. Please enable Javascript in order to access all the functionality of this web site. Here are the
+instructions how to enable JavaScript in your web browser.
+NVIDIA Drivers
+Note for Linux Drivers
+Many Linux distributions provide their own packages of the NVIDIA Linux Graphics Driver in the distribution's native package management format. This may interact better with the rest of your distribution's framework, and you may want to use this rather than NVIDIA's official package.
+Get Automatic Driver Updates
+The NVIDIA App is the essential companion for PC gamers and creators. Keep your PC up to date with the latest NVIDIA drivers and technology.
+Best for:
+Gamers / Creators
+Best for:
+Professionals / Workstation Users
+Latest Driver Downloads
+Latest Driver Downloads
+driver-popular-download-grd-name
+Best for:
+Gamers
+Details
+Driver Name:
+~ddName_td~
+Driver Version:
+~ddVersion_td~
+Release Date:
+~ddReleaseDate_td~
+Operating System:
+~ddOperatingSystem_td~
+Language:
+~ddLanguage_td~
+File Size:
+~ddFileSize_td~
+Download
+driver-popular-download-nsd-name
+Best for:
+Creatives
+Details
+Driver Name:
+~ddName_td~
+Driver Version:
+~ddVersion_td~
+Release Date:
+~ddReleaseDate_td~
+Operating System:
+~ddOperatingSystem_td~
+Language:
+~ddLanguage_td~
+File Size:
+~ddFileSize_td~
+Download
+driver-popular-download-nrtx-name
+Best for:
+Workstation Users
+Details
+Driver Name:
+~ddName_td~
+Driver Version:
+~ddVersion_td~
+Release Date:
+~ddReleaseDate_td~
+Operating System:
+~ddOperatingSystem_td~
+Language:
+~ddLanguage_td~
+File Size:
+~ddFileSize_td~
+Download
+Manual Driver Search
+Select Product Category
+dflt TITAN
+Select Product Series
+dflt GeForce MX100 Series (Notebook)
+Select Product
+GeForce MX150
+dflt Windows 10 32-bit
+dflt English (US)
+DCH
+Standard
+All
+Game Ready Driver
+Studio Driver
+Find DriversPOC
+No Drivers Found.
+Please select a different combination.
+Linux Drivers
+Unix Driver Archive
+Note:
+Many Linux distributions provide their own packages of the NVIDIA Linux Graphics Driver in the distribution's native package management format. This may interact better with the rest of your distribution's framework, and you may want to use this rather than NVIDIA's official package.
+Additional Drivers
+NVIDIA CUDA Drivers for Mac
+Quadro Advanced Options(Quadro View, NVWMI, etc.)
+NVIDIA Physx System Software
+NVIDIA Quadro Sync and Quadro Sync II Firmware
+HGX Software
+News & Recommendations
+Gaming Hardware  |  Product
+GeForce RTX™ 50 Series Graphics Cards and Desktops
+GeForce RTX
+TM
+graphics cards bring game-changing AI capabilities to gamers and creators. Multiply performance with NVIDIA DLSS 4, generate images at unprecedented speed, and unleash your creativity with NVIDIA Studio.
+Games |  News
+RTX. It's On.
+DLSS 4 and NVIDIA Reflex available now.
+Games |  News
+Get
+ARC Raiders
+With Select GeForce RTX 50 Series.*
+*Terms and conditions apply.
+Gaming Hardware | Product
+Student Recommended Laptops
+Featuring specialized AI technologies, 50 Series laptops accelerate top applications to help students learn, create, and game faster than an average laptop.
+Download
+Download
+Download
+NVIDIA Virtual GPU Customers
+Enterprise customers with a current Virtual GPU (vGPU) software license (NVIDIA vPC, NVIDIA vApps or NVIDIA RTX Virtual Workstation (vWS), can log into the enterprise software download portal by clicking below. Need more information about how to access your purchased licenses?
+vGPU Software Downloads Details
+.
+Login
+Linux Drivers
+Unix Driver Archive
+Note:
+Many Linux distributions provide their own packages of the NVIDIA Linux Graphics Driver in the distribution's native package management format. This may interact better with the rest of your distribution's framework, and you may want to use this rather than NVIDIA's official package.
+Additional Drivers
+NVIDIA CUDA Drivers for Mac
+Quadro Advanced Options(Quadro View, NVWMI, etc.)
+NVIDIA Physx System Software
+NVIDIA Quadro Sync and Quadro Sync II Firmware
+HGX Software
+NVIDIA Virtual GPU Customers
+Enterprise customers with a current Virtual GPU (vGPU) software license (NVIDIA vPC, NVIDIA vApps or NVIDIA RTX Virtual Workstation (vWS), can log into the enterprise software download portal by clicking below. Need more information about how to access your purchased licenses?
+vGPU Software Downloads Details
+.
+NVIDIA Virtual GPU Customers
+Enterprise customers with a current Virtual GPU (vGPU) software license (NVIDIA vPC, NVIDIA vApps or NVIDIA RTX Virtual Workstation (vWS), can log into the enterprise software download portal by clicking below. Need more information about how to access your purchased licenses?
+vGPU Software Downloads Details
+.
+Download Type
+Production Branch/Studio
+Most users select this choice for optimal stability and performance. The NVIDIA RTX Enterprise Production Branch driver is a rebrand of the Quadro Optimal Driver for Enterprise (ODE). It offers the same ISV certification, long life-cycle support, regular security updates, and access to the same functionality as prior Quadro ODE drivers and corresponding Studio Drivers (i.e., of the same driver version number).
+New Feature Branch (NFB)/Quadro New Feature (QNF)
+Users occasionally select this choice for access to new features, bug fixes, new operating system support, and other driver enhancements offered between Production Branch releases. Support duration for New Feature Branches is shorter than that for Production Branches.
+Download Type
+"All"
+Shows all available driver options for the selected product.
+"Game Ready Drivers"
+provide the best possible gaming experience for all major games. NVIDIA's driver team exhaustively tests games from early access through release of each DLC to optimize for performance, stability, and functionality. These drivers are certified by Microsoft’s Windows Hardware Quality Labs (WHQL).
+"NFB / SLB"
+New Feature Branch (NFB)
+[formerly known as Linux Short Lived Branch (SLB)] New Feature Branch Linux drivers provide early adopters and bleeding edge developers access to the latest driver features before they are integrated into the Production Branches.
+Product Category
+See our article to
+identify what type of graphics card model
+you have. Read more about
+the difference between NVIDIA RTX, NVIDIA GeForce, and NVIDIA Quadro
+.
+Download Type
+"All"
+Shows all available driver options for the selected product.
+"Game Ready Drivers"
+provide the best possible gaming experience for all major games. NVIDIA's driver team exhaustively tests games from early access through release of each DLC to optimize for performance, stability, and functionality. These drivers are certified by Microsoft’s Windows Hardware Quality Labs (WHQL).
+"Studio Drivers"
+provide the best possible experience for key creative applications. NVIDIA does extensive testing across the top creative applications to ensure the highest levels of performance, stability, and functionality. These drivers are certified by Microsoft’s Windows Hardware Quality Labs (WHQL).
+Company Information
+About Us
+Company Overview
+Investors
+Venture Capital (NVentures)
+NVIDIA Foundation
+Research
+Corporate Sustainability
+Technologies
+Careers
+News and Events
+Newsroom
+Company Blog
+Technical Blog
+Webinars
+Stay Informed
+Events Calendar
+GTC AI Conference
+NVIDIA On-Demand
+Popular Links
+Developers
+Partners
+Executive Insights
+Startups and VCs
+NVIDIA Connect for ISVs
+Documentation
+Technical Training
+Professional Services for Data Science
+Follow NVIDIA
+NVIDIA
+United States
+Privacy Policy
+Your Privacy Choices
+Terms of Service
+Accessibility
+Corporate Policies
+Product Security
+Contact
+Copyright © 2025 NVIDIA Corporation

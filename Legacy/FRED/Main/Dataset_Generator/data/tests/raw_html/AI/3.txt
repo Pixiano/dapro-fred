@@ -1,0 +1,103 @@
+Google AI -
+      
+      Research
+Research
+Quantum Echoes algorithm is a big step toward practical applications for quantum computing
+October 2025
+Google Research
+Learn More
+chevron_right
+How a Gemma model helped discover a new potential cancer therapy pathway
+October 2025
+Google DeepMind
+Google Research
+Learn More
+chevron_right
+DeepSomatic: using AI to identify genetic variants in tumors
+October 2025
+Google Research
+Learn More
+chevron_right
+Teaching Gemini to spot exploding stars with just a few examples
+October 2025
+Google Research
+Learn More
+chevron_right
+Coral NPU: a full-stack platform for Edge AI
+October 2025
+Google Research
+Learn More
+chevron_right
+Gemini Robotics: 1.5 brings AI agents into the physical world
+September 2025
+Google DeepMind
+Learn More
+chevron_right
+Using AI to perceive the universe in greater depth
+September 2025
+Google DeepMind
+Learn More
+chevron_right
+Genie 3: a general purpose world model that can generate a diversity of interactive environments
+August 2025
+Google DeepMind
+Learn More
+chevron_right
+Advanced version of Gemini with Deep Think officially achieves gold-medal standard at the International Mathematical Olympiad
+July 2025
+Google DeepMind
+Learn More
+chevron_right
+AlphaEarth Foundations: helps map our planet in unprecedented detail
+July 2025
+Google DeepMind
+Learn More
+chevron_right
+FireSat: first images of wildfires detected by the new satellite constellation
+July 2025
+Google Research
+Learn More
+chevron_right
+SensorLM: learning the language of wearable sensors
+July 2025
+Google Research
+Learn More
+chevron_right
+Aeneas transforms how historians connect the past
+July 2025
+Google DeepMind
+Learn More
+chevron_right
+Weather Lab: supporting better tropical cyclone prediction with AI
+June 2025
+Google DeepMind
+Google Research
+Learn More
+chevron_right
+ZAPBench: one of the most ambitious datasets in brain activity research
+June 2025
+Google Research
+Learn More
+chevron_right
+AI co-scientist: plan and advance your research with AI assistance
+February 2025
+Google Research
+Google DeepMind
+Google Cloud
+Learn More
+chevron_right
+AlphaProteo: generate novel proteins for health research
+September 2024
+Google DeepMind
+Learn More
+chevron_right
+AlphaFold: accelerating breakthroughs in biology with AI
+May 2024
+Google DeepMind
+Learn More
+chevron_right
+See more research from across Google
+Visit Google DeepMind
+call_made
+Visit Google Research
+call_made

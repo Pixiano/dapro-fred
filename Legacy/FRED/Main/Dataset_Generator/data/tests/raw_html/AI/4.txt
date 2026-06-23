@@ -1,0 +1,112 @@
+Google AI -
+      
+      Build
+Build
+Start building
+Build with Google AI Studio
+Start building something new, with cutting-edge AI models and tools
+Try Google AI Studio
+chevron_right
+View Gemini API docs
+chevron_right
+Build with Vertex AI
+Explore 200+ models on our enterprise platform with tools and features for AI development
+Try Vertex AI
+chevron_right
+Try Latest Models
+View all models
+chevron_right
+Gemini
+Our most intelligent AI models
+TRY IT IN
+Gemini app
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn more
+call_made
+Gemma
+A family of lightweight, state-of-the art open models
+TRY IT IN
+Google AI Studio
+chevron_right
+Learn More
+call_made
+Veo
+Our state-of-the-art video generation model
+TRY IT IN
+Gemini app
+chevron_right
+Flow
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn More
+call_made
+Imagen
+Our leading text-to-image model
+TRY IT IN
+Gemini app
+chevron_right
+Whisk
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn More
+call_made
+Lyria
+Our latest music generation model
+TRY IT IN
+MusicFX DJ
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn More
+call_made
+chevron_left
+chevron_right
+Code with AI assistance
+Accelerate development with integrated AI coding assistance
+Colab
+AI-first coding experience in browser and free-of-charge accelerators
+Try Colab
+Jules
+An AI agent for your GitHub repositories to help you improve and understand your code
+Try Jules
+Gemini Code Assist
+Coding assistant in popular IDEs like VSCode and IntelliJ at no cost
+Try Gemini Code Assist
+Gemini in Android Studio
+AI support for every stage of your development lifecycle, right at your fingertips
+Download Android Studio
+Chrome DevTools
+Use AI assistance to streamline debugging across styling, performance, and more
+Try Chrome DevTools
+Firebase Studio
+Prototype, build, deploy, & run full-stack, AI apps from your browser
+Try Firebase Studio
+Leverage frameworks and tools
+Develop and deploy models with strong foundations in place
+Google AI Edge
+Deploy AI across mobile, web, and embedded applications
+Try Google AI Edge
+Google Cloud
+Get personalized AI tool recommendations, and explore pre-built solutions to support your work
+Try in Vertex AI
+JAX
+Build and train high-performance ML models using accelerator-optimized, differentiable NumPy-like API
+Try JAX
+TensorFlow
+Build and train ML models for deployment in any environment
+Try Tensorflow
+Keras
+Explore easy ways to train models from state-of-the-art LLMs to recommender systems
+Try Keras

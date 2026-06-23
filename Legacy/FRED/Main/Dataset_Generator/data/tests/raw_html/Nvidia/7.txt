@@ -1,0 +1,518 @@
+World Leader in Artificial Intelligence Computing | NVIDIA
+This site requires Javascript in order to view all its content. Please enable Javascript in order to access all the functionality of this web site. Here are the
+instructions how to enable JavaScript in your web browser.
+NVIDIA GTC
+See Jensen Huang's Keynote at GTC Washington, D.C.
+October 27–29  |  Walter E. Convention Center
+NVIDIA’s CEO will take the stage to explore the latest in AI. Get your pass to attend in person.
+Register Now
+NVIDIA GTC
+GTC Live Washington, D.C.
+October 28, 8:30 a.m. ET |
+Walter E. Convention Center
+Join Patrick Moorhead (Moor Insights & Strategy), Brad Gerstner (Altimeter), and Kristina Partsinevelos (CNBC) for the keynote pregame.  Add livestream to calendar.
+Register Now
+Games
+GeForce Gamer Festival - Seoul
+Celebrate 25 years of GeForce in Korea - Oct 30, 2025
+Learn More
+Data Center
+NVIDIA RTX PRO Generally Available on Google Cloud
+G4 VMs, powered by NVIDIA RTX PRO™ 6000 Blackwell Server Edition GPUs, enable enterprise workloads from agentic AI to industrial digitalization.
+Read More
+Data Center
+NVIDIA and Oracle Enable Next-Gen Enterprise AI
+New Zettascale10 cluster and AI database integrations accelerated by NVIDIA, deliver intelligence at every layer of the ecosystem.
+Read Announcement
+Artificial Intelligence
+NVIDIA DGX Spark Arrives for World’s AI Developers
+NVIDIA and its partners are shipping DGX Spark, the world’s smallest AI supercomputer.
+Buy Now
+NVIDIA GTC
+See Jensen Huang's Keynote at GTC Washington, D.C.
+NVIDIA GTC
+GTC Live Washington, D.C.
+Games
+GeForce Gamer Festival - Seoul
+Data Center
+NVIDIA RTX PRO Generally Available on Google Cloud
+Data Center
+NVIDIA and Oracle Enable Next-Gen Enterprise AI
+Artificial Intelligence
+NVIDIA DGX Spark Has Arrived
+Previous
+Next
+NVIDIA GTC
+NVIDIA GTC
+Games
+Data Center
+Data Center
+Artificial Intelligence
+What’s Next in AI Starts Here
+Join us in person at the GTC AI conference on March 17–21 in San Jose, CA.
+Join Now
+Artificial Intelligence
+AI is powering change in every industry. From generative AI and speech recognition to medical imaging and improved supply chain management, AI is providing enterprises that compute power, tools, and algorithms their teams need to do their life's work.
+Quick Links
+Overview
+Data Analytics
+Machine Learning
+Predictive Analytics
+Recommender Systems
+Speech AI
+Apache Spark
+RAPIDS
+Artificial Intelligence | Announcement
+NVIDIA and Intel to Develop AI Infrastructure and PC Products
+Artificial Intelligence | Blog
+NVIDIA, UK and US Leaders Highlight AI Infrastructure Investments
+NVIDIA’s CEO met UK PM and government officials to make the nation a global AI force.
+Artificial Intelligence | Announcement
+Industry Pioneers Adopt New Reasoning Models
+New NVIDIA Nemotron™ and Cosmos™ reasoning models offer speedier inference and reduced costs.
+Artificial Intelligence | Announcement
+Bring Physical AI to Cities and Industrial Infrastructure
+Advanced blueprints, vision language models and synthetic data generation extensions from NVIDIA Metropolis enhance productivity and improve safety across environments.
+Artificial Intelligence | Blog
+European Financial Services Industry Goes All In
+Banks and online payment companies use NVIDIA AI and data science libraries to speed data analysis.
+Artificial Intelligence | Blog
+The EBU Partners With NVIDIA on Sovereign AI
+Delivering sovereign AI to media companies prioritizing local governance and public trust.
+Generative AI | Blog
+Sovereign AI Agents Think Local, Act Global With NVIDIA AI Factories
+Validated design for AI factories pairs accelerated infrastructure with software, including a new universal NIM microservice and an expanded suite of NVIDIA blueprints.
+Generative AI | Blog
+New NVIDIA AI Blueprint for Building Data Flywheels
+Enable self-improving AI agents by automating model optimization.
+Simulation | Blog
+Transforming Cities with Physical AI
+Explore how NVIDIA ecosystem partners are redefining smart cities with digital twins and visual AI agents powered by NVIDIA Omniverse Blueprint for smart city AI.
+Previous
+Next
+Short Description
+NVIDIA and Intel
+NVIDIA UK and US Leaders Highlight
+New Reasoning Models
+Bring Physical AI to Cities
+European Financial GTC 1
+The EBU GTC 2
+Sovereign AI Agents Think GTC 6
+New NVIDIA AI Blueprint GTC 7
+Transforming Cities GTC 9
+Design and Simulation
+NVIDIA RTX™ and NVIDIA Omniverse™ deliver the performance to help professionals, creators, developers, and students worldwide enhance creative workflows and build, operate, and connect metaverse applications.
+Quick Links
+Shop
+Newsroom
+Professionals
+Creators
+Developers
+Researchers
+XR
+Simulation | Announcement
+New Omniverse Libraries, Cosmos Physical AI Models, and More for Robotics
+New NVIDIA technologies are enabling instant world reconstruction, spatial reasoning, and large-scale simulation on NVIDIA DGX Cloud and NVIDIA RTX PRO Blackwell servers.
+Amazon Devices and Services
+Robotics | Blog
+Amazon Devices & Services Achieves Zero-Touch Manufacturing With NVIDIA
+The company’s innovative manufacturing solution powers robotic arms to autonomously audit devices using NVIDIA technologies.
+Simulation | Event
+OpenUSD Day at SIGGRAPH 2025
+Join us August 13 to learn how developers and industry pioneers are adopting OpenUSD for every application, from content creation and simulation to industrial AI and robotics.
+Simulation | Blog
+NVIDIA Omniverse Digital Twins Help Taiwan Manufacturers Drive Golden Age of Industrial AI
+Blueprints for building autonomous manufacturing facilities offer transformative advances for development of trillion-dollar industries.
+Cadence, ETAP, Schneider Electric, Vertiv
+Simulation | Blog
+NVIDIA Expands Omniverse Blueprint for AI Factory Digital Twins
+NVIDIA’s expanded Omniverse Blueprint for AI factory design and operation features deeper integrations across the AI factory power, cooling, and networking ecosystem
+Simulation | Announcement
+NVIDIA Omniverse Expands Ecosystem With Wave of Physical AI Adoption
+Leading industrial software and service providers are integrating Omniverse into their solutions to accelerate industrial digitalization with physical AI.
+Simulation | Announcement
+NVIDIA Blackwell RTX PRO Comes to Workstations and Servers
+Groundbreaking AI and graphics performance redefines visualization, simulation, and scientific computing.
+Simulation | Blog
+NVIDIA Unveils Open Physical AI Dataset for Robotics and Autonomous Vehicles
+Collection of simulation-ready ground-truth and synthetically generated data now open source.
+Simulation | Announcement
+The World Foundation Model Platform to Accelerate Physical AI
+The development of physical-AI-embodied systems such as robots and autonomous vehicles is accelerated with the new NVIDIA Cosmos™ platform.
+Previous
+Next
+Short Description
+New Omniverse Libraries
+Amazon Devices & Services
+OpenUSD Day at SIGGRAPH
+NVIDIA Omniverse Digital CMPTX 1
+NVIDIA Expands Omniverse CMPTX 2
+NVIDIA Omniverse Expands
+NVIDIA Blackwell RTX PRO
+NVIDIA Unveils Open
+The World Foundation
+High-Performance Computing
+High-performance computing (HPC) is the ability to process data and perform complex calculations at high speeds. HPC is one of the most essential tools fueling the advancement of computational science.
+Quick Links
+HPC Overview
+SC22 Event
+Supercomputing
+Healthcare
+Public Sector
+Energy
+NVIDIA HPC SDK
+NVIDIA PhysicsNeMo
+Danish Centre for AI Innovation
+HPC | Announcement
+NVIDIA and Ansys Advance Quantum Algorithms for Fluid Dynamics
+NVIDIA CUDA-Q running on the Gefion supercomputer enables new engineering applications for quantum computing.
+HPC | Blog
+NVL72 GB200 Powers the Future for Quantum Computing
+NVIDIA accelerates workloads spanning quantum computing research.
+Fujitsu
+HPC | Announcement
+NVIDIA Powers World’s Largest Quantum Research Supercomputer
+AIST’s ABCI-Q supercomputer equips researchers to navigate quantum computing’s challenges.
+HPC | Announcement
+Semiconductor Industry Accelerates Electronic Design Automation With NVIDIA Blackwell and CUDA-X
+NVIDIA Blackwell adopted by TSMC, ASML, Cadence, Siemens, Synopsys, and KLA for chip design and manufacturing.
+HPC | Announcement
+NVIDIA to Build Accelerated Quantum Computing Research Center
+The new center will advance the development of quantum computing architectures and algorithms.
+Artificial Intelligence | Announcement
+Pioneering Innovation in Autonomous Imaging
+NVIDIA and GE HealthCare collaborate to advance the development of autonomous diagnostic imaging with NVIDIA Physical AI.
+HPC | Announcement
+Earth-2 Announces New NIM Microservices
+Leverage AI-accelerated models to simulate real-world outcomes for climate and weather.
+Simulation | Blog
+Revolutionize AI-Driven Material Discovery Using NVIDIA ALCHEMI
+NVIDIA ALCHEMI introduces the first accelerated materials discovery NIM.
+HPC | Announcement
+NVIDIA Powers Europe’s Fastest Supercomputer
+NVIDIA Grace Hopper platform boosts simulation and training on the Jülich JUPITER supercomputer.
+HPC | Event
+Acceleratings Quantum Computing Centers Worldwide With CUDA-Q
+Supercomputers are incorporating NVIDIA Grace Hopper and CUDA-Q to advance quantum research.
+Previous
+Next
+Short Description
+NVIDIA and Ansys GTC 1
+NVL72 GB200 GTC 2
+NVIDIA Powers World’s Largest
+Semiconductor Industry accelerates CMPTX 1
+NVIDIA to Build Accelerated
+NVIDIA and GE HealthCare
+Earth-2 Announces New NIMs
+Revolutionize AI-driven
+NVIDIA Powers Europe’s
+Acceleratings Quantum Computing Centers Worldwide With CUDA-Q
+Gaming and Creating
+NVIDIA GeForce RTX powers the world’s fastest GPUs and the ultimate platform for gamers and creators. Enjoy beautiful ray tracing, AI-powered DLSS, and much more in games and applications, on your desktop, laptop, in the cloud, or in your living room.
+Quick Links
+GeForce
+Graphics Cards
+Laptops
+DLSS
+Reflex
+NVIDIA Studio
+NVIDIA App
+Game Ready Drivers
+G-SYNC
+Games | News
+GeForce at Gamescom 2025
+New RTX games, RTX 50 Series bundle, NVIDIA Blackwell on GeForce NOW, and more.
+Games | News
+NVIDIA DLSS 4
+175+ games and apps available now. More on the way.
+Gaming Hardware | Product
+GeForce RTX™ 50 Series Graphics Cards and Desktops
+GeForce RTX
+TM
+graphics cards bring game-changing AI capabilities to gamers and creators. Multiply performance with NVIDIA DLSS 4, generate images at unprecedented speed, and unleash your creativity with NVIDIA Studio.
+Games | News
+NVIDIA DLSS
+Over 175 DLSS 4 games and apps are available now, with more added each week. Check out the latest DLSS games.
+Games | News
+RTX. It's On.
+DLSS 4 and NVIDIA Reflex available now.
+Artificial Intelligence | Product
+Project G-Assist
+Project G-Assist is an AI assistant powered by your GeForce RTX PC that helps you tune, control, and optimize your system, available now through NVIDIA app.
+Games | News
+RTX Remix
+Play the RTX Remix contest mods now and get ready for an all-new particle system coming soon.
+Games | News
+500 RTX Games and Apps!
+Over 500 RTX games and apps have revolutionized the ways we play and create with ray tracing, DLSS and other AI-powered technologies. Check out RTX in today's biggest hits.
+Artificial Intelligence | Blog
+RTX AI Garage: How to Get Started With Large Language Models on NVIDIA RTX PCs
+Learn about using LLMs locally on PCs, and discover the latest advancements in RTX AI news.
+Previous
+Next
+Short Description
+Gamescom Summary Gamescom 1
+DLSS Games Gamescom 2
+DT 50 Series
+DLSS Weekly
+Battlefield
+G-Assist Gamescom 4
+Remix Gamescom 5
+DLSS
+Broadcast
+Automotive
+From developing autonomous vehicles on NVIDIA DRIVE® to creating factory digital twins and retail experiences with NVIDIA Omniverse, our automotive solutions offer the performance and scalability to design, visualize, simulate, and create all types of future transportation.
+Quick Links
+Automotive Industry
+Self-Driving Vehicles
+In-Vehicle Computing
+AI Training
+AV Simulation
+Partners
+DRIVE Videos
+Automotive | Blog
+NVIDIA Wins Second CVPR Autonomous Grand Challenge
+The competition tests how AI generates safe, realistic self-driving behavior from sensor data.
+Automotive | Announcement
+GM and NVIDIA Collaborate on AI for Next-Gen Vehicle Experience and Manufacturing
+The largest U.S. automaker will build next-generation vehicle, factories and robots using AI, simulation and accelerated computing.
+Automotive | Blog
+NVIDIA Launches Halos, a Full-Stack, Comprehensive Safety System for AVs
+A full-stack, comprehensive safety system that unifies vehicle architecture, AI models, chips, software, tools, and services to ensure the safe development of AVs, from cloud to car.
+Automotive | Blog
+NVIDIA Expands Automotive Ecosystem to Bring Physical AI to the Streets
+Global automakers, mobility innovators, suppliers, and software providers team with NVIDIA to deliver AI from the cloud to the car.
+Automotive | Blog
+NVIDIA Automotive at CES 2025
+Global transportation leaders showcase the latest innovations powered by NVIDIA.
+Simulation | Announcement
+The World Foundation Model Platform to Accelerate Physical AI
+The development of physical-AI-embodied systems such as robots and autonomous vehicles is accelerated with the new NVIDIA Cosmos™ platform.
+Automotive | Announcement
+HMG Embraces NVIDIA AI and Omniverse for Next-Gen Mobility
+Learn how HMG accelerates innovation with
+NVIDIA – creating
+safer, smarter vehicles, boosting manufacturing, and advancing robotics.
+Automotive | Announcement
+Toyota, Aurora, and Continental Partner With NVIDIA for Next-Gen AVs
+NVIDIA DRIVE adoption expands across the global automotive ecosystem, enabling highly automated and autonomous vehicles.
+Automotive | Announcement
+Three Computer Solution for Autonomous Mobility Enhanced With Cosmos
+Transportation leaders Foretellix, Uber, Waabi and Wayve are among first to adopt the Cosmos platform to accelerate the development of autonomous vehicles.
+Automotive | Announcement
+DRIVE AI Systems Inspection Lab Achieves New Industry Safety Milestones
+Read about NVIDIA’s new safety and cybersecurity initiative for autonomous vehicles partners.
+Previous
+Next
+Short Description
+NVIDIA Wins CVPR GTC 1
+GM and NVIDIA
+NVIDIA Launches Halos
+NVIDIA Expands Automotive
+NVIDIA Automotive at CES 2025
+The World Foundation
+HMG Embraces
+Toyota, Aurora, and Continental
+Three Computer
+DRIVE AI Systems
+Robotics and Edge AI
+The NVIDIA Jetson™ and Isaac™ platforms provide end-to-end solutions to develop and deploy AI-powered autonomous machines and edge computing applications across manufacturing, logistics, healthcare, smart cities, and retail.
+Quick Links
+Shop
+Overview
+Robotics Platform
+Embedded Edge
+Robotics Research
+Isaac Simulation
+NVIDIA IGX
+NVIDIA-Certified Systems
+Ecosystem Partners
+Robotics | Announcement
+The Ultimate Platform for Physical AI and Robotics
+The new NVIDIA® Jetson Thor™ Developer Kit and module are now available.
+Amazon Devices and Services
+Robotics | Blog
+Amazon Devices & Services Achieves Zero-Touch Manufacturing With NVIDIA
+The company’s innovative manufacturing solution powers robotic arms to autonomously audit devices using NVIDIA technologies.
+Robotics | Blog
+European Companies Adopt NVIDIA to Develop AI-Driven Robots
+See AI-powered robots and automation breakthroughs from Europe’s leading robotics companies.
+Robotics | Blog
+Adapting Dexterous Robots With NVIDIA Research Workflows and Models
+See how dexterity workflows and AI models address challenges like adaptability and data scarcity.
+Robotics | Announcement
+The First Open Foundation Model for Humanoid Robot Development
+NVIDIA Isaac™ GR00T N1 brings generalized skills and reasoning to humanoid robots.
+Robotics | GTC Session
+Humanoid Developer Day at GTC
+Join us for a day of specially curated sessions that will unveil breakthroughs in humanoid robotics, foundation models, and physics-based simulation.
+Simulation | Announcement
+The World Foundation Model Platform to Accelerate Physical AI
+The development of physical-AI-embodied systems such as robots and autonomous vehicles is accelerated with the new NVIDIA Cosmos™ platform.
+Robotics | Blog
+Isaac Platform Update Brings Enhanced AI Robot Capabilities
+Accelerate AI robot development with advances in robot learning, perception, and manipulation.
+Robotics | Blog
+New Mega Omniverse Blueprint for Industrial Robot Digital Twins
+This framework advances industrial AI and robot simulation with software-defined optimization.
+Robotics | Blog
+NVIDIA Announces Isaac GR00T Blueprint to Accelerate Humanoid Robotics
+Isaac GR00T workflows for synthetic data workflows and Cosmos foundation models supercharge robot development.
+Previous
+Next
+Short Description
+The Ultimate Platform
+Amazon Devices & Services
+European Companies GTC 1
+Adapting Dexterous Robots
+The First Open Foundation
+Humanoid Developer
+The World Foundation
+Isaac Platform Update
+New Mega Omniverse
+Announces Isaac GR00T
+Data Center and Cloud Computing
+From the cloud to the office to the data center to the edge, NVIDIA provides solutions that deliver breakthrough performance on enterprise AI and HPC workloads at any scale, driving business decisions in real time and resulting in faster time to value.
+Quick Links
+Data Center
+Cloud Computing
+Edge Computing
+NVIDIA LaunchPad
+NVIDIA AI Enterprise
+DGX Systems
+NVIDIA-Certified Systems
+Data Center | Announcement
+OpenAI and NVIDIA Announce Landmark Strategic Partnership
+Millions of GPUs will be deployed to fuel OpenAI’s infrastructure growth.
+Generative AI | Announcement
+Leading European Telcos Build AI Infrastructure for Regional Enterprises
+Orange Business, Fastweb, Swisscom, Telefónica, and Telenor expand sovereign AI factories across Europe.
+Data Center | Product
+Dell Builds the Largest AI Factories With NVIDIA Blackwell
+See how Dell Technologies is assembling servers for world’s largest AI factories.
+Data Center | Product
+Global Computer Makers to Introduce AI-First DGX Personal Systems
+Leading system manufacturers are set to build NVIDIA DGX Spark and DGX Station systems.
+Data Center | Announcement
+Storage Leaders Build Infrastructure to Fuel AI Agents
+Manufacturers create AI-enabled storage based on the NVIDIA AI Data Platform reference design.
+Data Center | Announcement
+NVIDIA NVLink Fusion Builds Custom AI Compute
+NVIDIA NVLink Fusion lets industry leaders build custom AI compute with the NVIDIA partner ecosystem.
+Data Center | Announcement
+NVIDIA Blackwell Ultra Paves the Way for the Age of AI Reasoning
+Boost test-time scaling inference to accelerate AI reasoning, agentic AI, and more.
+Data Center | Product
+Introducing NVIDIA DGX B300
+A purpose-built AI factory infrastructure solution tailored to meet the computational demands of AI reasoning, powered by NVIDIA Blackwell Ultra GPUs.
+Data Center | Blog
+Where AI and Graphics Converge
+NVIDIA RTX PRO™ 6000 Blackwell Server Edition built for both visual computing and enterprise AI.
+Previous
+Next
+Short Description
+NVIDIA and OpenAI
+Leading European GTC 1
+Dell Builds the Largest AI
+Global Computer CMPTX 1
+Storage Leaders Build CMPTX 2
+NVIDIA NVLink Fusion CMPTX 3
+NVIDIA Blackwell Ultra Paves
+Introducing NVIDIA DGX B300
+Where AI and Graphics Converge
+About NVIDIA
+NVIDIA pioneered accelerated computing to tackle challenges no one else can solve. Our work in AI and digital twins is transforming the world's largest industries and profoundly impacting society.
+Quick Links
+NVIDIA GTC
+Careers
+Newsroom
+NVIDIA On-Demand
+Leaders
+Corporate Overview
+Keynote | Event
+NVIDIA CEO Jensen Huang Takes the Stage at COMPUTEX 2025
+Tune in to the NVIDIA keynote to see what’s next in AI.
+NVIDIA GTC | Event
+GTC Keynote With NVIDIA CEO Jensen Huang
+March 18 | 10 a.m. | SAP Center
+Discover what's next in AI and how it's transforming every industry.
+Artificial Intelligence | Video
+The AI Factory
+Discover how the AI Factory creates tokens to build a future of endless possibilities—accelerated by human ingenuity and NVIDIA.
+Special Address | Event
+AI Driving Digital Transformation in India and Beyond
+Discover how AI is fueling India’s groundbreaking innovation, economic growth, and global leadership.
+Special Event | Event
+Jensen Huang and Mark Zuckerberg on AI Breakthroughs
+NVIDIA and Meta CEOs discuss how researchers and creators use generative AI to build virtual worlds.
+Corporate | Blog
+Our Story
+NVIDIA is the result of the decades-long pursuit of a vision and the life’s work of our employees. Discover our company’s story.
+Artificial Intelligence | Blog
+Sustainable Strides: AI and Accelerated Computing Drive Energy Efficiency
+Learn how companies, from finance to manufacturing and beyond, are on the way to sustainable AI with NVIDIA technologies.
+Artificial Intelligence | Blog
+Self-Paced Career Development Courses in AI and Data Science
+Industry experts share advice on starting a career in AI with technical training and certifications.
+Robotics | Blog
+High School Student Develops Robot Guide Dogs With NVIDIA Jetson
+Selin Alara Ornek is using machine learning and the NVIDIA Jetson™ platform for edge AI and robotics to create robot guide dogs for the visually impaired.
+Accuray
+Corporate | Brochure
+Learn the NVIDIA Story
+Our work is truly unique. Part science. Part art. Every breakthrough helps shape what's next.
+Previous
+Next
+Short Description
+COMPUTEX 2025
+What’s Next in AI Starts Here
+The AI Factory
+Fireside Chat with Jensen Huang
+Jensen Huang and Mark Zuckerberg
+Our Story
+Sustainable Strides: AI and Accelerated Computing Drive Energy Efficiency
+Self-Paced Career Development Courses in AI and Data Science
+High School Student Develops Robot Guide Dogs With NVIDIA Jetson
+NVIDIA story
+Company Information
+About Us
+Company Overview
+Investors
+Venture Capital (NVentures)
+NVIDIA Foundation
+Research
+Corporate Sustainability
+Technologies
+Careers
+News and Events
+Newsroom
+Company Blog
+Technical Blog
+Webinars
+Stay Informed
+Events Calendar
+GTC AI Conference
+NVIDIA On-Demand
+Popular Links
+Developers
+Partners
+Executive Insights
+Startups and VCs
+NVIDIA Connect for ISVs
+Documentation
+Technical Training
+Training for IT Professionals
+Professional Services for Data Science
+Sign Up for NVIDIA News
+Subscribe
+Follow NVIDIA
+NVIDIA
+India
+Privacy Policy
+Your Privacy Choices
+Legal
+Accessibility
+Corporate Policies
+Product Security
+Contact
+Copyright © 2025 NVIDIA Corporation

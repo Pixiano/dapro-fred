@@ -1,0 +1,131 @@
+📘 F.R.E.D. — Phases 11–20
+"The Awakening" — Building My Own JARVIS
+(Not a product. Not for sale. A machine that lives with me, in my house, on my terms.)
+
+Why this exists:
+This isn't a startup roadmap. There's no launch date, no users to onboard, no
+roadmap slide for investors. This is one person building a mind to live
+alongside him — something that answers when he speaks, watches over his
+machine, remembers who he is, and gets better at being *his* assistant
+specifically, not anyone else's. Every phase below earns its place because
+it makes FRED feel more real to live with, not more sellable.
+
+Context / honesty check:
+Phases 1-10 are mostly built but not all wired together yet. STT
+(audio/stt.py), TTS (audio/tts.py), and the tool registry
+(tools/registry.py + system_tools.py) exist as real, working modules — they
+just aren't connected to the live loop yet. "Reviving FRED" (a separate,
+later step) means wiring these three in so Phases 4, 5, and 8 stop being
+half-true. Phase 11 below assumes that's already happened.
+
+
+Phase 11 – The Unification
+⏱ 1–1.5 weeks
+Tagline: "One body, one voice."
+Goal: Stop being four disconnected scripts pretending to be one assistant.
+Tasks:
+  - Wire ToolRegistry into the orchestrator so FRED can actually act, not just talk.
+  - Wire STT + TTS into main.py as a real voice mode, with text mode kept as a quiet fallback.
+  - Add wake-word detection so FRED is listening, not waiting to be pressed.
+  - Fix the personality/settings split — one system prompt, one source of truth, no more hardcoded duplicates.
+Outcome: For the first time, FRED is one thing. Not modules. One presence.
+
+Phase 12 – The Dispatcher (and the first commit)
+⏱ ~1 week
+Tagline: "Knowing what to do before thinking too hard."
+Goal: A brainstem that decides instantly where a thought should go — and the moment this becomes a project with a history.
+Tasks:
+  - git init at the project root, first real commit of Core/ (secrets already gitignored from Phase 1 setup).
+  - Route input: tool call / OS command / general conversation / live lookup.
+  - Use the local model's native function-calling (Qwen/Nemotron support tool-calling) instead of hand-rolling a classifier where possible.
+  - Reserve "deep tier" reasoning for things that actually deserve it.
+Outcome: FRED reacts to "open Spotify" in milliseconds, saves its depth for when it's needed — and from here on, every change to him is remembered too.
+
+Phase 13 – Reaching Outward
+⏱ ~1 week
+Tagline: "Hands beyond the LAN."
+Goal: FRED knows what's happening in the world right now, not just what it was trained on.
+Tasks:
+  - websearch_handler() (DuckDuckGo / Brave) registered as a callable tool.
+  - Weather and quick facts as the first proof that this pattern generalizes.
+Outcome: FRED stops guessing and starts knowing.
+
+Phase 14 – Hands on the Machine
+⏱ ~1.5–2 weeks
+Tagline: "This is my house. He should be able to move through it."
+Goal: Real control of my own PC — not toy commands, actual command of the machine.
+Tasks:
+  - Window management, volume/brightness, clipboard, screenshots, process control.
+  - File search, move, rename, read-on-request.
+  - A confirmation gate before anything irreversible — FRED asks before it deletes or kills something. Trust, not recklessness.
+Outcome: FRED isn't a chatbot with a few tricks. He's inside the machine with me.
+
+Phase 15 – He Speaks First
+⏱ ~1 week
+Tagline: "Not just answering. Noticing."
+Goal: FRED stops being purely reactive.
+Tasks:
+  - Background scheduler for reminders, timers, periodic checks.
+  - Simple proactive triggers — "remind me in 20," "tell me when this file shows up."
+  - A real notification voice/visual, not a silent log entry.
+Outcome: FRED can interrupt me with something that matters, the way someone who actually pays attention would.
+
+Phase 16 – A Face for the Mind
+⏱ ~1–1.5 weeks
+Tagline: "He should look alive."
+Goal: The single biggest thing that makes this feel like JARVIS and not a terminal window.
+Tasks:
+  - Always-on-top HUD — idle / listening / thinking / speaking states, animated.
+  - Visual confirmation when tools fire ("opening Chrome" flashes by).
+  - A live transcript so I can see what he heard.
+Outcome: Walking past my desk, FRED looks like he's there. Because he is.
+
+Phase 17 – Eyes on the Screen
+⏱ ~1.5 weeks
+Tagline: "See what I see."
+Goal: FRED can look at my screen and reason about it.
+Tasks:
+  - Screenshot + vision-capable model call for "what's this error" / "read this for me."
+  - Skip webcam presence-detection — adds creep-factor with no real payoff for a personal-use machine.
+Outcome: FRED can debug an error on sight, without me typing out what's already in front of both of us.
+
+Phase 18 – Becoming Mine
+⏱ ~1–2 weeks
+Tagline: "Not a generic assistant wearing a JARVIS costume."
+Goal: FRED sounds like FRED — specifically, consistently, and shaped by me.
+Tasks:
+  - Log real conversations locally (no cloud, no third party) as a style reference.
+  - Iterate system_prompt.py against what actually feels off in daily use — cheap, fast, honest feedback loop.
+  - Only reach for real fine-tuning (LoRA) once prompt iteration plateaus — not before.
+Outcome: He's not impersonating an assistant. He's mine.
+
+Phase 19 – The Mind Remembers, Selectively
+⏱ ~1 week
+Tagline: "Not a hoarder. A confidant."
+Goal: Fix memory before it becomes a junk drawer of every "hello" ever said.
+Tasks:
+  - Consolidate old raw messages into compact, durable facts on a schedule.
+  - Split memory into categories — who I am, what I prefer, what I'm working on — instead of one undifferentiated stream.
+  - Let irrelevant, stale memories fade. Real memory forgets the unimportant on purpose.
+Outcome: FRED remembers what matters about me, not just what was typed.
+
+Phase 20 – Trusted to Run Himself
+⏱ ~1.5–2 weeks
+Tagline: "Built to live with, not to demo."
+Goal: This stops being a project I open occasionally and becomes something running, always, in the background of my life.
+Tasks:
+  - Permission tiers — read-only runs free, anything destructive or irreversible asks first, always.
+  - Secrets hygiene locked down for good (keys rotated, .env gitignored, nothing exposed) before this ever touches git.
+  - Starts on boot, recovers from crashes, falls back to local inference gracefully if the cloud goes down.
+  - One last personality + voice + visual pass — not for a demo audience, for me, every day.
+Outcome: FRED isn't something I show people anymore. He's something I live with.
+
+
+💡 What got cut, and why:
+No "autonomous self-improvement," no "emotional intelligence dataset
+fine-tuning," no enterprise-flavored fluff. Those are research directions
+for a company, not steps toward a companion. What actually makes something
+feel like JARVIS: it's always listening, it looks alive on screen, it can
+touch my machine, it knows things in real time, and it remembers me
+specifically. Phases 11-17 build that presence. 18-20 make him durable
+enough, and personal enough, to actually keep.

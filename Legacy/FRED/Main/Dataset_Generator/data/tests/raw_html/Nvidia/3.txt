@@ -1,0 +1,147 @@
+Official GeForce Drivers | NVIDIA
+This site requires Javascript in order to view all its content. Please enable Javascript in order to access all the functionality of this web site. Here are the
+instructions how to enable JavaScript in your web browser.
+GeForce
+®
+Drivers
+Automatic Driver Updates
+The NVIDIA App is the essential companion for PC gamers and creators. Keep your PC up to date with the latest NVIDIA drivers and technology.
+Download Now
+Manual Driver Search
+Search all GeForce drivers by providing your system information.
+Product Type:
+TITAN
+GeForce
+Legacy
+3D Vision
+ION
+Product Series:
+GeForce MX100 Series(Notebook)
+GeForce RTX 20 Series
+GeForce 10 Series
+Product:
+GeForce MX150
+GeForce MX130
+GeForce MX110
+Operating System:
+Windows 10 64-bit
+Windows 7 32-bit
+Windows 7 64-bit
+Language:
+English (US)
+English (UK)
+English (India)
+Chinese (Simplified)
+Chinese (Traditional)
+Japanese
+Korean
+Deutsch
+Español (España)
+Español (América Latina)
+Français
+Italiano
+Polski
+Português (Brazil)
+Русский
+Turkish
+Other
+Windows Driver Type:
+DCH
+Standard
+Download Type:
+All
+Recommended/Certified
+Beta
+Studio Ready Driver
+Start Search
+Product Type:
+dflt TITAN
+Product Series:
+dflt GeForce MX100 Series (Notebook)
+Product:
+GeForce MX150
+Operating System:
+dflt Windows 10 32-bit
+Language:
+dflt English (US)
+Windows Driver Type:
+DCH
+Standard
+Download Type:
+All
+Game Ready Driver
+Studio Driver
+Driver Results
+No Drivers Found.
+Please select a different combination.
+GeForce Game Ready Driver - Whql
+Version: 441.20 - Release Date: Tue Nov 12, 2019
+Driver Version:
+- Release Date:
+Release Notes
+Get Download
+Driver Forum
+Questions or issues regarding drivers? Discuss them with other GeForce users in our forum.
+Visit Forum
+Game Ready Drivers vs NVIDIA Studio Drivers
+Whether you are playing the hottest new games or working with the latest creative applications, NVIDIA drivers are custom tailored to provide the best possible experience.  If you are a gamer who prioritizes day of launch support for the latest games, patches, and DLCs, choose Game Ready Drivers.  If you are a content creator who prioritizes reliability for creative workflows including video editing, animation, photography, graphic design, and livestreaming, choose Studio Drivers.  Do a little bit of both?  No worries, either can support running the best games and creative apps.
+How to Identify Product Type
+If NVIDIA driver is not installed:
+Open Device Manager in the Windows Control Panel
+Expand Display Adapter
+The GeForce shown will be your GPU Product Type
+If NVIDIA driver is installed:
+Right click the desktop and open NVIDIA Control Panel
+Click System Information in the bottom left corner
+In the Display tab your GPU Product Type is listed in the Components column
+Windows Driver Type
+"Standard"
+packages are those that do not require the DCH driver components.
+"DCH"
+(
+D
+eclarative,
+C
+omponentized,
+H
+ardware Support Apps) refers to new packages preinstalled by OEMS implementing the Microsoft Universal Driver paradigm.
+DCH drivers cannot be installed over a standard system, and Standard drivers cannot be installed over a DCH system.
+To confirm the type of system you have, locate
+Driver Type
+under the System Information menu in the NVIDIA Control Panel.
+For more information, visit
+What's new in driver development
+All, GRD, SD
+"All"
+Shows all available driver options for the selected product.
+"GRD"
+Game Ready Drivers provide the best possible gaming experience for all major games. NVIDIA's driver team exhaustively tests games from early access through release of each DLC to optimize for performance, stability, and functionality. These drivers are certified by Microsoft’s Windows Hardware Quality Labs (WHQL).
+"SD"
+Studio Drivers provide the best possible experience for key creative applications. NVIDIA does extensive testing across the top creative applications to ensure the highest levels of performance, stability, and functionality. These drivers are certified by Microsoft’s Windows Hardware Quality Labs (WHQL).
+Products
+Graphics Cards
+Laptops
+G-SYNC Monitors
+Community & News
+Latest News
+Community Forums
+#SHOTWITHGEFORCE
+Community Portal
+Developer Resources
+Support
+Drivers
+Purchase Support
+Technical Support
+Follow GeForce
+Facebook
+Instagram
+NVIDIA
+India
+Privacy Policy
+Your Privacy Choices
+Legal
+Accessibility
+Corporate Policies
+Product Security
+Contact
+Copyright © 2025 NVIDIA Corporation

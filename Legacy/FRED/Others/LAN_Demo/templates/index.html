@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>F.R.E.D. By Da Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+    <style>
+        /* Body */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background-color: #0a0a0a;  /* dark cyber background */
+            color: white; 
+            font-family: Arial, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+        }
+
+        /* Header */
+        header { 
+            text-align: center; 
+            font-size: 2.5em; 
+            padding: 20px; 
+            color: #39ff14; 
+            font-family: 'Orbitron', sans-serif; 
+            letter-spacing: 2px;
+        }
+
+        /* Verification overlay */
+        #verification-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            color: white;
+        }
+        #verification-overlay input[type=text] {
+            padding: 10px;
+            font-size: 1em;
+            margin-right: 10px;
+            border-radius: 5px;
+            border: none;
+        }
+        #verification-overlay input[type=submit] {
+            padding: 10px 15px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: none;
+            background: #39ff14;
+            color: black;
+            cursor: pointer;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        /* Chat area */
+        #chat {
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 20px; 
+            background-color: #111;  
+            color: white; 
+            display: none;
+            opacity: 0;
+            transition: opacity 1s ease-in;
+        }
+
+        /* Individual messages */
+        .message { 
+            margin: 10px 0; 
+            padding: 10px; 
+            border-radius: 8px; 
+            max-width: 70%; 
+            clear: both; 
+            word-wrap: break-word;
+        }
+        .user { 
+            background-color: #1e90ff; 
+            color: white;
+            float: left; 
+        }
+        .fred { 
+            background-color: #ff4500; 
+            color: white;
+            float: right; 
+        }
+
+        /* Input box */
+        #input-box { 
+            display: flex; 
+            padding: 10px; 
+            background-color: #222; 
+            display: none;
+            opacity: 0;
+            transition: opacity 1s ease-in;
+        }
+        #msg-input { 
+            flex: 1; 
+            padding: 10px; 
+            border-radius: 5px; 
+            border: none; 
+            margin-right: 10px; 
+            font-size: 1em; 
+        }
+        #send-btn { 
+            padding: 10px 20px; 
+            font-size: 1em; 
+            border: none; 
+            border-radius: 5px; 
+            background-color: #39ff14; 
+            color: black; 
+            cursor: pointer; 
+        }
+
+        /* Role highlight */
+        .god { color: #02dff7; font-weight: bold; }
+        .friend { color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header>F.R.E.D. - Friendly Responsive | Rational | Rakish Electronic Dude</header>
+
+    <!-- Verification overlay -->
+    <div id="verification-overlay">
+        <h2>Enter Your Name to get Verified:</h2>
+        <div>
+            <input type="text" id="name-input" placeholder="Your Name">
+            <input type="submit" id="verify-btn" value="Verify">
+        </div>
+        <div id="status"></div>
+    </div>
+
+    <!-- Chat area -->
+    <div id="chat"></div>
+    <div id="input-box">
+        <input type="text" id="msg-input" placeholder="Type a message..." autofocus />
+        <button id="send-btn">Send</button>
+    </div>
+
+    <script>
+        const socket = io({ transports: ["polling", "websocket"] });
+
+        const authorizedUsers = ["Vatsal", "Suhani", "Jiyana", "Anvay", "Vatsal Da Pro", "Devansh", "Pranati", "Saloni", "Vihaan", "Dhiraj"];
+        const chatDiv = document.getElementById("chat");
+        const inputBox = document.getElementById("input-box");
+        const input = document.getElementById("msg-input");
+        const sendBtn = document.getElementById("send-btn");
+
+        // Verification elements
+        const verificationOverlay = document.getElementById("verification-overlay");
+        const nameInput = document.getElementById("name-input");
+        const verifyBtn = document.getElementById("verify-btn");
+        const statusDiv = document.getElementById("status");
+
+        let username = "";
+
+        function appendMessage(text, cls) {
+            const div = document.createElement("div");
+            div.className = `message ${cls}`;
+            div.innerText = text;
+            chatDiv.appendChild(div);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        verifyBtn.onclick = () => {
+            const enteredName = nameInput.value.trim();
+            if (!authorizedUsers.includes(enteredName)) {
+                statusDiv.textContent = "Unauthorized! Refresh and try again.";
+                statusDiv.style.color = "red";
+                return;
+            }
+
+            username = enteredName;
+            let message = "";
+            let colorClass = "friend";
+
+            if (username === "Vatsal" || username === "Vatsal Da Pro") {
+                message = "Identified as God";
+                colorClass = "god";
+            } else if (username === "Suhani") {
+                message = "Identified as the best friend of Vatsal Da Pro, Buhani Da Pro😅";
+                colorClass = "god"; // Suhani = God color
+            } else {
+                message = "Identified as an ally of Vatsal Da Pro";
+                colorClass = "friend";
+            }
+
+            statusDiv.textContent = message;
+            statusDiv.className = colorClass;
+
+            setTimeout(() => {
+                verificationOverlay.style.display = "none";
+                chatDiv.style.display = "block";
+                inputBox.style.display = "flex";
+
+                setTimeout(() => {
+                    chatDiv.style.opacity = 1;
+                    inputBox.style.opacity = 1;
+                }, 100);
+            }, 2000);
+        };
+
+        sendBtn.onclick = () => {
+            const msg = input.value.trim();
+            if (!msg) return;
+            appendMessage("You: " + msg, "user");
+            socket.emit("user_message", { name: username, user_input: msg, os_command: "" });
+            input.value = "";
+        };
+
+        input.addEventListener("keyup", (e) => {
+            if (e.key === "Enter") sendBtn.click();
+        });
+
+        socket.on("fred_reply", (msg) => {
+            appendMessage("FRED: " + msg.text, "fred");
+        });
+    </script>
+</body>
+</html>

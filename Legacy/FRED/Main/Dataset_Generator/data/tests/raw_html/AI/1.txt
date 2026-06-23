@@ -1,0 +1,278 @@
+Google AI -
+      
+      How we're making AI helpful for everyone
+Homepage - I/O 2025
+Get started
+Ask Gemini
+Search with AI Mode
+Create an image
+Generate video
+Learn with NotebookLM
+Combine elements from different images, and other new ways to bring your creativity to life
+August 2025
+Try in Gemini
+chevron_right
+Try Veo 3.1 for more advanced video storytelling
+October 2025
+Create with Flow
+chevron_right
+Edit images directly in Google Search with Nano Banana
+October 2025
+Learn how
+chevron_right
+Have a conversation with Search using your voice and phoneâs camera
+September 2025
+Go Live with Search
+chevron_right
+Turn your photos into videos using Veo
+July 2025
+Try in Gemini
+chevron_right
+Build custom AI helpers and share with your favorite people using Gems Sharing
+September 2025
+Try in Gemini
+chevron_right
+Clarify or summarize information as you browse the web with Gemini in Chrome
+September 2025
+Download Chrome
+chevron_right
+Create stunning videos in vertical formats for mobile and social sharing with Flow
+September 2025
+Create with Flow
+chevron_right
+Get things done, like finding the best dinner reservation, with agentic capabilities in AI Mode
+August 2025
+Try in Search
+chevron_right
+Gemini on Pixel devices can proactively understand and interact with the world around you
+August 2025
+Get a Pixel
+chevron_right
+Go deeper into topics and learn in a way that works best for you with Guided Learning
+August 2025
+Try in Gemini
+chevron_right
+Bring your ideas to life with personalized, illustrated storybooks
+August 2025
+Try in Gemini
+chevron_right
+Transform your source material into an engaging explainer video, presented to you by an AI host, in NotebookLM
+July 2025
+Try now
+chevron_right
+Products
+See all products
+Latest
+For knowledge
+For creativity
+For productivity
+For students
+For experimenting
+Try Veo 3.1 for more advanced video storytelling
+Create with Flow
+chevron_right
+Edit images directly in Google Search with Nano Banana
+Learn how
+chevron_right
+Have a conversation with Search using your voice and phoneâs camera
+Go Live with Search
+chevron_right
+Transform images in amazing new ways
+Try in Gemini
+chevron_right
+Turn your photos into videos using Veo
+Try in Gemini
+chevron_right
+Transform your source material into an engaging explainer video
+Try NotebookLM
+chevron_right
+chevron_left
+chevron_right
+Build an understanding of complex topics with Deep Research
+Chat with Gemini
+chevron_right
+Have a conversation using your voice and phoneâs camera
+Go Live with Search
+chevron_right
+Ask tough questions and let Google do the heavy lifting for you
+Try AI Mode in Google Search
+Experience a supercharged browser with built-in AI
+Download Chrome
+chevron_right
+See how ideas relate with Mind Maps
+Try NotebookLM
+chevron_right
+Ask Maps for inspiration on things to do, curated by Gemini
+Learn more
+chevron_right
+chevron_left
+chevron_right
+Try Veo 3.1 for more advanced video storytelling
+Create with Flow
+chevron_right
+Edit images directly in Google Search with Nano Banana
+Learn how
+chevron_right
+Transform images in amazing new ways
+Try in Gemini
+chevron_right
+Create videos with Veo for greater realism and fidelity
+Try in Gemini
+chevron_right
+Visualize and remix ideas using both text and image prompts
+Try Whisk
+chevron_right
+Uncover creative possibilities with text and language
+Try TextFX
+chevron_right
+Make custom emoji using your own photos
+Explore on Android devices
+chevron_right
+chevron_left
+chevron_right
+Get things done with agentic capabilities in AI Mode
+Try in Search
+chevron_right
+Get the right info, right when you need it, with Magic Cue on Pixel
+Learn more
+chevron_right
+Create beautiful documents and refine your writing with AI
+Try Gemini in Google Docs
+chevron_right
+Automate multiple tasks simultaneously with Project Mariner
+Try now
+chevron_right
+Quickly get summaries and insights from all of your documents
+Try NotebookLM
+chevron_right
+Draft, summarize and organize with AI to conquer your inbox
+Try Gemini in Gmail
+chevron_right
+chevron_left
+chevron_right
+Use Guided Learning to go deeper into topics and learn
+Try in Gemini
+chevron_right
+Transform your source material into an engaging explainer video
+Try NotebookLM
+chevron_right
+Dive deeper on your research questions with Deep Search
+Try AI Mode in Google Search
+chevron_right
+Discover additional sources on topics to support your studies
+Try NotebookLM
+chevron_right
+Get step by step homework help with Google Lens
+Try Google Lens
+chevron_right
+chevron_left
+chevron_right
+Explore and refine your ideas with an AI-powered concepting board
+Try Mixboard
+chevron_right
+Explore the future of agents in browsers in Project Mariner
+Try now
+chevron_right
+Discover the future capabilities of a universal AI assistant with Project Astra
+Join trusted tester waitlist
+chevron_right
+Explore new possibilities for your career
+Try Career Dreamer
+chevron_right
+Listen to an AI-powered audio update - made just for you
+Try Daily Listen
+chevron_right
+Turn your generated images into videos with Whisk Animate
+Try Whisk Animate
+chevron_right
+chevron_left
+chevron_right
+Build
+Explore our full AI stack
+Build with Google AI Studio
+Start building something new, with cutting-edge AI models and tools
+Try Google AI Studio
+chevron_right
+View Gemini API docs
+chevron_right
+Build with Vertex AI
+Explore 200+ models on our enterprise platform with tools and features for AI development
+Try Vertex AI
+chevron_right
+Try the latest models
+View all models
+Gemini
+Our most intelligent AI models
+TRY IT IN
+Gemini app
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn more
+call_made
+Gemma
+A family of lightweight, state-of-the art open models
+TRY IT IN
+Google AI Studio
+chevron_right
+Learn More
+call_made
+Veo
+Our state-of-the-art video generation model
+TRY IT IN
+Gemini app
+chevron_right
+Flow
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn More
+call_made
+Imagen
+Our leading text-to-image model
+TRY IT IN
+Gemini app
+chevron_right
+Whisk
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn More
+call_made
+Lyria
+Our latest music generation model
+TRY IT IN
+MusicFX DJ
+chevron_right
+Google AI Studio
+chevron_right
+Vertex AI Studio
+chevron_right
+Learn More
+call_made
+chevron_left
+chevron_right
+Research
+View all research
+Quantum Echoes algorithm is a big step toward practical applications for quantum computing
+October 2025
+Google Research
+Learn more
+DeepSomatic: using AI to identify genetic variants in tumors
+October 2025
+Google Research
+Learn more
+Gemini Robotics 1.5: brings AI agents into the physical world
+September 2025
+Google DeepMind
+Learn more
+Genie 3: a general purpose world model that can generate a diversity of interactive environments
+August 2025
+Google DeepMind
+Learn more

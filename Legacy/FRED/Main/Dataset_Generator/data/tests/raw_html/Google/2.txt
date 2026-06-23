@@ -1,0 +1,33 @@
+Earth Versions â Google Earth
+Google Earth on web
+Google Earth on mobile
+Google Earth Pro on desktop
+Travel the world without leaving your seat
+With Google Earth for Chrome, fly anywhere in seconds and explore hundreds of 3D cities right in your browser. Roll the dice to discover someplace new, take a guided tour with Voyager, and create your own maps and stories. Coming soon to more browsers.
+Launch Earth
+The whole world, in your hands
+Google Earth for mobile enables you to browse the globe with a swipe of your finger on your phone or tablet.
+Download Google Earth in Apple App Store
+Download Google Earth in Google Play Store
+Create maps with advanced tools
+Google Earth Pro on desktop is free for users with advanced feature needs. Import and export GIS data, and go back in time with historical imagery. Available on PC, Mac, or Linux.
+Download Earth Pro on desktop
+Download Google Earth in Apple App Store
+Download Google Earth in Google Play Store
+Download Earth Pro on desktop
+Download Google Earth Pro
+By installing, you agree to
+Google Earth's Privacy Policy
+.
+You are downloading
+version 7.3
+of Google Earth Pro. This version automatically installs recommended updates. If you'd like previous versions of Google Earth Pro, please visit the
+Direct Installers page
+.
+Help make Google Earth better by automatically sending anonymous usage statistics and crash reports to Google.
+Learn more
+.
+Please select your download package:
+64 bit .deb (For Debian/Ubuntu)
+64 bit .rpm (For Fedora/openSUSE)
+Accept & Download

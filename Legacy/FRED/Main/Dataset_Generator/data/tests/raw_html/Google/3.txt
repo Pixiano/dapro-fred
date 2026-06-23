@@ -1,0 +1,224 @@
+Safe, secure, protected browsing | Chrome
+Menu
+Menu
+icon chrome logo
+Jump to content
+Get Chrome
+Download Chrome
+close drawer
+icon chrome logo
+Get Chrome
+Download Chrome
+Explore
+Secure browsing
+Privacy controls
+Resources
+Secure browsing
+Privacy controls
+Resources
+You're
+safe
+secure
+protected
+in control
+safe
+secure
+protected
+in control
+safe
+secure
+protected
+in control
+safe
+secure
+protected
+in control
+on Chrome
+Play animation
+Pause animation
+Replay animation
+Your
+first
+line
+of
+defence
+so
+that
+you
+can
+steer
+clear
+of
+dangerous
+sites
+,
+update
+that
+old
+password
+to
+something
+stronger
+and
+easily
+delete
+your
+browsing
+history.
+In the background, keeping you secure
+Chrome's AI-powered security protects you against online threats and hackers, giving you confidence as you browse the web.
+Play animation
+Pause animation
+Replay animation
+Safety check
+Proactive safety alerts for your peace of mind
+Chrome continuously checks if your browser is set up securely. It makes sure that you have the latest security updates, checks your passwords and extensions for potential security risks and resets permissions from unused sites to protect your privacy.
+Safe Browsing
+Browse safely or choose extra protection
+Safe Browsing
+Safe Browsing
+Standard protection against websites, downloads and extensions that are known to be dangerous.
+keeps you protected by showing a warning message before you visit a dangerous site or download a harmful app. For more advanced security protections, turn on
+Enhanced protection
+Enhanced protection
+Faster, proactive protection against dangerous websites, downloads and extensions. Requires browsing data to be sent to Google.
+in your settings. It uses AI to detect new security threats even faster and protects you when you use Chrome and other Google products.
+Default
+Enhanced
+Default
+Enhanced
+Password Manager
+Safely sign in from anywhere
+Create, store and manage secure passwords with Google Password Manager. It's built right into Chrome, so you can easily sign in to sites in your Chrome browser and apps whether you're on your sofa or at the beach.
+Explore Password
+Manager
+Privacy settings to put you in control
+Chrome's Privacy Guide makes it easy to control and understand the most important privacy settings.
+Play animation
+Pause animation
+Replay animation
+Privacy Guide
+A guide to managing your privacy
+Privacy Guide is a step-by-step guided tour of critical privacy and security controls in Chrome – so that you can make and manage the right selections for you in one spot.
+Privacy controls
+Personalise your privacy
+Chrome can help give you control over your data and how it is used. With Chrome's privacy controls in your settings, you can clear your browsing history or manage websites' access to your location or camera.
+Profiles
+Switch it up
+With profiles, you can keep your Chrome settings separated by account, whether it's creating space between work and personal or sharing your computer with others. Profiles help you navigate the web how you want, when you want.
+Personal
+Work
+Personal
+Work
+Incognito mode
+You've gone incognito
+When you use Chrome's Incognito mode, others who use your device won't see your activity. Your browsing history, cookies and site data or information entered in forms won't be saved, so you can browse more privately. This won't change how data is collected by websites that you visit and the services that they use.
+Learn more about
+Incognito
+Additional resources
+Google Safety Centre
+Privacy settings built for you. Your privacy is protected by responsible data practices and innovative privacy technologies.
+Learn about Google Safety
+Centre
+Privacy Sandbox
+The Privacy Sandbox initiative aims to create technologies that both protect people's privacy online and give companies and developers tools to build thriving experiences online.
+Learn about Privacy
+Sandbox
+Responsible Google AI practices
+Here at Google, we're committed to developing and using artificial intelligence responsibly.
+Learn about Google
+AI
+Google Safety Centre
+Privacy settings built for you. Your privacy is protected by responsible data practices and innovative privacy technologies.
+Learn about Google Safety
+Centre
+Privacy Sandbox
+The Privacy Sandbox initiative aims to create technologies that both protect people's privacy online and give companies and developers tools to build thriving experiences online.
+Learn about Privacy
+Sandbox
+Responsible Google AI practices
+Here at Google, we're committed to developing and using artificial intelligence responsibly.
+Learn about Google
+AI
+Take your browser with you
+Download Chrome on your mobile device or tablet and sign into your account for the same browser experience, everywhere.
+Get Chrome
+Download Chrome
+Scan for the
+Chrome app
+Get Chrome for Windows
+For Windows 10 32-bit
+For Windows 11/10 64-bit
+For Windows 11 ARM
+For Windows XP/Vista
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For Windows 8.1/8/7 32-bit
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For Windows 8.1/8/7 64-bit
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+Get Chrome for Mac
+For macOS 12 or later.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+This computer will no longer receive Google Chrome updates because macOS 10.6–10.12 are no longer supported.
+For macOS 10.13/10.14
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For macOS 10.15
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+For macOS 11
+This device won’t receive updates because Google Chrome no longer supports your operating system.
+Get Chrome for Linux
+Debian/Ubuntu/Fedora/openSUSE.
+Please select your download package:
+64 bit .deb (For Debian/Ubuntu)
+64 bit .rpm (For Fedora/openSUSE)
+Not Debian/Ubuntu or Fedora/openSUSE? There may be a community-supported version for your distribution
+here
+.
+Get Chrome for iOS
+Get Chrome for chromeOS
+Get Chrome for android
+Set Google Chrome as my default browser
+Help make Google Chrome better by automatically sending usage statistics and crash reports to Google.
+Learn more
+Note:
+Installing Google Chrome will
+add the Google repository
+so that your system will automatically keep Google Chrome up to date. If you don’t want Google's repository, do 'sudo touch/etc/default/google-chrome' before installing the package.
+By downloading Chrome, you agree to the
+Google Terms of Service
+and
+Chrome and ChromeOS Additional Terms of Service
+Accept and Install
+Accept and Install
+Accept and Install
+Get Chrome
+Download for phone or tablet
+Android
+iOS
+Download for another desktop OS
+Windows 11/10 64-bit
+Windows 10 32-bit
+Windows 11 ARM
+macOS 12 or later
+Linux
+Frozen versions
+Windows XP
+Windows Vista
+Windows 8.1/8/7 32-bit
+Windows 8.1/8/7 64-bit
+Mac 10.6 - 10.8
+Mac 10.9
+Mac 10.10
+Mac 10.11 - 10.12
+Mac 10.13 - 10.14
+Mac 10.15
+Mac 11
+Looks like you’re already using Chrome browser. Great!
+The device that you have runs on ChromeOS, which already has Chrome browser built in. No need to manually install or update it – with automatic updates, you’ll always get the latest version.
+Learn more about automatic updates.
+Looking for Chrome for a different operating system?
+See the
+full list of supported operating systems
+.

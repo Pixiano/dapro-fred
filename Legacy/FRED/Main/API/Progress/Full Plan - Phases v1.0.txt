@@ -1,0 +1,118 @@
+📅 Timeframed FRED Roadmap
+Phase 1 – Concept & Vision
+
+⏱️ 2–3 days
+
+Visualize final Jarvis.
+Pick must-have vs. nice-to-have features.
+Brainstorm name.
+
+👉 Low effort, more about clarity.
+
+Phase 2 – Setup Foundations
+
+⏱️ 3–5 days
+
+Install Python + packages.
+Organize project folders.
+Do first “Hello World” style test.
+
+👉 Once done, you’ll never need to redo.
+
+Phase 3 – First Spark (Text-to-Text)
+
+⏱️ 1 week
+
+Connect free LLM (GPT4All, LM Studio, Ollama).
+Chat with it in text.
+Start personality tuning.
+
+👉 The “it’s alive!” moment.
+
+DONE!! -------------------------------------------------------------------
+
+Phase 4 – STT Integration
+
+⏱️ 1–2 weeks
+
+Add mic input → text via Whisper/Vosk.
+Debug latency & errors.
+Test conversations fully in text+speech in/out.
+
+👉 First time FRED “hears” you.
+
+Phase 5 – TTS Integration
+
+⏱️ 1–2 weeks
+
+Add Jarvis voice output.
+Debug clarity, pacing.
+5.2 Reveal to parents/friends.
+5.3 Possible YT demo (basic Jarvis working).
+👉 First time Jarvis “talks” back.
+
+-----------------------------------DONE!--------------------------------
+
+Phase 6 – Memory Layer
+
+⏱️ 2–3 weeks
+
+Add short-term (conversation log).
+Add long-term (facts in JSON/db).
+Test recall and continuity.
+
+👉 From “toy” → “companion.”
+
+-------------------------------------Done---------------------------------
+
+Phase 7 – Testing & Stability
+
+⏱️ 1 week
+
+Push Jarvis with stress tests.
+Refactor into neat modules.
+Debug crashes.
+
+👉 More stable and less frustrating.
+
+----------------------------DONE!--------------------------------
+
+Phase 8 – OS Commands & Automation
+
+⏱️ 2–4 weeks
+
+Teach Jarvis to open apps, run files, play music.
+Explore pyautogui, subprocess, etc.
+8.1 Make a YT demo (Jarvis controlling PC).
+
+👉 From “companion” → “assistant.”
+
+Phase 9 – Hardware & Upgrades
+
+⏱️ 2–3 weeks (flexible, depends on budget)
+
+Buy better mic/speakers.
+Optional mini-PC or better GPU.
+Upgrade to premium voices if you want.
+
+👉 Jarvis feels smooth & professional.
+
+Phase 10 – Final Polish & Personality
+
+⏱️ 2–3 weeks
+
+Add wake word detection.
+Add multiple voice moods.
+Reduce awkward silences.
+Create daily-use workflow.
+
+👉 Your personal polished Jarvis.
+
+⏳ Total Estimate
+
+➡️ ~4–6 months for full Phase 1–10 journey
+(2–3 months if you go speedrun mode and skip polish/hardware at first).
+------------------
+
+Current --> 21 days = Phase 10 Complete
+On track --> 30 days = Phase 10+ (Beat Prediction)

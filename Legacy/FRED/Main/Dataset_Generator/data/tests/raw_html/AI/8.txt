@@ -1,0 +1,100 @@
+Google AI -
+      
+      
+        Science AI
+SCIENCE
+Advancing science with AI innovation
+We are inspired by the ability of AI to help tackle the grand challenges in science. At Google, we have a unique opportunity to accelerate scientific progress by using AI to help transform healthcare, advance towards a more sustainable future, and drive breakthroughs in natural sciences. Our research scientists and engineers collaborate with research institutions around the globe, share our progress in scientific publications, and open source releases. Together, our aim is to enable scientific innovation for a better world.
+SCIENCE
+Advancing science with AI innovation
+We are inspired by the ability of AI to help tackle the grand challenges in science. At Google, we have a unique opportunity to accelerate scientific progress by using AI to help transform healthcare, advance towards a more sustainable future, and drive breakthroughs in natural sciences. Our research scientists and engineers collaborate with research institutions around the globe, share our progress in scientific publications, and open source releases. Together, our aim is to enable scientific innovation for a better world.
+Neuroscience
+Mapping the brain to solve the mysteries of the mind
+Google Research Connectomics
+How does the group of cells that form a brain work together to bring thoughts, movements, and feelings to life? To help answer this question, Google researchers are using AI to create some of the most detailed maps of brains ever made â enabling new insights about how neurons network to share and process information, and revealing never-before-seen discoveries.
+Google Research Connectomics
+Link to Youtube Video
+(visible only when JS is disabled)
+Ten years of neuroscience at Google yields maps of human brain
+Learn more
+Marking ten years of connectomics research at Google, we published in Science the first large-scale reconstruction of a small piece of the human brain at the synaptic level. We presented several new neuron structures discovered in the data, and we opened the dataset and software tools to the scientific community for continued discovery.
+Learn more
+Genomics
+A breakthrough to better represent human â¨genomic diversity
+Mapping the genes in human DNA is critical for improving the treatment of disease, but for years, the only complete human genome was based on DNA samples scientists collected from a small handful of volunteers in the United States. As part of an international effort to improve upon this single linear genome, our technologies are helping create a pangenome â a record of the genetic diversity of ancestries from around the world.
+Learn more
+AlphaMissense: A catalog of genetic mutations to help pinpoint the cause of diseases
+Uncovering the root causes of disease is one of the greatest challenges in human genetics. With millions of possible mutations and limited experimental data, itâs largely still a mystery which ones could give rise to disease. This knowledge is crucial to faster diagnosis and developing life-saving treatments.
+Learn more
+MOLECULAR BIOLOGY
+AlphaFold 3 predicts the structure and interactions of all lifeâs molecules
+Revolutionizing how scientists understand proteins
+Learn more
+AlphaFold, an AI technology developed by Googleâs DeepMind, is accelerating the pace of scientific innovation by helping researchers understand the intricate 3D shapes of proteins. It heralds a new era in digital biology that is helping to unlock breakthroughs across medicine, agriculture and sustainability.
+Learn more
+Helping researchers make scientific breakthroughs that were previously out of reach
+Vaccine development
+Antibiotic and antimicrobial resistance
+Insect and plant immunity
+Enzymes
+Stopping malaria in its tracks
+Learn more
+Guided by AlphaFold, scientists have determined the first full-length structure of a protein called Pfs48/45, which is a promising candidate for a malaria vaccine. This could help to design new vaccines that induce the production of transmission-blocking antibodies.
+Accelerating the race against antibiotic resistance
+Learn more
+Antibiotic resistance causes 2.8M infections in the US alone each year. A team using AlphaFold identified a bacterial protein structure in half an hour that had been elusive for 10 years.
+How honeybees could help protect the worldâs flora and fauna
+Learn more
+Using AlphaFold and electron microscopy, we are getting closer to understanding the molecular mechanisms related to insect immunity. The results are specifically relevant to honeybee health, which is a topic of global concern due to rapidly declining pollinator numbers.
+Developing plastic-digesting enzymes
+Learn more
+A team discovering and engineering enhanced enzymes that can eventually be applied at scale to break down some of the most polluting single-use plastics used AF to screen 100 candidate enzymes â too many to generate 3D structures for â in days, giving them a new library of templates to engineer faster, more stable and cheaper enzymes for plastic recycling.
+Vaccine development
+Stopping malaria in its tracks
+Guided by AlphaFold, scientists have determined the first full-length structure of a protein called Pfs48/45, which is a promising candidate for a malaria vaccine. This could help to design new vaccines that induce the production of transmission-blocking antibodies.
+Learn more
+Antibiotic and antimicrobial resistance
+Accelerating the race against antibiotic resistance
+Antibiotic resistance causes 2.8M infections in the US alone each year. A team using AlphaFold identified a bacterial protein structure in half an hour that had been elusive for 10 years.
+Learn more
+Insect and plant immunity
+How honeybees could help protect the worldâs flora and fauna
+Using AlphaFold and electron microscopy, we are getting closer to understanding the molecular mechanisms related to insect immunity. The results are specifically relevant to honeybee health, which is a topic of global concern due to rapidly declining pollinator numbers.
+Learn more
+Enzymes
+Developing plastic-digesting enzymes
+A team discovering and engineering enhanced enzymes that can eventually be applied at scale to break down some of the most polluting single-use plastics used AF to screen 100 candidate enzymes â too many to generate 3D structures for â in days, giving them a new library of templates to engineer faster, more stable and cheaper enzymes for plastic recycling.
+Learn more
+species ecology
+Listening to what birds tell us about biodiversity
+Link to Youtube Video
+(visible only when JS is disabled)
+Google Research Vs. Biodiversity Crisis
+Learn more
+Rich ecosystem or empty forest? Sometimes itâs hard to tell, but getting an answer is critical for scientists working to understand the effects of climate change or the impact of conservation measures. Our researchers have created new tools to measure and understand biodiversity through birdsong.
+Learn more
+Quantum Chemistry & Materials Science
+AI tool GNoME find 2.2 million new crystals
+Millions of new candidate materials discovered in deep learning
+Learn more
+Modern technologies from computer chips and batteries to solar panels rely on inorganic crystals, which must be stable, otherwise they can decompose. And behind each new stable crystal can be months of painstaking experimentation.
+Learn more
+geophysics
+Better, faster predictions of Earthâs weather and climate
+Weather and climate patterns are the result of the complicated interactions of many factors â ocean and wind currents, clouds, rain, sun, and topography to name just a few â so it takes some of the worldâs largest computers many hours to make the weather predictions we all rely on. Google Researchers are using ML to achieve even better forecasts in just a fraction of the time.
+AI-based weather model
+Google DeepMindâs medium-range global weather forecasting model is able to make weather forecasts with unprecedented accuracy. It predicts weather conditions up to 10 days in advance more accurately and much faster than the industry gold-standard weather simulation system â the High Resolution Forecast (HRES), produced by the European Centre for Medium-Range Weather Forecasts (ECMWF).
+Learn more
+NeuralGCM
+Climate change is real, and its effects are becoming increasingly evident. Traditional climate models struggle to produce clear, accurate pictures of how our climate will continue to change due to limitations in how the models represent complex phenomena. NeuralGCM is a groundbreaking AI-powered approach that could someday offer a faster, more efficient, and more accurate way to predict climate change.
+Learn more
+Mapping the ionosphere
+The ionosphere, a region in Earthâs upper atmosphere, is a swirling sea of charged particles. In a new study published in Nature, we report the use of aggregated sensor measurements from millions of Android phones to map the ionosphere at a level of accuracy that matches or far exceeds that of conventional monitoring infrastructure.
+Learn more
+Global earthquake detection
+Earthquakes are a constant threat to communities around the globe. Using aggregated measurements from a global network of Android smartphones, we developed a system that detects earthquakes, delivers early warnings to users, and builds user trust with each successful alert.
+Learn more
+mathematics
+AlphaGeometry
+AI systems often struggle with complex problems in geometry and mathematics due to a lack of reasoning skills and training data. AlphaGeometryâs system combines the predictive power of a neural language model with a rule-bound deduction engine, which work in tandem to find solutions.
+Learn more

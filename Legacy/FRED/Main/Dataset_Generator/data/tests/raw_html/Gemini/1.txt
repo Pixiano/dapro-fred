@@ -1,0 +1,237 @@
+Gemini - Google DeepMind
+Gemini
+Our most intelligent AI models
+Chat with Gemini
+Build with Gemini
+Models
+Gemini 2.5 Flash-Lite is now ready for scaled production use
+Models
+We’re expanding our Gemini 2.5 family of models
+Models
+Gemini 2.5: Updates to our family of thinking models
+Models
+Advanced audio dialog and generation with Gemini 2.5
+Gemini 2.5 models are capable of reasoning through their thoughts before responding, resulting in enhanced performance and improved accuracy.
+Models
+Hands-on
+Performance
+Safety
+Build
+Model family
+Gemini 2.5 builds on the best of Gemini — with native multimodality and a long context window.
+General availability
+2.5 Pro
+Best for coding and highly complex tasks
+Learn more
+General availability
+2.5 Flash
+Best for fast performance on everyday tasks
+Learn more
+General availability
+2.5 Flash-Lite
+Best for high volume, cost efficient tasks
+Learn more
+Create and edit images with Gemini 2.5 Flash Image
+Generate, transform and edit images with simple text prompts, or combine multiple images to create something new. All in Gemini.
+Learn more
+Pause video
+Play video
+Hands-on with Gemini 2.5
+See how Gemini 2.5 uses its reasoning capabilities to create interactive simulations and do advanced coding.
+Make an interactive animation
+See how Gemini 2.5 Pro uses its reasoning capabilities to create an interactive animation of “cosmic fish” with a simple prompt.
+Create your own dinosaur game
+Watch Gemini 2.5 Pro create an endless runner game, using executable code from a single line prompt.
+Code a fractal visualization
+See how Gemini 2.5 Pro creates a simulation of intricate fractal patterns to explore a Mandelbrot set.
+Plot interactive economic data
+Watch Gemini 2.5 Pro use its reasoning capabilities to create an interactive bubble chart to visualize economic and health indicators over time.
+Animate complex behavior
+See how Gemini 2.5 Pro creates an interactive Javascript animation of colorful boids inside a spinning hexagon.
+Code particle simulations
+Watch Gemini 2.5 Pro use its reasoning capabilities to create an interactive simulation of a reflection nebula.
+Adaptive and budgeted thinking
+Adaptive controls and adjustable thinking budgets allow you to balance performance and cost.
+Calibrated
+The model explores diverse thinking strategies, leading to more accurate and relevant outputs.
+Controllable
+Developers have fine-grained control over the model's thinking process, allowing them to manage resource usage.
+Adaptive
+When no thinking budget is set, the model assesses the complexity of a task and calibrates the amount of thinking accordingly.
+Gemini 2.5 Deep Think
+An enhanced reasoning mode that uses cutting edge research techniques in parallel thinking and reinforcement learning to significantly improve Gemini’s ability to solve complex problems.
+Try with Google AI Ultra
+View model card
+Deep Think can better help tackle problems that require creativity, strategic planning, and making improvements step-by-step.
+Iterative development and design
+We’ve seen impressive results on tasks that require building something by making small changes over time.
+Aiding scientific and mathematical discovery
+By reasoning through complex problems, Deep Think can act as a powerful tool for researchers.
+Algorithmic development and code
+Deep Think excels at tough coding problems where problem formulation and careful consideration of tradeoffs and time complexity is paramount.
+Performance
+Gemini 2.5 is state-of-the-art across a wide range of benchmarks.
+View 2.5 tech report
+Benchmarks
+In addition to its strong performance on academic benchmarks, Gemini 2.5 tops the popular coding leaderboard WebDev Arena.
+Benchmark
+Gemini 2.5
+Flash-Lite
+Non-thinking
+Gemini 2.5
+Flash-Lite
+Thinking
+Gemini 2.5
+Flash
+Non-thinking
+Gemini 2.5
+Flash
+Thinking
+View 2.5 Flash
+Gemini 2.5
+Pro
+Thinking
+View 2.5 Pro
+Input price
+$/1M tokens
+(no caching)
+$0.10
+$0.10
+$0.30
+$0.30
+$1.25
+$2.50 > 200k tokens
+Output price
+$/1M tokens
+$0.40
+$0.40
+$2.50
+$2.50
+$10.00
+$15.00 > 200k tokens
+Reasoning & knowledge
+Humanity's Last Exam (no tools)
+5.1%
+6.9%
+8.4%
+11.0%
+21.6%
+Science
+GPQA diamond
+64.6%
+66.7%
+78.3%
+82.8%
+86.4%
+Mathematics
+AIME 2025
+49.8%
+63.1%
+61.6%
+72.0%
+88.0%
+Code generation
+LiveCodeBench
+(UI: 1/1/2025-5/1/2025)
+33.7%
+34.3%
+41.1%
+55.4%
+69.0%
+Code editing
+Aider Polyglot
+26.7%
+27.1%
+44.0%
+56.7%
+82.2%
+Agentic coding
+SWE-bench Verified
+single attempt
+31.6%
+27.6%
+50.0%
+48.9%
+59.6%
+multiple attempts
+42.6%
+44.9%
+60.0%
+60.3%
+67.2%
+Factuality
+SimpleQA
+10.7%
+13.0%
+25.8%
+26.9%
+54.0%
+Factuality
+FACTS grounding
+84.1%
+86.8%
+83.4%
+85.3%
+87.8%
+Visual reasoning
+MMMU
+72.9%
+72.9%
+76.9%
+79.7%
+82.0%
+Image understanding
+Vibe-Eval (Reka)
+51.3%
+57.5%
+66.2%
+65.4%
+67.2%
+Long context
+MRCR v2 (8-needle)
+128k (average)
+16.6%
+30.6%
+34.1%
+54.3%
+58.0%
+1M (pointwise)
+4.1%
+5.4%
+16.8%
+21.0%
+16.4%
+Multilingual performance
+Global MMLU (Lite)
+81.1%
+84.5%
+85.8%
+88.4%
+89.2%
+Methodology
+Gemini results: All Gemini scores are pass @1."Single attempt" settings allow no majority voting or parallel test-time compute; "multiple attempts" settings allow test-time selection of the candidate answer. They are all run with the AI Studio API with default sampling settings. To reduce variance, we average over multiple trials for smaller benchmarks. Aider Polyglot score is the pass rate average of 3 trials. Vibe-Eval results are reported using Gemini as a judge. Google's scaffolding for "multiple attempts" for SWE-Bench includes drawing multiple trajectories and re-scoring them using model's own judgement. For Aider results differ from the official leaderboard due to a difference in the settings used for evaluation (non-default).
+Result sources: Where provider numbers are not available we report numbers from leaderboards reporting results on these benchmarks: Humanity's Last Exam results are sourced from https://agi.safe.ai/ and https://scale.com/leaderboard/humanitys_last_exam, LiveCodeBench results are from https://livecodebench.github.io/leaderboard.html (1/1/2025 - 5/1/2025 in the UI), Aider Polyglot numbers come from https://aider.chat/docs/leaderboards/. FACTS come from https://www.kaggle.com/benchmarks/google/facts-grounding. For MRCR v2 which is not publically available yet we include 128k results as a cumulative score to ensure they can be comparable with other models and a pointwise value for 1M context window to show the capability of the model at full length. The methodology has changed in this table vs previously published results for MRCR v2 as we have decided to focus on a harder, 8-needle version of the benchmark going forward.
+Input and output price reflects text, image and video modalities.
+Building responsibly in the agentic era
+As we develop these new technologies, we recognize the responsibility it entails, and aim to prioritize safety and security in all our efforts.
+Learn more
+For developers
+Gemini’s advanced thinking, native multimodality and massive context window  empowers developers to build next-generation experiences.
+Start building
+Developer ecosystem
+Build with cutting-edge generative AI models and tools to make AI helpful for everyone.
+Google AI Studio
+Build with the latest models from Google DeepMind
+Gemini API
+Easily integrate Google’s most capable AI model to your apps
+Accessing our latest AI models
+We want developers to gain access to our models as quickly as possible. We’re making these available through Google AI Studio.
+Sign in to Google AI Studio
+Get the latest updates
+Sign up for news on the latest innovations from Google DeepMind.
+Email address
+Please enter a valid email (e.g., "name@example.com")
+I accept Google's Terms and Conditions and acknowledge that my information will be used in accordance with
+Google's Privacy Policy
+.
+Sign up

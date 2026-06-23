@@ -1,0 +1,260 @@
+Getting started with ChatGPT — everything you need to know | Tom's Guide
+Skip to main content
+Don't miss these
+(Image credit: Shutterstock)
+OpenAI
+'s
+ChatGPT
+has rapidly become one of the most popular AI models out there, but simply asking it a basic question will only scratch the surface of what it can do.
+If you’re ready to move past simple queries and unlock the chatbot's true potential, you need to understand one key concept: it should not be treated like a search engine, but more like a brilliant assistant who needs clear instructions.
+The difference between a generic answer and a truly impressive result comes down to how you frame your requests. This guide will walk you through everything you need to know, from the moment you log in, to making ChatGPT work best for you.
+1. Sign up and log in
+(Image: © Future)
+Go to
+chat.openai.com
+and create an account using your email address, or sign in quickly with Google, Microsoft, or Apple credentials. The entire signup process takes about 30 seconds and gets you immediate access to the chatbot.
+The
+free tier
+is incredibly robust and will be
+sufficient for most casual users
+. It gives you limited access to the latest model,
+GPT-5
+, along with powerful features like
+w
+eb browsing, image generation, and data analysis. For quick questions, brainstorming, or occasional use, you can do almost everything without spending a dime.
+ChatGPT Plus
+, at
+$20 per month
+, is the dedicated subscription for
+daily and professional users
+. While the free tier is great, Plus removes the frustration of strict rate limits, provides faster response speeds, and unlocks more advanced models.
+2. The chat interface
+(Image: © Tom's Guide )
+The main chat window works exactly as you’d expect: you
+type your questions
+or requests in the text box at the bottom,
+hit the arrow to generate
+, and ChatGPT's responses appear. This back-and-forth is key, as each exchange
+builds on what came before.
+The sidebar on the left displays your conversation history, making it easy to jump back to previous chats whenever you need them. By
+clicking the + icon,
+you can
+add photos and files, search the web, and access different modes
+.
+To ensure the chatbot stays focused and sharp, it’s best practice to
+start a new chat
+when moving to a completely different topic
+. Starting a new chat clears the prior conversation context, which prevents the chatbot from getting confused by cramming multiple unrelated projects into one long thread.
+3. Crafting successful prompts
+(Image: © Tom's Guide)
+The key to getting useful output from ChatGPT is
+specificity, not general knowledge
+. A prompt like:
+What are the best places to visit in Barcelona? I'm traveling this summer
+, leaves the AI with too many options, resulting in a generic list you could find anywhere.
+Instead, treat ChatGPT like a specialist: front-load your requirements by
+including constraints like
+audience, format, length, and tone in your initial request
+. For instance, changing that simple question to:
+Write a five-day itinerary for a family of four traveling in Barcelona on a $$300/day budget that focuses on kid-friendly historical sites
+, gives it clear parameters and produces something immediately usable.
+As previously mentioned, ChatGPT remembers the full context of your conversation. So if the output misses the mark,
+edit through dialogue
+rather than starting over to refine your answers.
+4. Generate images
+(Image: © Tom's Guide )
+To create visual content, simply
+describe the image you want directly in your conversation
+, and ChatGPT automatically triggers its native image generator. Just naturally request things like:
+create an image of a cozy coffee shop interior
+.
+Detailed descriptions produce significantly better images than vague requests
+, so be sure to include details about style, composition, colors, and mood. Once an image is created, you can easily iterate on it conversationally, using follow-up messages like:
+make the mountain taller,
+or
+change the color scheme to cool earth tone
+s.
+It's worth noting that ChatGPT has content restrictions against real people and copyrighted characters, and it may still struggle to render text accurately within images. And, if you're on the free tier, you'll have a limited number of times you can create images per day.
+5. Its practial uses
+(Image: © Future)
+Once you master prompting, ChatGPT becomes an invaluable tool for nearly any task by functioning as an expert co-pilot. For
+creative and writing tasks
+, it can
+help you write your resume
+,
+improve your cover letter
+or even
+negotiate a higher salary.
+For
+research and logic
+, it can explain complex concepts at your chosen level — from basic to PhD, or use it for
+brainstorming and planning
+by creating your own guides, structuring outlines and examining pros and cons for decisions.
+For technical work, it's good for
+coding assistance
+, debugging errors, and
+generating boilerplate code
+. You can even upload
+data analysis
+files, allowing the AI to clean and visualize spreadsheets without you writing a single line of code.
+Follow
+Tom's Guide on Google News
+and
+add us as a preferred source
+to get our up-to-date news, analysis, and reviews in your feeds. Make sure to click the Follow button!
+More from Tom's Guide
+Get smarter ChatGPT answers with this powerful prompt
+I use ChatGPT every day — here's 9 prompts I can't live without
+I've been using ChatGPT since its release — 5 tips I wish I knew sooner
+Category
+Back to Laptops
+Brand
+Apple
+Asus
+Dell
+Lenovo
+Processor
+AMD Ryzen
+Intel Core i5
+Intel Core i7
+RAM
+8GB RAM
+16GB RAM
+32GB RAM
+Storage Size
+32GB
+64GB
+128GB
+256GB
+512GB
+1TB
+2TB
+Screen Size
+13.3-inch
+13.4-inch
+14-inch
+15-inch
+Colour
+Black
+Blue
+Gold
+Silver
+White
+Condition
+New
+Open Box
+Refurbished
+Price
+Any Price
+Showing 10 of 121 deals
+Filters
+☰
+SORT BY
+Price (low to high)
+Price (high to low)
+Product Name (A to Z)
+Product Name (Z to A)
+Retailer name (A to Z)
+Retailer name (Z to A)
+Apple 13" MacBook Air M4 (2025)
+(256GB Silver)
+1
+$979.99
+View Deal
+Dell XPS 13 (2016)
+(13.3-inch 256GB)
+Our Review
+☆
+☆
+☆
+☆
+☆
+2
+$755
+View Deal
+Apple 15" MacBook Air M4 (2025)
+(15-inch 256GB)
+3
+$1,199
+$1,099
+View Deal
+Lenovo Yoga Slim 7x (Gen 9)
+(512GB OLED)
+4
+$1,075.79
+$858.11
+View Deal
+Lenovo Chromebook Plus 14
+(14-inch 256GB)
+Our Review
+☆
+☆
+☆
+☆
+☆
+5
+$749
+View Deal
+Asus ROG Zephyrus G14 (2025)
+(14-inch 1TB)
+Our Review
+☆
+☆
+☆
+☆
+☆
+6
+$1,799.99
+View Deal
+Apple 13" MacBook Air M4 (2025)
+7
+$999
+View Deal
+Low Stock
+Dell XPS 13 7390
+(13.3-inch 512GB)
+8
+$619.99
+$549.99
+View Deal
+Apple 15" MacBook Air M4 (2025)
+(15-inch 512GB)
+9
+$1,399
+$1,299
+View Deal
+Lenovo Yoga Slim 7x (Gen 9)
+(Blue)
+10
+$1,289.99
+$929.99
+View Deal
+Show more
+Sign up to get the BEST of Tom's Guide direct to your inbox.
+Get instant access to breaking news, the hottest reviews, great deals and helpful tips.
+Contact me with news and offers from other Future brands
+Receive email from us on behalf of our trusted partners or sponsors
+See more AI How To
+TOPICS
+Kaycee Hill
+How-to Editor
+Kaycee is Tom's Guide's How-To Editor, known for tutorials that skip the fluff and get straight to what works. She writes across AI, homes, phones, and everything in between — because life doesn't stick to categories and neither should good advice. With years of experience in tech and content creation, she's built her reputation on turning complicated subjects into straightforward solutions. Kaycee is also an award-winning poet and co-editor at Fox and Star Books. Her debut collection is published by Bloodaxe, with a second book in the works.
+You must confirm your public display name before commenting
+Please logout and then login again, you will then be prompted to enter your display name.
+Logout
+LATEST ARTICLES
+1
+You only need these 5 items to banish slugs from your yard
+2
+This PT trains seniors for a living — here’s his 10-minute bodyweight workout that builds muscle and increases joint flexibility
+3
+Fall Back into Great Sleep — our week-long look at how to sleep better this fall and winter
+4
+iOS 26 lets you change the default snooze duration — here's how to do it
+5
+'IT: Welcome to Derry' writers hint at horror beyond Pennywise: 'The stakes are bigger than we’ve ever seen in an IT story'
+Close
+Please login or signup to comment
+Please wait...
+Login
+Sign Up

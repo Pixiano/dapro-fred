@@ -1,0 +1,277 @@
+Google Gemini: Everything you need to know about the generative AI apps and models | TechCrunch
+Image Credits:
+TechCrunch
+AI
+Google Gemini: Everything you need to know about the generative AI apps and models
+Kyle Wiggers
+Maxwell Zeff
+6:09 PM PST · February 26, 2025
+Google’s trying to make waves with Gemini, its flagship suite of generative AI models, apps, and services. But what’s Gemini? How can you use it? And how does it stack up to other generative AI tools such as OpenAI’s
+ChatGPT
+, Meta’s
+Llama
+, and Microsoft’s
+Copilot
+?
+To make it easier to keep up with the latest Gemini developments, we’ve put together this handy guide, which we’ll keep updated as new Gemini models, features, and news about Google’s plans for Gemini are released.
+What is Gemini?
+Gemini is Google’s
+long-promised
+, next-gen generative AI model family. Developed by Google’s AI research labs DeepMind and Google Research, it comes in several flavors:
+Gemini Ultra
+, a very large model.
+Gemini Pro
+, a large model — though smaller than Ultra. The latest version,
+Gemini 2.0 Pro
+, is Google’s current flagship.
+Gemini Flash
+, a speedier, “distilled” version of Pro.
+Gemini Flash-Lite
+, a slightly smaller and faster version of Gemini Flash.
+Gemini Flash Thinking
+, a model with “reasoning” capabilities.
+Gemini Nano
+, two small models:
+Nano-1
+and the slightly more capable
+Nano-2
+, which is meant to run offline.
+All Gemini models were trained to be natively multimodal — that is, able to work with and analyze more than just text. Google says they were pre-trained and fine-tuned on a variety of public, proprietary, and licensed audio, images, and videos; a set of codebases; and text in different languages.
+This sets Gemini apart from models such as
+Google’s own LaMDA
+, which was trained exclusively on text data. LaMDA can’t understand or generate anything beyond text (e.g., essays, emails, and so on), but that isn’t necessarily the case with Gemini models. For example, the
+latest versions of Gemini Flash
+and Gemini Pro can natively output images and audio in addition to text.
+We’ll note here that the
+ethics and legality
+of training models on public data, in some cases without the data owners’ knowledge or consent, are murky. Google has an
+AI indemnification policy
+to shield certain Google Cloud customers from lawsuits should they face them, but this policy contains carve-outs. Proceed with caution — particularly if you’re intending on using Gemini commercially.
+What’s the difference between the Gemini apps and Gemini models?
+Gemini is separate and distinct from the Gemini apps on the web and mobile (
+formerly Bard
+).
+Techcrunch event
+2-FOR-1 DISCOUNT: Bring a +1 and save 60%
+Google Cloud, Netflix, Microsoft, Box, Phia, a16z, ElevenLabs, Wayve, Hugging Face, Elad Gil, Vinod Khosla — some of the 250+ heavy hitters leading 200+ sessions designed to deliver the insights that fuel startup growth and sharpen your edge. And don’t miss 300+ showcasing startups in all sectors.
+Bring a +1 and save 60% on their pass, or get your pass by Oct 27 to save up to $444.
+2-FOR-1 DISCOUNT: Bring a +1 and save 60%
+Google Cloud, Netflix, Microsoft, Box, Phia, a16z, ElevenLabs, Wayve, Hugging Face, Elad Gil, Vinod Khosla — some of the 250+ heavy hitters leading 200+ sessions designed to deliver the insights that fuel startup growth and sharpen your edge. And don’t miss 300+ showcasing startups in all sectors. Bring a +1 and save 60% on their pass, or get your pass by Oct 27 to save up to $444.
+San Francisco
+|
+October 27-29, 2025
+REGISTER NOW
+The Gemini apps are clients that connect to various Gemini models and layer a chatbot-like interface on top. Think of them as front ends for Google’s generative AI, analogous to
+ChatGPT
+and Anthropic’s
+Claude family of apps
+.
+Image Credits:
+Google
+Gemini on the web lives
+here
+. On Android, the
+Gemini app
+replaces the existing Google Assistant app. And on iOS, the
+Google and Google Search apps
+serve as that platform’s Gemini clients.
+On Android, users can bring up a Gemini overlay to ask questions about what’s on their screen (for example, a YouTube video). Pressing and holding a supported smartphone’s power button or saying, “Hey Google” summons the overlay.
+Gemini apps can accept images as well as voice commands and text — including files like PDFs, either uploaded or imported from Google Drive — and generate images. As you’d expect, conversations with Gemini apps on mobile carry over to Gemini on the web and vice versa if you’re signed in to the same Google Account in both places.
+Gemini Advanced
+The Gemini apps aren’t the only means of recruiting Gemini models’ assistance with tasks. Slowly but surely, Gemini-imbued features are
+making their way
+into staple Google apps and services like Gmail and Google Docs.
+To take advantage of most of these, you’ll need the Google One AI Premium Plan. Technically a part of
+Google One
+, the AI Premium Plan costs $20 a month and provides access to Gemini in Google Workspace apps like Docs, Maps, Slides, Sheets, Drive, and Meet. It also enables what Google calls Gemini Advanced, which brings the company’s more sophisticated Gemini models to the Gemini apps.
+Image Credits:
+Google
+Gemini Advanced users get extras here and there, too, like priority access to new features and models; the ability to run and edit Python code directly in Gemini; and increased limits for
+NotebookLM
+, Google’s tool that turns PDFs into AI-generated podcasts. Recently, Gemini Advanced gained a
+memory feature
+that stores users’ preferences and allows Gemini to refer to old conversations as context for current chats.
+One of the more compelling Gemini Advanced exclusives,
+Deep Research
+, leverages Gemini models with “advanced reasoning” to create detailed briefs. In response to a prompt (e.g. “How should I redesign my kitchen?”), Deep Research develops a multi-step research plan and searches the web to craft a comprehensive answer.
+Gemini in Gmail, Docs, Chrome, dev tools, and more
+In Gmail, Gemini lives in a
+side panel
+that can write emails and summarize message threads. You’ll find the same panel in Docs, where it helps write and refine content and brainstorm new ideas. Gemini in Slides generates slides and custom images. And Gemini in Google Sheets tracks and organizes data, creating tables and formulas.
+Gemini
+is in Google Maps
+, where it can aggregate reviews about local businesses and offer recommendations like how to spend a day visiting a foreign city. The chatbot’s reach extends to Drive, as well, where it can summarize files and folders and give quick facts about a project.
+Image Credits:
+Google
+Gemini recently came to Google’s Chrome browser
+in the form of an AI writing tool. You can use it to write something completely new or rewrite existing text; Google says it’ll consider the web page you’re on to make recommendations.
+Elsewhere, you’ll find hints of Gemini in Google’s
+database products
+,
+cloud security tools
+, and
+app development platforms
+(including
+Firebase
+and
+Project IDX
+), as well as in apps like
+Google Photos
+(where Gemini handles natural language search queries),
+YouTube
+(where it helps brainstorm video ideas), and Meet (where it translates captions).
+Code Assist
+(formerly
+Duet AI for Developers
+), Google’s suite of AI-powered assistance tools for code completion and generation, is offloading heavy computational lifting to Gemini. So are Google’s
+security products underpinned by Gemini
+, like Gemini in Threat Intelligence, which can analyze large portions of potentially malicious code and let users perform natural language searches for ongoing threats or indicators of compromise.
+Gemini extensions and Gems
+Gemini Advanced users can create Gems
+, custom chatbots on desktop and mobile powered by Gemini models. Gems can be generated from natural language descriptions — for instance, “You’re my running coach. Give me a daily running plan” — and shared with other users or kept private.
+Image Credits:
+Google
+The Gemini apps can tap into Google services via what Google calls “Gemini extensions.” Gemini integrates with Drive, Gmail, YouTube, and more to respond to queries such as “Could you summarize my last three emails?”
+Gemini Live in-depth voice chats
+An experience called Gemini Live
+allows users to have “in-depth” voice chats with Gemini. It’s available in the Gemini apps on mobile and the
+Pixel Buds Pro 2
+, where it can be accessed even when your phone’s locked.
+Image Credits:
+Google
+With Gemini Live enabled, you can interrupt Gemini while the chatbot’s speaking to ask a clarifying question, and it’ll adapt to your speech patterns in real-time. Live is also designed to serve as a virtual coach of sorts, helping you rehearse for events, brainstorm ideas, and so on. For instance, Live can suggest which skills to highlight in an upcoming job interview and give public speaking pointers.
+You can read our
+review of Gemini Live here
+.
+Gemini for teens
+Google offers a teen-focused
+Gemini experience
+for students.
+The teen-focused Gemini has “additional policies and safeguards,” including a tailored onboarding process and an AI literacy guide. Otherwise, it’s nearly identical to the standard Gemini experience, down to the “double-check” feature that looks across the web to see if Gemini’s responses are accurate.
+What can the Gemini models do?
+Because Gemini models are multimodal, they can perform a range of multimodal tasks, from transcribing speech to captioning images and videos in real-time. Many of these capabilities have reached the product stage, and Google is promising much more in the not-too-distant future.
+Of course, Google offers no fix for some of the
+underlying problems
+with generative AI technology today, like its
+encoded
+biases
+and tendency to make things up (i.e.,
+hallucinate
+). Neither do its rivals, but it’s something to keep in mind when considering using or paying for Gemini.
+Gemini Pro’s capabilities
+Google says that its latest Pro model,
+Gemini 2.0 Pro
+, is its best yet for coding and complex prompts. 2.0 Pro outperforms its predecessor,
+Gemini 1.5 Pro
+, in benchmarks measuring programming, reasoning, math, and factual accuracy.
+In Google’s Vertex AI platform, developers can customize Gemini Pro to specific contexts and use cases via a fine-tuning or “grounding” process. For example, Pro (along with other Gemini models) can be instructed to use data from third-party providers like Moody’s, Thomson Reuters, ZoomInfo, and MSCI, or source information from corporate datasets or Google Search instead of its wider knowledge bank. Gemini Pro can also be connected to external, third-party APIs to perform particular actions, like automating a back-office workflow.
+Google’s AI Studio platform offers templates for creating structured chat prompts with Pro. Developers can control the model’s creative range and provide examples to give tone and style instructions — and also tune Pro’s safety settings.
+Gemini Flash is lightweight, while Gemini Flash Thinking adds reasoning
+Gemini 2.0 Flash
+, which can use tools like Google Search and interact with external APIs, outperforms some of the larger Gemini 1.5 models on benchmarks measuring coding and image analysis. An offshoot of Gemini Pro, Flash is small and efficient — built for narrow, high-frequency generative AI workloads.
+Google says that Flash is particularly well-suited for tasks like summarization and chat apps, plus image and video captioning and data extraction from long documents and tables. Meanwhile, Gemini 2.0 Flash-Lite, a more compact version of Flash, outperforms Gemini 1.5 Flash but runs at the same price and speed, according to Google.
+Last December, Google
+released a “thinking” version of Gemini 2.0 Flash
+that’s capable of “reasoning.” The AI model takes a few seconds to work backward through a problem before it gives an answer, which can improve its reliability.
+Gemini Nano can run on your phone
+Gemini Nano is a tiny version of Gemini efficient enough to run directly on (some) devices instead of sending the task off to a server somewhere. So far, Nano powers a couple of features on the
+Pixel 8 Pro, Pixel 8
+, Pixel 9 Pro, Pixel 9, and
+Samsung Galaxy S24
+, including Summarize in Recorder and Smart Reply in Gboard.
+The Recorder app, which lets users push a button to record and transcribe audio, includes a Gemini-powered summary of recorded conversations, interviews, presentations, and other audio snippets. Users get summaries even if they don’t have a signal or Wi-Fi connection — and in a nod to privacy, no data leaves their phone in process.
+Image Credits:
+Google
+Nano is also in Gboard, Google’s keyboard replacement. There, it powers Smart Reply, which helps to suggest the next thing you’ll want to say when having a conversation in a messaging app such as WhatsApp.
+A future version of Android will tap Nano to
+alert users to potential scams during calls.
+The
+new weather app
+on Pixel phones uses Gemini Nano to generate tailored weather reports. And TalkBack, Google’s accessibility service, employs Nano to
+create aural descriptions of objects
+for low-vision and blind users.
+Gemini Ultra, MIA for now
+We haven’t seen much of
+Gemini Ultra
+in recent months. The model isn’t available in the Gemini apps, and it isn’t listed on Google’s Gemini API pricing page. However, that doesn’t mean Google won’t bring Ultra back at some point in the future.
+How much do the Gemini models cost?
+Gemini 1.5 Pro, 1.5 Flash, 2.0 Flash, and 2.0 Flash-Lite are available through Google’s Gemini API for building apps and services. They’re pay-as-you-go. Here’s the base pricing — not including add-ons — as of February 225:
+Gemini 1.5 Pro:
+$1.25 per 1 million input tokens (for prompts up to 128K tokens) or $2.50 per 1 million input tokens (for prompts longer than 128K tokens); $5 per 1 million output tokens (for prompts up to 128K tokens) or $10 per 1 million output tokens (for prompts longer than 128K tokens)
+Gemini 1.5 Flash:
+7.5 cents per 1 million input tokens (for prompts up to 128K tokens), 15 cents per 1 million input tokens (for prompts longer than 128K tokens), 30 cents per 1 million output tokens (for prompts up to 128K tokens), 60 cents per 1 million output tokens (for prompts longer than 128K tokens)
+Gemini 2.0 Flash:
+10 cents per 1 million input tokens, 40 cents per 1 million output tokens. For audio, 70 cents per 1 million input tokens.
+Gemini 2.0 Flash-Lite:
+7.5 cents per 1 million input tokens, 30 cents per 1 million output tokens.
+Tokens are subdivided bits of raw data, like the syllables “fan,” “tas,” and “tic” in the word “fantastic”; 1 million tokens is equivalent to about 750,000 words.
+Input
+refers to tokens fed into the model, while
+output
+refers to tokens that the model generates.
+2.0 Pro pricing has yet to be announced, and Nano is still in
+early access
+.
+Is Gemini coming to the iPhone?
+It might.
+Apple has said that it’s in talks to put Gemini and other third-party models to use
+for a number of features in its
+Apple Intelligence
+suite. Following a keynote presentation at WWDC 2024, Apple SVP Craig Federighi
+confirmed plans to work with models
+, including Gemini, but he didn’t divulge any additional details.
+This post was originally published February 16, 2024, and is updated regularly.
+Topics
+AI
+,
+Apps
+,
+Enterprise
+,
+evergreens
+,
+gemini
+,
+Gemini Pro
+,
+Generative AI
+,
+Google
+,
+google gemini
+Kyle Wiggers
+AI Editor
+Kyle Wiggers was TechCrunch’s AI Editor until June 2025. His writing has appeared in VentureBeat and Digital Trends, as well as a range of gadget blogs including Android Police, Android Authority, Droid-Life, and XDA-Developers. He lives in Manhattan with his partner, a music therapist.
+View Bio
+Maxwell Zeff
+Senior AI Reporter
+Maxwell Zeff is a senior reporter at TechCrunch specializing in AI. Previously with Gizmodo, Bloomberg, and MSNBC, Zeff has covered the rise of AI and the Silicon Valley Bank crisis. He is based in San Francisco. When not reporting, he can be found hiking, biking, and exploring the Bay Area’s food scene.
+You can contact or verify outreach from Maxwell by emailing
+maxwell.zeff@techcrunch.com
+or via encrypted message at mzeff.88 on Signal.
+View Bio
+October 27-29, 2025
+San Francisco
+Bring a +1 and save 60%
+Have a +1 you’d like to bring to Disrupt? Bring them along and save 60% on their pass. Or get up to 30% off on group passes.
+Join 10,000 founders, investors, and tech leaders — and save when you come together to the tech epicenter of the year.
+S
+ave
+Now
+Most Popular
+20-year-old dropouts built AI notetaker Turbo AI and grew it to 5 million users
+Tage Kene-Okafor
+Two days after OpenAI’s Atlas, Microsoft relaunches a nearly identical AI browser
+Russell Brandom
+OpenAI launches an AI-powered browser: ChatGPT Atlas
+Maxwell Zeff
+Meta AI’s app downloads and daily users spiked after launch of ‘Vibes’ AI video feed
+Sarah Perez
+Trump DOE confirms it’s canceling over $700M in manufacturing grants
+Tim De Chant
+Kohler unveils a camera for your toilet
+Anthony Ha
+OpenAI’s ‘embarrassing’ math
+Anthony Ha
+Loading the next article
+Error loading the next article

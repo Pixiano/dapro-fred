@@ -1,15 +1,23 @@
 # Secrets - never commit
 *.env
 .env
+KEYS!.txt
 
 # Python
 __pycache__/
 *.pyc
-Core/venv/
+venv/
 
-# Memory data (personal, runtime-generated)
+# Node
+node_modules/
+
+# Memory data (personal, runtime-generated, or old conversation logs
+# naming real people - same rationale across Core/ and Legacy/)
 Core/memory_data/
 Core/memory_indexes/
+Legacy/FRED/Main/API/Memories/
+Legacy/FRED/Main/API/User_Memories/
+Legacy/FRED/Main/API/Faiss_Index/
 
 # Logs
 Core/data/logs/
@@ -17,5 +25,12 @@ Core/data/logs/
 # Audio runtime artifacts
 fred_tts_output.mp3
 
-# Large media (track separately or with Git LFS if needed)
-Video/*.mp4
+# Raw footage/audio (~40GB+, individual files past GitHub's 100MB
+# limit) - track separately or with Git LFS if ever needed
+Video/
+
+# Old large model/binary files past GitHub's 100MB hard limit -
+# superseded by Core/'s own smaller Vosk model anyway
+Legacy/FRED/Main/API/Models/vosk-model-en-in-0.5/
+Legacy/FRED/Main/API/Shortcuts/Godot.exe
+Legacy/FRED/Others/OS_Automation_Perfection/Shortcuts/Godot.exe

@@ -1,0 +1,43 @@
+Security News This Week: Amazon Explains How Its AWS Outage Took Down the Web
+Plus: The Jaguar Land Rover hack sets an expensive new record, OpenAI’s new Atlas browser raises security fears, Starlink cuts off scam compounds, and more.
+Amazon Web Services experienced DNS resolution issues on Monday
+leading to cascading outages that took down wide swaths of the web
+. Monday’s meltdown illustrated the world’s fundamental
+challenges for major cloud providers and their customers alike when things go awry
+. See below for more about how the outage occurred.
+US Justice Department indictments in a mob-fueled gambling scam reverberated through the NBA on Thursday. The case includes
+allegations that a group backed by the mob was using hacked card shufflers to con victims
+in an investigation into hacking Deckmate 2 card shufflers used in casinos.
+broke down the details of the shocking Louvre jewelry heist
+found in an investigation that US Immigration and Customs Enforcement likely did not buy guided missile warheads
+as part of its procurements. The transaction appears to have been an accounting coding error.
+Meanwhile, Anthropic has partnered with the US government to
+develop mechanisms meant to keep its AI platform, Claude, from guiding someone through building a nuclear weapon
+. Experts have mixed reactions, though, about whether this project is necessary—and whether it will be successful. And new research this week indicates that a browser seemingly downloaded millions of times—known as the Universe Browser—
+behaves like malware and has links to Asia’s booming cybercrime and illegal gambling networks
+And there’s more. Each week, we round up the security and privacy news we didn’t cover in depth ourselves. Click the headlines to read the full stories. And stay safe out there.
+After Major Outage, AWS Unpacks “Three Distinct Periods of Impact”
+AWS confirmed in a “post-event summary” on Thursday that its major outage on Monday was caused by Domain System Registry failures in its DynamoDB service. The company also explained, though, that these issues tipped off other problems as well, expanding the complexity and impact of the outage. One main component of the meltdown involved issues with the Network Load Balancer service, which is critical for dynamically managing the processing and flow of data across the cloud to prevent choke points. The other was disruptions to launching new “EC2 Instances,” the virtual machine configuration mechanism at the core of AWS. Without being able to bring up new instances, the system was straining under the weight of a backlog of requests. All of these elements combined to make recovery a difficult and time-consuming process. The entire incident—from detection to remediation—took about 15 hours to play out within AWS. “We know this event impacted many customers in significant ways,” the company wrote in its post mortem. “We will do everything we can to learn from this event and use it to improve our availability even further.”
+Cyberattack Against Jaguar Land Rover Set to Cost Around $2.5 Billion
+(JLR) and its sweeping supply chain for five weeks is likely to be the most financially costly hack in British history, a
+. According to the Cyber Monitoring Centre (CMC), the fallout from the attack is likely to be in the region of £1.9 billion ($2.5 billion). Researchers at the CMC estimated that around 5,000 companies may have been impacted by the hack, which saw JLR stop manufacturing, with the knock-on impact of its just-in-time supply chain also forcing firms supplying parts to halt operations as well. JLR restored production in early October and
+its yearly production was down around 25 percent after a “challenging quarter.”
+OpenAI’s Web Browser Atlas Raises Prompt Injection Fears
+this week—a direct shot at Google’s dominant Chrome browser. Atlas puts OpenAI’s chatbot at the heart of the browser, with the ability to search using the LLM and have it analyze, summarize, and ask questions of the web pages you’re viewing. However, as with other AI-enabled web browsers, experts and security researchers are concerned about the potential for
+, attacks involve hiding a set of instructions to an LLM in text or an image that the chatbot will then “read” and act upon; for instance, malicious instructions could appear on a web page that a chatbot is asked to summarize. Security researchers have previously demonstrated how
+Almost like clockwork, AI security researchers have
+via prompt injection attacks. In one instance, independent researcher
+showed how the browser could automatically turn itself from dark mode to light mode by reading instructions in a Google Document. “For this launch, we’ve performed extensive red-teaming, implemented novel model training techniques to reward the model for ignoring malicious instructions, implemented overlapping guardrails and safety measures, and added new systems to detect and block such attacks,” OpenAI CISO
+. “However, prompt injection remains a frontier, unsolved security problem, and our adversaries will spend significant time and resources to find ways to make ChatGPT agent[s] fall for these attacks.”
+Critical Vulnerability in Open Source Tool Illustrates Software Supply Chain Challenges
+Researchers from the cloud security firm Edera publicly disclosed findings on Tuesday about a significant vulnerability impacting open source libraries for a file archiving feature often used for distributing software updates or creating backups. Known as "async-tar," numerous "forks" or adapted versions of the library contain the vulnerability and have released patches as part of a coordinated disclosure process. The researchers emphasize, though, that one widely used library, "tokio-tar," is no longer maintained—sometimes called "abandonware." As a result, there is no patch for tokio-tar users to apply. The vulnerability is tracked as CVE-2025-62518.
+"In the worst-case scenario, this vulnerability ... can lead to Remote Code Execution (RCE) through file overwriting attacks, such as replacing configuration files or hijacking build backends," the researchers wrote. "Our suggested remediation is to immediately upgrade to one of the patched versions or remove this dependency. If you depend on tokio-tar, consider migrating to an actively maintained fork like astral-tokio-tar."
+2,500 Starlink Terminals Deactivated Around Scam Compounds, SpaceX Claims
+Over the last decade, hundreds of thousands of people have been
+in Southeast Asia. In these compounds—mostly in Myanmar, Laos, and Cambodia—these trafficking victims have been compelled to run online scams and
+When law enforcement agencies have shut off internet connections to the compounds, the criminal gangs have often turned to
+Elon Musk’s Starlink satellite system to stay online
+found thousands of phones connecting to the Starlink network at eight compounds based around the Myanmar-Thailand border. At the time, the company did not respond to queries about the use of its systems. This week, multiple Starlink devices were seized in a
+Lauren Dreyer, the vice president of Starlink’s business operations, took to X to say the company had
+abusing its technology. “In Myanmar, for example, SpaceX proactively identified and disabled over 2,500 Starlink Kits in the vicinity of suspected ‘scam centers,’” Dreyer said. “We are committed to ensuring the service remains a force for good and sustains trust worldwide: both connecting the unconnected and detecting and preventing misuse by bad actors.”
+It is unclear when the Starlink devices were disabled or if the company has taken any other measures to stop the devices being used at known scam compound sites in the region.
