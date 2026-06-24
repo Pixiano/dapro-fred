@@ -1,0 +1,223 @@
+📋 F.R.E.D. — MVP Plan
+v1.0 (MVP): June 28, 2026
+v1.1 (Full roadmap backlog): January 31, 2027
+v2+: unscheduled, triaged as it comes
+
+Why this document exists:
+Phases 11-15 got built, tested, and debugged for real in one session.
+Phase 16 onward then triggered a much bigger conversation about
+everything FRED could eventually be — accounts, manufacturing,
+ambient presence, self-improvement, a UI rivaling Apple's Dynamic
+Island. That conversation was worth having, but it can't all happen
+before June 28th, and pretending otherwise is how "the MVP" quietly
+turns into "whatever got talked about most recently." This document
+is the line: what ships by June 28, what's real but later (v1.1),
+and what's deliberately not even scheduled yet (v2+).
+
+Reward for hitting June 28th: undecided — to be picked once it's hit.
+
+
+=================================================================
+v1.0 — MVP, due June 28, 2026
+=================================================================
+
+Goal: finish Phases 16-20 in their CUT-DOWN form. Every phase below
+keeps its original outcome/tagline — the cut is in scope, not intent.
+
+Phase 16 — A Face for the Mind (MVP cut)
+  IN:  Always-on-top HUD window. Four states (idle / listening /
+       thinking / speaking), visually distinct. Live transcript of
+       what FRED heard, shown in the same window.
+  OUT: Apple Dynamic-Island-style permanent desktop shell integration.
+       Windows has no native equivalent of that — building it for
+       real means custom shell/overlay work, a UI project on its own,
+       not a HUD feature. -> v1.1.
+  Example of "done": FRED is listening, the HUD shows a visibly
+  different state than when he's thinking, and you can read back
+  what he heard without checking the console.
+
+Phase 17 — Eyes on the Screen (no cut needed)
+  IN:  Screenshot capture + a vision-capable model call for "what's
+       this error" / "read this for me." Already scoped small in the
+       original roadmap — ships as originally planned.
+  Example: you point at a stack trace on screen, say "what's this
+  error," FRED takes a screenshot and answers from what's actually
+  in it, not a guess from your description.
+
+Phase 18 — Becoming Mine (MVP cut)
+  IN:  Iterate system_prompt.py against what actually feels off in
+       daily use. Cheap, fast, text-only changes.
+  OUT: TTS voice cloning / fine-tuning on Vatsal's own voice. That's
+       a real ML pipeline (data collection, training, integration),
+       not a settings tweak — its own project. -> v1.1.
+  Example: if FRED's tone feels too formal in casual chat, the system
+  prompt gets adjusted and re-tested same day — but he still sounds
+  like generic Windows SAPI TTS at the end of v1.0, not "Vatsal's own
+  voice." That's expected and fine for this milestone.
+
+Phase 19 — The Mind Remembers, Selectively (MVP cut, but concrete)
+  IN:  Real category split — Achievements, Childhood, Current
+       Projects, Basics (and room for FRED to propose a new category
+       if something doesn't fit existing ones). Categorization and
+       re-categorization decisions ONLY run on deep/extreme tier —
+       never low/nano/standard. Basic consolidation of old raw
+       messages into durable facts.
+  OUT: Nothing meaningfully cut here — this phase's spec just got
+       more concrete than the original placeholder ("split memory
+       into categories"). It stays in v1.0 as-is.
+  Example: "I got into [university] today" gets filed under
+  Achievements, not dumped into the same undifferentiated stream as
+  "what's the weather." If a memory could plausibly be Achievements
+  OR Current Projects, the deep-tier model decides — not nano, even
+  if nano happens to be free at that moment.
+
+Phase 20 — Trusted to Run Himself (MVP cut)
+  IN:  Audit existing permission-tier coverage (the confirmation gate
+       from Phase 14 — confirm it actually covers everything
+       destructive, no gaps). Secrets hygiene re-confirmed. Starts on
+       boot, recovers from crashes. Voice mode stops demanding the
+       wake phrase every single turn — stays "in conversation" for a
+       short window after the first wake.
+  OUT: Grammar-constrained STT (real Vosk grammar work, non-trivial).
+       Dynamic/smarter tier selection (replacing the keyword-heuristic
+       _pick_tier with something that actually reasons about
+       complexity — a real design problem, not a quick fix). Both
+       -> v1.1.
+  Example of "done": you say "hey Fred" once, then have an actual
+  back-and-forth for the next minute without repeating the wake
+  phrase before every sentence. Separately: closing your laptop lid
+  and reopening doesn't require manually restarting FRED.
+
+v1.0 outcome: FRED looks present (HUD), can see your screen, has a
+more honest personality-iteration loop, organizes memory like an
+actual mind instead of a junk drawer, and holds a real conversation
+in voice mode without nagging you for the wake word every turn. Not
+"finished" — genuinely usable, daily-driver-credible.
+
+
+=================================================================
+v1.1 — Full backlog, due January 31, 2027 (~7 months after v1.0)
+=================================================================
+
+Everything below is real, was discussed in depth, and is NOT in
+v1.0. Each one gets built properly in this window — no rushing them
+the way the original Phase 16-20 timeline almost got rushed.
+
+1. Command-caching / dispatcher self-learning
+   When the LLM successfully resolves a clean single tool call for an
+   exact phrasing ("download Qwen3-30B from LM Studio"), offer to
+   remember it as a new deterministic dispatcher rule — so next time
+   it's instant, no LLM involved, the same way "open notepad" already
+   is. The dispatcher *learns* new rules from lived experience instead
+   of Vatsal hand-writing every regex.
+   Example: the first time you ask FRED to download a specific model,
+   it goes through the LLM/tool-calling path like anything novel does.
+   The fifth time you ask for that exact phrase, it's instant —
+   because it got promoted to a learned rule after the first success.
+
+2. Account integrations — Spotify, YouTube, Discord, Gmail, Drive,
+   OneDrive, Groq/Claude/ChatGPT/DeepSeek APIs
+   Prerequisite: a real credentials vault, not scattered API keys in
+   a settings file — this project has already leaked keys twice
+   (the two KEYS!.txt incidents), so this gets built BEFORE any new
+   account integration, not bolted on after the fact.
+   Amazon specifically: no real consumer API for shopping actions
+   exists; if it happens at all, it's fragile browser automation and
+   gets evaluated separately, not bundled with the rest.
+   Example: "skip this song" or "what's currently playing" actually
+   controls Spotify via its real Web API — not a maybe-this-works
+   browser-automation hack.
+
+3. "Extreme of extreme" cloud API tier
+   A deliberate, rarely-used, opt-in tier above local "extreme" that
+   calls out to a real cloud model (Claude/GPT/etc.) only for the
+   hardest cases local models genuinely can't handle. Requires
+   explicit confirmation before use, the same way Phase 14's
+   destructive-action gate requires confirmation — sending data
+   off-device has real privacy weight and shouldn't be silent.
+   Example: a genuinely hard multi-step reasoning task might prompt
+   "this would go faster/better with Claude's API — want me to use
+   it?" rather than FRED silently deciding to phone out.
+
+4. Dynamic-Island-style permanent desktop UI integration
+   The real version of what got cut from Phase 16's MVP — actual
+   OS-level shell integration, not just an always-on-top window.
+
+5. TTS voice cloning / fine-tuning on Vatsal's own voice
+   The real version of what got cut from Phase 18's MVP.
+
+6. Grammar-constrained STT + dynamic/smarter tier selection
+   The two items cut from Phase 20's MVP, built properly.
+
+7. ffmpeg access / file conversions, printing command, hard-drive
+   knowledge (maintained file index, not just live search)
+   Straightforward additions to the existing machine_tools pattern —
+   low risk, just more tools, no architecture change needed.
+   Example: "convert this to mp4" or "print this PDF" work the same
+   way "open notepad" does today — a registered tool, possibly a
+   dispatcher shortcut if the phrasing is common enough.
+
+8. Eon Companion, BRAIN, COPY, IAWY integration
+   FRED orchestrating Vatsal's other personal projects as sub-tools,
+   once Phase 21-equivalent scripting tools exist. Needs Vatsal to
+   specify what these actually are/how they're invoked before this
+   moves past a placeholder.
+
+9. Cross-device access (phone, laptop) — self-flagged as "later" by
+   Vatsal already; stays later.
+
+
+=================================================================
+v2+ — not scheduled, triaged as it comes
+=================================================================
+
+Everything already identified as its own frontier, separate from
+"FRED the personal assistant" as currently scoped:
+  - Self-improvement (FRED notices an error, drafts a fix in a
+    sandbox, proposes — never auto-applies)
+  - Running scripts / Claude-Code-style read-write-run tooling
+    (prerequisite for #1 above in spirit, but the FULL agentic
+    version — not just running one cached command)
+  - Continuous multi-video-feed monitoring (edge pre-filtering on
+    something like a Raspberry Pi, only escalating "interesting"
+    frames to real vision models)
+  - Learn-by-watching (FRED observes how Vatsal actually works and
+    builds preferences from it, not just from being told)
+  - Self-testing infrastructure (FRED runs tests against itself)
+  - True ambient presence beyond one PC (distributed mic/speaker
+    nodes, Raspberry Pi satellites)
+  - In-house manufacturing / physical equipment control
+  - Scientific simulation tooling
+  - Genuine self-awareness — explicitly NOT an engineering target for
+    this or any current system; this stays out of every version, not
+    just deferred.
+
+
+=================================================================
+TRIAGE RULE — how a NEW idea gets sorted, starting now
+=================================================================
+
+Whenever a new idea comes up between now and Jan 31, 2027, ask one
+question before logging it anywhere:
+
+  "Does this directly serve something already in the v1.1 backlog,
+   or is it new scope?"
+
+  -> If it serves an existing v1.1 item: fold it into that item's
+     spec, stays in v1.1.
+  -> If it's genuinely new: it goes to v2+, untouched until v1.1
+     actually ships. No exceptions made in the moment just because
+     an idea feels exciting right now — that's exactly the pattern
+     that turned the original Phase 16-20 plan into this document.
+
+Worked examples:
+  - "FRED should know which Spotify playlist I usually play at night"
+    -> serves item #2 (Spotify integration, already in v1.1) ->
+    folds into that item's spec, doesn't become a new line.
+  - "FRED should be able to control my 3D printer"
+    -> not served by anything in v1.1 -> v2+ (manufacturing), no
+    debate, no exception.
+  - "The HUD should also show a mini calendar"
+    -> Phase 16 already shipped in v1.0 by the time this kind of idea
+    would come up -> this is new scope on a finished MVP item -> v2+
+    (or a future v1.x, decided deliberately, not absorbed by default).
