@@ -97,6 +97,12 @@ Tasks:
   - Log real conversations locally (no cloud, no third party) as a style reference.
   - Iterate system_prompt.py against what actually feels off in daily use — cheap, fast, honest feedback loop.
   - Only reach for real fine-tuning (LoRA) once prompt iteration plateaus — not before.
+  - TTS voice identity — pyttsx3/SAPI is generic-robotic by nature, no
+    amount of tuning fixes that; "shaped by me" extends to how he
+    actually sounds, not just what he says. Eventually: a local voice
+    clone/fine-tune on my own voice, replacing the current SAPI voice
+    entirely. Real engine swap, not a settings tweak — scope it as
+    its own sub-effort when this phase comes up.
 Outcome: He's not impersonating an assistant. He's mine.
 
 Phase 19 – The Mind Remembers, Selectively
@@ -125,6 +131,14 @@ Tasks:
     Free-form conversation in voice mode falls back to unconstrained
     mode — this only tightens recognition for the command shapes FRED
     already knows about.
+  - Voice mode shouldn't demand the wake phrase every single turn —
+    after the first wake, stay "in conversation" for a short timeout
+    so a real back-and-forth doesn't mean re-saying "Fred" before
+    every sentence.
+  - Dynamic tier selection — _pick_tier is still keyword/regex
+    heuristics with hardcoded thresholds (Phase 12's stopgap, never
+    revisited). Replace with something that actually reasons about
+    complexity instead of pattern-matching for it.
   - One last personality + voice + visual pass — not for a demo audience, for me, every day.
 Outcome: FRED isn't something I show people anymore. He's something I live with.
 

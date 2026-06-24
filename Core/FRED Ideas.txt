@@ -1,0 +1,105 @@
+💡 F.R.E.D. — Ideas & Bugs (Core-internal log)
+(Reviewed from Core/problems.txt — items merged into the JARVIS
+roadmap are noted as such; the rest live here.)
+
+=================================================================
+KNOWN BUGS — fix before chasing new features
+=================================================================
+
+1. Hallucinated tool calls to ARGUMENT-FREE tools still slip through.
+   The fix shipped earlier only rejects a loosely-parsed
+   "functions.NAME:" call when the tool requires arguments it didn't
+   get. Tools that genuinely take zero arguments (get_current_time,
+   list_windows, get_volume, etc.) have no such signal to catch on —
+   a hallucinated call to one of them looks identical to a real one.
+   Reproduced live: "guess my age" -> "It's 22:19:10 on 2026-06-23."
+   (get_current_time, completely unrelated) and "tell me if you see a
+   text file named X" -> a dump of open window titles (list_windows,
+   also unrelated). Needs a relevance check, not just an arg-shape
+   check.
+
+2. Reminder job-ID collisions across restarts.
+   "Job identifier (reminder_1) conflicts with an existing job" — the
+   in-memory job_counter resets to 0 every time ReminderScheduler() is
+   constructed, but the SQLite store persists old job IDs across
+   restarts. First reminder after a restart can collide with a
+   leftover ID from a previous session. Needs globally-unique IDs
+   (timestamp or UUID-based), not a per-instance counter, now that
+   persistence is real.
+
+3. No folder/path intent resolution.
+   "make a text file named fred_test.txt on my desktop" created the
+   file in Core/ (the process's CWD), not the Desktop. create_text_file
+   /create_folder/etc. have no concept of "my desktop"/"my documents"
+   as resolvable locations — they just write wherever the process
+   happens to be running from.
+
+4. Web search dumps raw results instead of summarizing.
+   Direct consequence of web_search being a deterministic dispatcher
+   route (Phase 12/13 design: speed over LLM involvement) — right
+   tradeoff for "open notepad," wrong one for search, where nobody
+   wants a raw bullet dump read back verbatim. Worth reconsidering
+   specifically: either always run one LLM pass over search results
+   before showing them, or stop routing web_search through the
+   dispatcher at all.
+
+=================================================================
+MERGED INTO THE ROADMAP (Phases 11-20 JARVIS Roadmap.txt)
+=================================================================
+
+- TTS voice identity (speaks too fast/robotic; "voice is bad") and a
+  future voice-clone/fine-tune on Vatsal's own voice -> Phase 18,
+  Becoming Mine.
+- Voice mode requiring the wake phrase every turn instead of holding
+  a real conversation -> Phase 20, Trusted to Run Himself.
+- Dynamic/smarter tier selection instead of hardcoded keyword
+  heuristics -> Phase 20, Trusted to Run Himself.
+- Grammar-constrained STT (already added previously) -> Phase 20.
+
+=================================================================
+NOT MERGED — new capabilities, no natural home in Phases 16-20
+=================================================================
+
+- Voice dictation mode (Wispr-Flow-style): hold a key/phrase, speak,
+  it types the words out wherever the cursor currently is. Different
+  from command mode entirely — this is raw transcription-to-keystrokes,
+  not intent parsing.
+
+- "Type this for me" as an explicit tool: FRED asks which
+  window/field to type into first, then simulates the keystrokes
+  there. Adjacent to dictation but a distinct, narrower feature (a
+  one-shot typed action vs. continuous dictation).
+
+- "Make it able to run scripts (only run, for now)" — this is
+  literally a scoped-down slice of the future Claude-Code-style
+  tooling idea already logged in the root FRED Ideas.txt (the
+  run_command tool, minus the read/write/retry loop around it). Not
+  re-logging separately — see that entry, and the rough Phase 21-30
+  sketch discussed with Vatsal for where the fuller version lands.
+
+=================================================================
+BEYOND PHASE 20 — seeds for a future roadmap arc, not scoped yet
+=================================================================
+
+- Self-healing: FRED notices its own error logs and works on a fix
+  in a sandbox before it's asked to.
+- Learn-by-watching: FRED observes how Vatsal actually uses his PC
+  and picks up patterns/preferences from that, not just from being
+  told directly. Self-flagged as "very advanced... extremely
+  significant" — correctly. This is a different category of system
+  from anything built so far (continuous passive observation +
+  inference, not request/response).
+- Self-testing, Google-style robustness — FRED runs tests against
+  itself to catch regressions, rather than relying on Vatsal noticing
+  something broke.
+- Raspberry Pi integration research — possible distributed/edge
+  deployment angle, pure hardware research, no architecture
+  implications yet.
+
+  These four are bundled together deliberately: they're all "FRED
+  takes initiative on his own development," a meaningfully different
+  trust/autonomy level than anything in Phases 1-20, which are all
+  either reactive (respond when asked) or proactive-but-bounded
+  (Phase 15's reminders, still something Vatsal explicitly requested).
+  Worth their own phase arc once 11-20 is actually done and lived
+  with, not bolted onto the tail end of it.
