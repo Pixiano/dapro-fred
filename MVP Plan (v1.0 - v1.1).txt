@@ -114,6 +114,9 @@ the way the original Phase 16-20 timeline almost got rushed.
    it goes through the LLM/tool-calling path like anything novel does.
    The fifth time you ask for that exact phrase, it's instant —
    because it got promoted to a learned rule after the first success.
+   The variables might change, like, the model name will mostly differ
+   from the first command. This non-constant part of the command 
+   needs to be handled properly.
 
 2. Account integrations — Spotify, YouTube, Discord, Gmail, Drive,
    OneDrive, Groq/Claude/ChatGPT/DeepSeek APIs
@@ -131,20 +134,27 @@ the way the original Phase 16-20 timeline almost got rushed.
 3. "Extreme of extreme" cloud API tier
    A deliberate, rarely-used, opt-in tier above local "extreme" that
    calls out to a real cloud model (Claude/GPT/etc.) only for the
-   hardest cases local models genuinely can't handle. Requires
+   hardest cases local models genuinely can't handle, such as a
+   iterate-until-complete task (Claude Code type work). Requires
    explicit confirmation before use, the same way Phase 14's
    destructive-action gate requires confirmation — sending data
    off-device has real privacy weight and shouldn't be silent.
    Example: a genuinely hard multi-step reasoning task might prompt
    "this would go faster/better with Claude's API — want me to use
    it?" rather than FRED silently deciding to phone out.
+   This might also be integrated with memory so FRED knows "This 
+   task is usually handed out, so I must hand it out automatically",
+   this comes later and will still write or speak out a log of API usage.
 
 4. Dynamic-Island-style permanent desktop UI integration
    The real version of what got cut from Phase 16's MVP — actual
    OS-level shell integration, not just an always-on-top window.
+   Take inspiration from how the NVIDIA GPU overlay works.
 
 5. TTS voice cloning / fine-tuning on Vatsal's own voice
    The real version of what got cut from Phase 18's MVP.
+   Vatsal already has a voice cloning pipeline ready (90% complete),
+   give FRED access to this to execute it itself perhaps.
 
 6. Grammar-constrained STT + dynamic/smarter tier selection
    The two items cut from Phase 20's MVP, built properly.
@@ -155,16 +165,98 @@ the way the original Phase 16-20 timeline almost got rushed.
    low risk, just more tools, no architecture change needed.
    Example: "convert this to mp4" or "print this PDF" work the same
    way "open notepad" does today — a registered tool, possibly a
-   dispatcher shortcut if the phrasing is common enough.
+   dispatcher shortcut if the phrasing is common enough. And again,
+   memory helps take the LLM inference out of this equation for 
+   repetitive commands.
 
 8. Eon Companion, BRAIN, COPY, IAWY integration
    FRED orchestrating Vatsal's other personal projects as sub-tools,
    once Phase 21-equivalent scripting tools exist. Needs Vatsal to
    specify what these actually are/how they're invoked before this
-   moves past a placeholder.
+   moves past a placeholder. Possibly add a FRED integration to each
+   project rather than making FRED use it like a normal human user does.
 
 9. Cross-device access (phone, laptop) — self-flagged as "later" by
-   Vatsal already; stays later.
+   Vatsal already; stays later. For reference, srcpy is a good starting
+   point for Androids at least.
+
+10. Calculator tool
+    Small local models (2-15B params, which is most of FRED's tiers)
+    genuinely hallucinate arithmetic — this isn't a style problem,
+    it's a correctness bug. A calculator tool means actual math
+    routes to actual computation instead of a model guessing at it.
+    Same low-risk shape as item 7's tool additions.
+    Example: "what's 847 * 23 minus 15%" gets computed exactly, not
+    approximated by whichever tier happened to pick up the question.
+
+11. System information tool
+    Hardware specs, current usage (CPU/RAM/GPU/disk), relevant
+    settings — readable on request. Same pattern as the existing
+    psutil-based process tools, just surfacing more of what's already
+    available rather than anything architecturally new.
+    Example: "how much VRAM is free right now" or "what GPU am I
+    running" gets a real, current answer, not a guess from training
+    data about hardware that may not even be Vatsal's.
+
+12. YouTube upload access (called out separately from item 2)
+    Distinct from the read-only Spotify-style integrations above —
+    uploading requires OAuth with WRITE scope to Vatsal's actual
+    channel, which is a meaningfully higher-stakes credential than
+    "what's currently playing." Gets built on top of item 2's
+    credentials vault, but reviewed as its own decision, not bundled
+    in silently with the read-only integrations.
+    Example: "upload this to YouTube with title X" should feel at
+    least as deliberate as a Phase 14 destructive-action confirmation
+    — a wrong upload (wrong file, wrong title, public when it should
+    be unlisted) isn't reversible the way most of FRED's other
+    mistakes are.
+
+13. Self-documentation access (after v1.0 ships)
+    Give FRED indexed access to his own documentation — README,
+    roadmap, this plan, the codebase's own docs — the same way Claude
+    can be asked questions about Claude by referencing Claude's own
+    docs. Explicitly framed as a practical substitute for
+    self-awareness, not a claim that it IS self-awareness — FRED
+    being able to accurately answer "what can you actually do" or
+    "why did you make that choice" from real indexed material is
+    useful regardless of what it is or isn't philosophically. Natural
+    fit once Phase 19's category system exists — likely its own
+    category ("About Myself" or similar) rather than a bolt-on.
+    Example: "do you have a calculator tool" gets answered correctly
+    by checking FRED's own indexed docs, instead of FRED guessing
+    based on what's in his immediate conversation context.
+
+14. AI chat history import — "AI_Chats" memory project
+    Vatsal has years of conversations across DeepSeek, Gemini,
+    ChatGPT, and Claude that genuinely hold a lot of signal about him
+    as a person — not just project context, but who he is in general.
+    The idea: import/share/summarize all of them into a dedicated
+    "AI_Chats" memory section, processed by deep/extreme tier (or the
+    "extreme of extreme" API tier from item 3, specifically for speed
+    given the likely volume) to extract real memories and file them
+    into Phase 19's category system — existing categories where they
+    fit, new ones where they don't.
+    This is the biggest item in this whole backlog, bigger than it
+    looks at first glance, for three real reasons:
+      - Every platform exports differently (ChatGPT has a structured
+        data export, Claude has its own, Gemini/DeepSeek vary and may
+        not all support a clean export at all) — ingestion isn't one
+        pipeline, it's several.
+      - Deduplication across platforms matters — the same fact about
+        Vatsal likely got mentioned to multiple AIs across years;
+        without dedup, categories fill with repeats instead of
+        distinct facts.
+      - This is sensitive historical data by nature (years of
+        personal conversations) — it deserves the same "stays local,
+        never leaves the machine except the one deliberate API-tier
+        exception" treatment as everything else in this project, not
+        a casual bulk-import.
+    Example: a fact mentioned to ChatGPT in 2024 and again to Claude
+    in 2025 should end up as ONE entry in the right category, not
+    two — and something genuinely new (never told to FRED directly)
+    surfacing from a two-year-old Gemini chat should land in Basics
+    or Achievements just as naturally as something said to FRED
+    yesterday.
 
 
 =================================================================
@@ -177,20 +269,23 @@ Everything already identified as its own frontier, separate from
     sandbox, proposes — never auto-applies)
   - Running scripts / Claude-Code-style read-write-run tooling
     (prerequisite for #1 above in spirit, but the FULL agentic
-    version — not just running one cached command)
-  - Continuous multi-video-feed monitoring (edge pre-filtering on
-    something like a Raspberry Pi, only escalating "interesting"
+    version — not just running one cached command), review
+    this again with Vatsal, seems like an eminent task for v1.1.
+  - Continuous multi-video-or-audio-feed monitoring (edge pre-filtering 
+    on something like a Raspberry Pi, only escalating "interesting"
     frames to real vision models)
   - Learn-by-watching (FRED observes how Vatsal actually works and
     builds preferences from it, not just from being told)
-  - Self-testing infrastructure (FRED runs tests against itself)
+  - Self-testing infrastructure (FRED runs tests against itself),
+    inspired by Google's robust systems
   - True ambient presence beyond one PC (distributed mic/speaker
     nodes, Raspberry Pi satellites)
-  - In-house manufacturing / physical equipment control
-  - Scientific simulation tooling
+  - In-house manufacturing / physical equipment control (too quick for,
+    maybe years later)
+  - Scientific simulation tooling (interesting to see)
   - Genuine self-awareness — explicitly NOT an engineering target for
     this or any current system; this stays out of every version, not
-    just deferred.
+    just deferred. Discuss with Vatsal after 50% of v1.1 is complete.
 
 
 =================================================================
