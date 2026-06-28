@@ -13,6 +13,7 @@ from tools import web_tools
 from tools import machine_tools
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
+from ui.hud import HUDWindow
 from config.settings import TOOLS_ENABLED
 
 
@@ -40,6 +41,8 @@ class FREDOrchestrator:
 
         self.dispatcher = Dispatcher()
 
+        self.hud = HUDWindow()
+
         # Set whenever a destructive tool is awaiting a yes/no before
         # it's allowed to run. See _request_confirmation /
         # _handle_pending_confirmation.
@@ -61,23 +64,29 @@ class FREDOrchestrator:
         """
 
         self.state.add_message("user", user_input)
+        self.hud.set_transcript(f"You: {user_input}")
 
         if self.pending_action:
+            self.hud.set_state("thinking")
             assistant_reply = self._handle_pending_confirmation(user_input)
         else:
             dispatch = self.dispatcher.match(user_input)
 
             if dispatch:
+                self.hud.set_state("thinking")
                 assistant_reply = self._run_or_confirm(
                     dispatch["tool"], dispatch["arguments"]
                 )
             else:
+                self.hud.set_state("thinking")
                 assistant_reply = self._process_with_llm(user_input)
 
         self.state.add_message("assistant", assistant_reply)
 
         self.memory.store("user", user_input)
         self.memory.store("assistant", assistant_reply)
+
+        self.hud.set_state("idle")
 
         return assistant_reply
 
