@@ -3,12 +3,20 @@
 
 a = Analysis(
     ['fred_gui.py'],
-    pathex=[],
+    pathex=['Core'],
     binaries=[],
     datas=[
         ('Core/models', 'models'),
         ('Core/config', 'config'),
         ('Core/personality', 'personality'),
+        ('Core/ui', 'ui'),
+        ('Core/orchestrator', 'orchestrator'),
+        ('Core/audio', 'audio'),
+        ('Core/llm', 'llm'),
+        ('Core/memory', 'memory'),
+        ('Core/state', 'state'),
+        ('Core/tools', 'tools'),
+        ('Core/utils', 'utils'),
     ],
     hiddenimports=[
         'tkinter',

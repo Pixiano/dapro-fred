@@ -5,9 +5,16 @@
 import sys
 import os
 
-# Add Core directory to path so imports work
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'Core'))
+# Handle both bundled EXE and development environments
+if getattr(sys, 'frozen', False):
+    # Running as bundled EXE
+    app_dir = sys._MEIPASS
+else:
+    # Running as script
+    app_dir = os.path.join(os.path.dirname(__file__), 'Core')
+    sys.path.insert(0, app_dir)
 
+# Now do the imports
 from ui.gui_app import run_gui
 
 if __name__ == "__main__":
