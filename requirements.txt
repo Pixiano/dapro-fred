@@ -1,0 +1,36 @@
+# FRED - Personal AI Assistant
+# Core dependencies for running FRED
+
+# LLM and ML
+llama-cpp-python>=0.3.0
+faiss-cpu>=1.14.0
+numpy>=2.0.0
+
+# Audio (STT/TTS)
+vosk>=0.3.0
+pyaudio>=0.2.11
+pyttsx3>=2.99
+sounddevice>=0.4.5
+
+# UI and Interface
+pycaw>=20251023
+pyperclip>=1.8.2
+pygetwindow>=0.0.9
+pyautogui>=0.9.53
+screen-brightness-control>=0.21.0
+mss>=7.0.1
+pillow>=10.0.0
+winotify>=1.0.0
+
+# Web and Network
+requests>=2.34.0
+duckduckgo-search>=8.1.0
+
+# Scheduling and Time
+apscheduler>=3.10.0
+sqlalchemy>=2.0.0
+
+# System utilities
+psutil>=5.9.0
+comtypes>=1.4.0
+pywin32>=312
