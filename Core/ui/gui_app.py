@@ -4,7 +4,6 @@
 # no scrollback. One presence that changes color, shape, and motion
 # depending on what FRED is doing.
 
-import colorsys
 import math
 import time
 import threading
@@ -12,6 +11,7 @@ import queue
 import tkinter as tk
 from tkinter import font as tkfont
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageTk
 
 from orchestrator.orchestrator import FREDOrchestrator
@@ -68,6 +68,20 @@ def _lerp_rgb(c1, c2, t):
 
 def _rgb_to_hex(rgb):
     return "#%02x%02x%02x" % tuple(max(0, min(255, int(c))) for c in rgb)
+
+
+def _hsv_to_rgb_np(h, s, v):
+    """Vectorized HSV->RGB, h/s/v as numpy float arrays in [0,1]."""
+    h = np.mod(h, 1.0) * 6.0
+    i = np.floor(h).astype(int) % 6
+    f = h - np.floor(h)
+    p = v * (1 - s)
+    q = v * (1 - s * f)
+    t = v * (1 - s * (1 - f))
+    r = np.select([i == 0, i == 1, i == 2, i == 3, i == 4, i == 5], [v, q, p, p, t, v])
+    g = np.select([i == 0, i == 1, i == 2, i == 3, i == 4, i == 5], [t, v, v, q, p, p])
+    b = np.select([i == 0, i == 1, i == 2, i == 3, i == 4, i == 5], [p, p, t, v, v, q])
+    return r, g, b
 
 
 class Blob:
@@ -160,46 +174,35 @@ class Blob:
         glow = glow.filter(ImageFilter.GaussianBlur(self.GLOW_PAD * 0.55))
         composite = Image.alpha_composite(composite, glow)
 
-        # --- circular mask used to clip the body/band/highlight to the sphere
-        mask = Image.new("L", (size, size), 0)
-        md = ImageDraw.Draw(mask)
-        md.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
-
-        # --- glass body: radial shading, lighter toward upper-left ----------
-        body = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        bd = ImageDraw.Draw(body)
-        for i in range(r, 0, -2):
-            f = i / r  # 1 at the rim, 0 at the center
-            light = 1 - f
-            shade = tuple(
-                int(min(255, c * (0.45 + 0.55 * light) + 255 * 0.12 * light))
-                for c in color
-            )
-            alpha = int(150 + 50 * light)
-            bd.ellipse([cx - i, cy - i, cx + i, cy + i], fill=shade + (alpha,))
-        body.putalpha(Image.composite(body.split()[-1], Image.new("L", (size, size), 0), mask))
-        composite = Image.alpha_composite(composite, body)
-
-        # --- rainbow swirl band, masked to the sphere ------------------------
+        # --- full-sphere rainbow swirl, computed per-pixel (numpy) ----------
+        # A spiral hue field (angle + radius + time) covers the ENTIRE
+        # disc, not just a band through the middle — the iOS-Siri look.
+        # Shading (light from upper-left, darker toward the rim) and the
+        # circular mask with an anti-aliased edge are baked in here too.
         swirl_speed, swirl_alpha = SWIRL_PARAMS.get(self.state, (0.1, 100))
-        band = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        bnd = ImageDraw.Draw(band)
-        n_segments = 48
-        for i in range(n_segments):
-            xf = i / n_segments
-            x = i * (size / n_segments)
-            wave = math.sin(xf * 3 * math.pi + t * swirl_speed * 2 * math.pi) * r * 0.22
-            y = cy + wave
-            hue = (xf * 0.85 + t * swirl_speed * 0.5) % 1.0
-            rr, gg, bb = colorsys.hsv_to_rgb(hue, 0.75, 1.0)
-            seg_h = r * 0.55
-            bnd.ellipse(
-                [x - 5, y - seg_h / 2, x + 5, y + seg_h / 2],
-                fill=(int(rr * 255), int(gg * 255), int(bb * 255), swirl_alpha),
-            )
-        band = band.filter(ImageFilter.GaussianBlur(5))
-        band.putalpha(Image.composite(band.split()[-1], Image.new("L", (size, size), 0), mask))
-        composite = Image.alpha_composite(composite, band)
+
+        ax = np.arange(size) - cx
+        ay = np.arange(size) - cy
+        xx, yy = np.meshgrid(ax, ay)
+        r_pix = np.sqrt(xx ** 2 + yy ** 2)
+        nr = np.clip(r_pix / r, 0, 1)
+        theta = np.arctan2(yy, xx)
+
+        hue = (theta / (2 * math.pi) + nr * 0.6 + t * swirl_speed * 0.5) % 1.0
+        sat = 0.5 + 0.25 * nr
+        light_dot = (-xx * 0.55 - yy * 0.65) / (r_pix + 1e-6)
+        shade = 0.5 + 0.5 * light_dot
+        val = np.clip((0.4 + 0.6 * shade) * (1 - 0.25 * nr), 0, 1)
+
+        rr, gg, bb = _hsv_to_rgb_np(hue, sat, val)
+        edge = np.clip((r - r_pix + 1.5) / 1.5, 0, 1)  # anti-aliased rim
+        alpha = edge * (swirl_alpha / 255.0)
+
+        sphere_arr = np.stack(
+            [rr * 255, gg * 255, bb * 255, alpha * 255], axis=-1
+        ).astype(np.uint8)
+        sphere = Image.fromarray(sphere_arr, mode="RGBA")
+        composite = Image.alpha_composite(composite, sphere)
 
         # --- specular highlight, upper-left ----------------------------------
         hl_r = r * 0.32
