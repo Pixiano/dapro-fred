@@ -15,6 +15,16 @@ node_modules/
 # naming real people - same rationale across Core/ and Legacy/)
 Core/memory_data/
 Core/memory_indexes/
+# Same thing, written at repo root when FRED is launched from there
+# (fred_gui.py) instead of from Core/ (main.py)
+/memory_data/
+/memory_indexes/
+
+# Abandoned PyInstaller EXE build (DLL bundling issues with
+# llama-cpp-python - see commit history). Launchers are plain
+# batch files now.
+/build/
+/dist/
 Legacy/FRED/Main/API/Memories/
 Legacy/FRED/Main/API/User_Memories/
 Legacy/FRED/Main/API/Faiss_Index/

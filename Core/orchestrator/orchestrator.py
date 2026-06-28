@@ -13,7 +13,7 @@ from tools import web_tools
 from tools import machine_tools
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
-from ui.hud import HUDWindow
+from ui.hud import HUDWindow, NullHUD
 from config.settings import TOOLS_ENABLED
 
 
@@ -29,7 +29,7 @@ class FREDOrchestrator:
     - Persist conversation state
     """
 
-    def __init__(self):
+    def __init__(self, show_hud: bool = True):
         self.state = ConversationState()
         self.memory = MemoryManager()
         self.llm = LLMClient()
@@ -41,7 +41,10 @@ class FREDOrchestrator:
 
         self.dispatcher = Dispatcher()
 
-        self.hud = HUDWindow()
+        # GUI front-ends draw their own state indicator and pass
+        # show_hud=False so the orchestrator doesn't open a second,
+        # separate Tk window underneath them.
+        self.hud = HUDWindow() if show_hud else NullHUD()
 
         # Set whenever a destructive tool is awaiting a yes/no before
         # it's allowed to run. See _request_confirmation /

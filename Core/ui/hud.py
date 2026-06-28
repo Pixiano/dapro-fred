@@ -6,6 +6,23 @@ import queue
 from typing import Literal
 
 
+class NullHUD:
+    """
+    No-op stand-in for HUDWindow. Used when a front-end (like the GUI
+    app) renders its own state indicator and doesn't need the
+    orchestrator opening a second Tk window underneath it.
+    """
+
+    def set_state(self, state):
+        pass
+
+    def set_transcript(self, text):
+        pass
+
+    def shutdown(self):
+        pass
+
+
 class HUDWindow:
     """
     Always-on-top HUD window displaying FRED's state and live transcript.
