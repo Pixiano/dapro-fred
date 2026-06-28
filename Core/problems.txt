@@ -1,0 +1,123 @@
+voice is bad (maybe my headphone mic)
+--------------------------------------------------------------------------------------------------------------------------------
+
+Doesn't summarize the web search just dumps it
+--------------------------------------------------------------------------------------------------------------------------------
+
+Doesn't understand directories ("You: make a text file names "fred_test.txt" on my desktop
+
+F.R.E.D.: Created file: C:\Users\Dhiraj Vatsal\VatsalDaPro\Projects\Project_FRED\Core\fred_test.txt")
+--------------------------------------------------------------------------------------------------------------------------------
+
+idk what this is - You: WHo are you?
+
+F.R.E.D.: I'm F.R.E.D., your friendly, responsive, rational, Rakish Electronic Dude.  It's nice to meet you.
+
+You: WHo am I?
+
+F.R.E.D.: I'm not sure I understand.  Are you asking who *you* are?
+Or who *I* am?
+Let me know and I'll do my best to help.
+
+You: Me, the user, who am I?
+
+F.R.E.D.: You're a curious user, asking about yourself.  I'm happy to help you explore that.
+
+Do you want to talk about something specific about yourself? Or would you like to try something else?
+
+You: Do you know my name?
+
+F.R.E.D.: I don't have access to your personal information.  I can't remember names or any other details about you unless you tell me.  What's your name?
+
+You: It's Vatsal Kumar. Guess my age
+
+F.R.E.D.: It's 22:19:10 on 2026-06-23.
+
+You: It's Vatsal Kumar.
+
+F.R.E.D.: Nice to meet you, Vatsal Kumar.  Do you have any questions for me?
+
+You: Try and guess my age please
+
+F.R.E.D.: Based on your name, I'd say you're probably in your late 20s or early 30s.  Is that a good guess?
+
+You: Nope, I am 15 years old
+
+F.R.E.D.: Oh, apologies.  I'm still learning about people's real ages.  Do you want to try again? Maybe I can get it right this time.
+
+You: try?
+
+F.R.E.D.: Alright, let's try this.  You've got a good sense of humor, I'll give you that.  So, what's your favorite subject in school?<|im_end>
+
+You: I don't know it was maths and science earlier but now I just prefer learning about life, business, and AI more
+
+F.R.E.D.: It's 22:20:16 on 2026-06-23.
+--------------------------------------------------------------------------------------------------------------------------------
+
+what - You: tell me if u see a text file with the name "fred_test.txt" please
+
+F.R.E.D.: - NVIDIA GeForce Overlay DT
+- Command Prompt - .\venv\Scripts\python.exe  main.py
+- Project_FRED - File Explorer
+- Windows Input Experience
+- C:\Users\Dhiraj Vatsal\Desktop\LifeOS.exe
+- Command Prompt
+- Spotify Free
+- New tab - Google Chrome
+- Publishing Your Game on Steam - Google Gemini - Google Chrome
+- VOID - Main
+- New tab - Google Chrome
+- Untitled - Notepad
+- Untitled - Notepad
+- New tab - Google Chrome
+- New tab - Google Chrome
+- New tab - Google Chrome
+- OBS Studio 32.1.2 - Profile: Untitled - Scenes: Untitled
+- Phases 11 - 20 (JARVIS Roadmap).txt - Notepad
+- Command Prompt - .venv\Scripts\python.exe  -m eon
+- NVIDIA GeForce Overlay
+- Realtek Audio Console
+- Realtek Audio Console
+- Program Manager
+--------------------------------------------------------------------------------------------------------------------------------
+
+multiple timers not allowed - You: set a 1 min timer
+
+F.R.E.D.: Couldn't do that: 'Job identifier (reminder_1) conflicts with an existing job'
+
+You: cancel all timers
+
+F.R.E.D.: Cancelled all 1 pending reminder(s)/watch(es).
+
+You: set a 1 min timer
+
+F.R.E.D.: Reminder set for 1 minute(s) from now: "Your 1-minute timer is up."
+--------------------------------------------------------------------------------------------------------------------------------
+
+speaks too fast and too robotic (second will fix later perhaps maybe finetune model on my own voice and use that?)
+--------------------------------------------------------------------------------------------------------------------------------
+
+Allow it to voice dictate (idea) like wispr flow
+Allow it to type what I tell it too (not exactly voice thing), and ask where to type before typing
+--------------------------------------------------------------------------------------------------------------------------------
+
+Make it able to run scripts (only run for now0
+--------------------------------------------------------------------------------------------------------------------------------
+
+Make it continue conversation when in "voice" mode rather than saying a wakeword all the time
+--------------------------------------------------------------------------------------------------------------------------------
+
+Find possible raspberry pi integrations in this project for the future
+--------------------------------------------------------------------------------------------------------------------------------
+
+Make the model tier choosing mechanism dynamic and beter than just hardcoded
+--------------------------------------------------------------------------------------------------------------------------------
+
+Allow it to learn by seeing how I do things on my pc or something like this (very advanced but extremely significant)
+--------------------------------------------------------------------------------------------------------------------------------
+
+Allow it to sandbox-work-on-itself to improve itself when it logs an error or soemthign 
+--------------------------------------------------------------------------------------------------------------------------------
+
+Make it self-healable like Google's code and probably run tests on itself too to make it robust
+--------------------------------------------------------------------------------------------------------------------------------

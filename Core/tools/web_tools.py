@@ -7,7 +7,11 @@
 # on purpose, only when explicitly invoked.
 
 import requests
-from ddgs import DDGS
+
+try:
+    from ddgs import DDGS
+except ImportError:
+    DDGS = None
 
 
 # =========================================================
@@ -19,6 +23,9 @@ def web_search(query: str, max_results: int = 5) -> str:
     Search the live web (DuckDuckGo) and return a short, readable
     summary of the top results.
     """
+
+    if not DDGS:
+        return "Web search unavailable: duckduckgo-search module not installed."
 
     try:
         results = list(DDGS().text(query, max_results=max_results))
