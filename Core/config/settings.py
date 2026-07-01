@@ -112,12 +112,12 @@ STT_ENABLED = True
 # (run: python -c "import pyttsx3; [print(v.name) for v in pyttsx3.init().getProperty('voices')]")
 TTS_VOICE = "David"
 
-# Swapped from the 40MB small model — that one was misreading basic
-# commands ("open notepad" -> "north bay"). This one is 128MB but
-# barely worse than the full 1.8GB model on WER (7.82 vs 7.08), and
-# its dynamic-graph design is the same mechanism Phase 20's planned
-# grammar-constrained recognition would build on.
-STT_MODEL_PATH = BASE_DIR / "models" / "vosk-model-en-us-0.22-lgraph"
+# Indian-English-tuned model (1.5GB). Only invoked on-demand after the
+# wake word (or a typed command) triggers a full transcription — never
+# runs continuously — so the larger size doesn't affect the overlay's
+# idle CPU budget. Not committed to git (see .gitignore): too large for
+# GitHub's 100MB per-file limit, same as the Legacy copy it came from.
+STT_MODEL_PATH = BASE_DIR / "models" / "vosk-model-en-in-0.5"
 STT_SAMPLE_RATE = 16000
 
 # Wake detection via Vosk transcription + text matching, not a

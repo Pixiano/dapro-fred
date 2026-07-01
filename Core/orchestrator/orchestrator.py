@@ -16,19 +16,6 @@ from orchestrator.scheduler import ReminderScheduler
 from config.settings import TOOLS_ENABLED
 
 
-class NullHUD:
-    """No-op HUD for GUI front-ends that manage their own state display."""
-
-    def set_state(self, state):
-        pass
-
-    def set_transcript(self, text):
-        pass
-
-    def shutdown(self):
-        pass
-
-
 class FREDOrchestrator:
     """
     Central runtime coordinator for F.R.E.D.
@@ -41,7 +28,7 @@ class FREDOrchestrator:
     - Persist conversation state
     """
 
-    def __init__(self, show_hud: bool = True):
+    def __init__(self):
         self.state = ConversationState()
         self.memory = MemoryManager()
         self.llm = LLMClient()
@@ -52,11 +39,6 @@ class FREDOrchestrator:
         self._register_tools()
 
         self.dispatcher = Dispatcher()
-
-        # GUI front-ends draw their own state indicator and pass
-        # show_hud=False so the orchestrator doesn't open a second,
-        # separate Tk window underneath them.
-        self.hud = NullHUD()
 
         # Set whenever a destructive tool is awaiting a yes/no before
         # it's allowed to run. See _request_confirmation /
@@ -79,29 +61,23 @@ class FREDOrchestrator:
         """
 
         self.state.add_message("user", user_input)
-        self.hud.set_transcript(f"You: {user_input}")
 
         if self.pending_action:
-            self.hud.set_state("thinking")
             assistant_reply = self._handle_pending_confirmation(user_input)
         else:
             dispatch = self.dispatcher.match(user_input)
 
             if dispatch:
-                self.hud.set_state("thinking")
                 assistant_reply = self._run_or_confirm(
                     dispatch["tool"], dispatch["arguments"]
                 )
             else:
-                self.hud.set_state("thinking")
                 assistant_reply = self._process_with_llm(user_input)
 
         self.state.add_message("assistant", assistant_reply)
 
         self.memory.store("user", user_input)
         self.memory.store("assistant", assistant_reply)
-
-        self.hud.set_state("idle")
 
         return assistant_reply
 

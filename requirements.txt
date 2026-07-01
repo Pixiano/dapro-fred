@@ -11,8 +11,9 @@ vosk>=0.3.0
 pyaudio>=0.2.11
 pyttsx3>=2.99
 sounddevice>=0.4.5
+webrtcvad-wheels>=2.0.11
 
-# UI and Interface
+# System control (used by machine_tools)
 pycaw>=20251023
 pyperclip>=1.8.2
 pygetwindow>=0.0.9
@@ -21,7 +22,10 @@ screen-brightness-control>=0.21.0
 mss>=7.0.1
 pillow>=10.0.0
 winotify>=1.0.0
-pywebview>=5.0
+
+# Overlay UI (Phase 16) - native Win32 layered window (see Core/ui/),
+# not a browser engine: pywebview/WebView2 couldn't achieve real
+# per-pixel desktop transparency, only a frosted-glass approximation
 pystray>=0.19.0
 
 # Web and Network

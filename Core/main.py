@@ -8,7 +8,6 @@ from config.settings import TTS_ENABLED, STT_ENABLED, WAKE_WORD_ENABLED
 def run_text_loop(orchestrator: FREDOrchestrator):
 
     print("Text mode. Type 'voice' to switch to voice mode, 'exit' to quit.\n")
-    orchestrator.hud.set_state("idle")
 
     while True:
 
@@ -19,18 +18,15 @@ def run_text_loop(orchestrator: FREDOrchestrator):
 
         if user_input.lower() in ("exit", "quit"):
             print("\nF.R.E.D.: Shutting down gracefully.")
-            orchestrator.hud.set_state("idle")
             return
 
         if user_input.lower() == "voice":
             run_voice_loop(orchestrator)
             print("\nBack to text mode. Type 'voice' to switch back, 'exit' to quit.\n")
-            orchestrator.hud.set_state("idle")
             continue
 
         response = orchestrator.process(user_input)
         print(f"\nF.R.E.D.: {response}\n")
-        orchestrator.hud.set_transcript(f"You: {user_input}\n\nFRED: {response}")
 
 
 def run_voice_loop(orchestrator: FREDOrchestrator):
@@ -64,36 +60,28 @@ def run_voice_loop(orchestrator: FREDOrchestrator):
         while True:
 
             if wake_word:
-                orchestrator.hud.set_state("listening")
                 wake_word.listen_for_wake_word()
                 print("F.R.E.D.: Yes?")
                 tts.speak("Yes?")
 
-            orchestrator.hud.set_state("listening")
             user_input = stt.listen_once()
 
             if not user_input:
                 continue
 
             print(f"You (voice): {user_input}")
-            orchestrator.hud.set_transcript(f"You: {user_input}")
 
             if user_input.lower() in ("exit voice mode", "exit", "quit"):
                 print("\nF.R.E.D.: Returning to text mode.")
-                orchestrator.hud.set_state("idle")
                 return
 
             response = orchestrator.process(user_input)
 
-            orchestrator.hud.set_state("speaking")
             print(f"F.R.E.D.: {response}\n")
-            orchestrator.hud.set_transcript(f"You: {user_input}\n\nFRED: {response}")
             tts.speak(response)
-            orchestrator.hud.set_state("idle")
 
     except KeyboardInterrupt:
         print("\n\nF.R.E.D.: Returning to text mode.")
-        orchestrator.hud.set_state("idle")
 
 
 def main():
@@ -113,7 +101,6 @@ def main():
         print("\n[FATAL ERROR]", str(e))
 
     finally:
-        orchestrator.hud.shutdown()
         orchestrator.shutdown()
 
 

@@ -35,6 +35,10 @@ Core/data/logs/
 # Scheduled reminders (personal, runtime-generated)
 Core/data/reminders.sqlite
 
+# Overlay window position/palette (runtime-mutable user state, written
+# by the tray settings UI - regenerates from defaults if missing)
+Core/config/overlay_settings.json
+
 # Audio runtime artifacts
 fred_tts_output.mp3
 
@@ -47,3 +51,8 @@ Video/
 Legacy/FRED/Main/API/Models/vosk-model-en-in-0.5/
 Legacy/FRED/Main/API/Shortcuts/Godot.exe
 Legacy/FRED/Others/OS_Automation_Perfection/Shortcuts/Godot.exe
+
+# Core's own copy of the same model (now the active STT_MODEL_PATH) -
+# contains rescore/G.carpa (880MB) and graph/HCLG.fst (446MB), both
+# past GitHub's 100MB per-file hard limit. Local-only asset.
+Core/models/vosk-model-en-in-0.5/

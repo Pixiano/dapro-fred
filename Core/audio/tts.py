@@ -1,6 +1,7 @@
 # Core/audio/tts.py
 
 import threading
+from typing import Callable, Optional
 
 import pythoncom
 import pyttsx3
@@ -31,10 +32,16 @@ class TTSManager:
 
     def speak(
         self,
-        text: str
+        text: str,
+        on_word: Optional[Callable[[], None]] = None,
+        on_end: Optional[Callable[[], None]] = None,
     ):
         """
         Non-blocking speech output.
+
+        on_word/on_end are optional hooks for callers that want to react
+        to playback (the overlay UI's speaking-state pulse animation) —
+        both default to None so the CLI path is unaffected.
         """
 
         if not text.strip():
@@ -42,7 +49,7 @@ class TTSManager:
 
         thread = threading.Thread(
             target=self._speak_internal,
-            args=(text,),
+            args=(text, on_word, on_end),
             daemon=True
         )
 
@@ -54,7 +61,9 @@ class TTSManager:
 
     def _speak_internal(
         self,
-        text: str
+        text: str,
+        on_word: Optional[Callable[[], None]] = None,
+        on_end: Optional[Callable[[], None]] = None,
     ):
 
         with self.lock:
@@ -73,6 +82,18 @@ class TTSManager:
 
                 self._apply_voice(engine)
 
+                if on_word:
+                    # SAPI reports word *boundaries*, not amplitude —
+                    # pyttsx3 never exposes raw PCM for this backend, so
+                    # this drives a per-word pulse rather than true
+                    # waveform-reactive animation. Verified against the
+                    # configured TTS_VOICE before relying on it — some
+                    # SAPI voices don't emit these events reliably.
+                    engine.connect(
+                        "started-word",
+                        lambda name, location, length: on_word()
+                    )
+
                 engine.say(text)
                 engine.runAndWait()
                 engine.stop()
@@ -84,6 +105,12 @@ class TTSManager:
                 )
 
             finally:
+
+                if on_end:
+                    try:
+                        on_end()
+                    except Exception:
+                        pass
 
                 pythoncom.CoUninitialize()
 
