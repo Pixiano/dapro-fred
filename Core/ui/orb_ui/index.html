@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRED</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container mode-compact" id="app">
+    <div class="glass-panel" id="panel">
+      <button class="mode-toggle" id="modeToggle" aria-label="Toggle fullscreen" title="Toggle fullscreen">
+        <svg id="modeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+
+      <div class="transcript-area" id="transcriptArea" aria-live="polite">
+        <div class="transcript-user" id="transcriptUser"></div>
+        <div class="transcript-fred" id="transcriptFred"></div>
+      </div>
+
+      <canvas class="orb-canvas" id="orbCanvas" aria-label="FRED status orb"></canvas>
+
+      <div class="state-indicator idle" id="stateIndicator">idle</div>
+
+      <div class="input-area" id="inputArea">
+        <input
+          type="text"
+          class="glass-input"
+          id="input"
+          placeholder="Ask FRED..."
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Message FRED"
+        >
+        <button class="voice-btn" id="voiceBtn" aria-label="Voice input" title="Voice input (click to toggle)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

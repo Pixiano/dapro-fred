@@ -15,7 +15,7 @@ else:
     sys.path.insert(0, app_dir)
 
 # Now do the imports
-from ui.gui_app import run_gui
+from ui.fred_orb import main as run_gui
 
 if __name__ == "__main__":
     run_gui()

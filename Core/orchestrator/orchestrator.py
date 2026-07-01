@@ -13,8 +13,20 @@ from tools import web_tools
 from tools import machine_tools
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
-from ui.hud import HUDWindow, NullHUD
 from config.settings import TOOLS_ENABLED
+
+
+class NullHUD:
+    """No-op HUD for GUI front-ends that manage their own state display."""
+
+    def set_state(self, state):
+        pass
+
+    def set_transcript(self, text):
+        pass
+
+    def shutdown(self):
+        pass
 
 
 class FREDOrchestrator:
@@ -44,7 +56,7 @@ class FREDOrchestrator:
         # GUI front-ends draw their own state indicator and pass
         # show_hud=False so the orchestrator doesn't open a second,
         # separate Tk window underneath them.
-        self.hud = HUDWindow() if show_hud else NullHUD()
+        self.hud = NullHUD()
 
         # Set whenever a destructive tool is awaiting a yes/no before
         # it's allowed to run. See _request_confirmation /

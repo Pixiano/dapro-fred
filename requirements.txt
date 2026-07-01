@@ -21,6 +21,8 @@ screen-brightness-control>=0.21.0
 mss>=7.0.1
 pillow>=10.0.0
 winotify>=1.0.0
+pywebview>=5.0
+pystray>=0.19.0
 
 # Web and Network
 requests>=2.34.0
