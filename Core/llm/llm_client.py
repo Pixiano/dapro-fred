@@ -11,6 +11,7 @@ from llama_cpp import Llama
 from config.settings import (
     MODEL_TIERS,
     DEFAULT_TIER,
+    TIER_ROUTING_ENABLED,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
     GPU_LAYERS,
@@ -171,7 +172,17 @@ class LLMClient:
         "what time is it" and avoid running the nano model for
         anything that actually requires thinking. Refined further
         once Phase 12's real dispatcher exists.
+
+        Disabled by default (TIER_ROUTING_ENABLED). It effectively
+        overrode DEFAULT_TIER — the fallback below is "low", so ordinary
+        short utterances went to the 2B regardless of configuration, and
+        a 25-44 word one pulled in the 8.9GB "standard" model. Since
+        _get_model caches each tier it loads, that could leave several
+        models resident in VRAM simultaneously.
         """
+
+        if not TIER_ROUTING_ENABLED:
+            return self.default_tier
 
         last_user_msg = ""
 

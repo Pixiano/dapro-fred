@@ -63,14 +63,40 @@ MODEL_TIERS = {
             / "gpt-oss-20b.gguf",
 }
 
-# "nano" (Nemotron 4B, 3.9GB) rather than "standard" (Qwen3.5-9B, 8.9GB)
-# because GUI mode shares the GPU with Whisper. With the 9B loaded the
-# budget was: 8.9 (LLM) + 1.1 (embeddings) + ~1.5 (Whisper CUDA context)
-# + ~2.5 (desktop/browser) = ~14GB of 16.3GB, leaving too little for
-# llama.cpp's compute buffers — which showed up as a hard access
-# violation (0xc0000005) mid-turn rather than a clean OOM error.
-# Nemotron brings that to ~9GB and leaves real headroom.
+# "nano" (Nemotron 4B, 3.9GB) — the smallest tier that can reason.
+#
+# Two constraints meet here. On size: GUI mode shares the GPU with
+# Whisper, and the original "standard" tier is what crashed — 8.9
+# (Qwen3.5-9B) + 1.1 (embeddings) + ~1.5 (Whisper CUDA context) + ~2.5
+# (desktop/browser) = ~14GB of 16.3GB left too little for llama.cpp's
+# compute buffers, which faults (0xc0000005) rather than raising a clean
+# OOM error. This tier totals ~9GB.
+#
+# On reasoning: only Nemotron 4B and Qwen3-14B have <think> tokens in
+# their chat templates. "low" (gemma-2-2b, 1.59GB) is smaller and faster
+# but cannot think, and measurably worse for voice because of it — asked
+# the bat-and-ball question it narrated its whole derivation into the
+# spoken reply (470 chars), while Nemotron reasoned in a <think> block
+# that _strip_thinking removes and said only "The ball costs $0.05."
+# (25 chars, and the correct answer).
+#
+# So thinking needs no switch of its own: llm_client already strips the
+# block, which is the behaviour you want — reason internally, speak the
+# conclusion. It only needs a model capable of it. Cost is latency: the
+# reasoning tokens are generated before any audio can start.
 DEFAULT_TIER = "nano"
+
+# One model, always DEFAULT_TIER. When False this bypasses the word-count
+# heuristic in llm_client._pick_tier, which otherwise overrides
+# DEFAULT_TIER: its fallback is "low", so short utterances went to
+# gemma-2-2b regardless of this file, and a 25-44 word one pulled in
+# "standard" (8.9GB). _get_model caches each tier it loads, so a mixed
+# session could hold several models in VRAM simultaneously.
+#
+# Deliberately kept simple for now — picking a tier per request is worth
+# revisiting later, driven by the same classifier as orchestrator/intent.py
+# rather than by word count, so routing decisions stay consistent.
+TIER_ROUTING_ENABLED = False
 
 # Default context window, capped per-tier below. Asking for more than
 # a model was trained on triggers llama.cpp's "training context
@@ -221,13 +247,14 @@ WAKE_PHRASES = [
 # TOOL SETTINGS
 # =========================================================
 
-# Known caveat while DEFAULT_TIER is "nano": Nemotron 4B is much weaker
-# at tool selection than the 9B these tool definitions were tuned
-# against, and it has already misfired once — "Hello Fred, how are you
-# doing?" selected open_website and launched google.com. Expect the
-# occasional unwanted action on plain conversation. Raising DEFAULT_TIER
-# back to "standard" fixes the routing but reintroduces the VRAM
-# pressure that was crashing llama.cpp, so the two settings have to be
-# chosen together. Set False to skip the tool loop entirely and have the
-# orchestrator just generate a reply.
+# Caveat at small DEFAULT_TIER values: these ~30 tool definitions were
+# tuned against the 9B, and small models select among them much worse.
+# On Nemotron 4B, "Hello Fred, how are you doing?" chose open_website and
+# launched google.com — which is what motivated the intent gate in
+# orchestrator/intent.py, so that conversational turns are never shown
+# the tools at all. Genuine action requests still depend on the model
+# picking the right tool, and that accuracy does fall with size. Raising
+# DEFAULT_TIER fixes routing but reintroduces the VRAM pressure that was
+# crashing llama.cpp, so the two have to be chosen together. Set False to
+# skip the tool loop entirely and just generate a reply.
 TOOLS_ENABLED = True
