@@ -39,6 +39,14 @@ Core/data/reminders.sqlite
 # by the tray settings UI - regenerates from defaults if missing)
 Core/config/overlay_settings.json
 
+# Kokoro TTS model + voicepacks (~310MB + 27MB), past GitHub's 100MB
+# per-file limit. Release downloads, not pip data - see the URL in
+# Core/config/settings.py to re-fetch.
+Core/models/kokoro/
+
+# faster-whisper models live in the HuggingFace cache, not the repo,
+# and are fetched on first run.
+
 # Audio runtime artifacts
 fred_tts_output.mp3
 

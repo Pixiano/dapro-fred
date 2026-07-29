@@ -7,11 +7,24 @@ faiss-cpu>=1.14.0
 numpy>=2.0.0
 
 # Audio (STT/TTS)
+# GUI mode (hold-to-talk popup) uses faster-whisper + Kokoro; the CLI
+# still uses Vosk + SAPI/pyttsx3, so both pairs are needed.
 vosk>=0.3.0
 pyaudio>=0.2.11
 pyttsx3>=2.99
 sounddevice>=0.4.5
-webrtcvad-wheels>=2.0.11
+
+# faster-whisper runs on CTranslate2, which does its own CUDA/cuDNN
+# discovery and does not use torch - a CPU-only torch install says
+# nothing about whether this reaches the GPU. Check the device line it
+# prints at startup.
+faster-whisper>=1.2.0
+
+# Kokoro TTS. Chosen over SAPI for quality, but the decisive reason is
+# that it returns raw float32 PCM: pyttsx3/SAPI exposes only word
+# boundaries, so the popup's speaking waveform could never react to
+# real amplitude. Model files are separate downloads (see settings.py).
+kokoro-onnx>=0.5.0
 
 # System control (used by machine_tools)
 pycaw>=20251023

@@ -2,7 +2,7 @@
 
 from orchestrator.orchestrator import FREDOrchestrator
 from audio.device_info import describe_audio_devices
-from config.settings import TTS_ENABLED, STT_ENABLED, WAKE_WORD_ENABLED
+from config.settings import TTS_ENABLED, STT_ENABLED
 
 
 def run_text_loop(orchestrator: FREDOrchestrator):
@@ -44,25 +44,17 @@ def run_voice_loop(orchestrator: FREDOrchestrator):
     stt = STTManager()
     tts = TTSManager()
 
-    wake_word = None
-    if WAKE_WORD_ENABLED:
-        from audio.wake_word import WakeWordListener
-        wake_word = WakeWordListener(stt=stt)
-
+    # No wake word here any more — GUI mode is hold-to-talk (left
+    # Ctrl+Alt, see Core/ui/pill_app.py) and the old always-on VAD+Vosk
+    # wake-word listener retired with it (Attic/phase16-orb/audio/).
+    # The CLI just listens on each turn.
     print(
-        "\nVoice mode active. "
-        + ("Say \"Fred\", \"hey\", or just start talking. "
-           if wake_word else "Listening — speak now. ")
-        + "Say 'exit voice mode' or press Ctrl+C to return to text.\n"
+        "\nVoice mode active. Listening — speak now. "
+        "Say 'exit voice mode' or press Ctrl+C to return to text.\n"
     )
 
     try:
         while True:
-
-            if wake_word:
-                wake_word.listen_for_wake_word()
-                print("F.R.E.D.: Yes?")
-                tts.speak("Yes?")
 
             user_input = stt.listen_once()
 

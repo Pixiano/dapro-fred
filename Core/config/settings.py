@@ -110,7 +110,62 @@ STT_ENABLED = True
 
 # Name fragment matched against installed Windows SAPI voices
 # (run: python -c "import pyttsx3; [print(v.name) for v in pyttsx3.init().getProperty('voices')]")
+# Only used by the legacy SAPI path in audio/tts.py, which the CLI still
+# runs. GUI mode speaks through Kokoro (audio/tts_kokoro.py) instead.
 TTS_VOICE = "David"
+
+# =========================================================
+# KOKORO TTS — GUI mode's voice (audio/tts_kokoro.py)
+# =========================================================
+#
+# Replaces SAPI for GUI mode. Two reasons it's worth the extra model
+# files: SAPI's voices are a generation behind, and — the part that
+# actually changed the UI — pyttsx3/SAPI never exposes raw PCM, only
+# word-boundary events, so the pill's speaking waveform could not react
+# to real amplitude. Kokoro hands back float32 samples, so it can.
+#
+# Model files are release downloads, not pip data, and are too big for
+# git (see .gitignore):
+#   https://github.com/thewh1teagle/kokoro-onnx/releases (model-v1.0)
+KOKORO_DIR = BASE_DIR / "models" / "kokoro"
+KOKORO_MODEL_PATH = KOKORO_DIR / "kokoro-v1.0.onnx"
+KOKORO_VOICES_PATH = KOKORO_DIR / "voices-v1.0.bin"
+
+# Any name from Kokoro.get_voices(). Voicepacks are plain embedding
+# tensors, so blending two of them (see KOKORO_VOICE_BLEND) is the
+# supported way to get a voice that isn't in the stock list — there is
+# no published finetuning pipeline for this model.
+KOKORO_VOICE = "am_michael"
+
+# Optional ("other_voice", weight) to linearly blend into KOKORO_VOICE,
+# weight being the *other* voice's share. None = use KOKORO_VOICE alone.
+KOKORO_VOICE_BLEND = None
+
+KOKORO_SPEED = 1.0
+
+# =========================================================
+# FASTER-WHISPER STT — GUI mode's ears (audio/stt_whisper.py)
+# =========================================================
+#
+# GUI mode is hold-to-talk, which hands Whisper exactly what it wants:
+# a complete, pre-segmented utterance (key release *is* the endpoint).
+# That removes the reason Vosk was preferable — Vosk streams partial
+# results, Whisper can't, but nothing in the pill UI needs partials.
+# The CLI still uses Vosk via audio/stt.py.
+#
+# Auto-downloaded to the HF cache on first use, not stored in the repo.
+WHISPER_MODEL = "large-v3-turbo"
+
+# "auto" prefers CUDA when CTranslate2 can find CUDA+cuDNN, else CPU.
+# Note CTranslate2 does its own CUDA discovery and does not use torch,
+# so a CPU-only torch install is irrelevant here.
+WHISPER_DEVICE = "auto"
+WHISPER_COMPUTE_TYPE = "auto"
+WHISPER_LANGUAGE = "en"
+
+# Hard ceiling on one held utterance, so a stuck key can't grow the
+# recording buffer without bound.
+MAX_UTTERANCE_SECONDS = 60
 
 # Indian-English-tuned model (1.5GB). Only invoked on-demand after the
 # wake word (or a typed command) triggers a full transcription — never
