@@ -206,11 +206,13 @@ WAKE_PHRASES = [
 # TOOL SETTINGS
 # =========================================================
 
-# Off for now. With the nano tier (Nemotron 4B) the tool router misfires
-# badly — "Hello Fred, how are you doing?" selected open_website and
-# launched google.com. Small models are much weaker at tool selection
-# than the 9B this was tuned against, so tool use and DEFAULT_TIER need
-# revisiting together, not separately. When TOOLS_ENABLED is False the
-# orchestrator skips the tool loop entirely and just generates a reply
-# (see orchestrator.py::_generate_with_tools).
-TOOLS_ENABLED = False
+# Known caveat while DEFAULT_TIER is "nano": Nemotron 4B is much weaker
+# at tool selection than the 9B these tool definitions were tuned
+# against, and it has already misfired once — "Hello Fred, how are you
+# doing?" selected open_website and launched google.com. Expect the
+# occasional unwanted action on plain conversation. Raising DEFAULT_TIER
+# back to "standard" fixes the routing but reintroduces the VRAM
+# pressure that was crashing llama.cpp, so the two settings have to be
+# chosen together. Set False to skip the tool loop entirely and have the
+# orchestrator just generate a reply.
+TOOLS_ENABLED = True

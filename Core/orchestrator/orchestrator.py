@@ -13,6 +13,7 @@ from tools import web_tools
 from tools import machine_tools
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
+from orchestrator import intent
 from config.settings import TOOLS_ENABLED
 
 
@@ -583,6 +584,23 @@ class FREDOrchestrator:
 
         if not TOOLS_ENABLED:
             return self.llm.generate(messages)
+
+        # Conversation bypasses tools entirely. Handing the model ~30 tool
+        # definitions on a turn that needs none is what made it choose one
+        # anyway — there is no "reply normally" entry in that menu to
+        # compete with them. Not showing the tools makes a misfire
+        # impossible rather than merely unlikely.
+        last_user = next(
+            (m.get("content", "") for m in reversed(messages)
+             if m.get("role") == "user"),
+            "",
+        )
+        needs_tools, reason = intent.classify(last_user, llm=self.llm)
+        if not needs_tools:
+            print(f"[intent] chat ({reason})")
+            return self.llm.generate(messages)
+
+        print(f"[intent] tools ({reason})")
 
         tool_definitions = self.tools.get_tool_definitions()
 
