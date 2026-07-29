@@ -63,7 +63,14 @@ MODEL_TIERS = {
             / "gpt-oss-20b.gguf",
 }
 
-DEFAULT_TIER = "standard"
+# "nano" (Nemotron 4B, 3.9GB) rather than "standard" (Qwen3.5-9B, 8.9GB)
+# because GUI mode shares the GPU with Whisper. With the 9B loaded the
+# budget was: 8.9 (LLM) + 1.1 (embeddings) + ~1.5 (Whisper CUDA context)
+# + ~2.5 (desktop/browser) = ~14GB of 16.3GB, leaving too little for
+# llama.cpp's compute buffers — which showed up as a hard access
+# violation (0xc0000005) mid-turn rather than a clean OOM error.
+# Nemotron brings that to ~9GB and leaves real headroom.
+DEFAULT_TIER = "nano"
 
 # Default context window, capped per-tier below. Asking for more than
 # a model was trained on triggers llama.cpp's "training context
@@ -199,4 +206,11 @@ WAKE_PHRASES = [
 # TOOL SETTINGS
 # =========================================================
 
-TOOLS_ENABLED = True
+# Off for now. With the nano tier (Nemotron 4B) the tool router misfires
+# badly — "Hello Fred, how are you doing?" selected open_website and
+# launched google.com. Small models are much weaker at tool selection
+# than the 9B this was tuned against, so tool use and DEFAULT_TIER need
+# revisiting together, not separately. When TOOLS_ENABLED is False the
+# orchestrator skips the tool loop entirely and just generates a reply
+# (see orchestrator.py::_generate_with_tools).
+TOOLS_ENABLED = False

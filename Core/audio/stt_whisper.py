@@ -51,6 +51,14 @@ class WhisperSTT:
         self._blocks = []
         self._stream = None
         self._lock = threading.Lock()
+        # Separate lock for the PortAudio stream's lifetime. The stream is
+        # opened on the recording thread but closed from the turn thread
+        # (and possibly the cancel button's thread too), and letting an
+        # open race a close means PortAudio can be handed a half-freed
+        # stream — which surfaces as a bare access violation, not an
+        # exception. Reentrant because cancel_recording closes via a path
+        # that may already hold it.
+        self._stream_lock = threading.RLock()
         self._recording = False
 
         self.level = 0.0
@@ -122,31 +130,47 @@ class WhisperSTT:
                 self._blocks.append(block)
 
     def start_recording(self):
-        with self._lock:
-            if self._recording:
-                return
-            self._blocks = []
-            self._recording = True
+        with self._stream_lock:
+            with self._lock:
+                if self._recording:
+                    return
+                self._blocks = []
+                self._recording = True
 
-        self.level = 0.0
-        self._stream = sd.InputStream(
-            samplerate=self.samplerate,
-            channels=1,
-            dtype="float32",
-            blocksize=BLOCK_FRAMES,
-            callback=self._callback,
-        )
-        self._stream.start()
+            # Close any stream still lingering from a previous turn before
+            # opening a new one — pressing the hotkey again mid-answer is
+            # an ordinary interrupt, so this path is routine, not an edge
+            # case, and leaking a stream per interrupt would exhaust the
+            # device.
+            self._close_stream_locked()
 
-    def _close_stream(self):
+            self.level = 0.0
+            self._stream = sd.InputStream(
+                samplerate=self.samplerate,
+                channels=1,
+                dtype="float32",
+                blocksize=BLOCK_FRAMES,
+                callback=self._callback,
+            )
+            self._stream.start()
+
+    def _close_stream_locked(self):
+        """Caller must hold _stream_lock."""
         if self._stream is not None:
+            stream, self._stream = self._stream, None
             try:
-                self._stream.stop()
-                self._stream.close()
+                # stop() blocks until the PortAudio callback has finished,
+                # so it must precede close() — closing under a running
+                # callback is the use-after-free case.
+                stream.stop()
+                stream.close()
             except Exception as e:
                 print(f"[WhisperSTT] stream close failed: {e}")
-            self._stream = None
         self.level = 0.0
+
+    def _close_stream(self):
+        with self._stream_lock:
+            self._close_stream_locked()
 
     def cancel_recording(self):
         """Abandon the current recording without transcribing."""

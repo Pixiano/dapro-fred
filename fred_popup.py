@@ -14,7 +14,10 @@
 #                                   animation is a waste of a minute.
 
 import argparse
+import atexit
+import faulthandler
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -23,6 +26,29 @@ from pathlib import Path
 # Core/main.py is run.
 CORE_DIR = Path(__file__).resolve().parent / "Core"
 sys.path.insert(0, str(CORE_DIR))
+
+
+def _enable_crash_dump():
+    """
+    Dump every thread's Python stack on a fatal fault.
+
+    This process links three native runtimes that can each die below the
+    interpreter — llama.cpp/CUDA, CTranslate2/CUDA, and PortAudio — and a
+    crash in any of them exits with a bare Windows access violation
+    (0xc0000005) and no Python traceback at all. faulthandler is the only
+    thing that says *which* thread and which call was responsible.
+    """
+    log_dir = CORE_DIR / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / "crash.log"
+    # Kept open for the process lifetime on purpose: faulthandler writes
+    # to the raw fd from a signal context, so it must not be a file that
+    # Python might have closed or buffered by then.
+    handle = open(path, "a", buffering=1, encoding="utf-8")
+    handle.write(f"\n===== session start pid={os.getpid()} =====\n")
+    faulthandler.enable(file=handle, all_threads=True)
+    atexit.register(handle.close)
+    return path
 
 
 def run_mock(indicator_name=None, dwell=4.0):
@@ -80,6 +106,9 @@ def main():
         help="force an indicator style in mock mode (bars | ribbon)",
     )
     args = parser.parse_args()
+
+    crash_log = _enable_crash_dump()
+    print(f"[fred_popup] crash traces -> {crash_log}")
 
     if args.mock:
         run_mock(args.indicator)
