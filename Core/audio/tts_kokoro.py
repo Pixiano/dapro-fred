@@ -36,6 +36,7 @@ from config.settings import (
     KOKORO_VOICE,
     KOKORO_VOICE_BLEND,
     KOKORO_SPEED,
+    TTS_PREROLL_SEC,
 )
 
 # Blocks are the cancellation granularity: a write returns only once the
@@ -230,6 +231,14 @@ class KokoroTTS:
                             samplerate=sr, channels=1, dtype="float32"
                         )
                         stream.start()
+                        # Let a Bluetooth link do its wake-up ramp against
+                        # silence rather than against the first words of
+                        # the reply — see TTS_PREROLL_SEC in settings for
+                        # the measurements behind this.
+                        if TTS_PREROLL_SEC > 0:
+                            stream.write(
+                                np.zeros(int(sr * TTS_PREROLL_SEC), dtype=np.float32)
+                            )
 
                     if not started:
                         started = True

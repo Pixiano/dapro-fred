@@ -148,7 +148,22 @@ KOKORO_VOICE = "am_michael"
 # weight being the *other* voice's share. None = use KOKORO_VOICE alone.
 KOKORO_VOICE_BLEND = None
 
-KOKORO_SPEED = 1.0
+KOKORO_SPEED = 1.15
+
+# Silence written before the first real samples of each utterance.
+#
+# Bluetooth outputs attenuate or ramp the first ~0.5-1s while the link
+# wakes from idle and the codec stabilises, which swallowed the beginning
+# of every reply. Measured and confirmed to be the device, not the
+# pipeline: Kokoro generates the opening at full amplitude (higher RMS
+# than the rest of the utterance), and the playback loop shows no
+# underrun — writes never return early and settle at 41.5ms against a
+# 42.7ms block. So the fix is to give the link something inaudible to
+# ramp through.
+#
+# Costs this much extra time-to-first-word, once per utterance. Set to 0
+# on a wired output, where none of this applies.
+TTS_PREROLL_SEC = 0.35
 
 # =========================================================
 # FASTER-WHISPER STT — GUI mode's ears (audio/stt_whisper.py)
