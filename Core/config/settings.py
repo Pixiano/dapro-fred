@@ -61,30 +61,52 @@ MODEL_TIERS = {
     # extreme uses
     "extreme": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
             / "gpt-oss-20b.gguf",
+
+    # Gemma 4 E4B — "effective 4B", 4.97GB on disk. Reasons noticeably
+    # better than nano (gets the bat-and-ball trap right where Nemotron
+    # is inconsistent) and is the only tier here with real, switchable
+    # thinking. See THINKING_TIERS / CHAT_FORMAT_BY_TIER below: it needs
+    # its own chat template, not the chatml-function-calling override.
+    "gemma4": MODELS_DIR / "lmstudio-community" / "gemma-4-E4B-it-GGUF"
+            / "gemma-4-E4B-it-Q4_K_M.gguf",
 }
 
-# "nano" (Nemotron 4B, 3.9GB) — the smallest tier that can reason.
+# Tiers whose chat template gates reasoning behind an enable_thinking
+# flag, activated by putting this marker at the top of the system turn.
 #
-# Two constraints meet here. On size: GUI mode shares the GPU with
-# Whisper, and the original "standard" tier is what crashed — 8.9
-# (Qwen3.5-9B) + 1.1 (embeddings) + ~1.5 (Whisper CUDA context) + ~2.5
-# (desktop/browser) = ~14GB of 16.3GB left too little for llama.cpp's
-# compute buffers, which faults (0xc0000005) rather than raising a clean
-# OOM error. This tier totals ~9GB.
+# llama-cpp-python has no way to pass arbitrary jinja variables through
+# create_chat_completion, so enable_thinking cannot be set directly.
+# Gemma 4's canonical template renders '<|think|>\n' at the start of the
+# first system turn when that flag is true, so prepending the marker to
+# the system prompt produces a byte-identical prompt by another route.
+THINKING_TIERS = {"gemma4"}
+THINKING_MARKER = "<|think|>"
+
+# Per-tier chat_format override. None means "use the template embedded in
+# the GGUF". The global default (chatml-function-calling) exists because
+# most local GGUFs' own templates have no provision for tool definitions,
+# but Gemma 4's canonical template handles tool_calls AND thinking, and
+# forcing chatml over it discards both.
+CHAT_FORMAT_BY_TIER = {
+    "gemma4": None,
+}
+
+# Gemma 4 E4B, replacing "nano" (Nemotron 4B). Better reasoning and it
+# is the only tier with genuinely switchable thinking, via the
+# enable_thinking flag in its canonical chat template.
 #
-# On reasoning: only Nemotron 4B and Qwen3-14B have <think> tokens in
-# their chat templates. "low" (gemma-2-2b, 1.59GB) is smaller and faster
-# but cannot think, and measurably worse for voice because of it — asked
-# the bat-and-ball question it narrated its whole derivation into the
-# spoken reply (470 chars), while Nemotron reasoned in a <think> block
-# that _strip_thinking removes and said only "The ball costs $0.05."
-# (25 chars, and the correct answer).
+# Size still matters because GUI mode shares the GPU with Whisper. The
+# original "standard" tier is what crashed: 8.9 (Qwen3.5-9B) + 1.1
+# (embeddings) + ~1.5 (Whisper CUDA context) + ~2.5 (desktop/browser)
+# = ~14GB of 16.3GB left too little for llama.cpp's compute buffers,
+# which faults (0xc0000005) rather than raising a clean OOM error. At
+# 4.97GB this tier totals ~10GB.
 #
-# So thinking needs no switch of its own: llm_client already strips the
-# block, which is the behaviour you want — reason internally, speak the
-# conclusion. It only needs a model capable of it. Cost is latency: the
-# reasoning tokens are generated before any audio can start.
-DEFAULT_TIER = "nano"
+# Thinking costs latency — reasoning tokens are generated before any
+# audio can start — and the reasoning must be stripped before speaking,
+# which llm_client._strip_thinking handles for both the <think> style
+# (Nemotron) and Gemma's <|channel>thought ... <channel|> style.
+DEFAULT_TIER = "gemma4"
 
 # One model, always DEFAULT_TIER. When False this bypasses the word-count
 # heuristic in llm_client._pick_tier, which otherwise overrides
@@ -106,6 +128,7 @@ CONTEXT_WINDOW = 16384
 
 CONTEXT_WINDOW_BY_TIER = {
     "low": 8192,      # gemma-2-2b native context
+    "gemma4": 16384,
     "nano": 16384,
     "standard": 16384,
     "deep": 16384,

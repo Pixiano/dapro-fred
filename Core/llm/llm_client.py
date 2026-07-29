@@ -12,6 +12,9 @@ from config.settings import (
     MODEL_TIERS,
     DEFAULT_TIER,
     TIER_ROUTING_ENABLED,
+    CHAT_FORMAT_BY_TIER,
+    THINKING_TIERS,
+    THINKING_MARKER,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
     GPU_LAYERS,
@@ -60,6 +63,7 @@ class LLMClient:
         """
 
         chosen_tier = tier or self._pick_tier(messages)
+        messages = self._apply_thinking(messages, chosen_tier)
 
         try:
             model = self._get_model(chosen_tier)
@@ -97,6 +101,7 @@ class LLMClient:
         """
 
         chosen_tier = tier or self._pick_tier(messages)
+        messages = self._apply_thinking(messages, chosen_tier)
 
         try:
             model = self._get_model(chosen_tier)
@@ -145,17 +150,22 @@ class LLMClient:
 
         n_ctx = CONTEXT_WINDOW_BY_TIER.get(tier, CONTEXT_WINDOW)
 
+        # Most local GGUFs' own embedded chat templates have no provision
+        # for tool definitions at all — llama.cpp then silently never
+        # shows the model its tools, so chatml-function-calling is the
+        # default because it works for tool calls AND plain chat on any
+        # model. But it also *replaces* the model's own template, which
+        # discards anything that template alone provides. Gemma 4 handles
+        # both tools and thinking natively, so it opts out via
+        # CHAT_FORMAT_BY_TIER and keeps its own.
+        chat_format = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling")
+
         model = Llama(
             model_path=str(model_path),
             n_ctx=n_ctx,
             n_gpu_layers=GPU_LAYERS,
             verbose=False,
-            # Most local GGUFs' own embedded chat templates have no
-            # provision for tool definitions at all — llama.cpp then
-            # silently never shows the model its tools. This built-in
-            # format works for tool calls AND plain chat alike, on
-            # any model, so one loaded instance serves both.
-            chat_format="chatml-function-calling",
+            chat_format=chat_format,
         )
 
         self._loaded[tier] = model
@@ -261,23 +271,72 @@ class LLMClient:
         return content
 
     @staticmethod
+    def _apply_thinking(messages: list, tier: str) -> list:
+        """
+        Turn reasoning on for tiers that gate it behind enable_thinking.
+
+        llama-cpp-python offers no way to pass jinja variables through
+        create_chat_completion, so the flag itself is unreachable. Gemma
+        4's template renders THINKING_MARKER at the top of the first
+        system turn when enable_thinking is true, so putting the marker
+        there directly yields the same rendered prompt.
+
+        Returns a copy — mutating the caller's list would accumulate a
+        marker per turn, since the orchestrator reuses message history.
+        """
+        if tier not in THINKING_TIERS:
+            return messages
+
+        out = [dict(m) for m in messages]
+
+        for msg in out:
+            if msg.get("role") in ("system", "developer"):
+                content = msg.get("content") or ""
+                if isinstance(content, str) and THINKING_MARKER not in content:
+                    msg["content"] = f"{THINKING_MARKER}\n{content}"
+                return out
+
+        # No system turn to attach it to — the template only emits the
+        # marker inside one, so give it a system message to live in.
+        return [{"role": "system", "content": THINKING_MARKER}] + out
+
+    @staticmethod
     def _strip_thinking(content: str) -> str:
         """
-        Strip <think>...</think> reasoning blocks some local models
-        (DeepSeek-R1/Nemotron style) emit before the real answer.
-        Some models drop the opening tag, so also strip everything
-        up through a lone closing tag.
+        Remove reasoning blocks so only the conclusion is spoken.
+
+        Two syntaxes, because the models disagree:
+          <think>...</think>                     DeepSeek-R1 / Nemotron
+          <|channel>thought ... <channel|>       Gemma 4
+
+        Gemma 4's canonical template uses paired <|x> ... <x|> channel
+        markers rather than angle-bracket tags, and its own template
+        carries an equivalent strip_thinking macro — miss this and the
+        entire chain of thought gets read aloud.
+
+        Also handles a lone closing marker (some models omit the opener)
+        and an unterminated block, which means the model was cut off
+        mid-reasoning and has no answer to give.
         """
 
+        # <think> style
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
         content = re.sub(r"^.*?</think>", "", content, flags=re.DOTALL)
 
+        # Gemma 4 channel style. The thought channel is the one to drop;
+        # any other channel carries real content, so only its markers go.
+        content = re.sub(
+            r"<\|channel>\s*thought\b.*?<channel\|>", "", content, flags=re.DOTALL
+        )
+        content = re.sub(r"^.*?<channel\|>", "", content, flags=re.DOTALL)
+        content = re.sub(r"</?\|?channel\|?>", "", content)
+        content = content.replace(THINKING_MARKER, "")
+
         content = content.strip()
 
-        # Truncated mid-thought (opened but never closed, e.g. hit
-        # max_tokens) — the raw monologue isn't a real answer, so
-        # don't show it.
-        if content.startswith("<think>"):
+        # Opened but never closed (e.g. hit max_tokens) — a raw monologue
+        # is not an answer, so refuse it rather than speak it.
+        if content.startswith("<think>") or content.startswith("<|channel>"):
             return ""
 
         return content
