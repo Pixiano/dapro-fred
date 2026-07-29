@@ -114,7 +114,16 @@ CONTEXT_WINDOW_BY_TIER = {
 
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
 
-TEMPERATURE = 0.5
+# Low for repeatability: the same question should get the same answer,
+# which is what makes an assistant feel dependable.
+#
+# Do not expect accuracy from this. Measured across 3 arithmetic tasks,
+# 8 samples each: 22/24 correct at 0.5 vs 21/24 at 0.2 — a one-trial
+# difference, i.e. noise. A smaller run looked like a large effect
+# (5/6 vs 3/6 vs 2/6) purely by chance, so ignore small samples here.
+# Reasoning quality on this tier is bounded by the model, not by
+# sampling; see the reasoning note in personality/system_prompt.py.
+TEMPERATURE = 0.2
 TOP_P = 0.9
 # Generous headroom: some models (Nemotron/R1-style) emit a full
 # <think>...</think> block before the real answer — too low a limit
