@@ -148,7 +148,7 @@ KOKORO_VOICE = "am_michael"
 # weight being the *other* voice's share. None = use KOKORO_VOICE alone.
 KOKORO_VOICE_BLEND = None
 
-KOKORO_SPEED = 1.15
+KOKORO_SPEED = 1.2
 
 # Silence written before the first real samples of each utterance.
 #
