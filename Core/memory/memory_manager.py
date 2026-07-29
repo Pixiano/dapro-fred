@@ -13,7 +13,7 @@ ensure_cuda_dlls()
 
 from llama_cpp import Llama
 
-from config.settings import EMBEDDING_MODEL_PATH
+from config.settings import EMBEDDING_MODEL_PATH, MEMORY_DIR, INDEX_DIR
 
 
 class MemoryManager:
@@ -34,11 +34,19 @@ class MemoryManager:
         # -----------------------------
         # Directories
         # -----------------------------
-        self.memory_dir = Path("memory_data")
-        self.memory_dir.mkdir(exist_ok=True)
+        # Absolute, from settings — NOT relative to the working directory.
+        # These used to be Path("memory_data") / Path("memory_indexes"),
+        # which resolved against the CWD, so FRED kept a different memory
+        # depending on how it was started: one under Core/ for the CLI
+        # (run from Core/) and another at the repo root for the GUI
+        # (launched from there). Neither could see the other, so the popup
+        # appeared to have no history at all while 254 entries sat in the
+        # CLI's store. Both are preserved under data/memory_archive/.
+        self.memory_dir = Path(MEMORY_DIR)
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
 
-        self.index_dir = Path("memory_indexes")
-        self.index_dir.mkdir(exist_ok=True)
+        self.index_dir = Path(INDEX_DIR)
+        self.index_dir.mkdir(parents=True, exist_ok=True)
 
         # -----------------------------
         # Files

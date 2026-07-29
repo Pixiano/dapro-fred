@@ -13,10 +13,19 @@ node_modules/
 
 # Memory data (personal, runtime-generated, or old conversation logs
 # naming real people - same rationale across Core/ and Legacy/)
+#
+# Current location, from settings.MEMORY_DIR / INDEX_DIR:
+Core/data/memory/
+Core/data/indexes/
+# Pre-2026-07-29 stores, kept for reference. memory_manager.py used to
+# build these paths relative to the CWD, so FRED accumulated two separate
+# memories depending on whether it was launched from Core/ or the repo
+# root, and neither could see the other.
+Core/data/memory_archive/
+# The old CWD-relative locations themselves. Retained so that anything
+# still writing there stays ignored rather than silently committed.
 Core/memory_data/
 Core/memory_indexes/
-# Same thing, written at repo root when FRED is launched from there
-# (fred_gui.py) instead of from Core/ (main.py)
 /memory_data/
 /memory_indexes/
 
