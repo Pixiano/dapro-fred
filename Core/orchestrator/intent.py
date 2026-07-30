@@ -164,6 +164,22 @@ CATEGORY_CUES = {
 }
 
 
+# Minimum cosine similarity for the embedder alone to declare a turn an
+# action. Calibrated, not guessed: over 13 cue-free action paraphrases and
+# 8 plain-chat utterances, chat topped out at 0.601 ("tell me a joke"
+# against web_search) while confident actions ran 0.66-0.85. So 0.65 sits
+# in the gap — it catches the strong paraphrases keywords miss entirely and
+# rejects every chat sample.
+#
+# The mean scores overlap badly (actions 0.677, chat 0.502, and the worst
+# action scored 0.444 — below the best chat). That is why this is a high
+# bar for *adding* actions rather than a general action/chat divider:
+# embeddings are good at which tool, unreliable at whether. Anything below
+# this still falls through to the LLM check, exactly as before, so this can
+# only add correct routes, never take one away.
+SEMANTIC_FLOOR = 0.65
+
+
 def _build_cue_regex(cues):
     """Word-boundary match for alphanumeric cues, literal for the rest —
     so "dim" doesn't fire on "dimension" and ".com" still matches."""
@@ -221,7 +237,7 @@ def tools_for_categories(categories) -> list:
     return names
 
 
-def classify(text: str, llm=None) -> tuple:
+def classify(text: str, llm=None, router=None) -> tuple:
     """
     Returns (needs_tools, tool_names, reason).
 
@@ -243,7 +259,56 @@ def classify(text: str, llm=None) -> tuple:
 
     if categories:
         names = tools_for_categories(categories)
+
+        # Semantic ranking narrows a broad cue hit. "files" alone is ten
+        # tools; the embedder usually knows which two or three are meant,
+        # and intersecting keeps the cue result as a safety bound so a bad
+        # embedding can't pull in something unrelated.
+        if router is not None:
+            ranked_all = [n for n, _ in router.rank(text)]
+            narrowed = [n for n in ranked_all if n in names]
+
+            # Never narrow below two candidates. Measured: "what's using
+            # all my cpu" narrowed cleanly to a single tool — the wrong
+            # one — where the cue set had contained the right one. Keeping
+            # a runner-up lets the model correct a near-miss from context,
+            # and two options is still trivial for a small model against
+            # the forty it started with.
+            narrowed = narrowed[: max(2, min(6, len(narrowed)))]
+
+            # Rescue a cue-coverage gap. "What's using all my cpu" matched
+            # only the sysinfo category, so list_processes — the right
+            # answer — was never a candidate at all. If the embedder is
+            # confident about a tool the cues didn't reach, add it rather
+            # than let a missing keyword decide the turn.
+            rescued = []
+            if ranked_all:
+                top, best_score = router.route(text, top_k=1)
+                if top and best_score >= SEMANTIC_FLOOR and top[0] not in names:
+                    rescued = [top[0]]
+
+            candidates = rescued + (narrowed or names)
+
+            if len(candidates) < len(names) or rescued:
+                best = router.route(text, top_k=1)[1]
+                note = "narrowed" if not rescued else "narrowed+rescued"
+                return (
+                    True,
+                    candidates,
+                    f"cues {'+'.join(categories)} {note} by embedding "
+                    f"{len(names)}->{len(candidates)} (sim {best:.2f})",
+                )
+
         return True, names, f"cues {'+'.join(categories)} -> {len(names)} tools"
+
+    # No cue matched. This is where keyword routing used to give up and
+    # hand a 4B the ACTION/CHAT question it answers badly. Ask the
+    # embedder instead: if some tool is clearly close to what was said,
+    # this is an action and we already know which tools to offer.
+    if router is not None:
+        ranked, best = router.route(text, top_k=5, floor=SEMANTIC_FLOOR, margin=0.08)
+        if ranked:
+            return True, ranked, f"embedding {best:.2f} -> {len(ranked)} tools"
 
     if llm is None:
         return False, [], "no cue, no classifier — defaulting to chat"

@@ -95,6 +95,10 @@ class FREDOrchestrator:
         # _handle_pending_confirmation.
         self.pending_action = None
 
+        # Semantic tool router, built lazily on the first tool-eligible
+        # turn (see _tool_router).
+        self._router = None
+
     def process(self, user_input: str) -> str:
         """
         Main orchestration pipeline.
@@ -173,7 +177,7 @@ class FREDOrchestrator:
             needs_tools, tool_names, reason = False, [], "tools disabled"
         else:
             needs_tools, tool_names, reason = intent.classify(
-                user_input, llm=self.llm
+                user_input, llm=self.llm, router=self._tool_router()
             )
 
         if needs_tools:
@@ -886,7 +890,9 @@ class FREDOrchestrator:
              if m.get("role") == "user"),
             "",
         )
-        needs_tools, tool_names, reason = intent.classify(last_user, llm=self.llm)
+        needs_tools, tool_names, reason = intent.classify(
+            last_user, llm=self.llm, router=self._tool_router()
+        )
         if not needs_tools:
             print(f"[intent] chat ({reason})")
             return self.llm.generate(messages)
@@ -1157,6 +1163,36 @@ class FREDOrchestrator:
     # =========================================================
     # MESSAGE BUILDING
     # =========================================================
+
+    def _tool_router(self):
+        """
+        The semantic router, built on first use.
+
+        Lazy because building it embeds all 40 tools (~4.8s) and there's no
+        reason to pay that at startup when a session might be all
+        conversation. Reuses the memory embedder rather than loading a
+        second copy of the model, and returns None on any failure so
+        classification falls back to cue matching.
+        """
+        if self._router is not None:
+            return self._router
+
+        try:
+            from orchestrator.tool_router import SemanticToolRouter
+
+            descriptions = {
+                name: self.tools.tools[name]["description"]
+                for name in self.tools.list_tools()
+            }
+            router = SemanticToolRouter(
+                self.memory._generate_embedding, descriptions
+            )
+            if router.build():
+                self._router = router
+        except Exception as e:
+            print(f"[orchestrator] semantic router unavailable: {e}")
+
+        return self._router
 
     @staticmethod
     def _screen_context() -> str:
