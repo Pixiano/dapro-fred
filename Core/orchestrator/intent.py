@@ -1,32 +1,31 @@
 # Core/orchestrator/intent.py
 #
-# Decides whether a turn should be offered tools at all.
+# Decides two things before the model ever sees a tool:
+#   1. whether this turn needs tools at all
+#   2. if so, which small subset of them
 #
-# The problem this solves: the tool-calling loop passed all ~30 tools with
-# tool_choice="auto" on every single turn. Nothing in that menu represents
-# "just answer" — so a weak model has to beat 30 concrete alternatives with
-# an implicit option that was never described to it. In practice it
-# doesn't: "Hello Fred, how are you doing?" selected open_website and
-# launched google.com.
+# The problem being solved is tool-choice accuracy on a small model. With
+# 40 tools passed on every turn and tool_choice="auto", the model has to
+# pick one option out of forty — and nothing in that list means "just
+# reply", so a greeting competes against forty concrete actions and loses.
+# It did: "Hello Fred, how are you doing?" selected open_website and
+# opened google.com.
 #
-# So conversation becomes an explicit route. If a turn is classified as
-# conversation, the tool definitions are never shown to the model, and a
-# misfire is then not merely unlikely but impossible.
+# Two layers fix it:
 #
-# Three tiers, deliberately ordered cheapest and most certain first:
+#   CHAT vs TOOLS   — conversation never sees tool definitions, so a
+#                     misfire there is impossible rather than unlikely.
+#   CATEGORY SUBSET — an action turn sees only the category it matched,
+#                     typically 2-6 tools instead of 40. Choosing between
+#                     "set_volume / get_volume / mute / media_control" is
+#                     a task a 4B can do reliably; choosing among forty
+#                     is not.
 #
-#   1. Social/meta phrasing  -> CHAT, decided here, never asks the model.
-#      This is the class that actually broke, so it must not depend on
-#      model judgement to get right.
-#   2. An action cue present -> TOOLS. The cue vocabulary is bounded and
-#      knowable because the tool list is (see ACTION_CUES).
-#   3. Neither              -> ask the model, biased hard toward CHAT.
-#
-# The bias direction is the important design choice. Failing to offer a
-# tool is a mild annoyance — FRED says something instead of doing it, and
-# you rephrase. Wrongly firing one opens browsers, changes volume, moves
-# files. Those costs are not symmetric, so every ambiguous case resolves
-# to conversation.
+# Categories are matched by cue words rather than by asking the model,
+# because a deterministic router cannot itself be confused — and the whole
+# point is to remove a judgement call the small model is bad at. Multiple
+# categories can match at once and are unioned, so "turn the volume down
+# and open Spotify" still gets both sets.
 
 import re
 
@@ -39,8 +38,8 @@ _PREFIX = re.compile(
 )
 
 # Utterances that are purely social or about FRED itself. Matched against
-# the *whole* remaining text, so "how are you" is chat but "how loud is
-# the volume" is not accidentally caught by a bare "how".
+# the whole remaining text, so "how are you" is chat while "how loud is
+# the volume" isn't caught by a bare "how".
 _SOCIAL = re.compile(
     r"^(?:"
     r"how(?:'s| is| are|s)?\s+(?:you|it going|things|your day|everything)\b.*"
@@ -59,46 +58,125 @@ _SOCIAL = re.compile(
     re.IGNORECASE,
 )
 
-# Vocabulary tied to the registered tools. Bounded because the tool list
-# is: open_website, launch_application, create_text_file, create_folder,
-# get_current_time, web_search, get_weather, the window group, volume,
-# brightness, clipboard, screenshot, processes, the file group, and the
-# scheduling group. Over-inclusive on purpose — a false TOOL here only
-# means the model gets offered tools and can still decline, whereas a
-# miss means it cannot act at all.
-ACTION_CUES = (
-    # web / apps
-    "open", "launch", "start", "browse", "website", "url", ".com", ".org",
-    "go to", "google", "youtube", "search", "look up",
-    # time / weather
-    "time", "date", "what day", "clock", "weather", "temperature",
-    "forecast", "raining", "humidity",
-    # files / folders
-    "file", "folder", "directory", "note", "save", "create", "make",
-    "write", "rename", "move", "delete", "remove", "read",
-    # windows
-    "window", "minimize", "minimise", "maximize", "maximise", "close",
-    "switch to", "focus",
-    # system
-    "volume", "louder", "quieter", "loud", "quiet", "mute", "unmute",
-    "sound", "brightness", "brighter", "dimmer", "dim", "screenshot",
-    "screen shot", "capture", "clipboard", "copy", "paste",
-    "process", "kill", "task manager", "cpu", "memory",
-    # scheduling
-    "remind", "reminder", "schedule", "alarm", "timer",
-    "cancel", "tomorrow", "tonight", "wake me",
-)
+# =========================================================
+# CATEGORIES
+# =========================================================
+#
+# Kept small and single-purpose so a matched category is a genuinely
+# short menu. A tool may appear in more than one category when the
+# request phrasing could reasonably land in either.
 
-# Matched on word boundaries, not as bare substrings — "dim" must not fire
-# on "dimension", nor "note" on "nothing". Cues containing punctuation
-# (".com") or spaces ("go to") are escaped and matched as phrases.
-_ACTION_RE = re.compile(
-    r"(?:%s)" % "|".join(
-        (r"\b%s\b" if c[0].isalnum() else r"%s") % re.escape(c)
-        for c in ACTION_CUES
+TOOL_CATEGORIES = {
+    "time": ("get_current_time",),
+    "weather": ("get_weather",),
+    "math": ("calculate",),
+    "search": ("web_search",),
+    "sysinfo": ("get_system_status", "get_network_status"),
+    "apps": ("launch_application", "open_website", "open_path"),
+    "audio": ("get_volume", "set_volume", "mute", "media_control"),
+    "display": ("get_brightness", "set_brightness", "take_screenshot"),
+    "clipboard": ("get_clipboard", "set_clipboard"),
+    "windows": (
+        "list_windows", "focus_window", "minimize_window",
+        "maximize_window", "close_window",
     ),
-    re.IGNORECASE,
-)
+    "processes": ("list_processes", "kill_process"),
+    "power": ("power_action",),
+    "files": (
+        "create_text_file", "create_folder", "append_to_file", "read_file",
+        "list_directory", "search_files", "move_file", "rename_file",
+        "delete_file", "open_path",
+    ),
+    "schedule": (
+        "schedule_reminder", "set_timer", "schedule_file_watch",
+        "list_scheduled", "cancel_scheduled",
+    ),
+}
+
+# Cue words per category. Over-inclusive on purpose: a spurious category
+# only widens the menu slightly, whereas a miss means the tool cannot be
+# reached at all.
+CATEGORY_CUES = {
+    "time": (
+        "time", "date", "what day", "clock", "today's date", "day is it",
+    ),
+    "weather": (
+        "weather", "temperature", "forecast", "raining", "rain", "humidity",
+        "hot outside", "cold outside", "sunny",
+    ),
+    # No bare "what is"/"what's" here — they appear in almost every
+    # question ("what is my volume") and pulled maths into unrelated
+    # turns. Only genuinely arithmetic wording qualifies.
+    "math": (
+        "calculate", "how much is", "plus", "minus", "multiplied",
+        "divided", "percent of", "% of", "square root", "sqrt",
+        "sum of", "add up", "work out", "times",
+    ),
+    "search": (
+        "search", "look up", "google", "who is", "what happened",
+        "news", "find out", "search for", "on the web",
+    ),
+    "sysinfo": (
+        "battery", "charge", "cpu", "ram", "memory", "disk", "storage",
+        "space left", "uptime", "how fast", "wifi", "wi-fi", "internet",
+        "online", "network", "connected", "ip address",
+    ),
+    "apps": (
+        "open", "launch", "start", "run", "website", "url", ".com", ".org",
+        "go to", "youtube", "spotify", "chrome", "browser",
+    ),
+    "audio": (
+        "volume", "louder", "quieter", "loud", "quiet", "mute", "unmute",
+        "sound", "audio", "play", "pause", "resume", "skip", "next track",
+        "previous", "song", "music", "track",
+    ),
+    "display": (
+        "brightness", "brighter", "dimmer", "dim", "screen",
+        "screenshot", "screen shot", "capture", "grab the screen",
+    ),
+    "clipboard": ("clipboard", "copy", "copied", "paste"),
+    # "windows" is listed explicitly: cues match on word boundaries, so
+    # \bwindow\b never matched the plural, and "list my open windows"
+    # routed to apps+files instead — the model then denied being able to
+    # do it at all, because the tool wasn't in its menu.
+    "windows": (
+        "window", "windows", "minimize", "minimise", "maximize", "maximise",
+        "switch to", "focus", "bring up", "close the", "alt tab",
+    ),
+    "processes": (
+        "process", "task manager", "kill", "not responding", "frozen",
+        "running apps", "end task",
+    ),
+    "power": (
+        "lock", "sleep", "shut down", "shutdown", "restart", "reboot",
+        "power off", "hibernate", "log off",
+    ),
+    "files": (
+        "file", "folder", "directory", "note", "save", "create", "make",
+        "write", "rename", "move", "delete", "remove", "read", "append",
+        "add to", "list", "what's in", "document", "shopping list",
+    ),
+    "schedule": (
+        "remind", "reminder", "schedule", "alarm", "timer", "countdown",
+        "wake me", "tomorrow", "tonight", "cancel", "pending", "in an hour",
+        "at 7", "later",
+    ),
+}
+
+
+def _build_cue_regex(cues):
+    """Word-boundary match for alphanumeric cues, literal for the rest —
+    so "dim" doesn't fire on "dimension" and ".com" still matches."""
+    return re.compile(
+        "(?:%s)" % "|".join(
+            (r"\b%s\b" if c[0].isalnum() else r"%s") % re.escape(c)
+            for c in cues
+        ),
+        re.IGNORECASE,
+    )
+
+
+_CATEGORY_RE = {name: _build_cue_regex(cues) for name, cues in CATEGORY_CUES.items()}
 
 _CLASSIFIER_SYSTEM = (
     "You classify a user's message for a voice assistant. Answer with "
@@ -122,37 +200,53 @@ def normalise(text: str) -> str:
 
 def looks_social(text: str) -> bool:
     stripped = normalise(text)
-    # Nothing left after removing the greeting — e.g. a bare "Hey Fred".
     if not stripped:
-        return True
+        return True  # nothing left after the greeting, e.g. a bare "Hey Fred"
     return bool(_SOCIAL.match(stripped))
 
 
-def has_action_cue(text: str) -> bool:
-    return bool(_ACTION_RE.search(normalise(text)))
+def match_categories(text: str) -> list:
+    """Every category whose cues appear, in declaration order."""
+    stripped = normalise(text)
+    return [name for name, rx in _CATEGORY_RE.items() if rx.search(stripped)]
+
+
+def tools_for_categories(categories) -> list:
+    """Flatten categories to a de-duplicated tool-name list."""
+    names = []
+    for category in categories:
+        for tool in TOOL_CATEGORIES.get(category, ()):
+            if tool not in names:
+                names.append(tool)
+    return names
 
 
 def classify(text: str, llm=None) -> tuple:
     """
-    Returns (needs_tools: bool, reason: str). `reason` is returned rather
-    than logged internally so the caller can print it — misroutes are the
-    failure mode here, and they're impossible to debug without knowing
-    which tier made the call.
+    Returns (needs_tools, tool_names, reason).
 
-    `llm` is optional; without it, tier 3 defaults to CHAT rather than
-    guessing.
+    tool_names is the subset to offer the model; an empty list alongside
+    needs_tools=True means "no category matched, offer everything", which
+    is the safe fallback rather than blocking a real request.
+
+    `reason` is returned rather than logged internally so the caller can
+    print it — a misroute is the failure mode here and is near-impossible
+    to debug without knowing which layer decided.
     """
     if not (text or "").strip():
-        return False, "empty"
+        return False, [], "empty"
 
     if looks_social(text):
-        return False, "social/meta phrasing"
+        return False, [], "social/meta phrasing"
 
-    if has_action_cue(text):
-        return True, "action cue present"
+    categories = match_categories(text)
+
+    if categories:
+        names = tools_for_categories(categories)
+        return True, names, f"cues {'+'.join(categories)} -> {len(names)} tools"
 
     if llm is None:
-        return False, "no cue, no classifier — defaulting to chat"
+        return False, [], "no cue, no classifier — defaulting to chat"
 
     try:
         answer = llm.generate(
@@ -162,12 +256,15 @@ def classify(text: str, llm=None) -> tuple:
             ]
         )
     except Exception as e:
-        return False, f"classifier failed ({e}) — defaulting to chat"
+        return False, [], f"classifier failed ({e}) — defaulting to chat"
 
     # Only an explicit ACTION flips this. Anything else — CHAT, a refusal,
-    # a rambling non-answer, empty output — lands on conversation, per the
-    # asymmetry described at the top of this module.
+    # a rambling non-answer, empty output — lands on conversation. Failing
+    # to offer a tool is a mild annoyance; wrongly firing one opens
+    # browsers, deletes files and changes volume. Not symmetric.
     head = (answer or "").strip().upper()[:40]
     if "ACTION" in head and "CHAT" not in head:
-        return True, "classifier said ACTION"
-    return False, f"classifier said {head.split() or ['(nothing)']}"[:60]
+        return True, [], "classifier said ACTION (no category — all tools)"
+
+    words = head.split() or ["(nothing)"]
+    return False, [], f"classifier said {words[0]}"

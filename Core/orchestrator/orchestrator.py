@@ -11,6 +11,7 @@ from tools.registry import ToolRegistry
 from tools import system_tools
 from tools import web_tools
 from tools import machine_tools
+from tools import assist_tools
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import intent
@@ -578,6 +579,151 @@ class FREDOrchestrator:
             },
         )
 
+        # =========================================================
+        # ADDITIONS — see tools/assist_tools.py
+        # =========================================================
+
+        self.tools.register(
+            name="calculate",
+            function=assist_tools.calculate,
+            description=(
+                "Work out an arithmetic expression exactly. Use this for any "
+                "sum, percentage, or number question instead of answering "
+                "from memory."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "e.g. \"3 * 7 - 4\", \"17% of 300\", \"sqrt(144)\".",
+                    }
+                },
+                "required": ["expression"],
+            },
+        )
+
+        self.tools.register(
+            name="get_system_status",
+            function=assist_tools.get_system_status,
+            description="Battery level, CPU and memory use, free disk space and uptime.",
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+        self.tools.register(
+            name="get_network_status",
+            function=assist_tools.get_network_status,
+            description="Whether the machine is online, which Wi-Fi network, and the local IP.",
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+        self.tools.register(
+            name="media_control",
+            function=assist_tools.media_control,
+            description=(
+                "Control whatever is playing music or video — play/pause, "
+                "skip, go back, stop. Works with any player."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["playpause", "next", "previous", "stop"],
+                        "description": "Which media action to send.",
+                    }
+                },
+                "required": ["action"],
+            },
+        )
+
+        self.tools.register(
+            name="power_action",
+            function=assist_tools.power_action,
+            description=(
+                "Lock, sleep, restart or shut down the PC. Shutdown and "
+                "restart wait 5 seconds and can be cancelled."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["lock", "sleep", "restart", "shutdown", "cancel"],
+                        "description": "Which power action to take.",
+                    }
+                },
+                "required": ["action"],
+            },
+            destructive=True,
+        )
+
+        self.tools.register(
+            name="append_to_file",
+            function=assist_tools.append_to_file,
+            description=(
+                "Add a line to the end of a text file, creating it if it "
+                "doesn't exist. Use for notes and lists."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "File name or path. Bare names go to Documents/FRED.",
+                    },
+                    "text": {"type": "string", "description": "The line to add."},
+                },
+                "required": ["filename", "text"],
+            },
+        )
+
+        self.tools.register(
+            name="list_directory",
+            function=assist_tools.list_directory,
+            description="List what's inside a folder. Defaults to Documents/FRED.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "directory": {"type": "string", "description": "Folder to list."}
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="open_path",
+            function=assist_tools.open_path,
+            description=(
+                "Open an existing file or folder with its default program. "
+                "For programs use launch_application; for sites use open_website."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File or folder to open."}
+                },
+                "required": ["path"],
+            },
+        )
+
+        self.tools.register(
+            name="set_timer",
+            function=self.scheduler.set_timer,
+            description=(
+                "Start a countdown timer for a number of minutes. For a clock "
+                "time like \"7pm\" use schedule_reminder instead."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "minutes": {"type": "number", "description": "How many minutes to count down."},
+                    "label": {"type": "string", "description": "Optional name, e.g. \"pasta\"."},
+                },
+                "required": ["minutes"],
+            },
+        )
+
     def shutdown(self):
         """
         Stops the background scheduler. Call on process exit so
@@ -610,14 +756,17 @@ class FREDOrchestrator:
              if m.get("role") == "user"),
             "",
         )
-        needs_tools, reason = intent.classify(last_user, llm=self.llm)
+        needs_tools, tool_names, reason = intent.classify(last_user, llm=self.llm)
         if not needs_tools:
             print(f"[intent] chat ({reason})")
             return self.llm.generate(messages)
 
         print(f"[intent] tools ({reason})")
 
-        tool_definitions = self.tools.get_tool_definitions()
+        # Only the matched category's tools. Choosing between four volume
+        # tools is something a 4B does reliably; choosing among forty is
+        # not, and that mismatch was the whole source of erratic calls.
+        tool_definitions = self.tools.get_tool_definitions(only=tool_names)
 
         message = self.llm.generate_with_tools(messages, tools=tool_definitions)
 

@@ -9,8 +9,11 @@
 # That gate lives in the orchestrator, not here — these functions
 # always just do the thing when called.
 
+import os
 from pathlib import Path
 from datetime import datetime
+
+from tools.assist_tools import resolve_user_path
 
 import psutil
 import pyperclip
@@ -203,16 +206,26 @@ def take_screenshot(save_path: str = "") -> str:
 
     if not save_path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_path = f"screenshot_{timestamp}.png"
+        # Pictures/Screenshots, not the working directory — a background
+        # app's CWD is wherever it happened to be launched from, so the
+        # old default put screenshots somewhere unfindable.
+        folder = Path(os.path.expanduser("~")) / "Pictures" / "Screenshots"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"screenshot_{timestamp}.png"
+    else:
+        path = resolve_user_path(save_path)
 
-    path = Path(save_path)
     if not path.suffix:
         path = path.with_suffix(".png")
 
-    with mss() as sct:
-        sct.shot(output=str(path))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with mss() as sct:
+            sct.shot(output=str(path))
+    except Exception as e:
+        return f"Couldn't save the screenshot: {e}"
 
-    return f"Screenshot saved: {path.resolve()}"
+    return f"Screenshot saved: {path}"
 
 
 # =========================================================
@@ -279,7 +292,7 @@ def search_files(query: str, directory: str = "") -> str:
     defaulting to the user's home folder.
     """
 
-    base = Path(directory) if directory else Path.home()
+    base = resolve_user_path(directory) if directory else Path.home()
 
     if not base.exists():
         return f"Directory not found: {base}"

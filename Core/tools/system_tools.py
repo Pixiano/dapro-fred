@@ -1,12 +1,15 @@
 # Core/tools/system_tools.py
 
 import os
+import re
 import shutil
 import webbrowser
 import subprocess
 import winreg
 from pathlib import Path
 from datetime import datetime
+
+from tools.assist_tools import resolve_user_path
 
 
 # =========================================================
@@ -16,11 +19,22 @@ from datetime import datetime
 def open_website(url: str) -> str:
     """
     Open a website in the default browser.
+
+    A scheme-less "google.com" is normalised to https:// first —
+    webbrowser.open treats a bare host as a relative file path on
+    Windows, which silently opened nothing at all.
     """
 
-    webbrowser.open(url)
+    target = str(url or "").strip()
+    if not target:
+        return "No website given."
 
-    return f"Opened {url}"
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target):
+        target = "https://" + target.lstrip("/")
+
+    webbrowser.open(target)
+
+    return f"Opened {target}"
 
 
 # =========================================================
@@ -168,36 +182,41 @@ def create_text_file(
 ) -> str:
     """
     Create a text file.
+
+    A bare filename is anchored under Documents/FRED rather than the
+    working directory — see resolve_user_path. Previously "notes.txt"
+    landed wherever the process was launched from, which for a detached
+    background app meant somewhere the user would never find it.
     """
 
-    path = Path(filename)
+    path = resolve_user_path(filename)
 
     if not path.suffix:
         path = path.with_suffix(".txt")
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+    except OSError as e:
+        return f"Couldn't create {path.name}: {e}"
 
-    return (
-        f"Created file: {path.resolve()}"
-    )
+    return f"Created file: {path}"
 
 
 def create_folder(folder_name: str) -> str:
     """
-    Create a folder.
+    Create a folder. Bare names go under Documents/FRED, as above.
     """
 
-    path = Path(folder_name)
+    path = resolve_user_path(folder_name)
 
-    path.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return f"Couldn't create {path.name}: {e}"
 
-    return (
-        f"Created folder: {path.resolve()}"
-    )
+    return f"Created folder: {path}"
 
 
 # =========================================================
@@ -206,9 +225,16 @@ def create_folder(folder_name: str) -> str:
 
 def get_current_time() -> str:
     """
-    Get local system time.
+    Local date and time, phrased for speech.
+
+    Includes the weekday, which the previous version omitted — asked
+    "what day is it today" it answered "It's 06:24:23 on 2026-07-30",
+    which technically contains the date and yet doesn't answer the
+    question. Seconds are dropped for the same reason: nobody asking the
+    time out loud wants them.
     """
 
     now = datetime.now()
+    clock = now.strftime("%I:%M %p").lstrip("0")
 
-    return f"It's {now.strftime('%H:%M:%S')} on {now.strftime('%Y-%m-%d')}."
+    return f"It's {clock} on {now.strftime('%A, %d %B %Y')}."

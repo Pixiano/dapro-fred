@@ -68,14 +68,30 @@ class ToolRegistry:
     # GET TOOL SCHEMAS
     # =========================================================
 
-    def get_tool_definitions(self) -> list:
+    def get_tool_definitions(self, only=None) -> list:
         """
         Convert tools into LLM-compatible schemas.
+
+        `only` restricts the result to the named tools, preserving their
+        order, and is how the intent router keeps a turn's menu short —
+        showing a small model all 40 definitions is what made it pick a
+        random one. Unknown names are ignored, and an empty result falls
+        back to every tool rather than none, so a bad subset degrades to
+        the old behaviour instead of disabling tools entirely.
         """
 
         definitions = []
 
-        for name, tool in self.tools.items():
+        if only:
+            wanted = [name for name in only if name in self.tools]
+            items = [(name, self.tools[name]) for name in wanted]
+        else:
+            items = list(self.tools.items())
+
+        if not items:
+            items = list(self.tools.items())
+
+        for name, tool in items:
 
             definitions.append({
                 "type": "function",

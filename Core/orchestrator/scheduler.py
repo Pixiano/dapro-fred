@@ -5,6 +5,7 @@
 # matters instead of only ever responding when spoken to.
 
 import re
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -13,6 +14,7 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 from config.settings import SCHEDULER_DB_PATH
+from tools.assist_tools import format_duration
 from utils.notifier import notify
 
 # Safety valve for "tell me when X shows up" — without a cap, a typo'd
@@ -230,6 +232,42 @@ class ReminderScheduler:
 
         return f"Reminder set for {describe_when(run_at, now)}: \"{message}\""
 
+    def set_timer(self, minutes: float, label: str = "") -> str:
+        """
+        A countdown, kept separate from schedule_reminder on purpose.
+
+        "Set a timer for 10 minutes" and "remind me at 7pm" are different
+        requests, and giving the model one tool for both meant it had to
+        convert between forms. A timer is always a short relative
+        countdown, so it takes only a duration and never a clock time.
+        """
+        try:
+            duration = float(minutes)
+        except (TypeError, ValueError):
+            return f"\"{minutes}\" isn't a number of minutes I can use."
+
+        if duration <= 0:
+            return "A timer needs a positive number of minutes."
+        if duration > 24 * 60:
+            return "That's over a day — set a reminder instead."
+
+        run_at = datetime.now() + timedelta(minutes=duration)
+        spoken = format_duration(duration)
+        message = f"Timer finished: {label}" if label else f"Your {spoken} timer is up."
+
+        self._scheduler.add_job(
+            notify,
+            args=[message],
+            trigger="date",
+            run_date=run_at,
+            id=self._next_job_id("timer"),
+            jobstore="default",
+            misfire_grace_time=None,
+        )
+
+        suffix = f" for {label}" if label else ""
+        return f"Timer set for {spoken}{suffix}."
+
     # =========================================================
     # FILE WATCH (in-memory only — see class docstring)
     # =========================================================
@@ -344,6 +382,17 @@ class ReminderScheduler:
     # =========================================================
 
     def _next_job_id(self, prefix: str) -> str:
+        """
+        Unique across restarts, not just within a session.
 
+        The counter alone collided: reminders persist to SQLite but
+        _job_counter restarts at zero every launch, so the first reminder
+        of a new session tried to reuse "reminder_1" and APScheduler
+        rejected it — "Job identifier (reminder_1) conflicts with an
+        existing job". Observed as a timer that silently refused to set
+        while an old reminder was still pending. The timestamp makes the
+        id unique per run; the counter keeps ids distinct within one.
+        """
         self._job_counter += 1
-        return f"{prefix}_{self._job_counter}"
+        stamp = int(time.time())
+        return f"{prefix}_{stamp}_{self._job_counter}"
