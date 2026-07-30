@@ -16,6 +16,7 @@ from tools import assist_tools
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import intent
+from orchestrator import tool_call_log
 from config.settings import TOOLS_ENABLED
 
 
@@ -99,6 +100,18 @@ class FREDOrchestrator:
         # turn (see _tool_router).
         self._router = None
 
+        # Per-turn scratch, set at the top of process()/process_stream()
+        # and read by the tool-execution paths below — orchestrator
+        # processes one turn at a time (pill_app serialises via its own
+        # lock), so this is safe without threading utterance/turn_id
+        # through every call signature. Exposed via last_turn_id so the
+        # UI can attach post-hoc feedback (e.g. "user interrupted this
+        # reply") to the same row after the fact.
+        self._turn_utterance = ""
+        self.last_turn_id = None
+        self._last_tools_offered = []
+        self._last_routing_reason = ""
+
     def process(self, user_input: str) -> str:
         """
         Main orchestration pipeline.
@@ -115,6 +128,8 @@ class FREDOrchestrator:
         """
 
         self.state.add_message("user", user_input)
+        self._turn_utterance = user_input
+        self.last_turn_id = tool_call_log.new_turn_id()
 
         if self.pending_action:
             assistant_reply = self._handle_pending_confirmation(user_input)
@@ -152,6 +167,8 @@ class FREDOrchestrator:
         way.
         """
         self.state.add_message("user", user_input)
+        self._turn_utterance = user_input
+        self.last_turn_id = tool_call_log.new_turn_id()
 
         pieces = []
 
@@ -231,9 +248,15 @@ class FREDOrchestrator:
         self._announce_tool(tool_name)
 
         try:
-            return str(self.tools.execute(tool_name, **arguments))
+            result = str(self.tools.execute(tool_name, **arguments))
         except Exception as error:
-            return f"Couldn't do that: {error}"
+            result = f"Couldn't do that: {error}"
+
+        tool_call_log.log_tool_call(
+            self.last_turn_id, self._turn_utterance, tool_name, arguments,
+            result, path="dispatcher",
+        )
+        return result
 
     def _request_confirmation(self, tool_name: str, arguments: dict) -> str:
 
@@ -257,10 +280,24 @@ class FREDOrchestrator:
         if user_input.strip().lower() in affirmative:
             try:
                 result = str(self.tools.execute(action["tool"], **action["arguments"]))
-                return result
             except Exception as error:
-                return f"Couldn't do that: {error}"
+                result = f"Couldn't do that: {error}"
 
+            # The turn_id here belongs to the confirmation ("yes"), not the
+            # original destructive request — the two are separate calls to
+            # process(). Logged anyway since the tool+arguments pair is
+            # what matters for learning routing, and it's still linkable
+            # by timestamp proximity if that turns out to matter later.
+            tool_call_log.log_tool_call(
+                self.last_turn_id, self._turn_utterance, action["tool"],
+                action["arguments"], result, path="confirmed_destructive",
+            )
+            return result
+
+        tool_call_log.log_tool_call(
+            self.last_turn_id, self._turn_utterance, action["tool"],
+            action["arguments"], "Cancelled by user", path="confirmed_destructive",
+        )
         return "Cancelled — didn't run it."
 
     def _process_with_llm(self, user_input: str) -> str:
@@ -899,6 +936,11 @@ class FREDOrchestrator:
 
         print(f"[intent] tools ({reason})")
 
+        # Read by _execute_tool_call so the log records what the model was
+        # actually offered, not just what it picked.
+        self._last_tools_offered = tool_names
+        self._last_routing_reason = reason
+
         # Only the matched category's tools. Choosing between four volume
         # tools is something a 4B does reliably; choosing among forty is
         # not, and that mismatch was the whole source of erratic calls.
@@ -1156,9 +1198,17 @@ class FREDOrchestrator:
         self._announce_tool(name)
 
         try:
-            return self.tools.execute(name, **arguments)
+            result = self.tools.execute(name, **arguments)
         except Exception as error:
-            return f"Error running tool '{name}': {error}"
+            result = f"Error running tool '{name}': {error}"
+
+        tool_call_log.log_tool_call(
+            self.last_turn_id, self._turn_utterance, name, arguments, result,
+            path="tool_loop",
+            tools_offered=self._last_tools_offered,
+            reason=self._last_routing_reason,
+        )
+        return result
 
     # =========================================================
     # MESSAGE BUILDING

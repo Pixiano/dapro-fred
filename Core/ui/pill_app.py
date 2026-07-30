@@ -282,6 +282,14 @@ class PillApp:
         # things the user never heard, and follow-ups go incoherent.
         if spoken and spoken != reply:
             print(f"[PillApp] interrupted — spoke {len(spoken)}/{len(reply)} chars")
+            # Weak negative signal on whatever tool this turn called, if
+            # any — see orchestrator/tool_call_log.py. Cutting FRED off
+            # doesn't always mean the tool was wrong, but it's evidence
+            # worth keeping alongside the stronger error/success signals.
+            from orchestrator import tool_call_log
+            tool_call_log.log_turn_feedback(
+                self.orchestrator.last_turn_id, interrupted=True
+            )
 
         self._to_idle_and_hide()
 

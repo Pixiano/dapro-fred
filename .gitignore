@@ -44,6 +44,10 @@ Core/data/logs/
 # Scheduled reminders (personal, runtime-generated)
 Core/data/reminders.sqlite
 
+# Tool-call routing log (personal usage data — utterances, arguments,
+# results). See Core/orchestrator/tool_call_log.py.
+Core/data/tool_call_log.jsonl
+
 # Overlay window position/palette (runtime-mutable user state, written
 # by the tray settings UI - regenerates from defaults if missing)
 Core/config/overlay_settings.json
