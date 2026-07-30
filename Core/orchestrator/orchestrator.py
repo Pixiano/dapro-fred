@@ -701,6 +701,27 @@ class FREDOrchestrator:
         valid = set(self.tools.list_tools())
         calls = []
 
+        # Gemma 4 native: <|tool_call>call:NAME{args}<tool_call|>
+        #
+        # This path exists because giving Gemma 4 its own chat template
+        # (needed to enable thinking — see CHAT_FORMAT_BY_TIER) gives up
+        # llama-cpp-python's tool-call parsing, which lives only in the
+        # chatml-function-calling handler. Nothing else recognised this
+        # syntax, so the raw call text was reaching the user as the answer.
+        for name, raw_args in re.findall(
+            r"<\|tool_call>\s*call:\s*([\w_]+)\s*(\{.*?\})?\s*<tool_call\|>",
+            content,
+            re.DOTALL,
+        ):
+            if name in valid:
+                calls.append({
+                    "id": f"gemma_call_{len(calls)}",
+                    "function": {
+                        "name": name,
+                        "arguments": self._gemma_args_to_json(raw_args),
+                    },
+                })
+
         for block in re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL):
             block = block.strip()
 
@@ -753,6 +774,34 @@ class FREDOrchestrator:
 
         return calls
 
+    @staticmethod
+    def _gemma_args_to_json(raw: str) -> str:
+        """
+        Convert Gemma 4's argument syntax to JSON.
+
+        It renders arguments near-JSON but not quite: keys are bare and
+        strings are wrapped in its own <|"|> token rather than quotes,
+        e.g. {location:<|"|>London<|"|>,days:3}. _execute_tool_call
+        json.loads() this, so it has to be real JSON by the time it
+        arrives, or every call fails as "malformed arguments".
+
+        Returns "{}" if the result still isn't valid JSON — a call with
+        no arguments is recoverable, a crash is not.
+        """
+        if not raw or not raw.strip() or raw.strip() == "{}":
+            return "{}"
+
+        text = raw.replace('<|"|>', '"')
+        # Quote bare keys: {name: -> {"name":
+        text = re.sub(r'([{,]\s*)([A-Za-z_]\w*)\s*:', r'\1"\2":', text)
+
+        try:
+            json.loads(text)
+            return text
+        except json.JSONDecodeError:
+            print(f"[orchestrator] could not parse Gemma args: {raw!r}")
+            return "{}"
+
     def _looks_like_leaked_tool_syntax(self, content: str) -> bool:
         """
         True when content is leaked tool-call scaffolding rather than a
@@ -769,6 +818,13 @@ class FREDOrchestrator:
         return bool(
             re.search(r"functions\.[\w_]+\s*[:\(]", text)
             or "<tool_call>" in text
+            # Gemma 4's own markers. Without these the model's raw
+            # "<|tool_call>call:get_current_time{}<tool_call|>" was
+            # spoken aloud verbatim, since it matches none of the
+            # patterns above.
+            or "<|tool_call>" in text
+            or "<tool_call|>" in text
+            or "<|channel>" in text
             or re.match(r"^<function=", text)
         )
 

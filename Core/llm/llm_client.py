@@ -1,5 +1,6 @@
 # Core/llm/llm_client.py
 
+import json
 import re
 
 from utils.gpu_bootstrap import ensure_cuda_dlls
@@ -273,21 +274,55 @@ class LLMClient:
     @staticmethod
     def _apply_thinking(messages: list, tier: str) -> list:
         """
-        Turn reasoning on for tiers that gate it behind enable_thinking.
+        Adapt the message list to a tier that uses its own chat template.
 
-        llama-cpp-python offers no way to pass jinja variables through
-        create_chat_completion, so the flag itself is unreachable. Gemma
-        4's template renders THINKING_MARKER at the top of the first
-        system turn when enable_thinking is true, so putting the marker
-        there directly yields the same rendered prompt.
+        Two adjustments, both required by Gemma 4's canonical template:
 
-        Returns a copy — mutating the caller's list would accumulate a
-        marker per turn, since the orchestrator reuses message history.
+        1. Enable reasoning. llama-cpp-python offers no way to pass jinja
+           variables through create_chat_completion, so `enable_thinking`
+           is unreachable. The template renders THINKING_MARKER at the top
+           of the first system turn when that flag is true, so putting the
+           marker there directly yields the same rendered prompt.
+
+        2. Convert tool-call arguments from a JSON string to a dict. The
+           OpenAI convention (and chatml-function-calling) passes them as
+           a string, but Gemma's template explicitly raise_exception()s on
+           that — so replaying tool-call history for the follow-up turn
+           aborted the whole generation with "arguments must be a JSON
+           object (mapping), not a string".
+
+        Returns a copy. Mutating the caller's list would stack a marker
+        per turn, since the orchestrator reuses message history.
         """
-        if tier not in THINKING_TIERS:
+        native_template = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling") is None
+
+        if tier not in THINKING_TIERS and not native_template:
             return messages
 
-        out = [dict(m) for m in messages]
+        out = []
+        for msg in messages:
+            msg = dict(msg)
+            tool_calls = msg.get("tool_calls")
+
+            if native_template and tool_calls:
+                converted = []
+                for call in tool_calls:
+                    call = dict(call)
+                    function = dict(call.get("function") or {})
+                    args = function.get("arguments")
+                    if isinstance(args, str):
+                        try:
+                            function["arguments"] = json.loads(args or "{}")
+                        except json.JSONDecodeError:
+                            function["arguments"] = {}
+                    call["function"] = function
+                    converted.append(call)
+                msg["tool_calls"] = converted
+
+            out.append(msg)
+
+        if tier not in THINKING_TIERS:
+            return out
 
         for msg in out:
             if msg.get("role") in ("system", "developer"):
