@@ -518,14 +518,29 @@ class FREDOrchestrator:
         self.tools.register(
             name="schedule_reminder",
             function=self.scheduler.schedule_reminder,
-            description="Set a one-off reminder that fires after N minutes.",
+            description=(
+                "Set a one-off reminder. Use 'when' for a clock time "
+                "(\"7pm\", \"tomorrow at 8:30am\", \"19:00\"), or 'minutes' "
+                "for an offset from now. Give exactly one of them."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
                     "message": {"type": "string", "description": "What to remind about."},
+                    "when": {
+                        "type": "string",
+                        "description": (
+                            "Absolute time, e.g. \"7pm\", \"7:30 am\", "
+                            "\"19:00\", \"tomorrow at 8am\", \"noon\". "
+                            "A time already past rolls to the next day."
+                        ),
+                    },
                     "minutes": {"type": "number", "description": "Minutes from now to fire."},
                 },
-                "required": ["message", "minutes"],
+                # Only the message is truly required — the time can arrive
+                # as either field, and marking both required made the model
+                # invent a minutes value alongside every clock time.
+                "required": ["message"],
             },
         )
 
