@@ -53,6 +53,14 @@ def get_weather(location: str = "") -> str:
     """
     Get current weather for a location (or the caller's
     auto-detected location if left blank), via wttr.in.
+
+    Requests condition, temperature and resolved location as three
+    separate fields (%C|%t|%l) rather than wttr.in's default one-line
+    report — the default glues an emoji straight onto the temperature
+    ("Mumbai, Maharashtra, IN: 🌦️ +28°C"), which is a location label plus
+    a symbol, not a sentence. Building the sentence here means an emoji
+    TTS can't reliably render never appears, and phrasing three fields is
+    still zero LLM calls.
     """
 
     url = f"https://wttr.in/{location}" if location else "https://wttr.in/"
@@ -60,17 +68,32 @@ def get_weather(location: str = "") -> str:
     try:
         response = requests.get(
             url,
-            params={"format": "3"},
+            params={"format": "%C|%t|%l"},
             headers={"User-Agent": "curl"},
             timeout=10,
         )
         response.raise_for_status()
+    except requests.HTTPError as e:
+        # An unresolvable location isn't a 200 with an error message in
+        # the body — wttr.in answers it with an actual 500, so
+        # raise_for_status() throws before the "location not found" text
+        # in the body is ever read, and every bad location used to surface
+        # as a raw "500 Server Error" string instead of a clean message.
+        body = (e.response.text or "").strip().lower() if e.response is not None else ""
+        if "not found" in body or "invalid" in body:
+            return f"Couldn't find weather for '{location}'." if location else "Couldn't fetch weather."
+        return f"Couldn't fetch weather: {e}"
     except requests.RequestException as e:
         return f"Couldn't fetch weather: {e}"
 
     text = response.text.strip()
+    parts = text.split("|")
 
-    if not text or "Unknown location" in text:
-        return f"Couldn't find weather for '{location}'."
+    if len(parts) != 3:
+        return f"Couldn't find weather for '{location}'." if location else "Couldn't fetch weather."
 
-    return text
+    condition, temp, resolved = (p.strip() for p in parts)
+    temp = temp.lstrip("+")
+
+    # Lowercased for "with light rain showers" — mid-sentence, not a label.
+    return f"It's {temp} in {resolved} right now, with {condition[0].lower()}{condition[1:]}."

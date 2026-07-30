@@ -327,7 +327,9 @@ def move_file(source: str, destination: str) -> str:
 
     src.rename(dest)
 
-    return f"Moved {src} -> {dest}"
+    # "to" rather than "->" — spoken output, and a literal arrow either
+    # gets read as a stray symbol or silently dropped.
+    return f"Moved {src} to {dest}"
 
 
 def rename_file(path: str, new_name: str) -> str:
@@ -343,7 +345,7 @@ def rename_file(path: str, new_name: str) -> str:
     dest = src.parent / new_name
     src.rename(dest)
 
-    return f"Renamed {src.name} -> {dest.name}"
+    return f"Renamed {src.name} to {dest.name}"
 
 
 def read_file(path: str, max_chars: int = 4000) -> str:

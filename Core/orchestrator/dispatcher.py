@@ -45,6 +45,32 @@ class Dispatcher:
                 self._route_get_time,
             ),
             (
+                # A word-problem trigger ("calculate", "what is", "how
+                # much is"...) followed by a chunk that actually contains
+                # both a digit and an operator — the operator requirement
+                # is what stops this from swallowing "what is the capital
+                # of France", which has neither.
+                re.compile(
+                    r"^(?:calculate|compute|work out|solve|"
+                    r"what(?:'s| is)|how much is)\s+"
+                    r"(?P<expr>(?=.*\d)(?=.*(?:[+\-*/^%]|plus|minus|times|"
+                    r"multiplied|divided|percent|sqrt|square root)).+?)\??$",
+                    re.IGNORECASE,
+                ),
+                self._route_calculate,
+            ),
+            (
+                # Bare arithmetic with no question prefix at all —
+                # "12 times 8", "17% of 300" — a leading number followed
+                # by an operator, spoken or symbolic.
+                re.compile(
+                    r"^-?\d+(?:\.\d+)?\s*(?:[+\-*/^%]|plus|minus|times|"
+                    r"multiplied by|divided by|percent of)\s+.+$",
+                    re.IGNORECASE,
+                ),
+                self._route_calculate_bare,
+            ),
+            (
                 re.compile(
                     r"^create (?:a |an )?folder (?:named |called )?(?P<target>.+)$",
                     re.IGNORECASE,
@@ -216,6 +242,16 @@ class Dispatcher:
     def _route_get_time(match: re.Match) -> dict:
 
         return {"tool": "get_current_time", "arguments": {}}
+
+    @staticmethod
+    def _route_calculate(match: re.Match) -> dict:
+
+        return {"tool": "calculate", "arguments": {"expression": match.group("expr").strip()}}
+
+    @staticmethod
+    def _route_calculate_bare(match: re.Match) -> dict:
+
+        return {"tool": "calculate", "arguments": {"expression": match.group(0).strip()}}
 
     @staticmethod
     def _route_create_folder(match: re.Match) -> dict:

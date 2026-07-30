@@ -34,6 +34,15 @@ _CLOCK_RE = re.compile(
     re.IGNORECASE,
 )
 
+def _fire_reminder(message: str):
+    """
+    The reminder job's actual target — never notify() directly, so the
+    "Here's your reminder:" framing lives only here, at fire time, and
+    never gets stored as the job's args (see schedule_reminder).
+    """
+    notify(f"Here's your reminder: {message}", title="Reminder")
+
+
 _UNIT_MINUTES = {
     "m": 1, "min": 1, "mins": 1, "minute": 1, "minutes": 1,
     "h": 60, "hr": 60, "hrs": 60, "hour": 60, "hours": 60,
@@ -220,8 +229,15 @@ class ReminderScheduler:
         if run_at <= now:
             return "That time has already passed."
 
+        # Firing goes through _fire_reminder rather than notify directly,
+        # so job.args stays the plain original message — used by
+        # list_scheduled to show what the reminder is actually about — and
+        # the "Here's your reminder:" framing is added only at the moment
+        # it's spoken. Baking the framing into args instead produced a
+        # visibly double-wrapped list entry: "Reminder: \"Here's your
+        # reminder: buy milk\"".
         self._scheduler.add_job(
-            notify,
+            _fire_reminder,
             args=[message],
             trigger="date",
             run_date=run_at,
@@ -252,12 +268,18 @@ class ReminderScheduler:
             return "That's over a day — set a reminder instead."
 
         run_at = datetime.now() + timedelta(minutes=duration)
-        spoken = format_duration(duration)
-        message = f"Timer finished: {label}" if label else f"Your {spoken} timer is up."
+        duration_text = format_duration(duration)
+
+        # A label already identifies the timer better than its duration
+        # does — "Your pasta timer is up!" needs no number attached, and
+        # cramming both in ("your 10 minutes pasta timer is up") reads as
+        # broken grammar rather than more informative.
+        message = f"Your {label} timer is up!" if label else f"Your {duration_text} timer is up!"
 
         self._scheduler.add_job(
             notify,
             args=[message],
+            kwargs={"title": "Timer"},
             trigger="date",
             run_date=run_at,
             id=self._next_job_id("timer"),
@@ -266,7 +288,7 @@ class ReminderScheduler:
         )
 
         suffix = f" for {label}" if label else ""
-        return f"Timer set for {spoken}{suffix}."
+        return f"Timer set for {duration_text}{suffix}."
 
     # =========================================================
     # FILE WATCH (in-memory only — see class docstring)
@@ -327,9 +349,18 @@ class ReminderScheduler:
         lines = []
 
         for job in jobs:
-            kind = "reminder" if job.id.startswith("reminder_") else "file watch"
+            if job.id.startswith("reminder_"):
+                kind = "Reminder"
+            elif job.id.startswith("timer_"):
+                kind = "Timer"
+            else:
+                kind = "File watch"
+
+            # A raw ISO timestamp read aloud is a string of digits —
+            # "twenty twenty six dash oh seven dash thirty". describe_when
+            # already exists for exactly this from the reminder-time work.
             when = (
-                job.next_run_time.strftime("%Y-%m-%d %H:%M:%S")
+                describe_when(job.next_run_time)
                 if job.next_run_time else "pending"
             )
             detail = job.args[0] if job.args else ""

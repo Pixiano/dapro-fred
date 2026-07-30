@@ -113,14 +113,77 @@ def _eval_node(node):
     raise ValueError("unsupported expression")
 
 
+# Phrase words per top-level AST operator, keyed off the actual parsed
+# expression rather than guessed by regex — Python's ast already resolves
+# operator precedence, so the root node of "3+4*5" is correctly Add even
+# though the text starts by looking like Mult. Reusing that structure is
+# more reliable than re-detecting it.
+_OP_PHRASE = {
+    ast.Add: "The sum of {l} and {r} is {v}.",
+    ast.Sub: "{l} minus {r} is {v}.",
+    ast.Mult: "The product of {l} and {r} is {v}.",
+    ast.Div: "{l} divided by {r} is {v}.",
+    ast.FloorDiv: "{l} divided by {r}, rounded down, is {v}.",
+    ast.Mod: "{l} modulo {r} is {v}.",
+    ast.Pow: "{l} to the power of {r} is {v}.",
+}
+
+# A rendered operand longer than this reads as a run-on clause rather than
+# a number ("the sum of 3 + 4 * 5 - 2 and 7 is..."), so anything past it
+# falls back to the plain answer instead of a broken-sounding sentence.
+_MAX_OPERAND_CHARS = 20
+
+
+def _describe_calculation(root, value, percent_of: tuple = None) -> str:
+    """
+    A spoken sentence for the result, or "" if the shape doesn't map to
+    one cleanly — the caller falls back to a plain answer rather than
+    forcing a phrase that would read worse than none.
+    """
+    if percent_of:
+        pct, base = percent_of
+        return f"{pct}% of {base} is {value}."
+
+    if (
+        isinstance(root, ast.Call)
+        and isinstance(root.func, ast.Name)
+        and root.func.id == "sqrt"
+        and len(root.args) == 1
+    ):
+        arg = ast.unparse(root.args[0])
+        if len(arg) <= _MAX_OPERAND_CHARS:
+            return f"The square root of {arg} is {value}."
+        return ""
+
+    if isinstance(root, ast.BinOp) and type(root.op) in _OP_PHRASE:
+        left, right = ast.unparse(root.left), ast.unparse(root.right)
+        # Both sides must be plain numbers, not just short. "3+4*5"'s root
+        # is Add(3, Mult(4,5)) — right unparses to "4 * 5", short enough
+        # to pass a length check but still an operator symbol a TTS voice
+        # would read literally. Rather than recurse into nested phrasing,
+        # bail to the plain answer once either side isn't just a number.
+        if (
+            len(left) <= _MAX_OPERAND_CHARS and len(right) <= _MAX_OPERAND_CHARS
+            and re.fullmatch(r"-?\d+(\.\d+)?", left)
+            and re.fullmatch(r"-?\d+(\.\d+)?", right)
+        ):
+            return _OP_PHRASE[type(root.op)].format(l=left, r=right, v=value)
+
+    return ""
+
+
 def calculate(expression: str) -> str:
     """
-    Evaluate an arithmetic expression exactly.
+    Evaluate an arithmetic expression exactly, and phrase the result as a
+    sentence rather than an equation.
 
     Exists because a 4B model does arithmetic by pattern, not by
     calculating — it answered a bat-and-ball question wrong until forced
     to reason, and longer sums are worse. Delegating to Python makes the
-    answer correct by construction.
+    answer correct by construction; phrasing it here rather than handing
+    "12 * 8 = 96" to the LLM for a second generation pass to turn into
+    words means one deterministic tool call replaces two model calls, and
+    the wording can never drift from the actual arithmetic.
 
     Parsed via ast with an explicit operator whitelist, never eval() —
     the input reaches here from speech through an LLM, so it must not be
@@ -130,8 +193,20 @@ def calculate(expression: str) -> str:
     if not text:
         return "Give me something to calculate."
 
-    # "17% of 300" and "17 percent of 300" -> 17/100*300. Handled before
-    # the bare-% rule below, which would otherwise leave a stray "of".
+    # "17% of 300" and "17 percent of 300" -> 17/100*300. Captured before
+    # rewriting so the phrase can still say "17% of 300", rather than
+    # reporting the top-level op after rewrite, which would be Mult —
+    # "the product of 0.17 and 300" is technically true and a strange
+    # thing to hear in answer to "what's 17 percent of 300".
+    percent_match = re.search(
+        r"(\d+(?:\.\d+)?)\s*(?:%|percent)\s+of\s+(\d+(?:\.\d+)?)",
+        text,
+        re.IGNORECASE,
+    )
+    percent_of = (
+        (percent_match.group(1), percent_match.group(2)) if percent_match else None
+    )
+
     text = re.sub(
         r"(\d+(?:\.\d+)?)\s*(?:%|percent)\s+of\s+",
         r"(\1/100)*",
@@ -152,7 +227,8 @@ def calculate(expression: str) -> str:
     text = text.replace("%", "/100").rstrip("=").strip()
 
     try:
-        value = _eval_node(ast.parse(text, mode="eval").body)
+        root = ast.parse(text, mode="eval").body
+        value = _eval_node(root)
     except Exception:
         return f"I couldn't read \"{expression}\" as a calculation."
 
@@ -161,7 +237,8 @@ def calculate(expression: str) -> str:
         # ten decimal places read aloud is noise.
         rounded = round(value, 4)
         value = int(rounded) if rounded == int(rounded) else rounded
-    return f"{expression} = {value}"
+
+    return _describe_calculation(root, value, percent_of) or f"That comes out to {value}."
 
 
 # =========================================================
@@ -172,7 +249,9 @@ def get_system_status() -> str:
     """Battery, CPU, memory, disk and uptime in one spoken line."""
     import psutil
 
-    parts = []
+    # Full sentences rather than "CPU 5%. RAM 62% (19.3 of 31.1 GB)." — the
+    # label:value fragments read like a log line, not something said aloud.
+    sentences = []
 
     battery = None
     try:
@@ -180,33 +259,43 @@ def get_system_status() -> str:
     except Exception:
         pass
     if battery is not None:
-        state = "charging" if battery.power_plugged else "on battery"
-        parts.append(f"Battery {int(battery.percent)}% ({state})")
-        if not battery.power_plugged and battery.secsleft and battery.secsleft > 0:
-            parts.append(f"~{battery.secsleft // 60} min left")
+        pct = int(battery.percent)
+        if battery.power_plugged:
+            sentences.append(f"Your battery is at {pct}% and charging.")
+        else:
+            sentence = f"Your battery is at {pct}%."
+            if battery.secsleft and battery.secsleft > 0:
+                sentence = (
+                    f"Your battery is at {pct}%, "
+                    f"about {battery.secsleft // 60} minutes left."
+                )
+            sentences.append(sentence)
 
-    parts.append(f"CPU {psutil.cpu_percent(interval=0.3):.0f}%")
-
+    cpu = psutil.cpu_percent(interval=0.3)
     memory = psutil.virtual_memory()
-    parts.append(
-        f"RAM {memory.percent:.0f}% "
-        f"({memory.used / 2**30:.1f} of {memory.total / 2**30:.1f} GB)"
+    sentences.append(
+        f"CPU usage is at {cpu:.0f}%, and you're using {memory.percent:.0f}% "
+        f"of your RAM — {memory.used / 2**30:.1f} of {memory.total / 2**30:.1f} gigabytes."
     )
 
     try:
         disk = shutil.disk_usage(os.environ.get("SystemDrive", "C:") + "\\")
-        parts.append(f"Disk {disk.free / 2**30:.0f} GB free")
+        sentences.append(f"You've got {disk.free / 2**30:.0f} gigabytes of disk space free.")
     except Exception:
         pass
 
     try:
         uptime = timedelta(seconds=int(time.time() - psutil.boot_time()))
         hours, remainder = divmod(int(uptime.total_seconds()), 3600)
-        parts.append(f"up {hours}h {remainder // 60}m")
+        minutes = remainder // 60
+        bits = ([f"{hours} hour{'s' if hours != 1 else ''}"] if hours else []) + (
+            [f"{minutes} minute{'s' if minutes != 1 else ''}"] if minutes or not hours else []
+        )
+        sentences.append(f"The PC's been running for {' and '.join(bits)}.")
     except Exception:
         pass
 
-    return ". ".join(parts) + "."
+    return " ".join(sentences)
 
 
 def get_network_status() -> str:
@@ -219,9 +308,9 @@ def get_network_status() -> str:
         online = False
 
     if not online:
-        return "No internet connection."
+        return "You're not connected to the internet right now."
 
-    parts = ["Online"]
+    sentence = "You're online"
 
     try:
         result = subprocess.run(
@@ -238,16 +327,22 @@ def get_network_status() -> str:
             elif clean.lower().startswith("signal") and ":" in clean:
                 signal = clean.split(":", 1)[1].strip()
         if ssid:
-            parts.append(f"on {ssid}" + (f" ({signal} signal)" if signal else ""))
+            sentence += f", connected to {ssid}"
+            if signal:
+                sentence += f" with {signal} signal"
     except Exception:
         pass
+
+    sentence += "."
 
     try:
-        parts.append(f"local IP {socket.gethostbyname(socket.gethostname())}")
+        sentence += f" Your local IP is {socket.gethostbyname(socket.gethostname())}."
     except Exception:
         pass
 
-    return ", ".join(parts) + "."
+    parts = [sentence]
+
+    return "".join(parts)
 
 
 # =========================================================

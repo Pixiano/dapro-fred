@@ -332,17 +332,29 @@ class PillApp:
         already in flight — talking over yourself is worse than a toast
         that waits, and the toast has already fired regardless.
         """
-        if not self.tts or self._recording:
+        if not self.tts:
+            print("[PillApp] proactive speech skipped: no TTS configured")
+            return
+        if self._recording:
+            print("[PillApp] proactive speech skipped: user is mid-recording")
             return
 
         def run():
             if not self._turn_lock.acquire(blocking=False):
+                # Silent before this fix — a reminder firing during a
+                # live conversation turn would vanish with no trace, which
+                # is indistinguishable from a real bug when reported as
+                # "it didn't speak". Logged now so the two are tellable
+                # apart.
+                print("[PillApp] proactive speech skipped: a turn is already running")
                 return
             try:
                 self.window.set_transcript(message, ttl=6.0)
                 self.window.set_state("speaking")
                 self.window.show()
-                self.tts.speak(message, on_level=self.window.set_level)
+                print(f"[PillApp] speaking proactively: {message!r}")
+                spoken = self.tts.speak(message, on_level=self.window.set_level)
+                print(f"[PillApp] proactive speech done ({len(spoken)}/{len(message)} chars spoken)")
             except Exception as e:
                 print(f"[PillApp] proactive speech failed: {e}")
             finally:

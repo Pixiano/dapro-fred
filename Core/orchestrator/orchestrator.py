@@ -67,6 +67,33 @@ TOOL_LABELS = {
 }
 
 
+# Tools whose own return string is already a complete spoken sentence,
+# so the tool-calling loop's second LLM pass (re-phrasing the raw result
+# into something sayable) is skipped entirely when every tool called this
+# turn is in this set — see the skip in _generate_with_tools. Deliberately
+# a short, conservative list: only tools recently rewritten to return full
+# sentences on purpose (see tools/assist_tools.py, tools/machine_tools.py,
+# orchestrator/scheduler.py), not "whatever currently happens to look
+# okay" — a tool added later defaults to going through the follow-up pass
+# until someone deliberately decides its phrasing needs no help.
+SELF_NARRATING_TOOLS = {
+    "calculate",
+    "get_current_time",
+    "get_weather",
+    "get_system_status",
+    "get_network_status",
+    "get_volume",
+    "set_volume",
+    "mute",
+    "get_brightness",
+    "set_brightness",
+    "schedule_reminder",
+    "set_timer",
+    "list_scheduled",
+    "cancel_scheduled",
+}
+
+
 class FREDOrchestrator:
     """
     Central runtime coordinator for F.R.E.D.
@@ -1005,6 +1032,18 @@ class FREDOrchestrator:
                 "tool_call_id": call.get("id", ""),
                 "content": str(result),
             })
+
+        # Skip the second LLM call entirely when every tool this turn
+        # called already returns a complete spoken sentence — see
+        # SELF_NARRATING_TOOLS. calculate() is the motivating case: without
+        # this, "12 times 8" cost two LLM calls (pick the tool, then
+        # re-phrase "12 * 8 = 96" into English) to say something the tool
+        # already said correctly on its own. Re-asking the model here also
+        # risks it silently rewording — or mangling — an answer that was
+        # already exactly right.
+        called_names = {c.get("function", {}).get("name") for c in tool_calls}
+        if called_names and called_names <= SELF_NARRATING_TOOLS:
+            return " ".join(tool_results)
 
         # Ask once more, now with tool results in context, for the
         # natural-language reply FRED actually says out loud. The
