@@ -17,6 +17,7 @@
 # discovery and does not use torch at all — so a CPU-only torch install
 # in this venv says nothing about whether this runs on the GPU.
 
+import gc
 import threading
 import time
 
@@ -28,6 +29,7 @@ from config.settings import (
     WHISPER_DEVICE,
     WHISPER_COMPUTE_TYPE,
     WHISPER_LANGUAGE,
+    WHISPER_WARMUP_ON_RELOAD,
     MAX_UTTERANCE_SECONDS,
     STT_SAMPLE_RATE,
 )
@@ -64,28 +66,88 @@ class WhisperSTT:
         self.level = 0.0
         self._max_frames = int(MAX_UTTERANCE_SECONDS * self.samplerate)
 
-        from faster_whisper import WhisperModel
+        self._name = model_name or WHISPER_MODEL
+        self._device = device or WHISPER_DEVICE
+        self._compute_type = compute_type or WHISPER_COMPUTE_TYPE
 
-        name = model_name or WHISPER_MODEL
-        device = device or WHISPER_DEVICE
-        compute_type = compute_type or WHISPER_COMPUTE_TYPE
+        self.model = None
+        self.device = self._device
+        self.compute_type = self._compute_type
+        self._model_lock = threading.RLock()
 
-        t0 = time.time()
-        self.model = WhisperModel(name, device=device, compute_type=compute_type)
+        self.ensure_loaded()
 
-        # Read the *resolved* device off the CTranslate2 model rather than
-        # echoing the requested one — "auto" silently falls back to CPU,
-        # and that's the difference between a 0.25s and a 4s transcript.
-        ct2 = self.model.model
-        self.device = getattr(ct2, "device", device)
-        self.compute_type = getattr(ct2, "compute_type", compute_type)
-        load_s = time.time() - t0
+    # =========================================================
+    # LOAD / UNLOAD (see settings.WHISPER_UNLOAD_AFTER_LLM_SECONDS)
+    # =========================================================
+    #
+    # Deliberately separate from recording. sd.InputStream needs no model
+    # at all, so capture starts the instant the hotkey goes down while the
+    # model loads alongside it — otherwise Whisper's ~3s would land in
+    # front of the user and cost them the start of their own sentence.
 
-        self._warm_up()
-        print(
-            f"[WhisperSTT] '{name}' on {self.device}/{self.compute_type} — "
-            f"load {load_s:.1f}s, warm-up {time.time() - t0 - load_s:.1f}s"
-        )
+    def is_loaded(self) -> bool:
+        return self.model is not None
+
+    def ensure_loaded(self, warm: bool = None) -> bool:
+        with self._model_lock:
+            if self.model is not None:
+                return True
+
+            from faster_whisper import WhisperModel
+
+            t0 = time.time()
+            try:
+                self.model = WhisperModel(
+                    self._name,
+                    device=self._device,
+                    compute_type=self._compute_type,
+                )
+            except Exception as e:
+                print(f"[WhisperSTT] load failed: {e}")
+                self.model = None
+                return False
+
+            # Read the *resolved* device off the CTranslate2 model rather
+            # than echoing the requested one — "auto" silently falls back
+            # to CPU, and that's the difference between a 0.25s and a 4s
+            # transcript.
+            ct2 = self.model.model
+            self.device = getattr(ct2, "device", self._device)
+            self.compute_type = getattr(ct2, "compute_type", self._compute_type)
+            load_s = time.time() - t0
+
+            if warm is None:
+                warm = WHISPER_WARMUP_ON_RELOAD
+            if warm:
+                self._warm_up()
+
+            print(
+                f"[WhisperSTT] '{self._name}' on {self.device}/{self.compute_type} — "
+                f"load {load_s:.1f}s, ready in {time.time() - t0:.1f}s"
+            )
+            return True
+
+    def unload(self) -> bool:
+        """Free the model's VRAM — measured at 1072 of 1287 MiB reclaimed."""
+        with self._model_lock:
+            if self.model is None:
+                return False
+            if self._recording:
+                # Mid-utterance; the watchdog will retry on its next tick.
+                return False
+
+            model, self.model = self.model, None
+            try:
+                inner = getattr(model, "model", None)
+                if inner is not None:
+                    del inner
+            except Exception:
+                pass
+            del model
+            gc.collect()
+            print("[WhisperSTT] unloaded — VRAM released")
+            return True
 
     def _warm_up(self):
         """
@@ -200,6 +262,11 @@ class WhisperSTT:
         # transcription — Whisper will happily hallucinate a phrase out
         # of a few milliseconds of room noise.
         if len(audio) < min_seconds * self.samplerate:
+            return ""
+
+        # Load now if the watchdog unloaded us. Normally already done by
+        # the hotkey-press preload, so this is the short-utterance case.
+        if not self.ensure_loaded():
             return ""
 
         try:

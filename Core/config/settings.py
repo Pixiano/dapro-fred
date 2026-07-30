@@ -137,6 +137,39 @@ CONTEXT_WINDOW_BY_TIER = {
 
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
 
+# =========================================================
+# IDLE MODEL UNLOADING
+# =========================================================
+#
+# FRED runs all day now (see install_startup.py), so holding every model
+# resident costs VRAM you might want back. Measured on this machine:
+#
+#   LLM (Gemma 4 E4B) : +4814 MiB, reload 1.90s
+#   Whisper turbo     : +1287 MiB, reload 2.94s (+~1.4s if re-warmed)
+#
+# Both runtimes genuinely release on close — 4566 and 1072 MiB reclaimed
+# respectively, so this is worth doing rather than theatre. Together it's
+# ~6.1GB, about 37% of a 16GB card.
+#
+# The reload cost is mostly hidden because loading starts on the hotkey
+# press, concurrently with speech, rather than on demand after it. Audio
+# capture needs no model at all, so recording begins instantly either way
+# and only a very short utterance can outrun the load.
+#
+# Whisper waits for the LLM to have been gone a while before going itself:
+# it's the more expensive one to reload and the one needed soonest after a
+# keypress, so it earns a longer grace period.
+LLM_IDLE_UNLOAD_SECONDS = 60 * 60          # 1 hour of no use
+WHISPER_UNLOAD_AFTER_LLM_SECONDS = 15 * 60  # + 15 min => 1h15m total
+MODEL_WATCHDOG_TICK_SECONDS = 30
+
+# Re-run Whisper's warm-up decode after a reload. The first CUDA
+# transcription in a fresh process cost ~14s against ~0.25s warm; after an
+# unload the CUDA context survives, so a reload may not need the full
+# warm-up. Left on because a slow first utterance is more annoying than
+# 1.4s spent while the user is still talking.
+WHISPER_WARMUP_ON_RELOAD = True
+
 # Low for repeatability: the same question should get the same answer,
 # which is what makes an assistant feel dependable.
 #

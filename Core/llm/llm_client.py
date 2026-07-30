@@ -1,5 +1,6 @@
 # Core/llm/llm_client.py
 
+import gc
 import json
 import re
 
@@ -234,6 +235,55 @@ class LLMClient:
     # =========================================================
     # MODEL LOADING
     # =========================================================
+
+    # =========================================================
+    # LOAD / UNLOAD (see settings.LLM_IDLE_UNLOAD_SECONDS)
+    # =========================================================
+
+    def is_loaded(self, tier: str = None) -> bool:
+        return (tier or self.default_tier) in self._loaded
+
+    def ensure_loaded(self, tier: str = None):
+        """
+        Load ahead of use. Called on the hotkey press so the ~1.9s load
+        happens while the user is still speaking instead of after.
+        """
+        try:
+            self._get_model(tier or self.default_tier)
+            return True
+        except Exception as e:
+            print(f"[LLM] preload failed: {e}")
+            return False
+
+    def unload(self, tier: str = None) -> int:
+        """
+        Free a loaded model's VRAM. Returns how many models were dropped.
+
+        llama_cpp's Llama.close() is what actually releases — measured at
+        4566 of 4814 MiB reclaimed. The ~248 MiB left is the CUDA context,
+        which is reused on the next load rather than leaked per cycle.
+        """
+        targets = [tier] if tier else list(self._loaded.keys())
+        dropped = 0
+
+        for name in targets:
+            model = self._loaded.pop(name, None)
+            if model is None:
+                continue
+            try:
+                close = getattr(model, "close", None)
+                if close:
+                    close()
+            except Exception as e:
+                print(f"[LLM] close() failed for '{name}': {e}")
+            del model
+            dropped += 1
+
+        if dropped:
+            gc.collect()
+            print(f"[LLM] unloaded {dropped} model(s) — VRAM released")
+
+        return dropped
 
     def _get_model(self, tier: str) -> Llama:
 

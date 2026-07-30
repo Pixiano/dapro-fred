@@ -28,6 +28,7 @@ from orchestrator.orchestrator import FREDOrchestrator
 from input.hotkey import HoldHotkey
 from ui.pill.indicators import random_indicator
 from ui.pill.window import PillWindow
+from utils.model_lifecycle import ModelLifecycle
 
 # How long the transcript of what you said stays on screen.
 TRANSCRIPT_TTL = 2.5
@@ -79,6 +80,15 @@ class PillApp:
         self._turn_thread = None
         self._running = True
 
+        # Idle VRAM reclaim. `busy` covers both an in-flight turn and an
+        # active recording, so nothing can be unloaded out from under a
+        # request.
+        self.lifecycle = ModelLifecycle(
+            llm=self.orchestrator.llm,
+            stt=self.stt,
+            busy=lambda: self._recording or self._turn_lock.locked(),
+        )
+
         self.tray = None
 
     # =========================================================
@@ -92,6 +102,7 @@ class PillApp:
     def _on_ready(self):
         self.hotkey.install()
         self._start_tray()
+        self.lifecycle.start()
         print(
             "[PillApp] Ready — hold LEFT Ctrl+Alt to talk. "
             "Quit from the tray icon."
@@ -122,6 +133,7 @@ class PillApp:
     def shutdown(self):
         self._running = False
         self._cancel.set()
+        self.lifecycle.stop()
         try:
             self.hotkey.uninstall()
         except Exception:
@@ -156,6 +168,10 @@ class PillApp:
         # New indicator per activation, so both styles get seen in real
         # use rather than being compared from screenshots.
         self.window.set_indicator(random_indicator(random))
+
+        # Start reloading anything the watchdog freed, now, so it happens
+        # while the user speaks rather than after. Returns immediately.
+        self.lifecycle.preload()
 
         self.window.clear_transcript()
         self.window.set_state("listening")
@@ -270,6 +286,8 @@ class PillApp:
         self._to_idle_and_hide()
 
     def _to_idle_and_hide(self):
+        # Restart the idle clock from the end of the turn, not its start.
+        self.lifecycle.touch()
         self.window.set_level(0.0)
         self.window.set_state("idle")
         time.sleep(IDLE_LINGER)
