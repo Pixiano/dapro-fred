@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import datetime
 
 from state.conversation_state import ConversationState
 from memory.memory_manager import MemoryManager
@@ -16,6 +17,53 @@ from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import intent
 from config.settings import TOOLS_ENABLED
+
+
+# Present-tense phrases for the pill's tool-fire confirmation. Written as
+# what FRED is doing rather than the function name, since this is read by a
+# human at a glance, not parsed.
+TOOL_LABELS = {
+    "open_website": "Opening website",
+    "launch_application": "Launching app",
+    "open_path": "Opening",
+    "web_search": "Searching the web",
+    "get_weather": "Checking weather",
+    "get_current_time": "Checking the time",
+    "calculate": "Calculating",
+    "get_system_status": "Checking system",
+    "get_network_status": "Checking network",
+    "media_control": "Media",
+    "power_action": "Power",
+    "get_volume": "Checking volume",
+    "set_volume": "Setting volume",
+    "mute": "Muting",
+    "get_brightness": "Checking brightness",
+    "set_brightness": "Setting brightness",
+    "get_clipboard": "Reading clipboard",
+    "set_clipboard": "Copying",
+    "take_screenshot": "Taking screenshot",
+    "list_windows": "Listing windows",
+    "focus_window": "Switching window",
+    "minimize_window": "Minimising",
+    "maximize_window": "Maximising",
+    "close_window": "Closing window",
+    "list_processes": "Listing processes",
+    "kill_process": "Ending process",
+    "create_text_file": "Creating file",
+    "create_folder": "Creating folder",
+    "append_to_file": "Adding to file",
+    "read_file": "Reading file",
+    "list_directory": "Listing folder",
+    "search_files": "Searching files",
+    "move_file": "Moving file",
+    "rename_file": "Renaming",
+    "delete_file": "Deleting",
+    "schedule_reminder": "Setting reminder",
+    "set_timer": "Setting timer",
+    "schedule_file_watch": "Watching for file",
+    "list_scheduled": "Checking reminders",
+    "cancel_scheduled": "Cancelling",
+}
 
 
 class FREDOrchestrator:
@@ -171,6 +219,12 @@ class FREDOrchestrator:
 
         if self.tools.is_destructive(tool_name):
             return self._request_confirmation(tool_name, arguments)
+
+        # Announced here as well as in _execute_tool_call: the dispatcher
+        # resolves obvious commands without ever reaching the tool-calling
+        # loop, so hooking only that loop left the fast path — which is
+        # most of the common commands — with no visual confirmation.
+        self._announce_tool(tool_name)
 
         try:
             return str(self.tools.execute(tool_name, **arguments))
@@ -1068,6 +1122,20 @@ class FREDOrchestrator:
             or re.match(r"^<function=", text)
         )
 
+    # Set by the UI controller to show what FRED just did. Left as None
+    # for the CLI, which prints tool results anyway. Phase 16 asked for
+    # "visual confirmation when tools fire" — without it, an action is
+    # audio-only and there's no way to see that it actually happened.
+    on_tool_event = None
+
+    def _announce_tool(self, name: str):
+        if not self.on_tool_event:
+            return
+        try:
+            self.on_tool_event(TOOL_LABELS.get(name, name.replace("_", " ")))
+        except Exception as e:
+            print(f"[orchestrator] tool-event hook failed: {e}")
+
     def _execute_tool_call(self, call: dict) -> str:
 
         function = call.get("function", {})
@@ -1079,6 +1147,8 @@ class FREDOrchestrator:
         except json.JSONDecodeError:
             return f"Error: malformed arguments for tool '{name}'."
 
+        self._announce_tool(name)
+
         try:
             return self.tools.execute(name, **arguments)
         except Exception as error:
@@ -1087,6 +1157,33 @@ class FREDOrchestrator:
     # =========================================================
     # MESSAGE BUILDING
     # =========================================================
+
+    @staticmethod
+    def _screen_context() -> str:
+        """
+        One line naming the active window and the local time.
+
+        Deliberately just the title, not a screenshot — it costs a single
+        Win32 call, needs no vision model, and answers most of what
+        context is actually for. Returns "" on any failure so a missing
+        window manager can never break a turn.
+        """
+        try:
+            import win32gui
+
+            title = (win32gui.GetWindowText(win32gui.GetForegroundWindow()) or "").strip()
+        except Exception:
+            title = ""
+
+        now = datetime.now().strftime("%A %d %B, %I:%M %p").replace(" 0", " ")
+
+        if not title or title in ("FRED_PILL", "Program Manager"):
+            return f"Current context: it is {now}."
+
+        return (
+            f"Current context: it is {now}. The user is currently looking at "
+            f"\"{title}\". Mention this only if it is relevant to what they asked."
+        )
 
     def _build_messages(
         self,
@@ -1107,6 +1204,17 @@ class FREDOrchestrator:
             "role": "system",
             "content": SYSTEM_PROMPT
         })
+
+        # -----------------------------
+        # Ambient screen context
+        # -----------------------------
+        # What's in front of the user right now, so "what am I doing" and
+        # app-implicit requests ("close this", "what's this error") have
+        # something to resolve against. Cheap: one Win32 title read per
+        # turn, no screenshot, no vision model. Stays local like the rest.
+        context = self._screen_context()
+        if context:
+            messages.append({"role": "system", "content": context})
 
         # -----------------------------
         # Inject memory context

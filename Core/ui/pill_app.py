@@ -62,6 +62,17 @@ class PillApp:
             on_release=self._on_hold_end,
         )
 
+        # Show in the pill what FRED is doing when a tool fires, so an
+        # action isn't audio-only (Phase 16's "visual confirmation").
+        self.orchestrator.on_tool_event = self._on_tool_event
+
+        # Proactive speech (reminders, timers) goes through Kokoro rather
+        # than the SAPI fallback, so an interruption sounds like the same
+        # assistant you were just talking to.
+        if self.tts:
+            from utils import notifier
+            notifier.set_voice(self._speak_proactive)
+
         self._cancel = threading.Event()
         self._turn_lock = threading.Lock()
         self._recording = False
@@ -277,6 +288,42 @@ class PillApp:
     # for a "confirm" button to confirm. They're retained as requested;
     # they become meaningfully different if a latch/toggle mode is added,
     # where an explicit send and an explicit discard are both needed.
+
+    # =========================================================
+    # HOOKS FROM THE ORCHESTRATOR / SCHEDULER
+    # =========================================================
+
+    def _on_tool_event(self, label: str):
+        """A tool is about to run — flash what it is on the pill."""
+        self.window.set_transcript(label + "...", ttl=2.0)
+
+    def _speak_proactive(self, message: str):
+        """
+        Speak a reminder or timer in FRED's own voice, showing the pill
+        while it talks so an unprompted interruption has a face.
+
+        Runs on the scheduler's thread. Skipped entirely if a turn is
+        already in flight — talking over yourself is worse than a toast
+        that waits, and the toast has already fired regardless.
+        """
+        if not self.tts or self._recording:
+            return
+
+        def run():
+            if not self._turn_lock.acquire(blocking=False):
+                return
+            try:
+                self.window.set_transcript(message, ttl=6.0)
+                self.window.set_state("speaking")
+                self.window.show()
+                self.tts.speak(message, on_level=self.window.set_level)
+            except Exception as e:
+                print(f"[PillApp] proactive speech failed: {e}")
+            finally:
+                self._turn_lock.release()
+                self._to_idle_and_hide()
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _on_cancel_button(self):
         self._cancel.set()

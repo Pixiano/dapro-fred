@@ -6,19 +6,43 @@
 
 from winotify import Notification
 
-from audio.tts import TTSManager
-
 _tts = None
+_voice = None
 
 
-def _get_tts() -> TTSManager:
+def set_voice(speak_callable):
+    """
+    Route proactive speech through FRED's own voice.
 
+    GUI mode speaks with Kokoro while this module's fallback is SAPI, so
+    without this a reminder interrupted you in a completely different —
+    and much worse — voice than the assistant you'd been talking to. The
+    Kokoro instance lives in the UI controller, which the scheduler must
+    not depend on, so the controller injects it here instead.
+
+    Pass None to fall back to SAPI.
+    """
+    global _voice
+    _voice = speak_callable
+
+
+def _get_tts():
+    """Lazy SAPI fallback, used only when set_voice hasn't been called —
+    i.e. the CLI, where Kokoro was never started."""
     global _tts
 
     if _tts is None:
+        from audio.tts import TTSManager
         _tts = TTSManager()
 
     return _tts
+
+
+def _speak(message: str):
+    if _voice is not None:
+        _voice(message)
+    else:
+        _get_tts().speak(message)
 
 
 def notify(message: str, title: str = "F.R.E.D."):
@@ -42,6 +66,6 @@ def notify(message: str, title: str = "F.R.E.D."):
         print(f"[NOTIFY ERROR] Toast failed: {e}")
 
     try:
-        _get_tts().speak(message)
+        _speak(message)
     except Exception as e:
         print(f"[NOTIFY ERROR] TTS failed: {e}")
