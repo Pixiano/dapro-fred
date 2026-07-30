@@ -73,3 +73,11 @@ Legacy/FRED/Others/OS_Automation_Perfection/Shortcuts/Godot.exe
 # contains rescore/G.carpa (880MB) and graph/HCLG.fst (446MB), both
 # past GitHub's 100MB per-file hard limit. Local-only asset.
 Core/models/vosk-model-en-in-0.5/
+
+# Screenshots and other tool output that can contain personal screen
+# content. take_screenshot used to default to a working-directory-relative
+# path, which for a detached app meant the repo root — one was committed
+# and pushed before that was fixed (see Pictures/Screenshots now).
+screenshot_*.png
+*.screenshot.png
+Core/data/memory_archive/
