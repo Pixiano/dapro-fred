@@ -156,17 +156,24 @@ class KokoroTTS:
 
     def speak(self, text, on_level=None, on_first_audio=None, cancel=None) -> str:
         """
-        Synthesise and play `text` chunk by chunk, prefetching the next
-        chunk while the current one plays. Blocks until done or cancelled.
+        Synthesise and play `text`, prefetching the next chunk while the
+        current one plays. Blocks until done or cancelled.
 
-        Returns the text that was *actually spoken* — which is not the
-        input when cancelled partway. The caller should record that
-        rather than the full reply: storing words the user never heard
-        makes follow-up turns incoherent.
+        `text` may be a finished string, or an iterable of pieces from a
+        streaming generator — in which case speech starts as soon as the
+        first complete sentence has arrived, rather than waiting for the
+        model to finish. That is the difference between a couple of
+        seconds of dead air per turn and none.
+
+        Returns the text that was *actually spoken* — not the input, when
+        cancelled partway. The caller should record that rather than the
+        full reply: storing words the user never heard makes follow-up
+        turns incoherent.
         """
-        chunks = split_for_speech(text)
-        if not chunks:
-            return ""
+        if isinstance(text, str):
+            source = iter([text])
+        else:
+            source = iter(text)
 
         cancel = cancel or threading.Event()
         spoken = []
@@ -186,21 +193,57 @@ class KokoroTTS:
         # small means a cancel discards little wasted work.
         pending = queue.Queue(maxsize=1)
 
+        def emit(chunk):
+            """Synthesise one chunk and hand it to the player."""
+            try:
+                samples, sr = self.synth(chunk)
+            except Exception as e:
+                print(f"[KokoroTTS] synth failed for {chunk!r}: {e}")
+                return
+            while not stopping():
+                try:
+                    pending.put((chunk, samples, sr), timeout=0.1)
+                    return
+                except queue.Full:
+                    continue
+
         def producer():
-            for chunk in chunks:
+            # Accumulate incoming text and flush whole sentences as they
+            # complete. A partial sentence is never synthesised — Kokoro's
+            # prosody depends on seeing the full clause, and half a
+            # sentence spoken then corrected sounds worse than waiting.
+            buffer = ""
+            first = True
+
+            for piece in source:
                 if stopping():
                     break
-                try:
-                    samples, sr = self.synth(chunk)
-                except Exception as e:
-                    print(f"[KokoroTTS] synth failed for {chunk!r}: {e}")
-                    continue
+                buffer += piece or ""
+
                 while not stopping():
-                    try:
-                        pending.put((chunk, samples, sr), timeout=0.1)
+                    ready = split_for_speech(
+                        buffer,
+                        first_chunk_max=90 if first else 10_000,
+                    )
+                    # Only flush when there is provably a completed
+                    # sentence, i.e. more than one chunk, or the buffer
+                    # already ends on terminal punctuation.
+                    complete = len(ready) > 1 or buffer.rstrip().endswith((".", "!", "?"))
+                    if not (ready and complete):
                         break
-                    except queue.Full:
-                        continue
+                    head = ready[0]
+                    emit(head)
+                    first = False
+                    index = buffer.find(head)
+                    buffer = buffer[index + len(head):] if index >= 0 else ""
+
+            # Whatever is left is the tail of the reply — speak it even
+            # without terminal punctuation, or the last words are lost.
+            if buffer.strip() and not stopping():
+                for chunk in split_for_speech(buffer):
+                    if stopping():
+                        break
+                    emit(chunk)
             # Sentinel so the consumer doesn't wait on a dead producer.
             while not stopping():
                 try:

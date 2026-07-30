@@ -211,27 +211,44 @@ class PillApp:
             return
 
         self.window.set_state("thinking")
-        try:
-            reply = self.orchestrator.process(text)
-        except Exception as e:
-            reply = f"Sorry, something went wrong: {e}"
 
-        if self._cancel.is_set():
+        if not self.tts:
+            try:
+                print(f"F.R.E.D.: {self.orchestrator.process(text)}")
+            except Exception as e:
+                print(f"[PillApp] {e}")
             self._to_idle_and_hide()
             return
 
-        print(f"F.R.E.D.: {reply}")
+        # Stream the reply into the speaker. The generator is consumed by
+        # Kokoro's producer thread, so synthesis of sentence one overlaps
+        # generation of sentence two — the state flips to "speaking" on
+        # the first audio callback rather than after the model finishes.
+        collected = []
 
-        if not (self.tts and reply):
-            self._to_idle_and_hide()
-            return
+        def piece_source():
+            try:
+                for piece in self.orchestrator.process_stream(text):
+                    if self._cancel.is_set():
+                        return
+                    collected.append(piece)
+                    yield piece
+            except Exception as e:
+                print(f"[PillApp] generation failed: {e}")
+                yield "Sorry, something went wrong."
 
-        self.window.set_state("speaking")
+        def on_first_audio():
+            self.window.set_state("speaking")
+
         spoken = self.tts.speak(
-            reply,
+            piece_source(),
             on_level=self.window.set_level,
+            on_first_audio=on_first_audio,
             cancel=self._cancel,
         )
+
+        reply = "".join(collected).strip()
+        print(f"F.R.E.D.: {reply}")
 
         # Only what was actually heard belongs in history. Recording the
         # full reply after an interrupt would leave FRED believing it said

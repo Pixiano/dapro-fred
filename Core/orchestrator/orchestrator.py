@@ -83,6 +83,82 @@ class FREDOrchestrator:
 
         return assistant_reply
 
+    def process_stream(self, user_input: str):
+        """
+        Same pipeline as process(), but yields the reply in pieces when it
+        can, so the caller can start speaking before generation finishes.
+
+        Streams only on the plain-conversation path. A dispatcher hit, a
+        pending confirmation, or a turn that needs tools all produce their
+        reply from something that must complete first — a tool result
+        can't be narrated before the tool has run — so those yield once,
+        whole. Callers therefore always get an iterator and never have to
+        know which path ran.
+
+        Memory and conversation state are written after the stream is
+        drained, using the assembled text, so history is identical either
+        way.
+        """
+        self.state.add_message("user", user_input)
+
+        pieces = []
+
+        def finish(reply: str):
+            self.state.add_message("assistant", reply)
+            self.memory.store("user", user_input)
+            self.memory.store("assistant", reply)
+
+        if self.pending_action:
+            reply = self._handle_pending_confirmation(user_input)
+            finish(reply)
+            yield reply
+            return
+
+        dispatch = self.dispatcher.match(user_input)
+        if dispatch:
+            reply = self._run_or_confirm(dispatch["tool"], dispatch["arguments"])
+            finish(reply)
+            yield reply
+            return
+
+        if not TOOLS_ENABLED:
+            needs_tools, tool_names, reason = False, [], "tools disabled"
+        else:
+            needs_tools, tool_names, reason = intent.classify(
+                user_input, llm=self.llm
+            )
+
+        if needs_tools:
+            print(f"[intent] tools ({reason}) — not streaming")
+            reply = self._process_with_llm(user_input)
+            finish(reply)
+            yield reply
+            return
+
+        print(f"[intent] chat ({reason}) — streaming")
+
+        # Same retrieval and prompt shape as _process_with_llm, so a
+        # streamed chat turn and a non-streamed one see identical context.
+        messages = self._build_messages(
+            recent_messages=self.state.get_recent_messages(limit=10),
+            memories=self.memory.retrieve_relevant(query=user_input, top_k=5),
+            user_input=user_input,
+        )
+
+        for piece in self.llm.generate_stream(messages):
+            if piece:
+                pieces.append(piece)
+                yield piece
+
+        reply = "".join(pieces).strip()
+        if not reply:
+            # Streaming produced nothing usable — fall back rather than
+            # leaving the turn silent.
+            reply = self.llm.generate(messages)
+            yield reply
+
+        finish(reply)
+
     # =========================================================
     # CONFIRMATION GATE
     # =========================================================

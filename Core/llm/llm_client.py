@@ -85,6 +85,104 @@ class LLMClient:
                 "I'm experiencing a cognitive malfunction, boss."
             )
 
+    # Openers/closers for the two reasoning syntaxes in play. Streaming
+    # has to know about these: with thinking enabled the chain of thought
+    # arrives as tokens like everything else, and _strip_thinking can only
+    # act on a finished string. Emitting deltas naively would speak the
+    # model's reasoning aloud.
+    _THOUGHT_OPENERS = ("<|channel>", "<think>")
+    _THOUGHT_CLOSERS = ("<channel|>", "</think>")
+
+    @classmethod
+    def _could_start_thought(cls, text: str) -> bool:
+        """True while `text` is still a possible prefix of an opener, so a
+        marker split across two deltas isn't missed."""
+        return any(
+            opener.startswith(text) or text.startswith(opener)
+            for opener in cls._THOUGHT_OPENERS
+        )
+
+    def generate_stream(self, messages: list, tier: str = None):
+        """
+        Yield reply text as it is generated, with any reasoning block
+        withheld.
+
+        This is the fix for dead air: the caller can start speaking the
+        first sentence while the rest is still being generated. Only safe
+        on turns that need no tools — a tool result can't be summarised
+        before the tool has run — and the intent router already separates
+        those, so this is only ever called on the chat path.
+
+        Falls back to yielding one complete string if streaming fails, so
+        a caller never has to handle both shapes.
+        """
+        chosen_tier = tier or self._pick_tier(messages)
+        messages = self._apply_thinking(messages, chosen_tier)
+
+        try:
+            model = self._get_model(chosen_tier)
+            stream = model.create_chat_completion(
+                messages=messages,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                max_tokens=self.max_tokens,
+                stream=True,
+            )
+        except Exception as error:
+            print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
+            yield self.generate(messages, tier=chosen_tier)
+            return
+
+        buffer = ""
+        state = "unknown"  # unknown -> thinking -> done, or unknown -> done
+
+        try:
+            for chunk in stream:
+                delta = (
+                    chunk.get("choices", [{}])[0]
+                    .get("delta", {})
+                    .get("content")
+                ) or ""
+                if not delta:
+                    continue
+
+                if state == "done":
+                    yield delta
+                    continue
+
+                buffer += delta
+
+                if state == "unknown":
+                    if any(o in buffer for o in self._THOUGHT_OPENERS):
+                        state = "thinking"
+                    elif not self._could_start_thought(buffer.lstrip()[:12]):
+                        # Long enough to be sure no opener is coming.
+                        state = "done"
+                        yield buffer
+                        buffer = ""
+                        continue
+
+                if state == "thinking":
+                    for closer in self._THOUGHT_CLOSERS:
+                        index = buffer.find(closer)
+                        if index >= 0:
+                            remainder = buffer[index + len(closer):]
+                            state = "done"
+                            buffer = ""
+                            if remainder.strip():
+                                yield remainder
+                            break
+
+        except Exception as error:
+            print(f"[LLM] Stream interrupted: {error}")
+
+        # Anything still buffered never resolved into a reasoning block —
+        # strip defensively and emit, so a reply is never silently lost.
+        if buffer.strip():
+            leftover = self._strip_thinking(buffer)
+            if leftover:
+                yield leftover
+
     def generate_with_tools(
         self,
         messages: list,
