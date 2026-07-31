@@ -76,6 +76,59 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# =========================================================
+# CENTERING
+# =========================================================
+#
+# Embedding spaces have "hubs": a handful of vectors sit near the centre
+# of the distribution and therefore score highly against almost any
+# query, carrying no discriminative information at all. This index had a
+# textbook one. Measured over 16 queries (8 genuinely vault-relevant, 8
+# pure chat), the chunk `projects/fred.md — What it does` was the #1 hit
+# for 9 of them — including three relevant queries where it is simply
+# wrong: it outranked reference/machine.md for "what are my machine
+# specs" and active-priorities.md for "what are my current priorities".
+#
+# No threshold fixes this, which was checked before reaching for it:
+# top-1 score, gap-to-6th, and gap-to-mean ALL overlap between relevant
+# and chat queries (relevant top-1 0.578-0.712 vs chat 0.388-0.649), so
+# any floor that rejects "tell me a fun fact" also rejects "who is
+# suhani". The problem is not where the cutoff sits, it is that one
+# vector is close to everything.
+#
+# Subtracting the corpus mean from every chunk AND from the query
+# removes the shared component that makes everything look alike. On the
+# same 16 queries this cost nothing and fixed real errors:
+#   relevant recall@6      7/7  ->  7/7   (unchanged)
+#   "machine specs" top-1  fred.md -> reference/machine.md
+#   "priorities"    top-1  fred.md -> personal/goals.md — Priority order
+#   fred.md as #1 on chat  6/6  ->  4/6
+#
+# Note this makes scores centered cosines, not raw ones: they are lower
+# and CAN be negative, so VAULT_RETRIEVAL_FLOOR is interpreted against
+# that scale (see the note there). Cheap — one subtraction per chunk at
+# build, one per query.
+
+
+def _mean_vector(vectors):
+    if not vectors:
+        return None
+    dim = len(vectors[0])
+    n = len(vectors)
+    return [sum(v[i] for v in vectors) / n for i in range(dim)]
+
+
+def _center(entries):
+    """entries -> same entries with the corpus mean subtracted."""
+    mean = _mean_vector([v for _l, _t, v in entries])
+    if mean is None:
+        return entries
+    return [
+        (label, text, [x - m for x, m in zip(vec, mean)])
+        for label, text, vec in entries
+    ]
+
+
 def _chunk_file(rel_path: str, path: Path):
     """(section_label, embed_text, display_text) for every chunk in one file."""
     raw = path.read_text(encoding="utf-8")
@@ -102,7 +155,8 @@ class VaultRouter:
 
     def __init__(self, embed_fn):
         self.embed = embed_fn
-        self._entries = []  # [(label, display_text, vector)]
+        self._entries = []  # [(label, display_text, CENTERED vector)]
+        self._mean = None   # corpus mean, subtracted from every query too
         self._ready = False
         self._failed = False
 
@@ -160,7 +214,8 @@ class VaultRouter:
             else:
                 print(f"[vault_router] {len(entries)} chunks loaded from cache, all current")
 
-            self._entries = entries
+            self._entries = _center(entries)
+            self._mean = _mean_vector([v for _l, _t, v in entries])
             self._ready = True
             return True
 
@@ -216,6 +271,12 @@ class VaultRouter:
 
         top_k = VAULT_RETRIEVAL_TOP_K if top_k is None else top_k
         floor = VAULT_RETRIEVAL_FLOOR if floor is None else floor
+
+        # The query must be centered by the same corpus mean the chunks
+        # were, or the two live in different spaces and the comparison is
+        # meaningless. self._entries already holds centered vectors.
+        if self._mean is not None:
+            q_vector = [x - m for x, m in zip(q_vector, self._mean)]
 
         scored = [
             (label, text, _cosine(q_vector, vec))

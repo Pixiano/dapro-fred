@@ -112,13 +112,22 @@ VAULT_RETRIEVAL_TOP_K = 6
 # are injected on EVERY turn regardless of relevance, costing roughly
 # 6 x VAULT_CHUNK_INJECT_CHARS (~2,520 chars, order of 600-700 tokens)
 # of prompt budget per turn against gemma4's 16,384-token context, plus
-# whatever confusion an off-topic chunk causes. "Tell me a joke" will now
-# always pull vault text — most often the self-referential chunks in
-# projects/fred.md ("What it does", "(intro)"), whose broad
-# conversational-assistant language drifts close to almost any query.
-# If that noise ever needs reining in, restore a floor here and/or
-# re-enable the cue gate at the call site in vault_router.retrieve().
-VAULT_RETRIEVAL_FLOOR = 0.0
+# whatever confusion an off-topic chunk causes.
+#
+# -1.0 rather than 0.0 because vault_router now CENTERS embeddings
+# (subtracts the corpus mean from both chunks and query — see the
+# comment block above _center() there). Centered cosines sit on a lower
+# scale than raw ones and can legitimately be negative, so a 0.0 cutoff
+# would silently drop real hits rather than mean "no cutoff". -1.0 is
+# the minimum a cosine can take, so it is unambiguously "no floor".
+#
+# Restoring a floor here is NOT the way to cut retrieval noise — that
+# was measured and does not work (see _center()'s comment: relevant and
+# chat score ranges overlap on every metric tried). Centering plus a
+# reworded projects/fred.md is what actually moved the numbers. If more
+# is needed, the cue gate at the call site in vault_router.retrieve()
+# is the lever, not this constant.
+VAULT_RETRIEVAL_FLOOR = -1.0
 # Injected chunk text is capped here — a section can run a few hundred
 # words, and top_k=3 of those uncapped would be a real chunk of the
 # context budget on every hit.
