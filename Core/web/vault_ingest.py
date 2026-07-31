@@ -165,7 +165,7 @@ The vault's format is strict. Follow it exactly:
 
 4. Then any `**Key:** value` lines that apply (Location, Stack, Repo, Relationship, Published, etc). Only ones the material actually supports.
 
-5. Then `---` and `## Section` headings, each separated by `---` on its own line. Choose sections that fit the material. Common ones: What it does, Current state, Decisions, Constraints, Known issues, Context, Notes.
+5. Then `---` and `## Section` headings, each separated by `---` on its own line. Use the section set for this destination, given below. Do NOT use project sections on a person or a daily note.
 
 Hard rules, in priority order:
 
@@ -178,13 +178,37 @@ Hard rules, in priority order:
 Output the raw markdown file only. No preamble, no explanation, no code fences around it."""
 
 
+# Section sets per destination. Without this the model applied the
+# project template ("What it does", "Current state", "Decisions",
+# "Constraints", "Known issues") to everything — which produced eleven
+# people/ files carrying `Stack:` and `Repo:` headers on entries about
+# real human beings, and buried a relationship chronology under a
+# software-project schema. Read off the real _TEMPLATE.md files in the
+# vault rather than invented.
+SECTION_SETS = {
+    "projects": "What it does, Current state, Decisions, Constraints, Known issues, Context",
+    "jobs": "When to run this, Context (read these first), Steps, Done when",
+    "people": "Context, Recurring, Notes — and a `**Relationship:**` / `**Comes up in:**` pair "
+              "under the title. NEVER use project sections here, and never emit Stack/Repo/Published "
+              "on a person. Only record what makes the assistant useful, not private detail about "
+              "them that serves no purpose.",
+    "personal": "Context, Current state, Notes",
+    "knowledge": "What this is, Key points, Gotchas, Context",
+    "research": "What it is, Findings, Relevance, Context",
+    "reference": "Context, Details, Notes",
+    "daily": "What happened, Decisions, Open threads, Profile updates",
+}
+
+
 def build_prompt(dump: str, section: str, hint: str):
     today = date.today().isoformat()
     wanted_type = VAULT_SECTIONS.get(section, "note")
+    sections = SECTION_SETS.get(section, "Context, Details, Notes")
 
     user = [f"Convert the following into one vault file.\n"]
     user.append(f"It belongs in: {section or 'the vault root'}/")
     user.append(f"Use type: {wanted_type}")
+    user.append(f"Use these sections: {sections}")
     if hint.strip():
         user.append(f"\nThe user adds this context about the dump: {hint.strip()}")
     user.append("\n--- RAW DUMP BEGINS ---\n")
