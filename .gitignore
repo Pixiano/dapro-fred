@@ -38,7 +38,8 @@ Legacy/FRED/Main/API/Memories/
 Legacy/FRED/Main/API/User_Memories/
 Legacy/FRED/Main/API/Faiss_Index/
 
-# Logs
+# Logs (includes per-session event logs — full speech transcripts,
+# errors, tool calls; see Core/utils/event_log.py)
 Core/data/logs/
 
 # Scheduled reminders (personal, runtime-generated)

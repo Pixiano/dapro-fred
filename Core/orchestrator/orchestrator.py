@@ -18,6 +18,7 @@ from orchestrator.scheduler import ReminderScheduler
 from orchestrator import intent
 from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
+from utils import event_log
 from config.settings import TOOLS_ENABLED, VAULT_CHUNK_INJECT_CHARS
 
 
@@ -280,10 +281,15 @@ class FREDOrchestrator:
             result = str(self.tools.execute(tool_name, **arguments))
         except Exception as error:
             result = f"Couldn't do that: {error}"
+            event_log.log_error(f"tool:{tool_name}", error)
 
         tool_call_log.log_tool_call(
             self.last_turn_id, self._turn_utterance, tool_name, arguments,
             result, path="dispatcher",
+        )
+        event_log.log(
+            "tool_call", tool=tool_name, arguments=arguments,
+            result=result[:300], path="dispatcher",
         )
         return result
 
@@ -311,6 +317,7 @@ class FREDOrchestrator:
                 result = str(self.tools.execute(action["tool"], **action["arguments"]))
             except Exception as error:
                 result = f"Couldn't do that: {error}"
+                event_log.log_error(f"tool:{action['tool']}", error)
 
             # The turn_id here belongs to the confirmation ("yes"), not the
             # original destructive request — the two are separate calls to
@@ -321,11 +328,19 @@ class FREDOrchestrator:
                 self.last_turn_id, self._turn_utterance, action["tool"],
                 action["arguments"], result, path="confirmed_destructive",
             )
+            event_log.log(
+                "tool_call", tool=action["tool"], arguments=action["arguments"],
+                result=result[:300], path="confirmed_destructive",
+            )
             return result
 
         tool_call_log.log_tool_call(
             self.last_turn_id, self._turn_utterance, action["tool"],
             action["arguments"], "Cancelled by user", path="confirmed_destructive",
+        )
+        event_log.log(
+            "tool_call", tool=action["tool"], arguments=action["arguments"],
+            result="Cancelled by user", path="confirmed_destructive",
         )
         return "Cancelled — didn't run it."
 
@@ -1242,12 +1257,17 @@ class FREDOrchestrator:
             result = self.tools.execute(name, **arguments)
         except Exception as error:
             result = f"Error running tool '{name}': {error}"
+            event_log.log_error(f"tool:{name}", error)
 
         tool_call_log.log_tool_call(
             self.last_turn_id, self._turn_utterance, name, arguments, result,
             path="tool_loop",
             tools_offered=self._last_tools_offered,
             reason=self._last_routing_reason,
+        )
+        event_log.log(
+            "tool_call", tool=name, arguments=arguments,
+            result=str(result)[:300], path="tool_loop",
         )
         return result
 

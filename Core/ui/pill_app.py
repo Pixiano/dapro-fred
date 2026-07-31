@@ -28,6 +28,7 @@ from orchestrator.orchestrator import FREDOrchestrator
 from input.hotkey import HoldHotkey
 from ui.pill.indicators import random_indicator
 from ui.pill.window import PillWindow
+from utils import event_log
 from utils.model_lifecycle import ModelLifecycle
 
 # How long the transcript of what you said stays on screen.
@@ -131,6 +132,7 @@ class PillApp:
             print(f"[PillApp] tray unavailable ({e}) — Ctrl+C to quit")
 
     def shutdown(self):
+        event_log.log("system", note="session end")
         self._running = False
         self._cancel.set()
         self.lifecycle.stop()
@@ -190,6 +192,7 @@ class PillApp:
                 time.sleep(0.03)
         except Exception as e:
             print(f"[PillApp] recording failed: {e}")
+            event_log.log_error("recording", e)
             self._recording = False
             self._to_idle_and_hide()
 
@@ -216,6 +219,7 @@ class PillApp:
                 self._turn_body()
             except Exception as e:
                 print(f"[PillApp] turn failed: {e}")
+                event_log.log_error("turn", e)
                 self._to_idle_and_hide()
 
     def _turn_body(self):
@@ -226,6 +230,7 @@ class PillApp:
             return
 
         print(f"You: {text}")
+        event_log.log("user_speech", text=text)
 
         # Shown immediately and left up for a couple of seconds while the
         # model works. Deliberately NOT a confirmation gate — inserting a
@@ -241,9 +246,12 @@ class PillApp:
 
         if not self.tts:
             try:
-                print(f"F.R.E.D.: {self.orchestrator.process(text)}")
+                reply = self.orchestrator.process(text)
+                print(f"F.R.E.D.: {reply}")
+                event_log.log("fred_speech", text=reply, spoken=False)
             except Exception as e:
                 print(f"[PillApp] {e}")
+                event_log.log_error("process", e)
             self._to_idle_and_hide()
             return
 
@@ -262,6 +270,7 @@ class PillApp:
                     yield piece
             except Exception as e:
                 print(f"[PillApp] generation failed: {e}")
+                event_log.log_error("generation", e)
                 yield "Sorry, something went wrong."
 
         def on_first_audio():
@@ -276,6 +285,10 @@ class PillApp:
 
         reply = "".join(collected).strip()
         print(f"F.R.E.D.: {reply}")
+        event_log.log(
+            "fred_speech", text=reply, spoken=True,
+            interrupted=bool(spoken and spoken != reply),
+        )
 
         # Only what was actually heard belongs in history. Recording the
         # full reply after an interrupt would leave FRED believing it said
@@ -322,6 +335,7 @@ class PillApp:
     def _on_tool_event(self, label: str):
         """A tool is about to run — flash what it is on the pill."""
         self.window.set_transcript(label + "...", ttl=2.0)
+        event_log.log("tool_event", label=label)
 
     def _speak_proactive(self, message: str):
         """
@@ -353,10 +367,12 @@ class PillApp:
                 self.window.set_state("speaking")
                 self.window.show()
                 print(f"[PillApp] speaking proactively: {message!r}")
+                event_log.log("fred_speech", text=message, spoken=True, proactive=True)
                 spoken = self.tts.speak(message, on_level=self.window.set_level)
                 print(f"[PillApp] proactive speech done ({len(spoken)}/{len(message)} chars spoken)")
             except Exception as e:
                 print(f"[PillApp] proactive speech failed: {e}")
+                event_log.log_error("proactive_speech", e)
             finally:
                 self._turn_lock.release()
                 self._to_idle_and_hide()

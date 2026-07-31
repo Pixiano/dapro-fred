@@ -114,6 +114,11 @@ def main():
         run_mock(args.indicator)
         return
 
+    from utils import event_log
+    session_log = event_log.start_session()
+    print(f"[fred_popup] session log -> {session_log}")
+    event_log.log("system", note="crash log path", path=str(crash_log))
+
     from ui.pill_app import main as app_main
     app_main()
 
