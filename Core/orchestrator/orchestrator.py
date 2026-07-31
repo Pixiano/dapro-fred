@@ -13,6 +13,7 @@ from tools import system_tools
 from tools import web_tools
 from tools import machine_tools
 from tools import assist_tools
+from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import intent
@@ -161,8 +162,12 @@ class FREDOrchestrator:
         self._turn_utterance = user_input
         self.last_turn_id = tool_call_log.new_turn_id()
 
+        canned = None if self.pending_action else canned_replies.match(user_input)
+
         if self.pending_action:
             assistant_reply = self._handle_pending_confirmation(user_input)
+        elif canned:
+            assistant_reply = canned
         else:
             dispatch = self.dispatcher.match(user_input)
 
@@ -211,6 +216,12 @@ class FREDOrchestrator:
             reply = self._handle_pending_confirmation(user_input)
             finish(reply)
             yield reply
+            return
+
+        canned = canned_replies.match(user_input)
+        if canned:
+            finish(canned)
+            yield canned
             return
 
         dispatch = self.dispatcher.match(user_input)
