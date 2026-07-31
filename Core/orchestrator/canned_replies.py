@@ -21,13 +21,35 @@
 import random
 import re
 
+from orchestrator import intent
+
 _PUNCT_RE = re.compile(r"[^\w\s]")
 
 
 def _normalize(text: str) -> str:
-    """Lowercase, drop punctuation, drop any address of "Fred" — so
-    "Thanks, Fred!" and "thanks" hit the same trigger key."""
-    t = _PUNCT_RE.sub(" ", (text or "").lower())
+    """Lowercase, strip a leading vocative ("hey", "hi", "Fred", "good
+    morning", ...), drop punctuation, drop any remaining mention of
+    "Fred" — so "Hey, Fred. How are you doing?" and "how are you doing"
+    hit the same trigger key.
+
+    Reuses intent.normalise() (the same leading-prefix strip already
+    proven for tool routing) rather than a second hand-rolled version —
+    a bare "\\bfred\\b" strip alone missed vocatives like "hey"/"hi" in
+    front of it, which is exactly why real speech ("Hey, Fred...") was
+    failing to match trigger phrases written without them.
+
+    intent.normalise() strips "hi"/"hello"/"okay"/"good morning" etc. as
+    a *prefix*, which collapses them to "" when one of those words is
+    the entire message rather than a vocative in front of one — and
+    several of this module's own triggers ("hi", "okay", "good morning")
+    are exactly that. Falling back to the un-stripped text whenever
+    stripping would erase the message keeps "hi" and "okay" distinct
+    instead of colliding on the same empty key.
+    """
+    raw = (text or "").strip().lower()
+    stripped = intent.normalise(raw)
+    t = stripped if stripped else raw
+    t = _PUNCT_RE.sub(" ", t)
     t = re.sub(r"\bfred\b", "", t)
     return re.sub(r"\s+", " ", t).strip()
 
