@@ -85,3 +85,7 @@ Core/models/vosk-model-en-in-0.5/
 screenshot_*.png
 *.screenshot.png
 Core/data/memory_archive/
+
+# Vault knowledge router cache — contains raw text chunks from the vault,
+# including personal/ and people/ content. Must never be committed.
+Core/data/vault_index/

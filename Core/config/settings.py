@@ -42,6 +42,56 @@ DEFAULT_USERNAME = "default_user"
 # any one project is the point.
 VAULT_DIR = Path(r"C:\Users\Dhiraj Vatsal\VatsalDaPro\Projects\1_FRED_Memory\FRED")
 
+# Read directly by personality/system_prompt.py, never through the vector
+# router — orchestrator/vault_router.py imports this same tuple to exclude
+# them from its index, so a file is never represented both ways at once
+# (one list, not two that could drift apart).
+VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md")
+
+# Filenames excluded from the vector index for reasons other than being
+# hardcoded — routing/formatting metadata for a human or an editing agent,
+# not content FRED should ever retrieve mid-conversation:
+#   MAP.md, INDEX.md        routing table + frontmatter schema
+#   AGENT-BOOTSTRAP.md      startup sequence for an agent editing the
+#                           vault (e.g. Claude Code) — not for FRED
+#   _TEMPLATE.md            blank skeletons, no retrievable content
+VAULT_EXCLUDED_FILES = {"MAP.md", "INDEX.md", "AGENT-BOOTSTRAP.md", "_TEMPLATE.md"}
+
+# Cache/index for the vector router — generated data, not vault content,
+# so it lives with FRED's other generated stores (Core/data/) rather than
+# inside the vault itself. Re-embeds only files whose content hash
+# changed since the last build (see VaultRouter.build).
+VAULT_INDEX_DIR = DATA_DIR / "vault_index"
+VAULT_INDEX_DIR.mkdir(exist_ok=True)
+
+VAULT_RETRIEVAL_TOP_K = 3
+
+# Measured against the real vault (7 relevant queries, 6 plain-chat), not
+# guessed — and the honest result is there is no floor that cleanly
+# separates them. Real relevant hits ran 0.533-0.736; plain chat ran
+# 0.340-0.661, with "tell me a joke" (0.661) scoring HIGHER than the
+# board-exams query (0.533) scored against its own correct answer. Two
+# self-referential chunks in projects/fred.md ("What it does", "(intro)")
+# are the repeat offenders — broad conversational-assistant language that
+# drifts close to almost any chat query regardless of topic.
+#
+# 0.55 is a deliberate compromise, not a solved threshold: it clears most
+# chat noise and catches most real hits, but "tell me a joke" still
+# leaks through occasionally and a borderline-relevant query like the
+# board-exams one sits close to the line. Accepted because the failure
+# mode here is cheap — a stray paragraph of vault text costs a few
+# context tokens on an unrelated turn — unlike a misrouted TOOL, which
+# takes a wrong action. If this turns out to leak too often in practice,
+# the real fix is almost certainly a cue-gate layer in front of this,
+# mirroring what actually fixed tool routing (orchestrator/intent.py) —
+# semantic-only classification of "is this relevant at all" was
+# unreliable there too, for the same underlying reason.
+VAULT_RETRIEVAL_FLOOR = 0.55
+# Injected chunk text is capped here — a section can run a few hundred
+# words, and top_k=3 of those uncapped would be a real chunk of the
+# context budget on every hit.
+VAULT_CHUNK_INJECT_CHARS = 420
+
 # =========================================================
 # LLM SETTINGS — fully local inference via llama.cpp
 # =========================================================

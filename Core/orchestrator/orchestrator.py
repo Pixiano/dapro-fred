@@ -17,7 +17,8 @@ from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import intent
 from orchestrator import tool_call_log
-from config.settings import TOOLS_ENABLED
+from orchestrator.vault_router import VaultRouter
+from config.settings import TOOLS_ENABLED, VAULT_CHUNK_INJECT_CHARS
 
 
 # Present-tense phrases for the pill's tool-fire confirmation. Written as
@@ -126,6 +127,7 @@ class FREDOrchestrator:
         # Semantic tool router, built lazily on the first tool-eligible
         # turn (see _tool_router).
         self._router = None
+        self._vault = None
 
         # Per-turn scratch, set at the top of process()/process_stream()
         # and read by the tool-execution paths below — orchestrator
@@ -1253,6 +1255,27 @@ class FREDOrchestrator:
     # MESSAGE BUILDING
     # =========================================================
 
+    def _vault_router(self):
+        """
+        The vault knowledge router, built on first use — same lazy pattern
+        as _tool_router, reusing the same embedder so this is zero extra
+        VRAM. Cold build re-embeds only vault files whose content changed
+        since the on-disk cache was written (measured: 19.7s cold, 0.04s
+        fully cached), so this cost is paid once per changed file, not
+        once per FRED launch.
+        """
+        if self._vault is not None:
+            return self._vault
+
+        try:
+            router = VaultRouter(self.memory._generate_embedding)
+            if router.build():
+                self._vault = router
+        except Exception as e:
+            print(f"[orchestrator] vault router unavailable: {e}")
+
+        return self._vault
+
     def _tool_router(self):
         """
         The semantic router, built on first use.
@@ -1340,6 +1363,24 @@ class FREDOrchestrator:
         context = self._screen_context()
         if context:
             messages.append({"role": "system", "content": context})
+
+        # -----------------------------
+        # Vault knowledge (the other 32 files — persona/profile/rules are
+        # loaded directly and always, see personality/system_prompt.py)
+        # -----------------------------
+        vault_router = self._vault_router()
+        if vault_router:
+            hits = vault_router.retrieve(user_input)
+            if hits:
+                vault_text = "\n".join(
+                    f"- [{label}] {text[:VAULT_CHUNK_INJECT_CHARS]}"
+                    + ("..." if len(text) > VAULT_CHUNK_INJECT_CHARS else "")
+                    for label, text, _score in hits
+                )
+                messages.append({
+                    "role": "system",
+                    "content": f"Relevant vault knowledge:\n{vault_text}",
+                })
 
         # -----------------------------
         # Inject memory context

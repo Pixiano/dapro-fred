@@ -26,25 +26,15 @@
 # and hasn't been corrected here — vault write-back is deliberately
 # deferred, so this file doesn't touch vault content, only reads it.
 
-import re
-from pathlib import Path
-
-from config.settings import VAULT_DIR
-
-_FRONTMATTER = re.compile(r"^---\n.*?\n---\n+", re.DOTALL)
-
-_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md")
-
-
-def _strip_frontmatter(text: str) -> str:
-    return _FRONTMATTER.sub("", text, count=1)
+from config.settings import VAULT_DIR, VAULT_HARDCODED_FILES
+from utils.vault_md import strip_frontmatter
 
 
 def _load_vault_prompt() -> str:
     sections = []
-    for name in _HARDCODED_FILES:
+    for name in VAULT_HARDCODED_FILES:
         path = VAULT_DIR / name
-        content = _strip_frontmatter(path.read_text(encoding="utf-8")).strip()
+        content = strip_frontmatter(path.read_text(encoding="utf-8")).strip()
         if content:
             sections.append(content)
     return "\n\n---\n\n".join(sections)

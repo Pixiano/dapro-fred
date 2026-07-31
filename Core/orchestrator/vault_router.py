@@ -1,0 +1,209 @@
+# Core/orchestrator/vault_router.py
+#
+# Semantic retrieval over the vault's other 32 files (everything except
+# persona.md/profile.md/rules.md, which load directly and always — see
+# personality/system_prompt.py). Same shape as orchestrator/tool_router.py:
+# embed once, compare by cosine similarity, offer only what's close.
+#
+# Chunked by ## section rather than whole-file, unlike the tool router.
+# A tool's description is one coherent idea; a vault file like profile.md
+# or machine.md covers several ("VRAM budget" and "Paths" have nothing to
+# do with each other), and whole-file embedding would blur them into one
+# vector that matches everything a little and nothing well. Section
+# boundaries were checked against real files (persona.md, profile.md,
+# rules.md, board-exams.md, active-priorities.md, machine.md,
+# jobs/_TEMPLATE.md) before committing to this — every one uses ## / ---
+# consistently.
+#
+# Cached to disk, keyed by content hash per file, because embedding is
+# not free — the tool router's one-time 40-item build measured at ~4.8s,
+# and the vault has more chunks than that. Re-embedding only changed
+# files (not the whole vault) on every FRED launch matters given
+# knowledge/jobs/root are near-static while people/projects/daily change
+# regularly.
+
+import hashlib
+import json
+import math
+import re
+from pathlib import Path
+
+from config.settings import (
+    VAULT_DIR,
+    VAULT_HARDCODED_FILES,
+    VAULT_EXCLUDED_FILES,
+    VAULT_INDEX_DIR,
+    VAULT_RETRIEVAL_TOP_K,
+    VAULT_RETRIEVAL_FLOOR,
+)
+from utils.vault_md import strip_frontmatter, extract_h1_title, split_sections
+
+CACHE_PATH = VAULT_INDEX_DIR / "chunks.json"
+
+
+def _cosine(a, b) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _iter_vault_files():
+    """Every .md file under VAULT_DIR except the hardcoded and excluded
+    ones, as (relative_path_str, absolute_path)."""
+    skip = set(VAULT_HARDCODED_FILES) | set(VAULT_EXCLUDED_FILES)
+    if not VAULT_DIR.exists():
+        return
+    for path in sorted(VAULT_DIR.rglob("*.md")):
+        if path.name in skip:
+            continue
+        yield str(path.relative_to(VAULT_DIR)).replace("\\", "/"), path
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _chunk_file(rel_path: str, path: Path):
+    """(section_label, embed_text, display_text) for every chunk in one file."""
+    raw = path.read_text(encoding="utf-8")
+    body = strip_frontmatter(raw)
+    title = extract_h1_title(body) or rel_path
+
+    chunks = []
+    for heading, text in split_sections(body):
+        label = f"{rel_path} — {heading}" if heading != "(whole file)" else rel_path
+        embed_text = f"{title} — {heading}\n{text}" if heading not in ("(whole file)", "(intro)") else f"{title}\n{text}"
+        chunks.append((label, embed_text, text))
+    return chunks
+
+
+class VaultRouter:
+    """
+    Nearest-neighbour retrieval over vault knowledge chunks.
+
+    Same lazy-build, fail-open shape as SemanticToolRouter: build() is
+    idempotent and safe to call repeatedly, and any failure (vault
+    missing, embedder unavailable) degrades to "no vault context this
+    turn" rather than breaking the conversation.
+    """
+
+    def __init__(self, embed_fn):
+        self.embed = embed_fn
+        self._entries = []  # [(label, display_text, vector)]
+        self._ready = False
+        self._failed = False
+
+    # =========================================================
+    # BUILD (cached, per-file hash invalidation)
+    # =========================================================
+
+    def build(self, force: bool = False) -> bool:
+        if self._ready and not force:
+            return True
+        if self._failed and not force:
+            return False
+
+        try:
+            cache = self._load_cache()
+            updated_cache = {}
+            entries = []
+            changed = 0
+            seen_files = set()
+
+            for rel_path, path in _iter_vault_files():
+                seen_files.add(rel_path)
+                file_hash = _file_hash(path)
+                cached = cache.get(rel_path)
+
+                if cached and cached.get("hash") == file_hash:
+                    updated_cache[rel_path] = cached
+                    for c in cached["chunks"]:
+                        entries.append((c["label"], c["text"], c["vector"]))
+                    continue
+
+                changed += 1
+                chunk_records = []
+                for label, embed_text, display_text in _chunk_file(rel_path, path):
+                    try:
+                        vector = self.embed(embed_text)
+                    except Exception as e:
+                        print(f"[vault_router] embed failed for {label!r}: {e}")
+                        continue
+                    chunk_records.append(
+                        {"label": label, "text": display_text, "vector": vector}
+                    )
+                    entries.append((label, display_text, vector))
+
+                updated_cache[rel_path] = {"hash": file_hash, "chunks": chunk_records}
+
+            dropped = set(cache.keys()) - seen_files
+            if changed or dropped:
+                self._save_cache(updated_cache)
+                print(
+                    f"[vault_router] indexed {len(entries)} chunks from "
+                    f"{len(seen_files)} files ({changed} re-embedded, "
+                    f"{len(dropped)} dropped)"
+                )
+            else:
+                print(f"[vault_router] {len(entries)} chunks loaded from cache, all current")
+
+            self._entries = entries
+            self._ready = True
+            return True
+
+        except Exception as e:
+            print(f"[vault_router] build failed: {e}")
+            self._failed = True
+            self._entries = []
+            return False
+
+    def _load_cache(self) -> dict:
+        if not CACHE_PATH.exists():
+            return {}
+        try:
+            return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"[vault_router] cache unreadable ({e}) — rebuilding from scratch")
+            return {}
+
+    def _save_cache(self, cache: dict):
+        VAULT_INDEX_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = CACHE_PATH.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(cache), encoding="utf-8")
+        tmp.replace(CACHE_PATH)
+
+    # =========================================================
+    # RETRIEVE
+    # =========================================================
+
+    def retrieve(self, query: str, top_k: int = None, floor: float = None):
+        """
+        Returns [(label, display_text, score)] for chunks above `floor`,
+        best first, capped at `top_k`. Empty list if the router isn't
+        built, the vault is empty, or nothing clears the floor — all
+        three are "no vault context this turn," not errors.
+        """
+        if not self.build():
+            return []
+        if not self._entries or not query.strip():
+            return []
+
+        try:
+            q_vector = self.embed(query)
+        except Exception as e:
+            print(f"[vault_router] query embed failed: {e}")
+            return []
+
+        top_k = VAULT_RETRIEVAL_TOP_K if top_k is None else top_k
+        floor = VAULT_RETRIEVAL_FLOOR if floor is None else floor
+
+        scored = [
+            (label, text, _cosine(q_vector, vec))
+            for label, text, vec in self._entries
+        ]
+        scored.sort(key=lambda t: t[2], reverse=True)
+
+        return [(l, t, s) for l, t, s in scored[:top_k] if s >= floor]
