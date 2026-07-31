@@ -37,6 +37,7 @@ from config.settings import (
     VAULT_RETRIEVAL_FLOOR,
 )
 from utils.vault_md import strip_frontmatter, extract_h1_title, split_sections
+from orchestrator.vault_intent import should_check_vault
 
 CACHE_PATH = VAULT_INDEX_DIR / "chunks.json"
 
@@ -183,12 +184,15 @@ class VaultRouter:
         """
         Returns [(label, display_text, score)] for chunks above `floor`,
         best first, capped at `top_k`. Empty list if the router isn't
-        built, the vault is empty, or nothing clears the floor — all
-        three are "no vault context this turn," not errors.
+        built, the vault is empty, the cue gate didn't fire, or nothing
+        clears the floor — all are "no vault context this turn," not
+        errors.
         """
+        if not query.strip() or not should_check_vault(query):
+            return []
         if not self.build():
             return []
-        if not self._entries or not query.strip():
+        if not self._entries:
             return []
 
         try:
