@@ -1,9 +1,12 @@
 # Core/orchestrator/vault_router.py
 #
-# Semantic retrieval over the vault's other 32 files (everything except
-# persona.md/profile.md/rules.md, which load directly and always — see
-# personality/system_prompt.py). Same shape as orchestrator/tool_router.py:
-# embed once, compare by cosine similarity, offer only what's close.
+# Semantic retrieval over every other file in the vault (60 of 63 .md at
+# time of writing — everything except persona.md/profile.md/rules.md,
+# which load directly and always, see personality/system_prompt.py).
+# Same shape as orchestrator/tool_router.py: embed once, compare by
+# cosine similarity. Unlike the tool router it no longer filters — the
+# user asked for unrestricted read access, so the top-K nearest chunks
+# come back on every turn regardless of score (VAULT_RETRIEVAL_FLOOR = 0.0).
 #
 # Chunked by ## section rather than whole-file, unlike the tool router.
 # A tool's description is one coherent idea; a vault file like profile.md
@@ -37,7 +40,13 @@ from config.settings import (
     VAULT_RETRIEVAL_FLOOR,
 )
 from utils.vault_md import strip_frontmatter, extract_h1_title, split_sections
-from orchestrator.vault_intent import should_check_vault
+
+# orchestrator.vault_intent.should_check_vault() used to gate retrieve()
+# below. It is deliberately NOT imported any more — the user asked for
+# unrestricted read access, so every turn now queries the vault. The
+# module is left intact and importable rather than deleted, so the gate
+# can be put back by restoring this import and the one-line check in
+# retrieve() if the added noise ever proves too costly.
 
 CACHE_PATH = VAULT_INDEX_DIR / "chunks.json"
 
@@ -183,12 +192,16 @@ class VaultRouter:
     def retrieve(self, query: str, top_k: int = None, floor: float = None):
         """
         Returns [(label, display_text, score)] for chunks above `floor`,
-        best first, capped at `top_k`. Empty list if the router isn't
-        built, the vault is empty, the cue gate didn't fire, or nothing
-        clears the floor — all are "no vault context this turn," not
-        errors.
+        best first, capped at `top_k`. Empty list only if the query is
+        blank, the router isn't built, or the vault is empty — all "no
+        vault context this turn," not errors.
+
+        No cue gate and (by default) no floor: with VAULT_RETRIEVAL_FLOOR
+        at 0.0 every non-blank turn gets the top_k nearest chunks, however
+        unrelated. That is the intended behaviour — unrestricted read
+        access — not an oversight.
         """
-        if not query.strip() or not should_check_vault(query):
+        if not query.strip():
             return []
         if not self.build():
             return []

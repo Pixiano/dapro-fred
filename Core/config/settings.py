@@ -48,45 +48,77 @@ VAULT_DIR = Path(r"C:\Users\Dhiraj Vatsal\VatsalDaPro\Projects\1_FRED_Memory\FRE
 # (one list, not two that could drift apart).
 VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md")
 
-# Filenames excluded from the vector index for reasons other than being
-# hardcoded — routing/formatting metadata for a human or an editing agent,
-# not content FRED should ever retrieve mid-conversation:
-#   MAP.md, INDEX.md        routing table + frontmatter schema
-#   AGENT-BOOTSTRAP.md      startup sequence for an agent editing the
-#                           vault (e.g. Claude Code) — not for FRED
-#   _TEMPLATE.md            blank skeletons, no retrievable content
-VAULT_EXCLUDED_FILES = {"MAP.md", "INDEX.md", "AGENT-BOOTSTRAP.md", "_TEMPLATE.md"}
-
-# Cache/index for the vector router — generated data, not vault content,
-# so it lives with FRED's other generated stores (Core/data/) rather than
-# inside the vault itself. Re-embeds only files whose content hash
-# changed since the last build (see VaultRouter.build).
-VAULT_INDEX_DIR = DATA_DIR / "vault_index"
-VAULT_INDEX_DIR.mkdir(exist_ok=True)
-
-VAULT_RETRIEVAL_TOP_K = 3
-
-# Measured against the real vault (7 relevant queries, 6 plain-chat), not
-# guessed — and the honest result is there is no floor that cleanly
-# separates them. Real relevant hits ran 0.533-0.736; plain chat ran
-# 0.340-0.661, with "tell me a joke" (0.661) scoring HIGHER than the
-# board-exams query (0.533) scored against its own correct answer. Two
-# self-referential chunks in projects/fred.md ("What it does", "(intro)")
-# are the repeat offenders — broad conversational-assistant language that
-# drifts close to almost any chat query regardless of topic.
+# Unrestricted read access, with exactly one exception, measured rather
+# than assumed. Every .md file that isn't hardcoded above is indexed —
+# including MAP.md, INDEX.md and AGENT-BOOTSTRAP.md, all of which carry
+# real content and were previously excluded for no good reason.
 #
-# 0.55 is a deliberate compromise, not a solved threshold: it clears most
-# chat noise and catches most real hits, but "tell me a joke" still
-# leaks through occasionally and a borderline-relevant query like the
-# board-exams one sits close to the line. Accepted because the failure
-# mode here is cheap — a stray paragraph of vault text costs a few
-# context tokens on an unrelated turn — unlike a misrouted TOOL, which
-# takes a wrong action. If this turns out to leak too often in practice,
-# the real fix is almost certainly a cue-gate layer in front of this,
-# mirroring what actually fixed tool routing (orchestrator/intent.py) —
-# semantic-only classification of "is this relevant at all" was
-# unreliable there too, for the same underlying reason.
-VAULT_RETRIEVAL_FLOOR = 0.55
+# _TEMPLATE.md is the exception, and it is not a restriction on access in
+# any meaningful sense: those four files are blank skeletons whose entire
+# text is placeholder prompts ("> One line: what this is and why it
+# exists", "[decision] — reasoning"). They hold zero information about
+# Vatsal, so indexing them grants FRED nothing — while actively costing
+# it real answers. Measured on the live 313-chunk index:
+#
+#   "what are my current priorities"
+#     with templates:    #1 jobs/_TEMPLATE.md (intro) 0.622
+#                        active-priorities.md pushed to rank 7
+#     without templates: active-priorities.md rises to rank 5
+#
+# Seven template chunks placed in the top 40 for that query. Short,
+# generic, question-shaped placeholder text embeds close to almost any
+# question, so they crowd out the file that actually answers it. Delete
+# this set to index them anyway; the cost is the ranking above.
+#
+# NOTE: read-only. Nothing here grants FRED the ability to WRITE to the
+# vault, and nothing should.
+VAULT_EXCLUDED_FILES = {"_TEMPLATE.md"}
+
+# Vector store for the vault router. Lives at <vault>/vectors/ so the
+# index travels with the memory vault it describes rather than with
+# Project_FRED — the vault is the thing that outlives any one project
+# (see VAULT_DIR above), and a rebuilt-from-scratch index on every clone
+# would otherwise cost a full re-embed. Contains only generated .json;
+# it can never index itself because _iter_vault_files() globs *.md only.
+# Re-embeds only files whose content hash changed since the last build
+# (see VaultRouter.build).
+VAULT_INDEX_DIR = VAULT_DIR / "vectors"
+VAULT_INDEX_DIR.mkdir(parents=True, exist_ok=True)
+
+# Raised 3 -> 6 when the floor went to 0.0. Three was calibrated against
+# a 126-chunk index over 25 files; the vault has since grown to 313
+# chunks over 60 files, so the same K now covers less than half as much
+# of the corpus. Measured consequence at K=3: "what are my current
+# priorities" returned projects/fred.md and personal/README.md while
+# active-priorities.md — the file that literally answers it — sat at
+# rank 5 and never reached the prompt. K=6 reaches it.
+#
+# Costs 6 x VAULT_CHUNK_INJECT_CHARS = ~2,520 chars (order of 600-700
+# tokens, ~4% of gemma4's 16,384-token window) on every turn, since with
+# floor 0.0 retrieval never returns fewer than K.
+VAULT_RETRIEVAL_TOP_K = 6
+
+# 0.0 = no floor. The user explicitly asked for unrestricted read access
+# to the vault, so retrieval now always returns the top-K nearest chunks
+# and never suppresses a turn. This deliberately abandons the previous
+# 0.55 threshold, which was calibrated against the real vault (7 relevant
+# queries, 6 plain-chat) and never worked cleanly anyway: relevant hits
+# ran 0.533-0.736 while plain chat ran 0.340-0.661, with "tell me a joke"
+# (0.661) outscoring the genuine board-exams match (0.533) against its
+# own correct chunk. There was no separating value to find, so nothing of
+# proven worth is being given up here.
+#
+# The tradeoff is real and unconditional: VAULT_RETRIEVAL_TOP_K chunks
+# are injected on EVERY turn regardless of relevance, costing roughly
+# 6 x VAULT_CHUNK_INJECT_CHARS (~2,520 chars, order of 600-700 tokens)
+# of prompt budget per turn against gemma4's 16,384-token context, plus
+# whatever confusion an off-topic chunk causes. "Tell me a joke" will now
+# always pull vault text — most often the self-referential chunks in
+# projects/fred.md ("What it does", "(intro)"), whose broad
+# conversational-assistant language drifts close to almost any query.
+# If that noise ever needs reining in, restore a floor here and/or
+# re-enable the cue gate at the call site in vault_router.retrieve().
+VAULT_RETRIEVAL_FLOOR = 0.0
 # Injected chunk text is capped here — a section can run a few hundred
 # words, and top_k=3 of those uncapped would be a real chunk of the
 # context budget on every hit.
