@@ -502,6 +502,19 @@ class LLMClient:
         mid-reasoning and has no answer to give.
         """
 
+        # Opened but never closed (e.g. hit max_tokens mid-reasoning) —
+        # checked FIRST, before any tag-stripping below runs. The
+        # substitutions a few lines down remove a lone, unclosed
+        # "<|channel>" opener on its own (line with `</?\|?channel\|?>`),
+        # which used to erase the only evidence this check needed —  by
+        # the time it ran, the opener was already gone and the raw
+        # reasoning text no longer "started with" anything recognisable,
+        # so it slipped through and got spoken aloud instead of refused.
+        if "<think>" in content and "</think>" not in content:
+            return ""
+        if re.search(r"<\|channel>\s*thought\b", content) and "<channel|>" not in content:
+            return ""
+
         # <think> style
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
         content = re.sub(r"^.*?</think>", "", content, flags=re.DOTALL)
@@ -517,8 +530,8 @@ class LLMClient:
 
         content = content.strip()
 
-        # Opened but never closed (e.g. hit max_tokens) — a raw monologue
-        # is not an answer, so refuse it rather than speak it.
+        # Belt and braces for any other unterminated-opener shape the two
+        # checks above didn't name explicitly.
         if content.startswith("<think>") or content.startswith("<|channel>"):
             return ""
 
