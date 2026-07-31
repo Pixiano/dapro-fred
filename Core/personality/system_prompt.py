@@ -1,6 +1,61 @@
 # Core/personality/system_prompt.py
+#
+# FRED's identity now lives in the vault, not here. This module loads it —
+# it is a loader, not a source of truth.
+#
+# Three files are read directly, always, on every FREDOrchestrator init —
+# no vector retrieval, no chance of a bad embedding match dropping
+# identity or a rule on some turn:
+#
+#   persona.md   who FRED is
+#   profile.md   who Vatsal is
+#   rules.md     hard behavioural rules
+#
+# Everything else in the vault (jobs/, projects/, knowledge/, daily/,
+# reference/, personal/, people/, active-priorities.md) is reached through
+# the vector store instead — those are the files that change, or that are
+# only relevant to some turns, not every turn. Loading three ~900-word
+# files always is a real, accepted cost (~4,200 tokens against gemma4's
+# 16,384-token window) in exchange for identity and rules never depending
+# on a retrieval match succeeding.
+#
+# persona.md itself currently claims the reverse of this file's role —
+# "[system_prompt.py] is the runtime source of truth; if the two
+# disagree, the system prompt wins and this file should be corrected."
+# That line is now stale (the authority direction flipped this session)
+# and hasn't been corrected here — vault write-back is deliberately
+# deferred, so this file doesn't touch vault content, only reads it.
 
-SYSTEM_PROMPT = """
+import re
+from pathlib import Path
+
+from config.settings import VAULT_DIR
+
+_FRONTMATTER = re.compile(r"^---\n.*?\n---\n+", re.DOTALL)
+
+_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md")
+
+
+def _strip_frontmatter(text: str) -> str:
+    return _FRONTMATTER.sub("", text, count=1)
+
+
+def _load_vault_prompt() -> str:
+    sections = []
+    for name in _HARDCODED_FILES:
+        path = VAULT_DIR / name
+        content = _strip_frontmatter(path.read_text(encoding="utf-8")).strip()
+        if content:
+            sections.append(content)
+    return "\n\n---\n\n".join(sections)
+
+
+# Pre-vault system prompt. Kept as a functional fallback, not just an
+# inert copy — if the vault is unreachable (moved, renamed, machine
+# without it), FRED still runs coherently rather than with an empty or
+# missing system prompt. This is the exact text that was the sole system
+# prompt before the vault swap.
+_FALLBACK_SYSTEM_PROMPT = """
 You are F.R.E.D. —
 Friendly, Responsive, Rational, Rakish Electronic Dude.
 
@@ -42,3 +97,21 @@ F.R.E.D.'s tone should feel like:
 a composed, intelligent assistant with personality —
 not a cartoon character.
 """.strip()
+
+
+def _build_system_prompt() -> str:
+    try:
+        prompt = _load_vault_prompt()
+        if not prompt:
+            raise ValueError("vault files were empty after stripping frontmatter")
+        return prompt
+    except Exception as e:
+        print(f"[system_prompt] vault load failed ({e}) — using fallback prompt")
+        return _FALLBACK_SYSTEM_PROMPT
+
+
+# Read once at import time, matching the previous behaviour (SYSTEM_PROMPT
+# was a static string). Vault edits to persona/profile/rules take effect
+# on the next FRED restart, not mid-session — these three files are
+# expected to change rarely, so this trades hot-reload for simplicity.
+SYSTEM_PROMPT = _build_system_prompt()

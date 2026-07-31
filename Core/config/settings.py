@@ -31,6 +31,18 @@ SCHEDULER_DB_PATH = DATA_DIR / "reminders.sqlite"
 DEFAULT_USERNAME = "default_user"
 
 # =========================================================
+# VAULT — FRED's identity and knowledge, outside this repo
+# =========================================================
+#
+# persona.md/profile.md/rules.md are read directly (see
+# personality/system_prompt.py); everything else in the vault reaches
+# FRED through the vector store instead of being loaded wholesale — the
+# vault is ~18,000 words, well past gemma4's 16,384-token context on its
+# own. Not under git, not inside Project_FRED: a memory vault outliving
+# any one project is the point.
+VAULT_DIR = Path(r"C:\Users\Dhiraj Vatsal\VatsalDaPro\Projects\1_FRED_Memory\FRED")
+
+# =========================================================
 # LLM SETTINGS — fully local inference via llama.cpp
 # =========================================================
 #
