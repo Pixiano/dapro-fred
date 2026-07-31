@@ -19,6 +19,7 @@
 # return immediately (Windows unhooks a slow callback with no warning),
 # so they only flip state and hand off to the turn thread.
 
+import queue
 import random
 import threading
 import time
@@ -38,6 +39,27 @@ TRANSCRIPT_TTL = 2.5
 # without it the popup vanishes the instant audio ends, which reads as a
 # crash rather than a completion.
 IDLE_LINGER = 0.7
+
+# Spoken immediately on every turn, before the real reply is even fully
+# generated. Masks time-to-first-word: gemma4 spends real time on its
+# reasoning block before anything is streamable (see llm_client.py /
+# settings.THINKING_TIERS), and this gives the user audio to listen to
+# during that gap instead of silence. Real generation starts on a
+# background thread the instant the filler starts playing, so the two
+# overlap rather than stack — the filler's ~1-2s of speech is latency
+# that would otherwise be spent waiting anyway.
+FILLER_PHRASES = (
+    "Let me think about that.",
+    "Give me a second.",
+    "One moment, sir.",
+    "Let me check on that.",
+    "Working on it now.",
+    "Let me have a look.",
+    "Hold on, thinking it through.",
+    "Give me one second.",
+    "Let's see here.",
+    "Just a moment.",
+)
 
 
 class PillApp:
@@ -255,29 +277,63 @@ class PillApp:
             self._to_idle_and_hide()
             return
 
-        # Stream the reply into the speaker. The generator is consumed by
-        # Kokoro's producer thread, so synthesis of sentence one overlaps
-        # generation of sentence two — the state flips to "speaking" on
-        # the first audio callback rather than after the model finishes.
+        # Real generation starts right now, on a background thread, so it
+        # overlaps with the filler phrase below instead of waiting for it
+        # to finish first. Buffered through a queue rather than handed
+        # straight to Kokoro because the filler and the real reply are two
+        # separate self.tts.speak() calls sharing one producer.
         collected = []
+        gen_queue = queue.Queue()
 
-        def piece_source():
+        def produce():
             try:
                 for piece in self.orchestrator.process_stream(text):
                     if self._cancel.is_set():
                         return
                     collected.append(piece)
-                    yield piece
+                    gen_queue.put(piece)
             except Exception as e:
                 print(f"[PillApp] generation failed: {e}")
                 event_log.log_error("generation", e)
-                yield "Sorry, something went wrong."
+                gen_queue.put("Sorry, something went wrong.")
+            finally:
+                # Always reached — cancel, exception, or normal finish —
+                # so the consumer below can never block forever on a
+                # producer that already died.
+                gen_queue.put(None)
+
+        threading.Thread(target=produce, daemon=True).start()
+
+        def queued_source():
+            while True:
+                item = gen_queue.get()
+                if item is None or self._cancel.is_set():
+                    return
+                yield item
 
         def on_first_audio():
             self.window.set_state("speaking")
 
+        # Spoken immediately, while the real reply is still generating in
+        # the background thread above.
+        filler = random.choice(FILLER_PHRASES)
+        event_log.log("fred_speech", text=filler, spoken=True, filler=True)
+        self.tts.speak(
+            filler,
+            on_level=self.window.set_level,
+            on_first_audio=on_first_audio,
+            cancel=self._cancel,
+        )
+
+        if self._cancel.is_set():
+            self._to_idle_and_hide()
+            return
+
+        # If the real reply isn't ready the moment the filler ends, this
+        # just blocks here with no audio — no second filler, the pill
+        # stays exactly as it is until there's something real to speak.
         spoken = self.tts.speak(
-            piece_source(),
+            queued_source(),
             on_level=self.window.set_level,
             on_first_audio=on_first_audio,
             cancel=self._cancel,
