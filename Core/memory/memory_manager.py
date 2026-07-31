@@ -62,9 +62,20 @@ class MemoryManager:
                 f"Embedding model not found: {EMBEDDING_MODEL_PATH}"
             )
 
+        # n_ctx explicit rather than left at llama-cpp-python's default of
+        # 512 — this model is called up to 3x per turn (memory retrieval,
+        # tool routing, vault routing) via three separate call sites that
+        # all share this one instance, and repeated turns in quick
+        # succession (rapid hotkey presses) produced native access
+        # violations inside llama_cpp's decode() (see data/logs/crash.log)
+        # consistent with that 512-token context being run past its
+        # limit. 4096 is comfortably above any single embedded text here
+        # (tool descriptions, vault chunks, memory entries) and the model
+        # trained on 32768, so there's no accuracy tradeoff either way.
         self.embedding_model = Llama(
             model_path=str(EMBEDDING_MODEL_PATH),
             embedding=True,
+            n_ctx=4096,
             verbose=False,
         )
 
