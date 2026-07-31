@@ -146,6 +146,17 @@ for _name, _triggers, _replies in CATEGORIES:
         _LOOKUP[_normalize(_t)] = (_name, _replies)
 
 
+def is_canned(user_input: str) -> bool:
+    """
+    Cheap pre-check: True if `user_input` would hit a canned reply,
+    without picking one or logging. The UI layer uses this to decide
+    whether a filler phrase is even worth playing — a canned reply is
+    already instant (no model call at all), so speaking a ~1s filler in
+    front of it only adds delay it exists to hide elsewhere.
+    """
+    return _normalize(user_input) in _LOOKUP
+
+
 def match(user_input: str) -> str | None:
     """
     Returns a random canned reply if `user_input`, once normalised, IS

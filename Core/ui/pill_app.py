@@ -25,7 +25,7 @@ import threading
 import time
 
 from config.settings import TTS_ENABLED, STT_ENABLED
-from orchestrator import intent
+from orchestrator import canned_replies, intent
 from orchestrator.orchestrator import FREDOrchestrator
 from input.hotkey import HoldHotkey
 from ui.pill.indicators import random_indicator
@@ -351,20 +351,25 @@ class PillApp:
         def on_first_audio():
             self.window.set_state("speaking")
 
-        # Spoken immediately, while the real reply is still generating in
-        # the background thread above.
-        filler = _pick_filler(text)
-        event_log.log("fred_speech", text=filler, spoken=True, filler=True)
-        self.tts.speak(
-            filler,
-            on_level=self.window.set_level,
-            on_first_audio=on_first_audio,
-            cancel=self._cancel,
-        )
+        # The filler exists to hide the model's reasoning latency (see
+        # FILLER_PHRASES above) — a canned reply never touches the model
+        # at all, so playing ~1s of filler in front of "thank you" would
+        # only add delay that has nothing to hide. Skip it there; the
+        # producer thread above still runs and the canned text (already
+        # queued almost instantly) plays as soon as this check is done.
+        if not canned_replies.is_canned(text):
+            filler = _pick_filler(text)
+            event_log.log("fred_speech", text=filler, spoken=True, filler=True)
+            self.tts.speak(
+                filler,
+                on_level=self.window.set_level,
+                on_first_audio=on_first_audio,
+                cancel=self._cancel,
+            )
 
-        if self._cancel.is_set():
-            self._to_idle_and_hide()
-            return
+            if self._cancel.is_set():
+                self._to_idle_and_hide()
+                return
 
         # If the real reply isn't ready the moment the filler ends, this
         # just blocks here with no audio — no second filler, the pill
