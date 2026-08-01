@@ -228,15 +228,44 @@ class Dispatcher:
     # ROUTES
     # =========================================================
 
-    @staticmethod
-    def _route_open_website(match: re.Match) -> dict:
+    # Suffixes that mean "this is a file on disk", not a hostname. The
+    # open-a-website pattern accepts any <something>.<something>, which
+    # a filename satisfies just as well as a domain does — confirmed
+    # 2026-08-02: "Open dossier.pdf", said right after FRED had found
+    # dossier.pdf on the Desktop, opened a browser at
+    # https://dossier.pdf instead of the actual PDF.
+    #
+    # Checking file extensions rather than valid TLDs is deliberate:
+    # the TLD list is enormous and grows, while the set of extensions
+    # someone asks FRED to open by voice is small and stable. Anything
+    # not listed still goes to the web, which keeps "open youtube.com"
+    # and any new TLD working without maintenance here.
+    _FILE_SUFFIXES = {
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md",
+        "csv", "json", "xml", "log", "rtf", "odt", "epub",
+        "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "ico",
+        "mp3", "mp4", "wav", "avi", "mkv", "mov", "flac", "m4a", "webm",
+        "zip", "rar", "7z", "tar", "gz", "iso",
+        "py", "js", "ts", "html", "css", "java", "cpp", "c", "rs", "go",
+        "exe", "msi", "bat", "ps1", "lnk", "dll",
+    }
+
+    @classmethod
+    def _route_open_website(cls, match: re.Match) -> dict:
 
         target = match.group("target")
 
-        if not target.startswith(("http://", "https://")):
-            target = f"https://{target}"
+        # An explicit scheme is unambiguous — always the web.
+        if target.startswith(("http://", "https://")):
+            return {"tool": "open_website", "arguments": {"url": target}}
 
-        return {"tool": "open_website", "arguments": {"url": target}}
+        suffix = target.rsplit(".", 1)[-1].lower() if "." in target else ""
+        if suffix in cls._FILE_SUFFIXES:
+            # open_path handles files and folders with the shell's own
+            # default program, which is what "open dossier.pdf" means.
+            return {"tool": "open_path", "arguments": {"path": target}}
+
+        return {"tool": "open_website", "arguments": {"url": f"https://{target}"}}
 
     @staticmethod
     def _route_launch_application(match: re.Match) -> dict:

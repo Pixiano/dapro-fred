@@ -486,6 +486,30 @@ def list_directory(directory: str = "", limit: int = 40) -> str:
     return header + "\n" + "\n".join(lines)
 
 
+# Where a bare filename is actually likely to live. Ordered: the places
+# a person drops a file they're about to talk about come first.
+_COMMON_FILE_HOMES = ("Desktop", "Downloads", "Documents", "Pictures")
+
+
+def _find_bare_filename(name: str):
+    """
+    Look for a bare filename in the obvious user folders (top level
+    only — no recursive walk, this must stay instant).
+
+    Needed because resolve_user_path anchors a bare name under
+    Documents/FRED, which is right for files FRED creates and wrong for
+    files that already exist somewhere else. Confirmed 2026-08-02:
+    FRED found dossier.pdf on the Desktop, was asked to open it, and
+    resolved it to Documents/FRED/dossier.pdf, which doesn't exist.
+    """
+    home = Path(os.path.expanduser("~"))
+    for folder in _COMMON_FILE_HOMES:
+        candidate = home / folder / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def open_path(path: str) -> str:
     """
     Open a file or folder with whatever Windows normally uses for it.
@@ -493,6 +517,13 @@ def open_path(path: str) -> str:
     open_website (which needs a URL).
     """
     target = resolve_user_path(path)
+
+    # A bare filename that isn't where it was anchored is probably an
+    # existing file elsewhere, not a missing one — see _find_bare_filename.
+    if not target.exists() and not Path(path).is_absolute() and len(Path(path).parts) == 1:
+        found = _find_bare_filename(Path(path).name)
+        if found is not None:
+            target = found
 
     if not target.exists():
         return f"Couldn't find {target}."

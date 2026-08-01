@@ -287,6 +287,49 @@ def kill_process(name_or_pid: str) -> str:
 # FILE NAVIGATION
 # =========================================================
 
+# Directories a user search is never actually asking about, pruned
+# during the walk rather than filtered after it.
+#
+# Measured 2026-08-02: searching the home folder for "dossier" took
+# 103.6s, because Path.rglob("*") descends into everything — AppData
+# (tens of thousands of files), package caches, node_modules, virtualenvs,
+# .git object stores, the local model store. The same search scoped to
+# Desktop took 0.6s. The walk itself was the entire cost; nothing about
+# the matching was slow.
+#
+# Pruning has to happen DURING traversal to help at all, which rglob
+# cannot do — hence os.walk, whose `dirs` list can be edited in place to
+# stop it descending. Names are matched case-insensitively because
+# Windows paths are.
+_SKIP_DIRS = {
+    "appdata", "application data", "$recycle.bin", "onedrivetemp",
+    "node_modules", "__pycache__", "site-packages", "venv", ".venv",
+    ".git", ".svn", ".hg", ".cache", ".conda", ".gradle", ".nuget",
+    ".pyenv", ".lmstudio", ".ollama", ".cargo", ".rustup", ".npm",
+    ".vscode", ".idea", "temp", "tmp",
+}
+
+
+def _walk_pruned(base: Path):
+    """
+    Yield files under `base`, skipping the directories in _SKIP_DIRS and
+    anything hidden (a leading dot). Depth is not limited — pruning the
+    heavy trees is what makes this fast, not a depth cap, and a cap
+    would silently miss genuinely deep files.
+    """
+    for dirpath, dirs, files in os.walk(base, topdown=True):
+        # In-place edit is load-bearing: os.walk reads this list AFTER
+        # the yield to decide where to go next, so reassigning it
+        # (dirs = [...]) instead of slicing would prune nothing.
+        dirs[:] = [
+            d for d in dirs
+            if d.lower() not in _SKIP_DIRS and not d.startswith(".")
+        ]
+        folder = Path(dirpath)
+        for name in files:
+            yield folder / name
+
+
 def search_files(query: str, directory: str = "") -> str:
     """
     Search for files by name (substring match) under a directory,
@@ -317,7 +360,7 @@ def search_files(query: str, directory: str = "") -> str:
         matches = [Path(p) for p in cached]
     else:
         matches = []
-        for path in base.rglob("*"):
+        for path in _walk_pruned(base):
             if query in path.name.lower():
                 matches.append(path)
                 if len(matches) >= 50:
