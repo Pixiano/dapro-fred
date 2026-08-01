@@ -339,7 +339,8 @@ class PillApp:
                 # producer that already died.
                 gen_queue.put(None)
 
-        threading.Thread(target=produce, daemon=True).start()
+        producer = threading.Thread(target=produce, daemon=True)
+        producer.start()
 
         def queued_source():
             while True:
@@ -374,12 +375,39 @@ class PillApp:
         # If the real reply isn't ready the moment the filler ends, this
         # just blocks here with no audio — no second filler, the pill
         # stays exactly as it is until there's something real to speak.
-        spoken = self.tts.speak(
-            queued_source(),
-            on_level=self.window.set_level,
-            on_first_audio=on_first_audio,
-            cancel=self._cancel,
-        )
+        try:
+            spoken = self.tts.speak(
+                queued_source(),
+                on_level=self.window.set_level,
+                on_first_audio=on_first_audio,
+                cancel=self._cancel,
+            )
+        finally:
+            # llama.cpp is NOT thread-safe, and _turn_lock alone does not
+            # protect it: the lock is released when _turn_body returns,
+            # but `produce` runs on its own thread and can still be inside
+            # create_chat_completion at that moment. Interrupting a reply
+            # then immediately speaking again therefore started a second
+            # generation on the same model while the first was still
+            # decoding — two concurrent llama_decode calls, which aborts
+            # the whole process with no catchable Python error.
+            #
+            # That is the "crashes if you hit the hotkey more than twice"
+            # report: two turns 5s apart, each logging only its filler and
+            # no reply, then `Fatal Python error: Aborted` inside
+            # llama_cpp/_internals.py decode().
+            #
+            # Joining here keeps the generation inside the lock's lifetime,
+            # so the next turn cannot start until this one has genuinely
+            # left llama.cpp. A cancelled turn still waits for the C call
+            # to return — it cannot be interrupted — which costs a moment
+            # of latency on a fast re-press and is strictly better than
+            # killing the process. The timeout is a backstop against a
+            # wedged generation deadlocking the app forever.
+            producer.join(timeout=120)
+            if producer.is_alive():
+                print("[PillApp] generation thread still running after 120s")
+                event_log.log("error", source="turn", message="producer join timed out")
 
         reply = "".join(collected).strip()
         print(f"F.R.E.D.: {reply}")
