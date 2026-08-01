@@ -144,15 +144,36 @@ MODELS_DIR = Path(
     r"C:\Users\Dhiraj Vatsal\.lmstudio\models"
 )
 
-# Revised 2026-08-01, twice in one day. First pass matched MODEL_TIERS
-# to the real contents of MODELS_DIR (some old tiers had been deleted
-# from disk, some new models had arrived). Second pass, this one:
-# renamed to Title Case on request, and dropped the two brand-new
-# additions (Mistral, Gemma 4 12B-QAT) again before they were ever
-# used — back down to exactly the three tiers actually in use.
+# Revised 2026-08-01, three times in one day. Pass 1 matched MODEL_TIERS
+# to the real contents of MODELS_DIR. Pass 2 renamed to Title Case and
+# dropped Mistral/Gemma-12B, back down to 3 tiers. Pass 3, this one:
+# Qwen3-8B promoted to "Standard" (DEFAULT_TIER) with thinking on, on
+# direct instruction after the user's own testing. The old Standard
+# (Qwen3.5-4B) is demoted to "Backup", kept configured rather than
+# removed — not currently reachable by anything (TIER_ROUTING_ENABLED
+# is False, so DEFAULT_TIER is the only tier ever selected), but sitting
+# here ready if Standard's new latency ever needs a fast fallback.
 MODEL_TIERS = {
-    # Qwen3.5-4B at Q6_K — DEFAULT_TIER. The main/always-resident model.
-    "Standard": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+    # Qwen3-8B at Q4_K_M — DEFAULT_TIER as of this revision. The main/
+    # always-resident model. Thinking ON: unlike Qwen3.5-4B, this
+    # template's enable_thinking guard only pre-closes the block when
+    # explicitly set to false (`{%- if enable_thinking is defined and
+    # enable_thinking is false %}`), and llama-cpp-python can never
+    # define that variable — so the guard never fires and reasoning
+    # runs by default, no marker needed. Confirmed at the byte level,
+    # same as Deep below. This is a real, accepted latency tradeoff on
+    # the tier used every single turn: expect reasoning cost closer to
+    # Deep's ~13s-for-a-trivial-reply than the old Standard's near-
+    # instant one. Chosen anyway, deliberately, after live testing.
+    "Standard": MODELS_DIR / "lmstudio-community" / "Qwen3-8B-GGUF"
+            / "Qwen3-8B-Q4_K_M.gguf",
+
+    # Qwen3.5-4B at Q6_K — demoted from Standard this revision. Reasoning
+    # off by default (its own template pre-closes <think></think>
+    # unconditionally when the kwarg is undefined, unlike Qwen3-8B/Deep
+    # above/below) — kept specifically as the fast option if Standard's
+    # new latency ever needs a quick fallback.
+    "Backup": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
             / "Qwen3.5-4B-Q6_K.gguf",
 
     # Qwen3-14B-Q4_K_M — the "bigger model" tier: reasoning, coding,
@@ -164,15 +185,14 @@ MODEL_TIERS = {
 
     # gpt-oss-20b — 11.28GB on disk, the largest configured tier. Rare/
     # heavy use only. VRAM math has not been done for this one the way
-    # it has for Standard/Deep, so treat as unverified until it is.
+    # it has for Standard/Backup/Deep, so treat as unverified until it is.
     "Extreme": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
             / "gpt-oss-20b.gguf",
 
     # Bonsai-27B: NOT added. Only mmproj-Bonsai-27B-BF16.gguf (0.87GB,
     # the vision projector) has downloaded so far — the actual model
-    # weights aren't on disk yet. A second model (Qwen-family) is also
-    # incoming as of this revision. Both go through the same sandbox
-    # test process before either gets a real tier entry here.
+    # weights aren't on disk yet. Goes through the same sandbox test
+    # process before it gets a real tier entry here.
 }
 
 # Per-tier literal text injected into the system turn, because
@@ -203,10 +223,12 @@ TIER_PROMPT_MARKERS = {
 # most local GGUFs' own templates have no provision for tool definitions,
 # and would otherwise silently discard tool_calls support.
 CHAT_FORMAT_BY_TIER = {
-    # Qwen3.5 ships a template that handles tool_calls AND reasoning, so
+    # Qwen3-8B ships a template that handles tool_calls AND reasoning, so
     # it keeps its own rather than having chatml-function-calling forced
     # over the top of it.
     "Standard": None,
+    # Same reasoning applies to Qwen3.5-4B's own template.
+    "Backup": None,
     # Same reasoning applies to Qwen3-14B's own template.
     "Deep": None,
     # Extreme (gpt-oss-20b) deliberately absent: its Harmony-format
@@ -218,8 +240,10 @@ CHAT_FORMAT_BY_TIER = {
 
 DEFAULT_TIER = "Standard"
 
-# Switched from gemma4 (Gemma 4 E4B, since deleted) 2026-08-01. Measured
-# on the same query ("tell me something interesting about black holes"),
+# DEFAULT_TIER has moved twice on 2026-08-01, in opposite directions.
+#
+# Morning: gemma4 (Gemma 4 E4B) -> Qwen3.5-4B, FOR speed. Measured on
+# the same query ("tell me something interesting about black holes"),
 # same system prompt, model already warm:
 #
 #                       gemma4 E4B Q4_K_M     Qwen3.5-4B Q6_K
@@ -229,13 +253,18 @@ DEFAULT_TIER = "Standard"
 #   silent reasoning block          5.87s               none
 #   full generation      8.72s / 589 tok     3.74s / 204 tok
 #
-# 2.3x faster end to end, 1.7 GB less VRAM, and a higher-precision quant
-# (Q6_K against Q4_K_M) on a true 4B rather than an "effective" one.
+# 2.3x faster end to end, 1.7 GB less VRAM. Qwen3.5-4B answered with no
+# <think> block because its template pre-closes one unless
+# enable_thinking is passed as a jinja variable, which llama-cpp-python
+# cannot do — reasoning was off by default, structurally, not a choice.
 #
-# It answers with no <think> block because Qwen3.5's own template
-# pre-closes one unless `enable_thinking` is passed as a jinja variable,
-# which llama-cpp-python cannot do. Not a quality collapse: it still
-# gets the bat-and-ball trap right ($0.05) reasoning inline, in 5.2s.
+# Evening: Qwen3.5-4B -> Qwen3-8B, DESPITE speed, on direct instruction
+# after the user's own live testing. Qwen3-8B's template has the
+# opposite default: its enable_thinking guard only fires when explicitly
+# set to false, which llama-cpp-python can never do — so reasoning runs
+# by default here. Expect the morning's speed win to be substantially
+# undone; Qwen3.5-4B is kept configured as "Backup" specifically for
+# this reason, in case Standard's new latency ever needs a fast option.
 
 # One model, always DEFAULT_TIER. When False this bypasses the word-count
 # heuristic in llm_client._pick_tier. That heuristic itself still names
@@ -256,6 +285,7 @@ CONTEXT_WINDOW = 16384
 
 CONTEXT_WINDOW_BY_TIER = {
     "Standard": 16384,
+    "Backup": 16384,
     "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, same as before
     "Extreme": 16384,
 }
