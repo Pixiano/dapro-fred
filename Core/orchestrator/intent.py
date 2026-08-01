@@ -128,7 +128,14 @@ CATEGORY_CUES = {
     "audio": (
         "volume", "louder", "quieter", "loud", "quiet", "mute", "unmute",
         "sound", "audio", "play", "pause", "resume", "skip", "next track",
-        "previous", "song", "music", "track",
+        "previous", "song", "music",
+        # NOT a bare "track" — "on track", "keep track", "track record"
+        # are common enough English idioms that it false-positived
+        # "Am I on track with my bulk?" (a fitness/vault question) into
+        # the audio category, which mis-routed it to get_volume. "next
+        # track" above already covers the real skip-song phrasing, so
+        # the bare form was pure liability with no coverage it alone
+        # provided.
     ),
     "display": (
         "brightness", "brighter", "dimmer", "dim", "screen",

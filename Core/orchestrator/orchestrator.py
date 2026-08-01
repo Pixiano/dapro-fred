@@ -79,8 +79,22 @@ TOOL_LABELS = {
 # orchestrator/scheduler.py), not "whatever currently happens to look
 # okay" — a tool added later defaults to going through the follow-up pass
 # until someone deliberately decides its phrasing needs no help.
+#
+# calculate() was here and is deliberately NOT any more. The bare-
+# arithmetic case that motivated it ("what's 12 times 8") never reaches
+# this code path at all — dispatcher.py's _route_calculate /
+# _route_calculate_bare already catch that with zero LLM calls, before
+# the tool-loop even starts (verified: dispatcher.match() returns a hit
+# for "what is 12 times 8", "12 times 8", "what is 17 percent of 300").
+# So by construction, anything that reaches calculate() THROUGH the tool
+# loop already failed the dispatcher's bare-math check — it's a
+# calculation embedded in a larger question, e.g. "a shirt is 40% off
+# then another 20% off, is that the same as 60% off?". Skipping the
+# follow-up there answered the arithmetic (48) and never answered the
+# actual question (no). calculate() stays self-narrating for the
+# dispatcher's zero-LLM path; the tool-loop path now always gets its
+# interpretive sentence.
 SELF_NARRATING_TOOLS = {
-    "calculate",
     "get_current_time",
     "get_weather",
     "get_system_status",
@@ -1063,12 +1077,10 @@ class FREDOrchestrator:
 
         # Skip the second LLM call entirely when every tool this turn
         # called already returns a complete spoken sentence — see
-        # SELF_NARRATING_TOOLS. calculate() is the motivating case: without
-        # this, "12 times 8" cost two LLM calls (pick the tool, then
-        # re-phrase "12 * 8 = 96" into English) to say something the tool
-        # already said correctly on its own. Re-asking the model here also
-        # risks it silently rewording — or mangling — an answer that was
-        # already exactly right.
+        # SELF_NARRATING_TOOLS, and its note on why calculate() is
+        # deliberately not in it: this loop only ever sees calculate()
+        # results for calculations embedded in a bigger question, which
+        # need interpreting, not just stating.
         called_names = {c.get("function", {}).get("name") for c in tool_calls}
         if called_names and called_names <= SELF_NARRATING_TOOLS:
             return " ".join(tool_results)
