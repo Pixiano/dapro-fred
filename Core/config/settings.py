@@ -401,17 +401,23 @@ KOKORO_SPEED = 1.2
 # 42.7ms block. So the fix is to give the link something inaudible to
 # ramp through.
 #
-# 0.35 undershot that own ~0.5-1s figure — still audibly quiet for the
-# first second even after the filler/captions/reply merge below stopped
-# it happening a SECOND time per turn (see pill_app.py's merged_source:
-# one continuous stream now, one sd.OutputStream, so this preroll is
-# paid once per turn, not once per real reply). Raised to the top of the
-# documented range now that the cost lands entirely before the
-# disposable filler rather than before the real answer.
+# 0.35 undershot the ~0.5-1s figure documented above — still audibly
+# quiet for the first second even after the filler/captions/reply merge
+# in pill_app.py stopped the ramp happening a SECOND time per turn (one
+# continuous stream now, one sd.OutputStream, so this preroll is paid
+# once per turn, not once per real reply).
+#
+# Raised to 1.0 first, matching the documented ceiling. Confirmed on
+# real hardware afterwards: real words were consistently full volume,
+# but the filler itself was still quiet — meaning this device's actual
+# ramp runs longer than the ~0.5-1s estimate above, not just up against
+# it. Raised again to 1.5, past that original estimate, on that direct
+# feedback rather than the documented figure. If the filler is ever
+# quiet again, that number is still a floor, not a hard limit.
 #
 # Costs this much extra time-to-first-word, once per turn. Set to 0 on a
 # wired output, where none of this applies.
-TTS_PREROLL_SEC = 1.0
+TTS_PREROLL_SEC = 1.5
 
 # =========================================================
 # FASTER-WHISPER STT — GUI mode's ears (audio/stt_whisper.py)
