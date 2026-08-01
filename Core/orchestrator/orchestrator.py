@@ -1141,7 +1141,26 @@ class FREDOrchestrator:
 
             if match:
                 name = match.group(1).strip()
-                raw_args = match.group(2).strip() or "{}"
+                inner = match.group(2).strip()
+
+                # Qwen3.5 style, nested one level deeper than Hermes:
+                # <function=NAME><parameter=key>value</parameter>...
+                # </function> — the body is NOT a JSON blob, it's one
+                # tag per argument. Assuming it already was JSON (the
+                # Hermes assumption below) fed the literal XML fragment
+                # into json.loads downstream, which failed with
+                # "malformed arguments" on every tool call this tier
+                # made — reproduced directly: asking a percentage
+                # question routed to calculate() with exactly this shape.
+                params = re.findall(
+                    r"<parameter=([\w_]+)>(.*?)</parameter>", inner, re.DOTALL
+                )
+                if params:
+                    raw_args = json.dumps({
+                        k: self._coerce_text_arg(v) for k, v in params
+                    })
+                else:
+                    raw_args = inner or "{}"
             else:
                 # Qwen-style: {"name": "...", "arguments": {...}}
                 try:
@@ -1182,6 +1201,26 @@ class FREDOrchestrator:
             })
 
         return calls
+
+    @staticmethod
+    def _coerce_text_arg(value: str):
+        """
+        Qwen3.5's <parameter=key>value</parameter> syntax gives every
+        argument as bare text — there is no type information the way a
+        JSON blob would carry it. A tool schema like set_volume(level:
+        int) then gets the string "50" instead of 50. Coerce the common
+        cases; leave anything else as a string, which is the safe
+        default a JSON number/bool would have been anyway if this
+        guessed wrong.
+        """
+        v = value.strip()
+        if re.fullmatch(r"-?\d+", v):
+            return int(v)
+        if re.fullmatch(r"-?\d+\.\d+", v):
+            return float(v)
+        if v.lower() in ("true", "false"):
+            return v.lower() == "true"
+        return v
 
     @staticmethod
     def _gemma_args_to_json(raw: str) -> str:
