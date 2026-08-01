@@ -1377,28 +1377,30 @@ class FREDOrchestrator:
         messages = []
 
         # -----------------------------
-        # System prompt
+        # System prompt — ONE message, not one per section.
         # -----------------------------
-        messages.append({
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        })
+        # Used to be four separate {"role": "system", ...} entries
+        # (persona, screen context, vault knowledge, memory). gemma4's
+        # template tolerated that silently; Qwen3.5's native template
+        # enforces exactly one leading system message and raises "System
+        # message must be at the beginning" the moment a second one
+        # appears — which surfaced as every real reply falling through to
+        # the generic "cognitive malfunction" string, since generate()
+        # catches the exception and returns that fallback rather than
+        # propagating it. Concatenating into one message is also just
+        # more correct prompt construction regardless of model.
+        system_sections = [SYSTEM_PROMPT]
 
-        # -----------------------------
-        # Ambient screen context
-        # -----------------------------
-        # What's in front of the user right now, so "what am I doing" and
-        # app-implicit requests ("close this", "what's this error") have
-        # something to resolve against. Cheap: one Win32 title read per
-        # turn, no screenshot, no vision model. Stays local like the rest.
+        # Ambient screen context: what's in front of the user right now,
+        # so "what am I doing" and app-implicit requests ("close this",
+        # "what's this error") have something to resolve against. Cheap:
+        # one Win32 title read per turn, no screenshot, no vision model.
         context = self._screen_context()
         if context:
-            messages.append({"role": "system", "content": context})
+            system_sections.append(context)
 
-        # -----------------------------
-        # Vault knowledge (the other 32 files — persona/profile/rules are
+        # Vault knowledge (the other files — persona/profile/rules are
         # loaded directly and always, see personality/system_prompt.py)
-        # -----------------------------
         vault_router = self._vault_router()
         if vault_router:
             hits = vault_router.retrieve(user_input)
@@ -1408,26 +1410,17 @@ class FREDOrchestrator:
                     + ("..." if len(text) > VAULT_CHUNK_INJECT_CHARS else "")
                     for label, text, _score in hits
                 )
-                messages.append({
-                    "role": "system",
-                    "content": f"Relevant vault knowledge:\n{vault_text}",
-                })
+                system_sections.append(f"Relevant vault knowledge:\n{vault_text}")
 
-        # -----------------------------
-        # Inject memory context
-        # -----------------------------
+        # Long-term memory
         if memories:
-            memory_text = "\n".join(
-                [f"- {m['content']}" for m in memories]
-            )
+            memory_text = "\n".join(f"- {m['content']}" for m in memories)
+            system_sections.append(f"Relevant long-term memory:\n{memory_text}")
 
-            messages.append({
-                "role": "system",
-                "content": (
-                    "Relevant long-term memory:\n"
-                    f"{memory_text}"
-                )
-            })
+        messages.append({
+            "role": "system",
+            "content": "\n\n".join(system_sections),
+        })
 
         # -----------------------------
         # Add recent conversation
