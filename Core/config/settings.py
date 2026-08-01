@@ -312,6 +312,17 @@ LLM_IDLE_UNLOAD_SECONDS = 60 * 60          # 1 hour of no use
 WHISPER_UNLOAD_AFTER_LLM_SECONDS = 15 * 60  # + 15 min => 1h15m total
 MODEL_WATCHDOG_TICK_SECONDS = 30
 
+# Kokoro joins the same waterfall (after Whisper, once it's ALSO been
+# gone this long), added for consistency with the pair above — but read
+# this before assuming it buys what LLM/Whisper unload buys. Verified:
+# kokoro_onnx hardcodes CPUExecutionProvider, and this environment's
+# onnxruntime has no GPU provider installed at all. Unloading Kokoro
+# frees ~340MB of ordinary RAM, not VRAM — a different, much less scarce
+# resource than the ~6.1GB LLM+Whisper reclaim above. Wired in mainly so
+# a phrase_cache-only session (see audio/phrase_cache.py) doesn't hold
+# the model resident for no reason, not because the RAM was tight.
+KOKORO_UNLOAD_AFTER_WHISPER_SECONDS = 15 * 60  # + 15 min => 1h30m total
+
 # Re-run Whisper's warm-up decode after a reload. The first CUDA
 # transcription in a fresh process cost ~14s against ~0.25s warm; after an
 # unload the CUDA context survives, so a reload may not need the full

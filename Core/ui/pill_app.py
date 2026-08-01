@@ -20,13 +20,14 @@
 # so they only flip state and hand off to the turn thread.
 
 import queue
-import random
 import threading
 import time
 
+from audio import phrase_cache
+from audio.fillers import ALL_FILLERS, pick_filler
 from config.settings import TTS_ENABLED, STT_ENABLED
-from orchestrator import canned_replies, intent
-from orchestrator.orchestrator import FREDOrchestrator
+from orchestrator import canned_replies
+from orchestrator.orchestrator import TOOL_LABELS, FREDOrchestrator
 from input.hotkey import HoldHotkey
 from ui.pill.indicators import random_indicator
 from ui.pill.window import PillWindow
@@ -41,62 +42,11 @@ TRANSCRIPT_TTL = 2.5
 # crash rather than a completion.
 IDLE_LINGER = 0.7
 
-# Spoken immediately on every turn, before the real reply is even fully
-# generated. Masks time-to-first-word: gemma4 spends real time on its
-# reasoning block before anything is streamable (see llm_client.py /
-# settings.THINKING_TIERS), and this gives the user audio to listen to
-# during that gap instead of silence. Real generation starts on a
-# background thread the instant the filler starts playing, so the two
-# overlap rather than stack — the filler's ~1-2s of speech is latency
-# that would otherwise be spent waiting anyway.
-#
-# Picked per turn by a cue check, not a fixed pool — "let me have a
-# look" answering "how are you doing" reads as broken, so what kind of
-# turn this looks like (social small talk vs. an action vs. everything
-# else) picks which flavour of filler is even eligible. Same
-# cheap-check-before-anything-expensive shape as orchestrator/intent.py
-# and vault_intent.py: word cues, no model call, so this can't slow the
-# turn down or misfire into something worse than a slightly plain filler.
-FILLER_SOCIAL = (
-    "One moment.",
-    "Just a second.",
-    "Give me a moment.",
-    "One sec.",
-)
-
-FILLER_ACTION = (
-    "On it.",
-    "Let me check on that.",
-    "Working on it now.",
-    "Let me have a look.",
-    "Give me one second.",
-)
-
-FILLER_DEFAULT = (
-    "Let me think about that.",
-    "Give me a second.",
-    "Hold on, thinking it through.",
-    "Let's see here.",
-    "Just a moment.",
-)
-
-
-def _pick_filler(text: str) -> str:
-    """Social turns (greetings, "how are you", thanks/bye — see
-    intent.looks_social) get neutral filler with no task language.
-    Turns matching a tool category (intent.match_categories — "open X",
-    "what's the volume") get task-flavoured filler. Everything else
-    (real questions, general chat) gets the thinking-flavoured default.
-    Falls through to FILLER_DEFAULT on any classification hiccup rather
-    than block the turn on it."""
-    try:
-        if intent.looks_social(text):
-            return random.choice(FILLER_SOCIAL)
-        if intent.match_categories(text):
-            return random.choice(FILLER_ACTION)
-    except Exception:
-        pass
-    return random.choice(FILLER_DEFAULT)
+# Every caption _on_tool_event can speak, spelled out here so it can be
+# pre-cached alongside the filler pool at startup (see _warm_phrase_cache).
+# TOOL_LABELS is the same fixed ~30-entry dict _on_tool_event reads from
+# to build "label..." — kept in sync by construction, not by hand.
+ALL_TOOL_CAPTIONS = tuple(f"{label}..." for label in TOOL_LABELS.values())
 
 
 class PillApp:
@@ -147,12 +97,14 @@ class PillApp:
         self._active_queue = None
         self._active_prefix = None
 
-        # Idle VRAM reclaim. `busy` covers both an in-flight turn and an
+        # Idle reclaim. `busy` covers both an in-flight turn and an
         # active recording, so nothing can be unloaded out from under a
-        # request.
+        # request. Kokoro's slot here is RAM reclaim, not VRAM — see
+        # KOKORO_UNLOAD_AFTER_WHISPER_SECONDS in settings.py.
         self.lifecycle = ModelLifecycle(
             llm=self.orchestrator.llm,
             stt=self.stt,
+            tts=self.tts,
             busy=lambda: self._recording or self._turn_lock.locked(),
         )
 
@@ -170,10 +122,32 @@ class PillApp:
         self.hotkey.install()
         self._start_tray()
         self.lifecycle.start()
+        if self.tts:
+            threading.Thread(target=self._warm_phrase_cache, daemon=True).start()
         print(
             "[PillApp] Ready — hold LEFT Ctrl+Alt to talk. "
             "Quit from the tray icon."
         )
+
+    def _warm_phrase_cache(self):
+        """
+        Pre-synthesises any filler/tool-caption phrase that isn't already
+        cached (see audio/phrase_cache.py), so ordinary turns hit the
+        cache instead of running Kokoro fresh. Backgrounded so a cold
+        cache (first run, or after a voice/speed change) can't delay
+        "Ready" — a turn that happens to need an uncached phrase before
+        this finishes just synthesises it the normal way, same as today.
+
+        Unloads Kokoro again afterwards: this thread is the one place
+        that forces a load purely to build the cache, and once it's
+        built, holding the model resident buys nothing further for a
+        session that only ever speaks cached phrases.
+        """
+        hit, miss = phrase_cache.warm(self.tts, ALL_FILLERS + ALL_TOOL_CAPTIONS)
+        if miss:
+            print(f"[PillApp] phrase cache: {hit} already cached, {miss} generated")
+        if self.tts.unload():
+            print("[PillApp] Kokoro unloaded after cache warm-up")
 
     def _start_tray(self):
         """Only way to quit: the pill is transient and click-through, so
@@ -235,7 +209,7 @@ class PillApp:
 
         # New indicator per activation, so both styles get seen in real
         # use rather than being compared from screenshots.
-        self.window.set_indicator(random_indicator(random))
+        self.window.set_indicator(random_indicator())
 
         # Start reloading anything the watchdog freed, now, so it happens
         # while the user speaks rather than after. Returns immediately.
@@ -378,12 +352,12 @@ class PillApp:
 
         def merged_source():
             # The filler exists to hide the model's reasoning latency
-            # (see FILLER_SOCIAL/ACTION/DEFAULT above) — a canned reply
+            # (see audio/fillers.py) — a canned reply
             # never touches the model at all, so playing ~1s of filler in
             # front of "thank you" would only add delay that has nothing
             # to hide.
             if not canned_replies.is_canned(text):
-                filler = _pick_filler(text)
+                filler = pick_filler(text)
                 prefix_texts.append(filler)
                 event_log.log("fred_speech", text=filler, spoken=True, filler=True)
                 yield filler

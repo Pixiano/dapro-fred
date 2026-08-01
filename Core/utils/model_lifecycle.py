@@ -28,6 +28,7 @@ import time
 from config.settings import (
     LLM_IDLE_UNLOAD_SECONDS,
     WHISPER_UNLOAD_AFTER_LLM_SECONDS,
+    KOKORO_UNLOAD_AFTER_WHISPER_SECONDS,
     MODEL_WATCHDOG_TICK_SECONDS,
 )
 
@@ -38,13 +39,15 @@ class ModelLifecycle:
     a turn is running, so an unload can never race generation.
     """
 
-    def __init__(self, llm=None, stt=None, busy=None):
+    def __init__(self, llm=None, stt=None, tts=None, busy=None):
         self.llm = llm
         self.stt = stt
+        self.tts = tts
         self.busy = busy or (lambda: False)
 
         self._last_used = time.monotonic()
         self._llm_unloaded_at = None
+        self._stt_unloaded_at = None
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
@@ -58,6 +61,7 @@ class ModelLifecycle:
         with self._lock:
             self._last_used = time.monotonic()
             self._llm_unloaded_at = None
+            self._stt_unloaded_at = None
 
     def preload(self):
         """
@@ -70,17 +74,23 @@ class ModelLifecycle:
 
         need_llm = self.llm is not None and not self.llm.is_loaded()
         need_stt = self.stt is not None and not self.stt.is_loaded()
+        need_tts = self.tts is not None and not self.tts.is_loaded()
 
-        if not (need_llm or need_stt):
+        if not (need_llm or need_stt or need_tts):
             return
 
         def run():
             # Whisper first: it's needed at key-up, the LLM only after
-            # transcription, so this ordering buys the most slack.
+            # transcription, so this ordering buys the most slack. Kokoro
+            # alongside the LLM — a real reply needs both roughly
+            # together, and Kokoro's load is comparatively cheap (CPU
+            # ONNX session, not a multi-GB CUDA context).
             if need_stt:
                 self.stt.ensure_loaded()
             if need_llm:
                 self.llm.ensure_loaded()
+            if need_tts:
+                self.tts.ensure_loaded()
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -115,6 +125,7 @@ class ModelLifecycle:
         with self._lock:
             idle = time.monotonic() - self._last_used
             llm_gone_at = self._llm_unloaded_at
+            stt_gone_at = self._stt_unloaded_at
 
         if (
             self.llm is not None
@@ -138,8 +149,26 @@ class ModelLifecycle:
             and (time.monotonic() - llm_gone_at) >= WHISPER_UNLOAD_AFTER_LLM_SECONDS
         ):
             if self.stt.unload():
+                with self._lock:
+                    self._stt_unloaded_at = time.monotonic()
+                print(f"[lifecycle] Whisper unloaded after {idle / 60:.0f} min idle")
+            return
+
+        # Kokoro last, once Whisper's ALSO been gone a while. Low-value
+        # relative to the two above (RAM, not VRAM — see
+        # KOKORO_UNLOAD_AFTER_WHISPER_SECONDS in settings.py) but kept in
+        # the same waterfall for consistency rather than a special case.
+        if (
+            self.tts is not None
+            and self.tts.is_loaded()
+            and self.stt is not None
+            and not self.stt.is_loaded()
+            and stt_gone_at is not None
+            and (time.monotonic() - stt_gone_at) >= KOKORO_UNLOAD_AFTER_WHISPER_SECONDS
+        ):
+            if self.tts.unload():
                 print(
-                    "[lifecycle] Whisper unloaded after "
+                    "[lifecycle] Kokoro unloaded after "
                     f"{idle / 60:.0f} min idle — all models released"
                 )
 
@@ -148,4 +177,5 @@ class ModelLifecycle:
             idle = time.monotonic() - self._last_used
         llm = "loaded" if (self.llm and self.llm.is_loaded()) else "unloaded"
         stt = "loaded" if (self.stt and self.stt.is_loaded()) else "unloaded"
-        return f"idle {idle / 60:.1f} min | LLM {llm} | Whisper {stt}"
+        tts = "loaded" if (self.tts and self.tts.is_loaded()) else "unloaded"
+        return f"idle {idle / 60:.1f} min | LLM {llm} | Whisper {stt} | Kokoro {tts}"

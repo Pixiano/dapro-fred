@@ -90,3 +90,7 @@ Core/data/memory_archive/
 # Vault knowledge router cache — contains raw text chunks from the vault,
 # including personal/ and people/ content. Must never be committed.
 Core/data/vault_index/
+
+# Pre-synthesised filler/tool-caption audio cache — regenerates on
+# first launch after a clean clone, nothing authored lives here.
+Core/data/phrase_cache/

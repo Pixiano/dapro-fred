@@ -30,6 +30,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 
+from audio import phrase_cache
 from config.settings import (
     KOKORO_MODEL_PATH,
     KOKORO_VOICES_PATH,
@@ -104,15 +105,63 @@ class KokoroTTS:
     """
 
     def __init__(self, model_path=None, voices_path=None, voice=None, speed=None):
-        from kokoro_onnx import Kokoro
-
-        model_path = str(model_path or KOKORO_MODEL_PATH)
-        voices_path = str(voices_path or KOKORO_VOICES_PATH)
-
-        self.kokoro = Kokoro(model_path, voices_path)
+        self._model_path = str(model_path or KOKORO_MODEL_PATH)
+        self._voices_path = str(voices_path or KOKORO_VOICES_PATH)
+        self._voice_name = voice or KOKORO_VOICE
         self.speed = speed or KOKORO_SPEED
-        self.voice = self._resolve_voice(voice or KOKORO_VOICE)
+
+        # Deferred, not built here — see _ensure_model(). Kokoro runs
+        # CPUExecutionProvider only (verified: kokoro_onnx hardcodes it,
+        # and this environment's onnxruntime has no GPU provider at all),
+        # so "loading" it costs RAM, not VRAM, unlike the LLM/Whisper
+        # unload pair in model_lifecycle.py. Still worth deferring: a
+        # session whose every spoken phrase is a phrase_cache hit (see
+        # audio/phrase_cache.py) never needs Kokoro's ~340MB resident at
+        # all, and construction time comes off FRED's boot instead.
+        self.kokoro = None
+        self.voice = None  # resolved (possibly blended) voice; set on load
         self._lock = threading.Lock()
+        self._load_lock = threading.Lock()
+
+    # =========================================================
+    # LAZY LOAD / UNLOAD — same shape as LLMClient / WhisperSTT
+    # =========================================================
+
+    def is_loaded(self) -> bool:
+        return self.kokoro is not None
+
+    def ensure_loaded(self) -> bool:
+        """Load ahead of use. Safe to call from any thread — real
+        construction is guarded so two callers can't double-load."""
+        try:
+            self._ensure_model()
+            return True
+        except Exception as e:
+            print(f"[KokoroTTS] preload failed: {e}")
+            return False
+
+    def unload(self) -> bool:
+        """Drop the model. Frees ordinary RAM only (~340MB) — see the
+        note in __init__ on why this is not a VRAM reclaim."""
+        with self._load_lock:
+            if self.kokoro is None:
+                return False
+            self.kokoro = None
+            self.voice = None
+        import gc
+        gc.collect()
+        return True
+
+    def _ensure_model(self):
+        if self.kokoro is not None:
+            return
+        with self._load_lock:
+            if self.kokoro is not None:  # lost the race, already loaded
+                return
+            from kokoro_onnx import Kokoro
+            model = Kokoro(self._model_path, self._voices_path)
+            self.kokoro = model
+            self.voice = self._resolve_voice(self._voice_name)
 
     def _resolve_voice(self, name):
         """
@@ -138,6 +187,7 @@ class KokoroTTS:
             return name
 
     def available_voices(self):
+        self._ensure_model()
         return sorted(self.kokoro.get_voices())
 
     # =========================================================
@@ -145,7 +195,25 @@ class KokoroTTS:
     # =========================================================
 
     def synth(self, text: str):
-        """One chunk -> (float32 samples, sample_rate)."""
+        """
+        One chunk -> (float32 samples, sample_rate). Loads the model on
+        first real use if it isn't resident.
+
+        Not guarded by self._lock — that lock's job is serialising whole
+        speak() calls, and it's held for a speak() call's entire
+        duration by a different thread than the one running this (the
+        producer thread), so taking it here would deadlock. This means
+        the phrase-cache warm-up thread (pill_app._warm_phrase_cache)
+        can call synth() concurrently with an in-flight speak()'s own
+        synth() calls. Left unsynchronised on the assumption that
+        onnxruntime's InferenceSession.run() is safe for concurrent
+        calls from multiple threads, which is a documented ORT design
+        goal — unlike llama.cpp's raw C bindings, which turned out NOT
+        to have that guarantee (see orchestrator.py's producer.join()
+        fix). Not independently verified here; flagged rather than
+        silently assumed.
+        """
+        self._ensure_model()
         return self.kokoro.create(
             text, voice=self.voice, speed=self.speed, lang="en-us"
         )
@@ -194,12 +262,22 @@ class KokoroTTS:
         pending = queue.Queue(maxsize=1)
 
         def emit(chunk):
-            """Synthesise one chunk and hand it to the player."""
-            try:
-                samples, sr = self.synth(chunk)
-            except Exception as e:
-                print(f"[KokoroTTS] synth failed for {chunk!r}: {e}")
-                return
+            """Synthesise one chunk and hand it to the player — or skip
+            synthesis entirely on a phrase_cache hit. Fillers and tool
+            captions are a closed, ~50-phrase vocabulary spoken on
+            nearly every turn; checking a cache dict is orders of
+            magnitude cheaper than re-running Kokoro on the same "On
+            it." for the thousandth time, and a full cache hit means
+            self.kokoro never has to be loaded at all this turn."""
+            cached = phrase_cache.get(chunk)
+            if cached is not None:
+                samples, sr = cached
+            else:
+                try:
+                    samples, sr = self.synth(chunk)
+                except Exception as e:
+                    print(f"[KokoroTTS] synth failed for {chunk!r}: {e}")
+                    return
             while not stopping():
                 try:
                     pending.put((chunk, samples, sr), timeout=0.1)
