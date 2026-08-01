@@ -15,8 +15,7 @@ from config.settings import (
     DEFAULT_TIER,
     TIER_ROUTING_ENABLED,
     CHAT_FORMAT_BY_TIER,
-    THINKING_TIERS,
-    THINKING_MARKER,
+    TIER_PROMPT_MARKERS,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
     GPU_LAYERS,
@@ -60,7 +59,7 @@ class LLMClient:
         """
         Unified generation interface.
 
-        tier: "nano" | "standard" | "deep" — if not given, FRED
+        tier: "Standard" | "Deep" | "Extreme" — if not given, FRED
         picks one based on the latest user message.
         """
 
@@ -327,17 +326,18 @@ class LLMClient:
 
     def _pick_tier(self, messages: list) -> str:
         """
-        Lightweight heuristic to avoid running the beast model for
-        "what time is it" and avoid running the nano model for
-        anything that actually requires thinking. Refined further
-        once Phase 12's real dispatcher exists.
+        Lightweight heuristic to avoid running Deep/Extreme for
+        "what time is it" and to reach for them when a request actually
+        looks like it needs the extra capability.
 
-        Disabled by default (TIER_ROUTING_ENABLED). It effectively
-        overrode DEFAULT_TIER — the fallback below is "low", so ordinary
-        short utterances went to the 2B regardless of configuration, and
-        a 25-44 word one pulled in the 8.9GB "standard" model. Since
-        _get_model caches each tier it loads, that could leave several
-        models resident in VRAM simultaneously.
+        Disabled by default (TIER_ROUTING_ENABLED). Simplified
+        2026-08-01 alongside MODEL_TIERS being cut back to exactly
+        Standard/Deep/Extreme — this used to also route to "nano" and
+        "low", both since deleted from MODEL_TIERS entirely, so those
+        branches are gone rather than left pointing at tiers that no
+        longer exist. Likely superseded by the planned "offer Deep, ask
+        before switching" flow rather than revived as silent routing —
+        see TIER_ROUTING_ENABLED's comment in settings.py.
         """
 
         if not TIER_ROUTING_ENABLED:
@@ -364,35 +364,18 @@ class LLMClient:
         deep_signals = (
             "why", "explain", "debug", "code", "plan", "design",
             "compare", "analyze", "architecture", "refactor",
-            "step by step", "reason", "strategy",
-        )
-
-        nano_signals = (
-            "open ", "launch ", "play ", "what time", "what's the time",
-            "create a file", "create a folder", "set a timer",
-            "remind me", "volume", "mute", "screenshot",
-        )
-
-        low_signals = (
-            "hi", "hey", "hello", "thanks", "thank you", "ok", "okay",
-            "cool", "lol", "yes", "no", "bye", "sup", "yo",
+            "step by step", "reason", "strategy", "research",
         )
 
         word_count = len(text.split())
 
         if any(sig in text for sig in extreme_signals) and word_count >= 65:
-            return "extreme"
-
-        if any(sig in text for sig in nano_signals) and word_count <= 25 and word_count >= 12:
-            return "nano"
+            return "Extreme"
 
         if any(sig in text for sig in deep_signals) and word_count >= 45:
-            return "deep"
+            return "Deep"
 
-        if word_count >= 25 and word_count < 45:
-            return "standard"
-
-        return "low"
+        return self.default_tier
 
     # =========================================================
     # INFERENCE
@@ -424,27 +407,37 @@ class LLMClient:
         """
         Adapt the message list to a tier that uses its own chat template.
 
-        Two adjustments, both required by Gemma 4's canonical template:
+        Two adjustments:
 
-        1. Enable reasoning. llama-cpp-python offers no way to pass jinja
-           variables through create_chat_completion, so `enable_thinking`
-           is unreachable. The template renders THINKING_MARKER at the top
-           of the first system turn when that flag is true, so putting the
-           marker there directly yields the same rendered prompt.
+        1. Inject that tier's TIER_PROMPT_MARKERS entry, if it has one.
+           llama-cpp-python offers no way to pass jinja template kwargs
+           through create_chat_completion (enable_thinking,
+           reasoning_effort, etc. are all unreachable), and each marker
+           is literal text confirmed to reproduce what the real kwarg
+           would have rendered for that specific tier's template — see
+           TIER_PROMPT_MARKERS in settings.py for what's actually been
+           checked per tier, since the mechanism differs (Gemma 4's old
+           marker suppressed nothing else and was purely additive;
+           gpt-oss's default "Reasoning: medium" line renders regardless
+           of this marker, so this one is a best-effort override sitting
+           alongside it, not a confirmed replacement).
 
-        2. Convert tool-call arguments from a JSON string to a dict. The
-           OpenAI convention (and chatml-function-calling) passes them as
-           a string, but Gemma's template explicitly raise_exception()s on
-           that — so replaying tool-call history for the follow-up turn
-           aborted the whole generation with "arguments must be a JSON
-           object (mapping), not a string".
+        2. Convert tool-call arguments from a JSON string to a dict, for
+           any tier keeping its own template (CHAT_FORMAT_BY_TIER is
+           None). The OpenAI convention (and chatml-function-calling)
+           passes them as a string, but a model's own template can
+           explicitly raise_exception() on that — Gemma 4 did — so
+           replaying tool-call history for a follow-up turn aborted the
+           whole generation with "arguments must be a JSON object
+           (mapping), not a string".
 
         Returns a copy. Mutating the caller's list would stack a marker
         per turn, since the orchestrator reuses message history.
         """
         native_template = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling") is None
+        marker = TIER_PROMPT_MARKERS.get(tier)
 
-        if tier not in THINKING_TIERS and not native_template:
+        if marker is None and not native_template:
             return messages
 
         out = []
@@ -469,19 +462,18 @@ class LLMClient:
 
             out.append(msg)
 
-        if tier not in THINKING_TIERS:
+        if marker is None:
             return out
 
         for msg in out:
             if msg.get("role") in ("system", "developer"):
                 content = msg.get("content") or ""
-                if isinstance(content, str) and THINKING_MARKER not in content:
-                    msg["content"] = f"{THINKING_MARKER}\n{content}"
+                if isinstance(content, str) and marker not in content:
+                    msg["content"] = f"{marker}\n{content}"
                 return out
 
-        # No system turn to attach it to — the template only emits the
-        # marker inside one, so give it a system message to live in.
-        return [{"role": "system", "content": THINKING_MARKER}] + out
+        # No system turn to attach it to — give the marker one to live in.
+        return [{"role": "system", "content": marker}] + out
 
     @staticmethod
     def _strip_thinking(content: str) -> str:

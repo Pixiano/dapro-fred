@@ -12,7 +12,7 @@ class Dispatcher:
 
     Deterministic and instant: regex match -> direct tool execution,
     no model inference involved at all. This is what reserves the
-    LLM's tiers (especially "deep") for things that actually need
+    LLM's tiers (especially "Deep") for things that actually need
     reasoning, instead of burning a model call on "open Spotify."
 
     Add new deterministic routes here as new tools come online

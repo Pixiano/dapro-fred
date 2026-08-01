@@ -45,10 +45,10 @@ from config.settings import VAULT_DIR, MODEL_TIERS
 HOST = "127.0.0.1"
 PORT = 8765
 
-# Qwen3-14B-Q4_K_M, already on disk as FRED's unused "deep" tier. Read
+# Qwen3-14B-Q4_K_M, already on disk as FRED's unused "Deep" tier. Read
 # from MODEL_TIERS rather than hardcoded so there is one source of truth
 # for where models live.
-CONVERTER_MODEL = MODEL_TIERS["deep"]
+CONVERTER_MODEL = MODEL_TIERS["Deep"]
 
 # Weights are 8.38GB; the rest is KV cache at n_ctx plus llama.cpp's
 # compute buffers. Measured headroom requirement is conservative on
