@@ -140,6 +140,13 @@ class PillApp:
         self._turn_thread = None
         self._running = True
 
+        # Set for the duration of one turn's TTS stream, so _on_tool_event
+        # (called from the orchestrator, on the background generation
+        # thread) can speak its caption through the SAME stream instead of
+        # opening a new one. None outside of an active turn.
+        self._active_queue = None
+        self._active_prefix = None
+
         # Idle VRAM reclaim. `busy` covers both an in-flight turn and an
         # active recording, so nothing can be unloaded out from under a
         # request.
@@ -352,37 +359,50 @@ class PillApp:
         def on_first_audio():
             self.window.set_state("speaking")
 
-        # The filler exists to hide the model's reasoning latency (see
-        # FILLER_PHRASES above) — a canned reply never touches the model
-        # at all, so playing ~1s of filler in front of "thank you" would
-        # only add delay that has nothing to hide. Skip it there; the
-        # producer thread above still runs and the canned text (already
-        # queued almost instantly) plays as soon as this check is done.
-        if not canned_replies.is_canned(text):
-            filler = _pick_filler(text)
-            event_log.log("fred_speech", text=filler, spoken=True, filler=True)
-            self.tts.speak(
-                filler,
-                on_level=self.window.set_level,
-                on_first_audio=on_first_audio,
-                cancel=self._cancel,
-            )
+        # Filler and any tool-event captions (see _on_tool_event) are
+        # injected as their own sentences ahead of the real reply, all
+        # spoken from ONE continuous output stream rather than a separate
+        # self.tts.speak() call each. Two calls used to mean two
+        # sd.OutputStreams, and TTS_PREROLL_SEC's Bluetooth wake-up ramp
+        # (see settings.py) re-triggers on every new stream — so the real
+        # reply's opening ~1s played through a second, unnecessary ramp
+        # right where it mattered. One stream, one ramp, at the very start
+        # of the turn instead of at the start of the actual answer.
+        #
+        # `prefix_texts` collects exactly what got queued this way, so it
+        # can be stripped back off `spoken` below — none of it belongs in
+        # conversation history, same as filler alone before this change.
+        prefix_texts = []
+        self._active_queue = gen_queue
+        self._active_prefix = prefix_texts
 
-            if self._cancel.is_set():
-                self._to_idle_and_hide()
-                return
+        def merged_source():
+            # The filler exists to hide the model's reasoning latency
+            # (see FILLER_SOCIAL/ACTION/DEFAULT above) — a canned reply
+            # never touches the model at all, so playing ~1s of filler in
+            # front of "thank you" would only add delay that has nothing
+            # to hide.
+            if not canned_replies.is_canned(text):
+                filler = _pick_filler(text)
+                prefix_texts.append(filler)
+                event_log.log("fred_speech", text=filler, spoken=True, filler=True)
+                yield filler
+            yield from queued_source()
 
-        # If the real reply isn't ready the moment the filler ends, this
-        # just blocks here with no audio — no second filler, the pill
-        # stays exactly as it is until there's something real to speak.
+        # If the real reply isn't ready the moment the filler (and any
+        # tool captions) end, this just blocks here with no audio — the
+        # pill stays exactly as it is until there's something real to
+        # speak.
         try:
             spoken = self.tts.speak(
-                queued_source(),
+                merged_source(),
                 on_level=self.window.set_level,
                 on_first_audio=on_first_audio,
                 cancel=self._cancel,
             )
         finally:
+            self._active_queue = None
+            self._active_prefix = None
             # llama.cpp is NOT thread-safe, and _turn_lock alone does not
             # protect it: the lock is released when _turn_body returns,
             # but `produce` runs on its own thread and can still be inside
@@ -410,17 +430,37 @@ class PillApp:
                 event_log.log("error", source="turn", message="producer join timed out")
 
         reply = "".join(collected).strip()
-        print(f"F.R.E.D.: {reply}")
-        event_log.log(
-            "fred_speech", text=reply, spoken=True,
-            interrupted=bool(spoken and spoken != reply),
+
+        # `spoken` is everything that came out of the speaker this turn,
+        # in order: filler, then any tool captions, then the real reply —
+        # all from the single merged stream above. Strip the injected
+        # prefix back off before comparing to `reply`, which never
+        # included it, so a normal filler-then-answer turn doesn't read
+        # as "interrupted" just because `spoken` started with "On it.".
+        prefix_joined = " ".join(prefix_texts)
+        heard_reply = (
+            spoken[len(prefix_joined):].strip()
+            if prefix_joined and spoken.startswith(prefix_joined)
+            else spoken
         )
+
+        # bool(spoken) rather than bool(heard_reply): if the turn was cut
+        # off during the filler/captions, before a single character of
+        # the real reply played, heard_reply is "" — falsy — which would
+        # read as "not interrupted" under the same test that correctly
+        # catches a cut mid-reply. spoken (the un-stripped original) is
+        # only empty when literally nothing was heard at all, including
+        # the filler, which is the one case with truly nothing to report.
+        interrupted = bool(spoken) and heard_reply != reply
+
+        print(f"F.R.E.D.: {reply}")
+        event_log.log("fred_speech", text=reply, spoken=True, interrupted=interrupted)
 
         # Only what was actually heard belongs in history. Recording the
         # full reply after an interrupt would leave FRED believing it said
         # things the user never heard, and follow-ups go incoherent.
-        if spoken and spoken != reply:
-            print(f"[PillApp] interrupted — spoke {len(spoken)}/{len(reply)} chars")
+        if interrupted:
+            print(f"[PillApp] interrupted — spoke {len(heard_reply)}/{len(reply)} chars")
             # Weak negative signal on whatever tool this turn called, if
             # any — see orchestrator/tool_call_log.py. Cutting FRED off
             # doesn't always mean the tool was wrong, but it's evidence
@@ -459,9 +499,28 @@ class PillApp:
     # =========================================================
 
     def _on_tool_event(self, label: str):
-        """A tool is about to run — flash what it is on the pill."""
-        self.window.set_transcript(label + "...", ttl=2.0)
+        """
+        A tool is about to run — flash what it is on the pill AND speak
+        it, so the cue exists whether or not you're looking at the
+        screen. Runs on the orchestrator's background generation thread,
+        mid-turn, which is why it reaches the live stream through
+        self._active_queue/_active_prefix rather than a direct call —
+        _turn_body owns the actual self.tts.speak() call.
+
+        Silently a no-op outside of an active turn (_active_queue is
+        None between turns), which matters because on_tool_event is a
+        single instance-wide hook — nothing else scopes it to "only while
+        a turn is in flight".
+        """
+        caption = f"{label}..."
+        self.window.set_transcript(caption, ttl=2.0)
         event_log.log("tool_event", label=label)
+
+        queue_ = self._active_queue
+        prefix = self._active_prefix
+        if queue_ is not None and prefix is not None:
+            prefix.append(caption)
+            queue_.put(caption)
 
     def _speak_proactive(self, message: str):
         """
