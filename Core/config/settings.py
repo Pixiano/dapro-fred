@@ -144,42 +144,55 @@ MODELS_DIR = Path(
     r"C:\Users\Dhiraj Vatsal\.lmstudio\models"
 )
 
+# Revised 2026-08-01 against the real contents of MODELS_DIR, not the
+# previous list — "low" (gemma-2-2b), "nano" (Nemotron-4B), "standard"
+# (Qwen3.5-9B) and "gemma4" (E4B) were all deleted from disk and are
+# gone from here too, rather than left as dangling paths that would
+# FileNotFoundError if anything ever selected them.
 MODEL_TIERS = {
-    # tremendously quick - simple greetings, etc
-    "low": MODELS_DIR / "lmstudio-community" / "gemma-2-2b-it-GGUF"
-            / "gemma-2-2b-it.gguf",
-    
-    # routing, OS commands, quick facts — fast, cheap
-    "nano": MODELS_DIR / "lmstudio-community" / "NVIDIA-Nemotron-3-Nano-4B-GGUF"
-             / "NVIDIA-Nemotron-3-Nano-4B-Q8_0.gguf",
+    # Qwen3.5-4B at Q6_K — DEFAULT_TIER, see the note below this dict.
+    "qwen35": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "Qwen3.5-4B-Q6_K.gguf",
 
-    # default daily conversation
-    "standard": MODELS_DIR / "lmstudio-community" / "Qwen3.5-9B-GGUF"
-                / "Qwen3.5-9B-Q8_0.gguf",
-
-    # reasoning, coding, planning
+    # Reasoning, coding, planning, long/heavy requests — the "bigger
+    # model" tier. Also the vault-ingest converter's model (see
+    # Core/web/vault_ingest.py). Needs CHAT_FORMAT_BY_TIER = None like
+    # qwen35/gemma4_12b below, or its own template (and the
+    # enable_thinking gate it carries) gets discarded in favour of
+    # llama-cpp-python's generic override.
     "deep": MODELS_DIR / "lmstudio-community" / "Qwen3-14B-GGUF"
             / "Qwen3-14B-Q4_K_M.gguf",
 
-    # extreme uses
+    # 11.28GB on disk — largest configured tier. Rare/heavy use only;
+    # VRAM math has not been done for this one the way it has for
+    # qwen35/deep/gemma4_12b, so treat as unverified until it is.
     "extreme": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
             / "gpt-oss-20b.gguf",
 
-    # Gemma 4 E4B — "effective 4B", 4.97GB on disk. Reasons noticeably
-    # better than nano (gets the bat-and-ball trap right where Nemotron
-    # is inconsistent) and is the only tier here with real, switchable
-    # thinking. See THINKING_TIERS / CHAT_FORMAT_BY_TIER below: it needs
-    # its own chat template, not the chatml-function-calling override.
-    "gemma4": MODELS_DIR / "lmstudio-community" / "gemma-4-E4B-it-GGUF"
-            / "gemma-4-E4B-it-Q4_K_M.gguf",
+    # New 2026-08-01. Mistral's own template has no tool-calling grammar
+    # and no reasoning mode, so it's left out of CHAT_FORMAT_BY_TIER
+    # entirely — same as the old nano/standard tiers were — meaning it
+    # gets llama-cpp-python's chatml-function-calling override by
+    # default. Not yet benchmarked for speed, VRAM, or quality here.
+    "mistral7b": MODELS_DIR / "lmstudio-community" / "Mistral-7B-Instruct-v0.3-GGUF"
+            / "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
 
-    # Qwen3.5-4B at Q6_K — a true 4B, where gemma4's "E4B" is an
-    # effective-4B whose file is larger (3.53GB vs 4.97GB), so this is a
-    # ~1.4GB VRAM saving as well as a higher-precision quant. Q6_K rather
-    # than Q4 deliberately: quantisation damage is more visible on a 4B
-    # than on a large model, and there was headroom to spend.
-    "qwen35": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
-            / "Qwen3.5-4B-Q6_K.gguf",
+    # New 2026-08-01. Same Gemma 4 family as the old (now-deleted)
+    # "gemma4" E4B tier, but the 12B QAT (quantisation-aware trained)
+    # variant — a different file, not a re-download of the old one, so
+    # given its own tier name rather than reusing "gemma4". Checked at
+    # the byte level like qwen35/deep were: no embedded chat_template
+    # metadata found, but its vocabulary carries the exact same
+    # <|think|> / <|channel> / <channel|> / <|turn|> special tokens the
+    # E4B used, so chat_format=None almost certainly resolves to
+    # llama.cpp's built-in Gemma-architecture formatting either way —
+    # not yet confirmed with a live generation, unlike qwen35/deep.
+    "gemma4_12b": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
+            / "gemma-4-12B-it-QAT-Q4_0.gguf",
+
+    # Bonsai-27B: NOT added. Only mmproj-Bonsai-27B-BF16.gguf (0.87GB,
+    # the vision projector) has downloaded so far — the actual model
+    # weights aren't on disk yet. Add a real entry once that file exists.
 }
 
 # Tiers whose chat template gates reasoning behind an enable_thinking
@@ -190,7 +203,7 @@ MODEL_TIERS = {
 # Gemma 4's canonical template renders '<|think|>\n' at the start of the
 # first system turn when that flag is true, so prepending the marker to
 # the system prompt produces a byte-identical prompt by another route.
-THINKING_TIERS = {"gemma4"}
+THINKING_TIERS = {"gemma4_12b"}
 THINKING_MARKER = "<|think|>"
 
 # NOTE: "qwen35" is deliberately NOT in THINKING_TIERS, even though it is
@@ -211,11 +224,18 @@ THINKING_MARKER = "<|think|>"
 # but Gemma 4's canonical template handles tool_calls AND thinking, and
 # forcing chatml over it discards both.
 CHAT_FORMAT_BY_TIER = {
-    "gemma4": None,
-    # Qwen3.5 likewise ships a template that handles tool_calls AND
-    # reasoning, so it keeps its own rather than having
-    # chatml-function-calling forced over the top of it.
+    # Qwen3.5 ships a template that handles tool_calls AND reasoning, so
+    # it keeps its own rather than having chatml-function-calling forced
+    # over the top of it.
     "qwen35": None,
+    # Same reasoning applies to Qwen3-14B's own template.
+    "deep": None,
+    # Gemma-architecture special tokens confirmed in its vocabulary (see
+    # MODEL_TIERS comment) — not yet confirmed live.
+    "gemma4_12b": None,
+    # mistral7b and extreme are deliberately absent: no reasoning mode,
+    # and no tool-calling grammar in their own templates, so they fall
+    # through to the chatml-function-calling default below.
 }
 
 # Gemma 4 E4B, replacing "nano" (Nemotron 4B). Better reasoning and it
@@ -275,13 +295,11 @@ TIER_ROUTING_ENABLED = False
 CONTEXT_WINDOW = 16384
 
 CONTEXT_WINDOW_BY_TIER = {
-    "low": 8192,      # gemma-2-2b native context
-    "gemma4": 16384,
     "qwen35": 16384,
-    "nano": 16384,
-    "standard": 16384,
-    "deep": 16384,
+    "deep": 16384,        # native 32768 (Qwen3-14B) — capped, same as before
     "extreme": 16384,
+    "mistral7b": 16384,   # native 32768 (Mistral v0.3) — capped, same pattern
+    "gemma4_12b": 16384,
 }
 
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
