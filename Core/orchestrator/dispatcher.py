@@ -204,6 +204,12 @@ class Dispatcher:
         Returns {"tool": name, "arguments": {...}} for an obvious,
         unambiguous command, or None if this needs real reasoning
         and should go to the LLM pipeline instead.
+
+        A handler may itself return None to decline a match it's
+        regex-eligible for but can't responsibly handle (see
+        _route_web_search) — matching continues to the remaining
+        rules rather than stopping there, same as no rule matching
+        at all.
         """
 
         text = user_input.strip()
@@ -212,7 +218,9 @@ class Dispatcher:
             found = pattern.match(text)
 
             if found:
-                return handler(found)
+                result = handler(found)
+                if result is not None:
+                    return result
 
         return None
 
@@ -276,12 +284,50 @@ class Dispatcher:
 
         return {"tool": "get_weather", "arguments": {"location": location.strip()}}
 
-    @staticmethod
-    def _route_web_search(match: re.Match) -> dict:
+    # Words that mean the query only makes sense with prior turns in
+    # view — a bare regex has no conversation to resolve them against.
+    _PRONOUN_LEAD = {
+        "it", "that", "this", "them", "him", "her", "they", "those",
+        "these",
+    }
+
+    # "Search" said about the local machine is a file search, not a web
+    # search. Confirmed misroute: "Search my desktop for dossier.pdf"
+    # dispatched straight to web_search and read out results about
+    # moving Windows folders and free PDF editors. These cues mean the
+    # target is local, so the turn belongs on the LLM tool path where
+    # search_files/find_file_smart are actually reachable.
+    _LOCAL_SEARCH_CUES = re.compile(
+        r"\b(?:my |the )?(?:desktop|downloads?|documents?|folder|directory|"
+        r"drive|pc|computer|laptop|machine|vault|files?)\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _route_web_search(cls, match: re.Match) -> dict | None:
+
+        target = match.group("target").strip()
+
+        # Confirmed bug: "Search it on the web. It has been released."
+        # (following a turn about Opus 5 pricing) dispatched here
+        # deterministically with query="it on the web. It has been
+        # released." — nothing upstream ever saw the actual topic,
+        # because this route runs before the LLM/conversation-history
+        # pipeline even starts. Declining here (returning None) sends
+        # it through Dispatcher.match()'s fallthrough to the LLM tool
+        # path instead, which has the last several turns in context
+        # and can resolve "it" to what was actually being discussed.
+        first_word = re.sub(r"[^\w]", "", target.split()[0].lower()) if target else ""
+        if first_word in cls._PRONOUN_LEAD:
+            return None
+
+        # Local-machine search, not a web search — see _LOCAL_SEARCH_CUES.
+        if cls._LOCAL_SEARCH_CUES.search(target):
+            return None
 
         return {
             "tool": "web_search",
-            "arguments": {"query": match.group("target").strip()},
+            "arguments": {"query": target},
         }
 
     @staticmethod

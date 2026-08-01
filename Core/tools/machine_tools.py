@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime
 
 from tools.assist_tools import resolve_user_path
+from tools import found_cache
 
 import psutil
 import pyperclip
@@ -290,6 +291,14 @@ def search_files(query: str, directory: str = "") -> str:
     """
     Search for files by name (substring match) under a directory,
     defaulting to the user's home folder.
+
+    Returns names only, not full absolute paths — FRED's replies are
+    spoken aloud (see persona.md's "no file paths" rule), and a raw
+    "C:\\Users\\...\\file.txt" list is exactly the shape a small model
+    tends to just parrot instead of summarising. Formatting the result
+    itself to be speech-safe, the same way move_file/rename_file already
+    report "X to Y" instead of raw Path reprs, doesn't depend on the
+    follow-up phrasing pass reliably rewriting it.
     """
 
     base = resolve_user_path(directory) if directory else Path.home()
@@ -298,18 +307,38 @@ def search_files(query: str, directory: str = "") -> str:
         return f"Directory not found: {base}"
 
     query = query.lower()
-    matches = []
 
-    for path in base.rglob("*"):
-        if query in path.name.lower():
-            matches.append(str(path))
-            if len(matches) >= 50:
-                break
+    # Suggestion #2 (found-things index): a repeat of the same
+    # (directory, query) pair skips the rglob walk entirely if every
+    # cached path still exists — see tools/found_cache.py for the
+    # staleness handling.
+    cached = found_cache.get(query, str(base))
+    if cached is not None:
+        matches = [Path(p) for p in cached]
+    else:
+        matches = []
+        for path in base.rglob("*"):
+            if query in path.name.lower():
+                matches.append(path)
+                if len(matches) >= 50:
+                    break
+        # Positive results only — a miss has no invalidation trigger
+        # (nothing marks the cache dirty when a matching file is later
+        # created), so caching "not found" risks a permanently stale
+        # false negative. A hit is safe because it's re-verified with
+        # Path.exists() on every read.
+        if matches:
+            found_cache.put(query, str(base), [str(p) for p in matches])
 
     if not matches:
         return f"No files matching '{query}' found under {base}."
 
-    return "\n".join(matches)
+    shown = matches[:10]
+    names = ", ".join(f"{p.name} (in {p.parent.name})" for p in shown)
+    summary = f"Found {len(matches)} file(s) matching '{query}': {names}"
+    if len(matches) > len(shown):
+        summary += f", and {len(matches) - len(shown)} more"
+    return summary
 
 
 def move_file(source: str, destination: str) -> str:

@@ -78,10 +78,26 @@ _APP_ALIASES = {
 }
 
 # Where to hunt for an installed .exe when PATH / App Paths both miss.
+#
+# APPDATA (Roaming) matters as much as LOCALAPPDATA here — confirmed
+# root cause of the "Spotify never launches" report: Spotify's desktop
+# installer puts Spotify.exe under %APPDATA%\Spotify, not Program Files
+# or %LOCALAPPDATA%, so it was invisible to every resolution step below
+# until this was added.
 _SEARCH_ROOTS = [
     os.environ.get("ProgramFiles", r"C:\Program Files"),
     os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
     os.environ.get("LOCALAPPDATA", ""),
+    os.environ.get("APPDATA", ""),
+]
+
+# Start Menu shortcut folders, per-user and all-users. A .lnk here can
+# be handed straight to os.startfile — it resolves and launches exactly
+# like double-clicking it in the Start Menu, so there's no need to
+# decode the shortcut's actual target path.
+_START_MENU_ROOTS = [
+    Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+    Path(os.environ.get("ProgramData", "")) / "Microsoft/Windows/Start Menu/Programs",
 ]
 
 
@@ -109,6 +125,29 @@ def _resolve_from_app_paths(exe_name: str):
     return None
 
 
+def _resolve_from_start_menu(display_name: str):
+    """
+    Search Start Menu .lnk shortcuts by display name — resolves apps
+    that install somewhere non-standard (per-user AppData, a
+    vendor-specific folder, a UWP package) but that Windows always
+    gives a Start Menu entry regardless of where they actually live.
+    Returns the .lnk path itself (os.startfile handles it directly) or
+    None.
+    """
+
+    name = display_name.lower()
+
+    for root in _START_MENU_ROOTS:
+        if not root or not root.exists():
+            continue
+
+        for lnk in root.rglob("*.lnk"):
+            if name in lnk.stem.lower():
+                return str(lnk)
+
+    return None
+
+
 def _resolve_from_search_roots(exe_name: str):
     """
     Last resort: walk common install directories looking for the exe.
@@ -126,6 +165,19 @@ def _resolve_from_search_roots(exe_name: str):
     return None
 
 
+# Trailing punctuation/filler from STT transcription, not part of the
+# app name. Confirmed root cause of every logged Spotify launch
+# failure: "open Spotify" transcribes as "Spotify." — the trailing
+# period survives into app_name, "Spotify." isn't in the alias table,
+# and since it doesn't already end in ".exe" the code below appended
+# one to the literal string, producing "Spotify..exe", which naturally
+# resolves nowhere. "Spotify now." (same session) shows the same shape
+# plus a trailing filler word.
+_TRAILING_NOISE = re.compile(
+    r"\s+(?:now|please|for me)\s*[.,!?]*$|[.,!?]+$", re.IGNORECASE
+)
+
+
 def launch_application(app_name: str) -> str:
     """
     Launch a desktop application by friendly name, resolving it via
@@ -133,7 +185,7 @@ def launch_application(app_name: str) -> str:
     search of common install directories.
     """
 
-    raw = app_name.strip()
+    raw = _TRAILING_NOISE.sub("", app_name.strip()).strip()
     key = raw.lower()
 
     target = _APP_ALIASES.get(key, raw)
@@ -155,7 +207,13 @@ def launch_application(app_name: str) -> str:
     if not resolved:
         resolved = _resolve_from_app_paths(exe_name)
 
-    # 3. common install dirs
+    # 3. Start Menu shortcut, by display name — catches apps installed
+    # somewhere neither of the above knows to look (Spotify's
+    # %APPDATA% install, UWP packages, anything vendor-custom).
+    if not resolved:
+        resolved = _resolve_from_start_menu(raw)
+
+    # 4. common install dirs — last resort, a full directory walk.
     if not resolved:
         resolved = _resolve_from_search_roots(exe_name)
 

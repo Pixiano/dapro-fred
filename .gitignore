@@ -91,6 +91,16 @@ Core/data/memory_archive/
 # including personal/ and people/ content. Must never be committed.
 Core/data/vault_index/
 
+# Resolved-path cache for search_files/find_file_smart (see
+# Core/tools/found_cache.py). Real filesystem paths from his machine —
+# personal, and runtime-regenerated on demand anyway.
+Core/data/found_files.json
+
+# Proactive-check dedup state (see Core/orchestrator/proactive_checks.py).
+# Records when he was last active at the keyboard — runtime state, and
+# personal activity data.
+Core/data/proactive_state.json
+
 # Pre-synthesised filler/tool-caption audio cache — regenerates on
 # first launch after a clean clone, nothing authored lives here.
 Core/data/phrase_cache/

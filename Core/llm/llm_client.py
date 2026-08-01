@@ -55,12 +55,17 @@ class LLMClient:
     # PUBLIC INTERFACE
     # =========================================================
 
-    def generate(self, messages: list, tier: str = None) -> str:
+    def generate(self, messages: list, tier: str = None, max_tokens: int = None) -> str:
         """
         Unified generation interface.
 
         tier: "Standard" | "Deep" | "Extreme" — if not given, FRED
         picks one based on the latest user message.
+
+        max_tokens: per-call cap, for callers whose expected answer is
+        short and who pay per token in wall-clock time — this build is
+        CPU-only, so an uncapped multi-step loop is genuinely expensive
+        (see tools/smart_search.py). Defaults to self.max_tokens.
         """
 
         chosen_tier = tier or self._pick_tier(messages)
@@ -68,7 +73,20 @@ class LLMClient:
 
         try:
             model = self._get_model(chosen_tier)
-            return self._generate(model, messages)
+            # _strip_thinking deliberately returns "" when the model
+            # opened a reasoning block and never closed it — it ran out
+            # of tokens mid-thought and genuinely has no answer, and
+            # speaking the raw chain of thought would be worse. But an
+            # empty string reaches the TTS layer as total silence:
+            # confirmed in session_2026-08-01_18-41-50.jsonl, where three
+            # turns logged `"text": ""` with `spoken: true` and FRED just
+            # said nothing at all. Thinking-on Qwen3-8B makes this
+            # reachable on any turn whose reasoning overruns max_tokens.
+            # Say something honest instead of nothing.
+            return self._generate(model, messages, max_tokens=max_tokens) or (
+                "I ran out of room thinking that one through, sir. "
+                "Ask me again, or narrow it down a little."
+            )
 
         except Exception as error:
 
@@ -77,7 +95,12 @@ class LLMClient:
             if chosen_tier != self.default_tier:
                 try:
                     model = self._get_model(self.default_tier)
-                    return self._generate(model, messages)
+                    return self._generate(
+                        model, messages, max_tokens=max_tokens
+                    ) or (
+                        "I ran out of room thinking that one through, sir. "
+                        "Ask me again, or narrow it down a little."
+                    )
                 except Exception as fallback_error:
                     print("[LLM] Fallback inference failed:", fallback_error)
 
@@ -289,6 +312,27 @@ class LLMClient:
         if tier in self._loaded:
             return self._loaded[tier]
 
+        # Only ONE tier stays resident. Measured 2026-08-02 on this
+        # machine: Standard (Qwen3-8B Q4_K_M) at n_ctx 32768 is ~12.4 GB
+        # RSS, and Deep (Qwen3-14B) is larger again — both resident at
+        # once would be ~22 GB against 31 GB total with ~13 GB already
+        # spoken for by other apps, i.e. swapping or an OOM.
+        #
+        # This was latent before today and is now reachable: nothing used
+        # to request Deep at all (TIER_ROUTING_ENABLED is False), but
+        # tools/smart_search.py's find_file_smart explicitly asks for it,
+        # so a single "find my X" turn could pull a second model in
+        # alongside the resident one. Note this build is CPU-only
+        # (llama_supports_gpu_offload() is False, so GPU_LAYERS is inert)
+        # — the budget being protected here is system RAM, not VRAM.
+        #
+        # The cost is a reload when alternating tiers, which is cheap:
+        # 3.2-3.5s measured, and the tier-switching path is rare.
+        if self._loaded:
+            evicted = ", ".join(self._loaded)
+            print(f"[LLM] evicting {evicted} to load '{tier}' (one tier resident)")
+            self.unload()
+
         model_path = self.tiers.get(tier, self.tiers[self.default_tier])
 
         if not model_path.exists():
@@ -381,26 +425,33 @@ class LLMClient:
     # INFERENCE
     # =========================================================
 
-    def _generate(self, model: Llama, messages: list) -> str:
+    def _generate(self, model: Llama, messages: list, max_tokens: int = None) -> str:
 
         response = model.create_chat_completion(
             messages=messages,
             temperature=self.temperature,
             top_p=self.top_p,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens or self.max_tokens,
         )
 
         content = response["choices"][0]["message"]["content"]
 
+        # A genuinely empty completion is a model/runtime failure worth
+        # retrying on another tier, so it still raises.
         if not content:
             raise ValueError("Empty response from local model.")
 
-        content = self._strip_thinking(content)
+        stripped = self._strip_thinking(content)
 
-        if not content:
-            raise ValueError("Model response was only unfinished reasoning.")
-
-        return content
+        # "Only unfinished reasoning" is NOT a failure and must not
+        # raise: the model worked fine, it just spent its whole budget
+        # thinking and never reached an answer. Raising sent it down the
+        # fallback path and ultimately to "I'm experiencing a cognitive
+        # malfunction", which misdescribes what happened and (on the
+        # default tier, where there's no other tier to fall back to) is
+        # all the user ever heard. Returning "" lets generate() answer
+        # honestly instead — see the fallback string there.
+        return stripped
 
     @staticmethod
     def _apply_thinking(messages: list, tier: str) -> list:
@@ -518,7 +569,14 @@ class LLMClient:
         )
         content = re.sub(r"^.*?<channel\|>", "", content, flags=re.DOTALL)
         content = re.sub(r"</?\|?channel\|?>", "", content)
-        content = content.replace(THINKING_MARKER, "")
+        # Leftover from the single-global-marker era — TIER_PROMPT_MARKERS
+        # is now per-tier, so strip whichever marker(s) it defines rather
+        # than one fixed string. Confirmed live: a bare `THINKING_MARKER`
+        # reference here threw NameError on every Standard-tier
+        # tool-calling turn, caught by generate_with_tools' fallback and
+        # masked as the generic "cognitive malfunction" reply.
+        for marker in TIER_PROMPT_MARKERS.values():
+            content = content.replace(marker, "")
 
         content = content.strip()
 

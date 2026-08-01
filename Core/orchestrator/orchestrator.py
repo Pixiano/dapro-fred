@@ -13,13 +13,17 @@ from tools import system_tools
 from tools import web_tools
 from tools import machine_tools
 from tools import assist_tools
+from tools import git_tools
+from tools import smart_search
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
+from orchestrator import proactive_checks
 from orchestrator import intent
 from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
 from utils import event_log
+from utils.vault_md import flatten_tables
 from config.settings import TOOLS_ENABLED, VAULT_CHUNK_INJECT_CHARS
 
 
@@ -59,6 +63,10 @@ TOOL_LABELS = {
     "read_file": "Reading file",
     "list_directory": "Listing folder",
     "search_files": "Searching files",
+    "find_file_smart": "Searching thoroughly",
+    "git_status": "Checking git status",
+    "git_log": "Checking git history",
+    "git_diff_summary": "Checking git changes",
     "move_file": "Moving file",
     "rename_file": "Renaming",
     "delete_file": "Deleting",
@@ -129,6 +137,7 @@ class FREDOrchestrator:
         self.llm = LLMClient()
 
         self.scheduler = ReminderScheduler()
+        proactive_checks.register(self.scheduler)
 
         self.tools = ToolRegistry()
         self._register_tools()
@@ -686,7 +695,7 @@ class FREDOrchestrator:
         self.tools.register(
             name="search_files",
             function=machine_tools.search_files,
-            description="Search for files by name under a directory.",
+            description="Search for files by exact/partial filename under a directory.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -694,6 +703,70 @@ class FREDOrchestrator:
                     "directory": {"type": "string", "description": "Directory to search under. Optional, defaults to home."},
                 },
                 "required": ["query"],
+            },
+        )
+
+        self.tools.register(
+            name="find_file_smart",
+            function=self._find_file_smart,
+            description=(
+                "Find a file when you don't know its exact name — describe what "
+                "it is (e.g. 'my health logs') and this reasons through the folder "
+                "tree instead of matching a filename substring. Slower than "
+                "search_files; use search_files first if the filename is known."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string", "description": "What the file is, in plain language."},
+                    "directory": {"type": "string", "description": "Where to start looking. Optional, defaults to home."},
+                },
+                "required": ["description"],
+            },
+        )
+
+        # ---------------------------------------------------
+        # Git — read-only (Suggestion #1). status/log/diff-summary
+        # only, nothing that mutates repo state. See git_tools.py.
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="git_status",
+            function=git_tools.git_status,
+            description="Current git branch and a summary of staged/modified/untracked files.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_path": {"type": "string", "description": "Repo folder. Optional, defaults to the FRED project."},
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="git_log",
+            function=git_tools.git_log,
+            description="Recent git commit history — subjects and relative times.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_path": {"type": "string", "description": "Repo folder. Optional, defaults to the FRED project."},
+                    "count": {"type": "integer", "description": "How many recent commits. Optional, defaults to 5."},
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="git_diff_summary",
+            function=git_tools.git_diff_summary,
+            description="Summary of uncommitted changes — files and line counts, not the raw diff.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo_path": {"type": "string", "description": "Repo folder. Optional, defaults to the FRED project."},
+                },
+                "required": [],
             },
         )
 
@@ -1302,6 +1375,15 @@ class FREDOrchestrator:
         except Exception as e:
             print(f"[orchestrator] tool-event hook failed: {e}")
 
+    def _find_file_smart(self, description: str, directory: str = "") -> str:
+        """
+        Bound wrapper so find_file_smart (tools/smart_search.py) gets
+        an LLM handle without every plain tool function needing one —
+        same shape as self.scheduler.* being registered directly for
+        tools that need orchestrator-level state.
+        """
+        return smart_search.find_file_smart(description, directory, llm=self.llm)
+
     def _execute_tool_call(self, call: dict) -> str:
 
         function = call.get("function", {})
@@ -1456,12 +1538,52 @@ class FREDOrchestrator:
         if vault_router:
             hits = vault_router.retrieve(user_input)
             if hits:
+                # Tables are flattened to "row — Column: value" BEFORE
+                # truncation, so a value can never be read out of the
+                # wrong column — see utils.vault_md.flatten_tables for
+                # the confirmed failure that motivated it.
                 vault_text = "\n".join(
-                    f"- [{label}] {text[:VAULT_CHUNK_INJECT_CHARS]}"
-                    + ("..." if len(text) > VAULT_CHUNK_INJECT_CHARS else "")
-                    for label, text, _score in hits
+                    f"- [{label}] {flat[:VAULT_CHUNK_INJECT_CHARS]}"
+                    + ("..." if len(flat) > VAULT_CHUNK_INJECT_CHARS else "")
+                    for label, flat, _score in (
+                        (label, flatten_tables(text), score)
+                        for label, text, score in hits
+                    )
                 )
-                system_sections.append(f"Relevant vault knowledge:\n{vault_text}")
+                # The anti-fabrication instruction is NOT optional framing.
+                # Confirmed 2026-08-01: asked to "review my fitness
+                # progress", FRED invented an entire report — a weight, a
+                # BMI, a body-fat percentage and a full bloodwork panel,
+                # none of which matched personal/fitness.md, which records
+                # different figures and no bloodwork at all. (The real
+                # values are deliberately not quoted here: that file is
+                # marked sensitive and rules.md forbids copying personal/
+                # content into the repo.) Chunks arrive truncated
+                # (VAULT_CHUNK_INJECT_CHARS), so a cut-off table looks to
+                # the model like a form to complete, and nothing in the
+                # prompt previously said the vault was the only admissible
+                # source for a personal fact. Inventing health data is the
+                # worst failure this system can have — rules.md's "don't
+                # launder guesses into facts" applies double here.
+                system_sections.append(
+                    "Relevant vault knowledge:\n"
+                    f"{vault_text}\n\n"
+                    "These vault excerpts are the ONLY valid source for facts "
+                    "about Vatsal — his body, health, projects, people, "
+                    "schedule, or history. Never state a number, date, "
+                    "measurement, or detail about him that does not appear "
+                    "verbatim above. Excerpts may be truncated mid-sentence or "
+                    "mid-table; a cut-off excerpt is missing information, never "
+                    "an invitation to fill in the rest. If the answer isn't in "
+                    "the text above, say you don't have it and name the file "
+                    "that might.\n"
+                    "In tables, the column a value sits in changes what it "
+                    "means: a Target or Goal is something not yet reached, a "
+                    "Baseline is where he started, and only Current is true "
+                    "now. Never report a target as if it were current. A dash "
+                    "or blank cell means that value is genuinely unknown — say "
+                    "so rather than substituting a number from another column."
+                )
 
         # Long-term memory
         if memories:

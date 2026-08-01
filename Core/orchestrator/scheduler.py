@@ -184,6 +184,25 @@ class ReminderScheduler:
 
         self._scheduler.shutdown(wait=False)
 
+    def add_periodic(self, func, minutes: float, job_id: str):
+        """
+        Runs `func` (no args) on a fixed interval, forever, in-memory
+        only — unlike one-off reminders, a periodic check has nothing
+        meaningful to persist across a restart, it just re-registers
+        itself every launch (see orchestrator/proactive_checks.py).
+        Skips re-adding if `job_id` already exists, so calling this
+        twice in one process doesn't stack duplicate jobs.
+        """
+        if self._scheduler.get_job(job_id, jobstore="memory"):
+            return
+        self._scheduler.add_job(
+            func,
+            trigger="interval",
+            minutes=minutes,
+            id=job_id,
+            jobstore="memory",
+        )
+
     # =========================================================
     # ONE-OFF REMINDERS (persistent)
     # =========================================================

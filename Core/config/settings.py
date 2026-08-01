@@ -131,7 +131,54 @@ VAULT_RETRIEVAL_FLOOR = -1.0
 # Injected chunk text is capped here — a section can run a few hundred
 # words, and top_k=3 of those uncapped would be a real chunk of the
 # context budget on every hit.
-VAULT_CHUNK_INJECT_CHARS = 420
+#
+# Raised 420 -> 1200 on 2026-08-01 after a confirmed fabrication: asked
+# to review his fitness progress, FRED invented weight, BMI, body fat and
+# a bloodwork panel. personal/fitness.md's Biometrics section is a
+# markdown table that ran past 420 chars, so the model received it cut
+# off mid-table and completed the pattern from imagination. 1200 clears
+# every table in the sampled personal/ files. This is a real context-cost
+# increase (6 chunks x 1200 = ~7.2k chars, order of 1.8k tokens against a
+# 16,384-token window) accepted deliberately: truncating structured data
+# mid-row is what invited the invention, and inventing personal health
+# data is a far worse failure than a tighter context budget. Paired with
+# the explicit anti-fabrication instruction in orchestrator._build_messages
+# — neither is sufficient alone.
+VAULT_CHUNK_INJECT_CHARS = 1200
+
+# =========================================================
+# PROACTIVE CHECKS — Observation B, 2026-08-01 feedback session
+# =========================================================
+#
+# Three periodic checks over orchestrator/proactive_checks.py, each
+# firing through utils/notifier.notify at most once per stretch (see
+# that module's dedup state) so this never becomes the nagging persona.md
+# explicitly warns against.
+
+# How often the background checks run at all. Cheap (frontmatter reads,
+# one Windows API call) — no reason to poll more often than this.
+PROACTIVE_CHECK_INTERVAL_MINUTES = 15
+
+# active-priorities.md's own `updated:` frontmatter date, not a per-item
+# parse of its prose bullets — see proactive_checks.py for why a
+# whole-file signal was chosen over trying to date-parse free text.
+PROACTIVE_STALE_DAYS = 7
+
+# Continuous machine use (no idle gap at least this long) before FRED
+# flags a break. Reset by any idle gap at or above this length — that's
+# what counts as "he took a break," not a fixed clock reset.
+PROACTIVE_BREAK_IDLE_MINUTES = 15
+PROACTIVE_LONG_SESSION_HOURS = 3
+
+# A vault file's optional `deadline: YYYY-MM-DD` frontmatter field,
+# flagged once it's within this many days out. No vault file uses this
+# field yet (board exam dates aren't recorded as of 2026-08-01), so
+# this check is currently a no-op scan — the read path exists for
+# whenever a real deadline gets added, not speculative parsing of dates
+# from prose.
+PROACTIVE_DEADLINE_WARN_DAYS = 7
+
+PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 
 # =========================================================
 # LLM SETTINGS — fully local inference via llama.cpp
@@ -283,13 +330,36 @@ TIER_ROUTING_ENABLED = False
 # overflow" warning and degrades quality.
 CONTEXT_WINDOW = 16384
 
+# Standard raised 16384 -> 32768 on 2026-08-02: Qwen3-8B trains at
+# 32768, so 16384 was leaving half the model's real capacity unused, and
+# the vault-chunk budget went up the same day (VAULT_CHUNK_INJECT_CHARS
+# 420 -> 1200) which eats into every turn's window.
+#
+# Measured directly on this machine before committing to it, since this
+# is a RAM decision and this box has crashed on exhaustion before:
+#
+#   Qwen3-8B Q4_K_M @ 16384 : 10.1 GB RSS after a generation, load 3.2s
+#   Qwen3-8B Q4_K_M @ 32768 : 12.4 GB RSS after a generation, load 3.5s
+#
+# So +2.3 GB for double the window, with no measurable slowdown on a
+# short generation (7.0s both). Note this llama-cpp-python build is
+# CPU-only — llama_supports_gpu_offload() returns False, so GPU_LAYERS
+# below is inert and none of this touches VRAM.
+#
+# Deep/Extreme deliberately NOT raised: they're bigger models, so the
+# same doubling costs more, and _get_model now keeps only one tier
+# resident (see llm_client) precisely because two at once doesn't fit.
 CONTEXT_WINDOW_BY_TIER = {
-    "Standard": 16384,
+    "Standard": 32768,
     "Backup": 16384,
-    "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, same as before
+    "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, RAM-bound
     "Extreme": 16384,
 }
 
+# Inert on this install: the bundled llama-cpp-python (0.3.31) is a
+# CPU-only build and llama_supports_gpu_offload() returns False, so no
+# layers are offloaded regardless of this value. Kept because the
+# setting is correct for a CUDA build and costs nothing here.
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
 
 # =========================================================

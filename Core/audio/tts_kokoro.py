@@ -51,6 +51,23 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _MD_NOISE = re.compile(r"[*_`#>]+")
 _BULLET = re.compile(r"^\s*[-•]\s*", re.MULTILINE)
 
+# Two attempts at the "quiet at the start, loud after ~0.2s" report were
+# made on 2026-08-01 and BOTH REVERTED, recorded here so neither gets
+# tried a third time:
+#
+#   1. Peak-normalising every chunk to a fixed target (0.95). Made things
+#      actively worse — Kokoro's own output level was never the problem,
+#      so all this did was amplify the already-audible part after the
+#      ramp, widening the gap it was meant to close.
+#   2. Replacing the silent preroll with a quiet 80Hz tone, on the theory
+#      that a Bluetooth receiver's gain ramp only triggers on real signal
+#      energy. No improvement to the quiet phase.
+#
+# The remaining behaviour (quiet opening, then a step up in level after a
+# short gap, on Bluetooth output) is most likely the receiver's own
+# hardware gain ramp — outside this process's control, and not something
+# sample-level changes reached in either attempt. Left alone deliberately.
+
 
 def clean_for_speech(text: str) -> str:
     text = _BULLET.sub("", text)

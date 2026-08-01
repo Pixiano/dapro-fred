@@ -84,13 +84,14 @@ TOOL_CATEGORIES = {
     "power": ("power_action",),
     "files": (
         "create_text_file", "create_folder", "append_to_file", "read_file",
-        "list_directory", "search_files", "move_file", "rename_file",
-        "delete_file", "open_path",
+        "list_directory", "search_files", "find_file_smart", "move_file",
+        "rename_file", "delete_file", "open_path",
     ),
     "schedule": (
         "schedule_reminder", "set_timer", "schedule_file_watch",
         "list_scheduled", "cancel_scheduled",
     ),
+    "git": ("git_status", "git_log", "git_diff_summary"),
 }
 
 # Cue words per category. Over-inclusive on purpose: a spurious category
@@ -141,7 +142,19 @@ CATEGORY_CUES = {
         "brightness", "brighter", "dimmer", "dim", "screen",
         "screenshot", "screen shot", "capture", "grab the screen",
     ),
-    "clipboard": ("clipboard", "copy", "copied", "paste"),
+    # Not bare "copy"/"copied" — confirmed false-positive on "project
+    # copy" / "project copy.md" (a project name), reproduced directly in
+    # session_2026-08-01_14-24-11.jsonl: "did we do last in project
+    # copy?" had no other category cue at all, so clipboard was the ONLY
+    # category offered and get_clipboard fired on a project name. Same
+    # shape as the "on track" collision above — "copy" is too common an
+    # ordinary noun/verb to stand alone as a cue. Real clipboard requests
+    # reliably say "clipboard" itself, or pair copy/paste with a
+    # demonstrative ("copy that", "copy this").
+    "clipboard": (
+        "clipboard", "paste", "pasted",
+        "copy that", "copy this", "copied that", "copied this",
+    ),
     # "windows" is listed explicitly: cues match on word boundaries, so
     # \bwindow\b never matched the plural, and "list my open windows"
     # routed to apps+files instead — the model then denied being able to
@@ -161,12 +174,24 @@ CATEGORY_CUES = {
     "files": (
         "file", "folder", "directory", "note", "save", "create", "make",
         "write", "rename", "move", "delete", "remove", "read", "append",
-        "add to", "list", "what's in", "document", "shopping list",
+        "add to", "list", "what's in", "document", "shopping list", "find",
+        # "find" added after a confirmed misroute: "find spotify.exe"
+        # matched only "apps" (via the "spotify" cue), so search_files/
+        # find_file_smart were never offered at all — the model had no
+        # way to do what was actually asked. Over-inclusive on purpose,
+        # same as every other cue here: this unions with whatever else
+        # matches rather than replacing it, so "find spotify.exe" now
+        # offers both the file-search tools AND launch_application,
+        # letting the model pick correctly instead of only seeing one.
     ),
     "schedule": (
         "remind", "reminder", "schedule", "alarm", "timer", "countdown",
         "wake me", "tomorrow", "tonight", "cancel", "pending", "in an hour",
         "at 7", "later",
+    ),
+    "git": (
+        "git", "commit", "commits", "branch", "repo", "repository",
+        "uncommitted", "pushed", "pull request",
     ),
 }
 
