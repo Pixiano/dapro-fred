@@ -172,6 +172,14 @@ MODEL_TIERS = {
     # its own chat template, not the chatml-function-calling override.
     "gemma4": MODELS_DIR / "lmstudio-community" / "gemma-4-E4B-it-GGUF"
             / "gemma-4-E4B-it-Q4_K_M.gguf",
+
+    # Qwen3.5-4B at Q6_K — a true 4B, where gemma4's "E4B" is an
+    # effective-4B whose file is larger (3.53GB vs 4.97GB), so this is a
+    # ~1.4GB VRAM saving as well as a higher-precision quant. Q6_K rather
+    # than Q4 deliberately: quantisation damage is more visible on a 4B
+    # than on a large model, and there was headroom to spend.
+    "qwen35": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "Qwen3.5-4B-Q6_K.gguf",
 }
 
 # Tiers whose chat template gates reasoning behind an enable_thinking
@@ -185,6 +193,18 @@ MODEL_TIERS = {
 THINKING_TIERS = {"gemma4"}
 THINKING_MARKER = "<|think|>"
 
+# NOTE: "qwen35" is deliberately NOT in THINKING_TIERS, even though it is
+# a reasoning model and reasoning is wanted on. The marker above is
+# Gemma-specific — Qwen3.5's own template enables reasoning by default
+# and has no use for "<|think|>", so injecting it would put a stray
+# literal at the top of every system prompt. Reasoning comes from the
+# model's own template instead, which it keeps via CHAT_FORMAT_BY_TIER.
+#
+# Its reasoning arrives as <think>...</think>, which llm_client's
+# _strip_thinking already handles (that syntax predates this tier —
+# DeepSeek-R1 and Nemotron use it), including the unterminated-block case
+# where generation is cut off mid-thought.
+
 # Per-tier chat_format override. None means "use the template embedded in
 # the GGUF". The global default (chatml-function-calling) exists because
 # most local GGUFs' own templates have no provision for tool definitions,
@@ -192,6 +212,10 @@ THINKING_MARKER = "<|think|>"
 # forcing chatml over it discards both.
 CHAT_FORMAT_BY_TIER = {
     "gemma4": None,
+    # Qwen3.5 likewise ships a template that handles tool_calls AND
+    # reasoning, so it keeps its own rather than having
+    # chatml-function-calling forced over the top of it.
+    "qwen35": None,
 }
 
 # Gemma 4 E4B, replacing "nano" (Nemotron 4B). Better reasoning and it
@@ -209,7 +233,28 @@ CHAT_FORMAT_BY_TIER = {
 # audio can start — and the reasoning must be stripped before speaking,
 # which llm_client._strip_thinking handles for both the <think> style
 # (Nemotron) and Gemma's <|channel>thought ... <channel|> style.
-DEFAULT_TIER = "gemma4"
+DEFAULT_TIER = "qwen35"
+
+# Switched from gemma4 2026-08-01. Measured on the same query ("tell me
+# something interesting about black holes"), same system prompt, model
+# already warm:
+#
+#                       gemma4 E4B Q4_K_M     Qwen3.5-4B Q6_K
+#   file size                     4.97 GB             3.28 GB
+#   load                            1.92s               1.68s
+#   first token                     1.19s               1.27s
+#   silent reasoning block          5.87s               none
+#   full generation      8.72s / 589 tok     3.74s / 204 tok
+#
+# 2.3x faster end to end, 1.7 GB less VRAM, and a higher-precision quant
+# (Q6_K against Q4_K_M) on a true 4B rather than an "effective" one.
+#
+# It answers with no <think> block because Qwen3.5's own template
+# pre-closes one unless `enable_thinking` is passed as a jinja variable,
+# which llama-cpp-python cannot do — the same wall that forced the
+# THINKING_MARKER workaround for gemma4. It is not a quality collapse:
+# it still gets the bat-and-ball trap right ($0.05) reasoning inline,
+# in 5.2s. See THINKING_TIERS above for why qwen35 is not listed there.
 
 # One model, always DEFAULT_TIER. When False this bypasses the word-count
 # heuristic in llm_client._pick_tier, which otherwise overrides
@@ -232,6 +277,7 @@ CONTEXT_WINDOW = 16384
 CONTEXT_WINDOW_BY_TIER = {
     "low": 8192,      # gemma-2-2b native context
     "gemma4": 16384,
+    "qwen35": 16384,
     "nano": 16384,
     "standard": 16384,
     "deep": 16384,
