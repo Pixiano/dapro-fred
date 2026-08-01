@@ -92,7 +92,7 @@ Captured from a single feedback session after switching `Standard` to Qwen3-8B. 
 ## Structural gaps (not bugs — capability FRED doesn't have yet)
 
 ### A. No live coding capability — DROPPED (for now)
-Decided with Vatsal: this directly conflicts with persona.md's own stated scope — *"Not a coding assistant... Claude Code covers that ground; FRED covers the rest."* Not built. Revisit long-term, years out, once local model code-editing quality is actually trustworthy — not a near-term item.
+Decided with Vatsal: this directly conflicts with persona.md's own stated scope — FRED is explicitly *not* a coding assistant; a dedicated coding agent covers that ground and FRED covers the rest. Not built. Revisit long-term, years out, once local model code-editing quality is actually trustworthy — not a near-term item.
 
 ### B. No real proactivity — RESOLVED (three checks built)
 Built in `Core/orchestrator/proactive_checks.py`, wired into `ReminderScheduler` at orchestrator startup (`register()` called from `orchestrator.py.__init__`), each firing through the existing `notifier.py` plumbing at most once per stretch:

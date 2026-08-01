@@ -71,7 +71,7 @@ NOT MERGED — new capabilities, no natural home in Phases 16-20
   one-shot typed action vs. continuous dictation).
 
 - "Make it able to run scripts (only run, for now)" — this is
-  literally a scoped-down slice of the future Claude-Code-style
+  literally a scoped-down slice of the future agentic-coding-assistant-style
   tooling idea already logged in the root FRED Ideas.txt (the
   run_command tool, minus the read/write/retry loop around it). Not
   re-logging separately — see that entry, and the rough Phase 21-30

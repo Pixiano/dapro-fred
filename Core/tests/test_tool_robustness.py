@@ -30,12 +30,12 @@ def test_trailing_punctuation_is_stripped_from_app_name():
 
 def test_guessed_repo_path_falls_back_to_the_fred_repo():
     """
-    Real transcript: "show me my recent GitHub commits" produced
-    repo_path="Projects\\Claude", which resolved to a non-existent
+    Real transcript: "show me my recent GitHub commits" produced a
+    guessed relative repo path, which resolved to a non-existent
     directory and killed the turn with "isn't a git repository"
     instead of answering about the project actually in front of him.
     """
-    answer = git_tools.git_status(repo_path="Projects\\Claude")
+    answer = git_tools.git_status(repo_path="Projects\\SomeGuessedRepo")
     assert "isn't a git repository" not in answer
     assert "On branch" in answer or "working tree clean" in answer
 

@@ -30,8 +30,8 @@ def _resolve_repo(repo_path: str) -> Path:
     when the given path isn't a git repo.
 
     Small models invent this argument rather than omitting it —
-    confirmed: "show me my recent GitHub commits" produced
-    repo_path="Projects\\Claude", which resolve_user_path anchored under
+    confirmed: "show me my recent GitHub commits" produced a guessed
+    relative repo path, which resolve_user_path anchored under
     Documents/FRED into a path that doesn't exist, and the turn died on
     "isn't a git repository" instead of answering about the project
     actually in front of him. A guessed path that isn't a repo is worth

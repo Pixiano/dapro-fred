@@ -47,7 +47,7 @@ Future idea — contextual app-opening:
     file I had open, probably X" is fuzzy intent, not a deterministic
     pattern) — belongs in the tool-calling path, not the dispatcher.
 
-Future idea — FRED gets Claude-Code-style tools/skills (NOT NOW —
+Future idea — FRED gets agentic-coding-assistant-style tools/skills (NOT NOW —
 revisit after Phase 20, this is a separate project on top of the
 roadmap, not a phase in it):
 

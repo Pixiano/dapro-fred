@@ -16,23 +16,17 @@
 #
 # Runs on the RESIDENT tier (whatever is already loaded — normally
 # Standard), NOT Deep. Originally written for Deep on the assumption
-# that "which folder should I open" wanted the stronger model. Two
-# facts killed that, both established 2026-08-02:
+# that "which folder should I open" wanted the stronger model;
+# llm_client._get_model now keeps only ONE tier resident (VRAM won't
+# hold two), so asking for Deep would evict Standard, run, and force
+# Standard to reload for the very next turn — a model reload either
+# side of every smart search, for a judgment that doesn't need it.
 #
-#   1. This llama-cpp-python build is CPU-only
-#      (llama_supports_gpu_offload() is False), so a 14B model runs on
-#      the CPU. Observed live: one find_file_smart call pinned the
-#      machine at 99% CPU long enough for Vatsal to notice and ask.
-#   2. llm_client._get_model now keeps only ONE tier resident, so
-#      asking for Deep evicts Standard, runs, and forces Standard to
-#      reload for the very next turn — a reload either side of every
-#      smart search.
-#
-# The per-step judgment is a short multiple-choice pick over a listed
+# The per-step decision is a short multiple-choice pick over a listed
 # set of names, not open-ended reasoning, which is well within the
-# resident model. Steps cut 6 -> 4 for the same reason: each step is a
-# full round trip on CPU, and four levels reaches essentially anything
-# in a normal user tree.
+# resident model. MAX_STEPS is 4 because each step is a full round
+# trip, and four levels reaches essentially anything in a normal user
+# tree.
 
 import os
 import re
@@ -42,10 +36,14 @@ from tools import found_cache
 
 MAX_STEPS = 4
 
-# One line ("ENTER: Documents") is all that's wanted. Uncapped, a
-# thinking-on model can spend hundreds of tokens reasoning per step,
-# multiplied by MAX_STEPS, on CPU.
-_STEP_MAX_TOKENS = 24
+# One line ("ENTER: Documents") is all that's WANTED, but the budget
+# has to cover the reasoning that comes before it: Standard runs with
+# thinking enabled, so a tight cap is spent entirely inside <think>
+# and the answer line never arrives. Measured with a 24-token cap,
+# every step returned empty and the search gave up after one folder.
+# 512 leaves room to think and still answer, and on GPU a step costs
+# well under a second.
+_STEP_MAX_TOKENS = 512
 
 _SYSTEM = (
     "You are navigating a folder tree to find a file matching a "

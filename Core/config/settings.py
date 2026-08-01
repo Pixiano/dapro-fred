@@ -330,36 +330,52 @@ TIER_ROUTING_ENABLED = False
 # overflow" warning and degrades quality.
 CONTEXT_WINDOW = 16384
 
-# Standard raised 16384 -> 32768 on 2026-08-02: Qwen3-8B trains at
-# 32768, so 16384 was leaving half the model's real capacity unused, and
-# the vault-chunk budget went up the same day (VAULT_CHUNK_INJECT_CHARS
-# 420 -> 1200) which eats into every turn's window.
+# Standard raised 16384 -> 24576 on 2026-08-02. Qwen3-8B trains at
+# 32768, so 16384 left real capacity unused, and the vault-chunk budget
+# went up the same day (VAULT_CHUNK_INJECT_CHARS 420 -> 1200) which eats
+# into every turn's window.
 #
-# Measured directly on this machine before committing to it, since this
-# is a RAM decision and this box has crashed on exhaustion before:
+# Measured on the venv's CUDA build (the interpreter FRED actually runs
+# — see the note on GPU_LAYERS), with a 4026-token prompt:
 #
-#   Qwen3-8B Q4_K_M @ 16384 : 10.1 GB RSS after a generation, load 3.2s
-#   Qwen3-8B Q4_K_M @ 32768 : 12.4 GB RSS after a generation, load 3.5s
+#   n_ctx    VRAM peak    free after    generate
+#   16384     8172 MiB     6954 MiB       4.3s
+#   24576     9877 MiB     5361 MiB       4.2s
+#   32768    11610 MiB     3522 MiB       4.4s
 #
-# So +2.3 GB for double the window, with no measurable slowdown on a
-# short generation (7.0s both). Note this llama-cpp-python build is
-# CPU-only — llama_supports_gpu_offload() returns False, so GPU_LAYERS
-# below is inert and none of this touches VRAM.
+# Speed is flat across all three — this is purely a VRAM decision. The
+# full budget is what ruled 32768 out: Whisper turbo adds ~1287 MiB when
+# resident, and the non-FRED baseline on this box has been observed
+# anywhere from 1.2 to 3.1 GB depending on what's open. At 32768 the
+# worst case lands within ~300 MiB of the 16310 MiB card, and this
+# machine has a documented history of hard access-violation crashes
+# (0xc0000005) from exactly that. 24576 keeps ~2 GB of worst-case
+# headroom for a 50% context gain, which is the better trade.
 #
-# Deep/Extreme deliberately NOT raised: they're bigger models, so the
-# same doubling costs more, and _get_model now keeps only one tier
-# resident (see llm_client) precisely because two at once doesn't fit.
+# 32768 IS reachable if the GPU is otherwise idle — raise it knowingly,
+# not by default.
+#
+# Deep/Extreme deliberately NOT raised: bigger models, so the same
+# increase costs more VRAM, and _get_model keeps only one tier resident
+# (see llm_client) precisely because two at once don't fit.
 CONTEXT_WINDOW_BY_TIER = {
-    "Standard": 32768,
+    "Standard": 24576,
     "Backup": 16384,
-    "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, RAM-bound
+    "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, VRAM-bound
     "Extreme": 16384,
 }
 
-# Inert on this install: the bundled llama-cpp-python (0.3.31) is a
-# CPU-only build and llama_supports_gpu_offload() returns False, so no
-# layers are offloaded regardless of this value. Kept because the
-# setting is correct for a CUDA build and costs nothing here.
+# Genuinely active: the venv's llama-cpp-python 0.3.31 is a CUDA build
+# (llama_supports_gpu_offload() is True) and all layers offload to the
+# RTX 5060 Ti.
+#
+# Worth knowing, because it caused a wrong diagnosis on 2026-08-02:
+# there are THREE Pythons on this machine with three different
+# llama_cpp installs — the venv here (CUDA, correct), a pyenv 3.10.11
+# (CPU-only), and system Python 3.11 (CUDA, but missing FRED's other
+# dependencies). Benchmarks run with the wrong interpreter reported
+# ~92s per turn where the venv does the same work in ~4.3s. Always
+# benchmark with Core/venv/Scripts/python.exe.
 GPU_LAYERS = -1  # offload all layers to GPU; set lower if VRAM-limited
 
 # =========================================================

@@ -119,7 +119,7 @@ the way the original Phase 16-20 timeline almost got rushed.
    needs to be handled properly.
 
 2. Account integrations — Spotify, YouTube, Discord, Gmail, Drive,
-   OneDrive, Groq/Claude/ChatGPT/DeepSeek APIs
+   OneDrive, Groq/ChatGPT/DeepSeek and similar cloud APIs
    Prerequisite: a real credentials vault, not scattered API keys in
    a settings file — this project has already leaked keys twice
    (the two KEYS!.txt incidents), so this gets built BEFORE any new
@@ -133,14 +133,14 @@ the way the original Phase 16-20 timeline almost got rushed.
 
 3. "Extreme of extreme" cloud API tier
    A deliberate, rarely-used, opt-in tier above local "extreme" that
-   calls out to a real cloud model (Claude/GPT/etc.) only for the
+   calls out to a real cloud model (a frontier cloud model) only for the
    hardest cases local models genuinely can't handle, such as a
-   iterate-until-complete task (Claude Code type work). Requires
+   iterate-until-complete task (agentic coding-assistant type work). Requires
    explicit confirmation before use, the same way Phase 14's
    destructive-action gate requires confirmation — sending data
    off-device has real privacy weight and shouldn't be silent.
    Example: a genuinely hard multi-step reasoning task might prompt
-   "this would go faster/better with Claude's API — want me to use
+   "this would go faster/better with a cloud model's API — want me to use
    it?" rather than FRED silently deciding to phone out.
    This might also be integrated with memory so FRED knows "This 
    task is usually handed out, so I must hand it out automatically",
@@ -213,8 +213,8 @@ the way the original Phase 16-20 timeline almost got rushed.
 
 13. Self-documentation access (after v1.0 ships)
     Give FRED indexed access to his own documentation — README,
-    roadmap, this plan, the codebase's own docs — the same way Claude
-    can be asked questions about Claude by referencing Claude's own
+    roadmap, this plan, the codebase's own docs — the same way a cloud assistant
+    can be asked questions about itself by referencing its own
     docs. Explicitly framed as a practical substitute for
     self-awareness, not a claim that it IS self-awareness — FRED
     being able to accurately answer "what can you actually do" or
@@ -228,7 +228,7 @@ the way the original Phase 16-20 timeline almost got rushed.
 
 14. AI chat history import — "AI_Chats" memory project
     Vatsal has years of conversations across DeepSeek, Gemini,
-    ChatGPT, and Claude that genuinely hold a lot of signal about him
+    ChatGPT, and other assistants that genuinely hold a lot of signal about him
     as a person — not just project context, but who he is in general.
     The idea: import/share/summarize all of them into a dedicated
     "AI_Chats" memory section, processed by deep/extreme tier (or the
@@ -239,7 +239,7 @@ the way the original Phase 16-20 timeline almost got rushed.
     This is the biggest item in this whole backlog, bigger than it
     looks at first glance, for three real reasons:
       - Every platform exports differently (ChatGPT has a structured
-        data export, Claude has its own, Gemini/DeepSeek vary and may
+        data export, others have their own, Gemini/DeepSeek vary and may
         not all support a clean export at all) — ingestion isn't one
         pipeline, it's several.
       - Deduplication across platforms matters — the same fact about
@@ -251,7 +251,7 @@ the way the original Phase 16-20 timeline almost got rushed.
         never leaves the machine except the one deliberate API-tier
         exception" treatment as everything else in this project, not
         a casual bulk-import.
-    Example: a fact mentioned to ChatGPT in 2024 and again to Claude
+    Example: a fact mentioned to ChatGPT in 2024 and again to another assistant
     in 2025 should end up as ONE entry in the right category, not
     two — and something genuinely new (never told to FRED directly)
     surfacing from a two-year-old Gemini chat should land in Basics
@@ -267,7 +267,7 @@ Everything already identified as its own frontier, separate from
 "FRED the personal assistant" as currently scoped:
   - Self-improvement (FRED notices an error, drafts a fix in a
     sandbox, proposes — never auto-applies)
-  - Running scripts / Claude-Code-style read-write-run tooling
+  - Running scripts / agentic-coding-assistant-style read-write-run tooling
     (prerequisite for #1 above in spirit, but the FULL agentic
     version — not just running one cached command), review
     this again with Vatsal, seems like an eminent task for v1.1.

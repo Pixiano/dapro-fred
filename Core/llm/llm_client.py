@@ -63,9 +63,9 @@ class LLMClient:
         picks one based on the latest user message.
 
         max_tokens: per-call cap, for callers whose expected answer is
-        short and who pay per token in wall-clock time — this build is
-        CPU-only, so an uncapped multi-step loop is genuinely expensive
-        (see tools/smart_search.py). Defaults to self.max_tokens.
+        one short line and who would otherwise pay for a thinking-on
+        model's full budget on every step of a loop (see
+        tools/smart_search.py). Defaults to self.max_tokens.
         """
 
         chosen_tier = tier or self._pick_tier(messages)
@@ -312,22 +312,21 @@ class LLMClient:
         if tier in self._loaded:
             return self._loaded[tier]
 
-        # Only ONE tier stays resident. Measured 2026-08-02 on this
-        # machine: Standard (Qwen3-8B Q4_K_M) at n_ctx 32768 is ~12.4 GB
-        # RSS, and Deep (Qwen3-14B) is larger again — both resident at
-        # once would be ~22 GB against 31 GB total with ~13 GB already
-        # spoken for by other apps, i.e. swapping or an OOM.
+        # Only ONE tier stays resident. Measured 2026-08-02 on the venv's
+        # CUDA build: Standard (Qwen3-8B Q4_K_M) at n_ctx 24576 peaks at
+        # ~9.9 GB VRAM of a 16310 MiB card, and Deep (Qwen3-14B) is
+        # larger again — two resident at once cannot fit, and this
+        # machine has a documented history of hard access-violation
+        # crashes (0xc0000005) from VRAM exhaustion.
         #
         # This was latent before today and is now reachable: nothing used
         # to request Deep at all (TIER_ROUTING_ENABLED is False), but
-        # tools/smart_search.py's find_file_smart explicitly asks for it,
-        # so a single "find my X" turn could pull a second model in
-        # alongside the resident one. Note this build is CPU-only
-        # (llama_supports_gpu_offload() is False, so GPU_LAYERS is inert)
-        # — the budget being protected here is system RAM, not VRAM.
+        # tools/smart_search.py's find_file_smart could pull a second
+        # model in alongside the resident one on a single "find my X"
+        # turn.
         #
-        # The cost is a reload when alternating tiers, which is cheap:
-        # 3.2-3.5s measured, and the tier-switching path is rare.
+        # The cost is a reload when alternating tiers, and the
+        # tier-switching path is rare.
         if self._loaded:
             evicted = ", ".join(self._loaded)
             print(f"[LLM] evicting {evicted} to load '{tier}' (one tier resident)")
