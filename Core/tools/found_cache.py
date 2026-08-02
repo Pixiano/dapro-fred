@@ -26,6 +26,13 @@ from config.settings import DATA_DIR
 CACHE_PATH = DATA_DIR / "found_files.json"
 
 
+# Reserved key holding the most recent search's resolved paths, so a
+# follow-up ("open it", "open that one") has something concrete to act
+# on. Namespaced with a marker no real (directory, query) pair can
+# produce, since _key always contains a NUL separator and this doesn't.
+_LAST_KEY = "__last_results__"
+
+
 def _key(query: str, directory: str) -> str:
     return f"{directory.strip().lower()}\x00{query.strip().lower()}"
 
@@ -71,3 +78,29 @@ def put(query: str, directory: str, paths: list):
     cache = _load()
     cache[_key(query, directory)] = {"paths": paths}
     _save(cache)
+
+
+def set_last(paths: list):
+    """
+    Record the paths a search just resolved, so "open it" has a
+    referent. Kept separate from put() because a search can legitimately
+    want to be remembered as the latest without being cached by query
+    (find_file_smart's key is its description, not a filename).
+    """
+    if not paths:
+        return
+    cache = _load()
+    cache[_LAST_KEY] = {"paths": [str(p) for p in paths]}
+    _save(cache)
+
+
+def get_last():
+    """
+    Paths from the most recent search that still exist, or [] — same
+    re-verification as get(), because "open it" five minutes later must
+    not open something that has since moved.
+    """
+    entry = _load().get(_LAST_KEY)
+    if not entry:
+        return []
+    return [p for p in entry.get("paths", []) if Path(p).exists()]

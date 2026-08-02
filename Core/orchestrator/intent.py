@@ -73,8 +73,8 @@ TOOL_CATEGORIES = {
     "search": ("web_search",),
     "sysinfo": ("get_system_status", "get_network_status"),
     "apps": ("launch_application", "open_website", "open_path"),
-    "audio": ("get_volume", "set_volume", "mute", "media_control"),
-    "display": ("get_brightness", "set_brightness", "take_screenshot"),
+    "audio": ("get_volume", "set_volume", "adjust_volume", "mute", "media_control"),
+    "display": ("get_brightness", "set_brightness", "adjust_brightness", "take_screenshot"),
     "clipboard": ("get_clipboard", "set_clipboard"),
     "windows": (
         "list_windows", "focus_window", "minimize_window",
@@ -85,13 +85,14 @@ TOOL_CATEGORIES = {
     "files": (
         "create_text_file", "create_folder", "append_to_file", "read_file",
         "list_directory", "search_files", "find_file_smart", "move_file",
-        "rename_file", "delete_file", "open_path",
+        "rename_file", "delete_file", "open_path", "open_last_found",
     ),
     "schedule": (
         "schedule_reminder", "set_timer", "schedule_file_watch",
         "list_scheduled", "cancel_scheduled",
     ),
     "git": ("git_status", "git_log", "git_diff_summary"),
+    "recap": ("summarise_today", "save_today_summary"),
 }
 
 # Cue words per category. Over-inclusive on purpose: a spurious category
@@ -192,6 +193,11 @@ CATEGORY_CUES = {
     "git": (
         "git", "commit", "commits", "branch", "repo", "repository",
         "uncommitted", "pushed", "pull request",
+    ),
+    "recap": (
+        "what did we do", "what have we done", "recap", "summarise today",
+        "summarize today", "today's summary", "wrap up", "sum up today",
+        "log today", "save today",
     ),
 }
 

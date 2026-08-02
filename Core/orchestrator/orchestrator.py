@@ -15,6 +15,7 @@ from tools import machine_tools
 from tools import assist_tools
 from tools import git_tools
 from tools import smart_search
+from tools import session_summary
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
@@ -44,6 +45,8 @@ TOOL_LABELS = {
     "power_action": "Power",
     "get_volume": "Checking volume",
     "set_volume": "Setting volume",
+    "adjust_volume": "Adjusting volume",
+    "adjust_brightness": "Adjusting brightness",
     "mute": "Muting",
     "get_brightness": "Checking brightness",
     "set_brightness": "Setting brightness",
@@ -64,6 +67,9 @@ TOOL_LABELS = {
     "list_directory": "Listing folder",
     "search_files": "Searching files",
     "find_file_smart": "Searching thoroughly",
+    "open_last_found": "Opening",
+    "summarise_today": "Reviewing today",
+    "save_today_summary": "Saving to vault",
     "git_status": "Checking git status",
     "git_log": "Checking git history",
     "git_diff_summary": "Checking git changes",
@@ -615,6 +621,46 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="adjust_volume",
+            function=machine_tools.adjust_volume,
+            description=(
+                "Change volume relative to its current level — for "
+                "'turn it up', 'a bit quieter', 'louder'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "direction": {"type": "string", "description": "'up' or 'down'."},
+                    "amount": {
+                        "type": "string",
+                        "description": "'small', 'normal', or 'large'. Defaults to normal.",
+                    },
+                },
+                "required": ["direction"],
+            },
+        )
+
+        self.tools.register(
+            name="adjust_brightness",
+            function=machine_tools.adjust_brightness,
+            description=(
+                "Change screen brightness relative to its current level — "
+                "for 'brighter', 'dim it a bit'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "direction": {"type": "string", "description": "'up' or 'down'."},
+                    "amount": {
+                        "type": "string",
+                        "description": "'small', 'normal', or 'large'. Defaults to normal.",
+                    },
+                },
+                "required": ["direction"],
+            },
+        )
+
+        self.tools.register(
             name="get_brightness",
             function=machine_tools.get_brightness,
             description="Get current screen brightness (0-100).",
@@ -1005,6 +1051,46 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="summarise_today",
+            function=self._summarise_today,
+            description=(
+                "Recap what was worked on today, built from the session "
+                "logs. Also says where it would be saved in the vault; "
+                "does NOT write anything."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="save_today_summary",
+            function=self._save_today_summary,
+            description=(
+                "Append today's recap to the vault's daily note. Only "
+                "call after the user has explicitly confirmed saving."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="open_last_found",
+            function=assist_tools.open_last_found,
+            description=(
+                "Open a file from the most recent search — use for "
+                "'open it', 'open that one', 'open the second one'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "which": {
+                        "type": "integer",
+                        "description": "Which result, 1-based. Defaults to 1.",
+                    }
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
             name="open_path",
             function=assist_tools.open_path,
             description=(
@@ -1374,6 +1460,16 @@ class FREDOrchestrator:
             self.on_tool_event(TOOL_LABELS.get(name, name.replace("_", " ")))
         except Exception as e:
             print(f"[orchestrator] tool-event hook failed: {e}")
+
+    def _summarise_today(self) -> str:
+        """Bound so the summariser can use the loaded model for real
+        prose instead of falling back to bare counts."""
+        return session_summary.preview_session_summary(llm=self.llm)
+
+    def _save_today_summary(self) -> str:
+        """Writes to the vault — reached only when the user has said
+        yes to the preview, per rules.md's propose-before-write."""
+        return session_summary.save_session_summary(llm=self.llm)
 
     def _find_file_smart(self, description: str, directory: str = "") -> str:
         """

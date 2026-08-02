@@ -119,6 +119,17 @@ def main():
     print(f"[fred_popup] session log -> {session_log}")
     event_log.log("system", note="crash log path", path=str(crash_log))
 
+    # Assert the expensive-to-be-wrong-about assumptions before the UI
+    # comes up — see utils/health_check.py for the two failures that
+    # went unnoticed for weeks because nothing checked them. Runs in
+    # milliseconds and never raises; a hard failure is reported and
+    # startup continues, because a half-working FRED still beats one
+    # that refuses to start.
+    from utils import health_check
+    results = health_check.run()
+    for failure in health_check.failures(results):
+        print(f"[fred_popup] HEALTH FAILURE — {failure}")
+
     from ui.pill_app import main as app_main
     app_main()
 

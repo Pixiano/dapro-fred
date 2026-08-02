@@ -146,6 +146,72 @@ def mute(should_mute: bool = True) -> str:
 # BRIGHTNESS
 # =========================================================
 
+# How much "a bit" moves a level, versus a plain "turn it up". Both
+# are what people actually say — nobody speaks in percentages to an
+# assistant — and neither previously did anything: the only volume
+# setter took an absolute number, so "turn it up a bit" either had to
+# be guessed at by the model or missed entirely.
+_NUDGE_SMALL = 10
+_NUDGE_NORMAL = 20
+
+
+def adjust_volume(direction: str, amount: str = "normal") -> str:
+    """
+    Move the volume relative to where it is now.
+
+    direction: "up" or "down". amount: "small" ("a bit", "slightly"),
+    "normal", or "large" ("a lot", "way up").
+    """
+    volume = _get_volume_interface()
+    current = round(volume.GetMasterVolumeLevelScalar() * 100)
+
+    step = {
+        "small": _NUDGE_SMALL,
+        "normal": _NUDGE_NORMAL,
+        "large": _NUDGE_NORMAL * 2,
+    }.get(str(amount).lower(), _NUDGE_NORMAL)
+
+    if str(direction).lower().startswith("d"):
+        step = -step
+
+    level = max(0, min(100, current + step))
+    volume.SetMasterVolumeLevelScalar(level / 100, None)
+
+    if level == current:
+        return f"Volume is already at {level}%."
+
+    return f"Volume {'up' if step > 0 else 'down'} to {level}%."
+
+
+def adjust_brightness(direction: str, amount: str = "normal") -> str:
+    """Same relative move for screen brightness — see adjust_volume."""
+    try:
+        current = sbc.get_brightness()[0]
+    except Exception as e:
+        return f"Couldn't read brightness: {e}"
+
+    step = {
+        "small": _NUDGE_SMALL,
+        "normal": _NUDGE_NORMAL,
+        "large": _NUDGE_NORMAL * 2,
+    }.get(str(amount).lower(), _NUDGE_NORMAL)
+
+    if str(direction).lower().startswith("d"):
+        step = -step
+
+    level = max(0, min(100, current + step))
+
+    try:
+        sbc.set_brightness(level)
+    except Exception as e:
+        return f"Couldn't set brightness: {e}"
+
+    if level == current:
+        return f"Brightness is already at {level}%."
+
+    return f"Brightness {'up' if step > 0 else 'down'} to {level}%."
+
+
 def get_brightness() -> str:
     """
     Get current screen brightness (0-100).
@@ -176,14 +242,32 @@ def set_brightness(level: int) -> str:
 # CLIPBOARD
 # =========================================================
 
+# The clipboard is unbounded — a copied article or a whole file's worth
+# of code is a perfectly normal thing to find in it, and this result is
+# read aloud. Without a cap, "what's in my clipboard" can commit FRED to
+# several minutes of uninterruptible speech.
+_CLIPBOARD_SPEAK_CHARS = 600
+
+
 def get_clipboard() -> str:
     """
-    Read the current clipboard contents.
+    Read the current clipboard contents, truncated to something
+    speakable (see _CLIPBOARD_SPEAK_CHARS).
     """
 
     content = pyperclip.paste()
 
-    return content if content else "Clipboard is empty."
+    if not content:
+        return "Clipboard is empty."
+
+    content = content.strip()
+
+    if len(content) > _CLIPBOARD_SPEAK_CHARS:
+        head = content[:_CLIPBOARD_SPEAK_CHARS].rsplit(" ", 1)[0]
+        remaining = len(content) - len(head)
+        return f"{head}... (about {remaining} more characters on the clipboard)"
+
+    return content
 
 
 def set_clipboard(text: str) -> str:
@@ -375,6 +459,11 @@ def search_files(query: str, directory: str = "") -> str:
 
     if not matches:
         return f"No files matching '{query}' found under {base}."
+
+    # Give a follow-up ("open it") something to refer to — the spoken
+    # result deliberately carries no paths, so the referent has to live
+    # somewhere the next turn can reach.
+    found_cache.set_last(matches)
 
     shown = matches[:10]
     names = ", ".join(f"{p.name} (in {p.parent.name})" for p in shown)

@@ -54,8 +54,22 @@ _SYSTEM = (
     "FOUND: <file name>        - a listed file clearly matches\n"
     "NONE                      - nothing here looks promising\n"
     "Only name a subfolder or file that is actually listed below. "
-    "Never invent a name that isn't shown."
+    "Never invent a name that isn't shown.\n"
+    "Prefer ENTER over a weak FOUND. If a subfolder's name is a better "
+    "match for the description than any file here, go into it — a "
+    "loosely related file at this level is not the answer when a "
+    "clearly relevant folder is sitting next to it. Only answer FOUND "
+    "when the file name itself plainly matches what is being looked for."
 )
+
+# Folders no user search means, skipped so they never occupy a step or
+# tempt the model into a wrong branch. Same rationale (and roughly the
+# same list) as machine_tools._SKIP_DIRS.
+_SKIP_DIRS = {
+    "appdata", "application data", "$recycle.bin", "node_modules",
+    "__pycache__", "site-packages", "venv", ".venv", ".git", ".cache",
+    "temp", "tmp",
+}
 
 
 def _list_entries(path: Path):
@@ -64,8 +78,13 @@ def _list_entries(path: Path):
     except OSError:
         return [], []
     return (
-        [e.name for e in entries if e.is_dir()],
-        [e.name for e in entries if e.is_file()],
+        [
+            e.name for e in entries
+            if e.is_dir()
+            and e.name.lower() not in _SKIP_DIRS
+            and not e.name.startswith(".")
+        ],
+        [e.name for e in entries if e.is_file() and not e.name.startswith(".")],
     )
 
 
@@ -107,6 +126,7 @@ def find_file_smart(description: str, directory: str = "", llm=None) -> str:
     cache_key = f"smart:{description.strip().lower()}"
     cached = found_cache.get(cache_key, str(base))
     if cached is not None:
+        found_cache.set_last([Path(p) for p in cached])
         names = ", ".join(f"{Path(p).name} (in {Path(p).parent.name})" for p in cached)
         return f"Found: {names}"
 
@@ -141,6 +161,7 @@ def find_file_smart(description: str, directory: str = "", llm=None) -> str:
         if action == "found" and target in files:
             result_path = current / target
             found_cache.put(cache_key, str(base), [str(result_path)])
+            found_cache.set_last([result_path])
             return f"Found: {target} (in {current.name})"
 
         if action == "enter" and target in dirs:

@@ -469,6 +469,16 @@ def list_directory(directory: str = "", limit: int = 40) -> str:
     if not entries:
         return f"{path} is empty."
 
+    # Count both kinds up front. A truncated listing used to end
+    # mid-sentence with no indication of what was cut — observed in
+    # session_2026-08-02, where a 53-item Desktop was cut at 40 and the
+    # visible remainder was all folders, so the files the user actually
+    # asked about were the part that got dropped. Saying "31 folders and
+    # 22 files" costs one line and tells the model (and the user)
+    # exactly what it isn't seeing.
+    folders = [e for e in entries if e.is_dir()]
+    files = [e for e in entries if not e.is_dir()]
+
     lines = []
     for entry in entries[: int(limit)]:
         if entry.is_dir():
@@ -480,9 +490,12 @@ def list_directory(directory: str = "", limit: int = 40) -> str:
             except OSError:
                 lines.append(f"- {entry.name}")
 
-    header = f"{len(entries)} item(s) in {path}:"
+    header = (
+        f"{len(entries)} item(s) in {path} "
+        f"({len(folders)} folder(s), {len(files)} file(s)):"
+    )
     if len(entries) > int(limit):
-        header += f" (first {limit})"
+        header += f" showing the first {limit}"
     return header + "\n" + "\n".join(lines)
 
 
@@ -508,6 +521,44 @@ def _find_bare_filename(name: str):
         if candidate.exists():
             return candidate
     return None
+
+
+def open_last_found(which: int = 1) -> str:
+    """
+    Open a file from the most recent search — what "open it" or "open
+    that one" means right after FRED has reported finding something.
+
+    `which` is 1-based to match how it gets said out loud ("open the
+    second one"), not 0-based.
+
+    Exists because search results are deliberately spoken without paths
+    (persona.md forbids reading them aloud), which left the follow-up
+    with nothing to name. The referent lives in found_cache instead of
+    in conversation history, so it survives the phrasing pass and
+    doesn't depend on the model having repeated the filename correctly.
+    """
+    from tools import found_cache
+
+    paths = found_cache.get_last()
+
+    if not paths:
+        return "I don't have a recent search result to open."
+
+    index = max(1, int(which)) - 1
+    if index >= len(paths):
+        return (
+            f"There were only {len(paths)} result(s) — "
+            f"I can't open number {int(which)}."
+        )
+
+    target = Path(paths[index])
+
+    try:
+        os.startfile(str(target))
+    except Exception as e:
+        return f"Couldn't open {target.name}: {e}"
+
+    return f"Opened {target.name}."
 
 
 def open_path(path: str) -> str:

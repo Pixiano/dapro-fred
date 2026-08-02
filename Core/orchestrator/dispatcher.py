@@ -24,6 +24,21 @@ class Dispatcher:
         # Order matters — more specific patterns first.
         self._rules = [
             (
+                # "open it" / "open that one" / "open the second one" —
+                # a follow-up to a search whose spoken result carried no
+                # filename to repeat back. Must sit above the generic
+                # open-a-website and open-an-app rules, both of which
+                # would otherwise swallow the pronoun and try to launch
+                # an application literally called "it".
+                re.compile(
+                    r"^open\s+(?:up\s+)?(?:the\s+)?"
+                    r"(?:(?P<ordinal>first|second|third|1st|2nd|3rd)\s+)?"
+                    r"(?:it|that|that one|one|file|result)$",
+                    re.IGNORECASE,
+                ),
+                self._route_open_last_found,
+            ),
+            (
                 re.compile(
                     r"^(?:open|launch|start)\s+(?P<target>https?://\S+|\S+\.\S+)$",
                     re.IGNORECASE,
@@ -111,6 +126,33 @@ class Dispatcher:
                     r"^set volume(?: to)? (?P<level>\d+)%?$", re.IGNORECASE
                 ),
                 self._route_set_volume,
+            ),
+            (
+                # Relative moves — "turn it up a bit", "volume down",
+                # "louder", "a lot quieter". Deterministic because the
+                # phrasing is closed and the action is trivial; leaving
+                # it to the model meant it had to invent an absolute
+                # number for a request that never named one.
+                re.compile(
+                    r"^(?:(?:turn|bump)\s+(?:the\s+)?(?:volume|sound|it)?\s*"
+                    r"(?P<dir1>up|down)|"
+                    r"(?:volume|sound)\s+(?P<dir2>up|down)|"
+                    r"(?P<word>louder|quieter|softer))"
+                    r"(?:\s+(?P<amount>a bit|a little|slightly|a lot|way more|much))?$",
+                    re.IGNORECASE,
+                ),
+                self._route_adjust_volume,
+            ),
+            (
+                re.compile(
+                    r"^(?:(?:turn|bump)\s+(?:the\s+)?(?:brightness|screen)\s*"
+                    r"(?P<dir1>up|down)|"
+                    r"(?:brightness|screen)\s+(?P<dir2>up|down)|"
+                    r"(?P<word>brighter|dimmer|darker))"
+                    r"(?:\s+(?P<amount>a bit|a little|slightly|a lot|way more|much))?$",
+                    re.IGNORECASE,
+                ),
+                self._route_adjust_brightness,
             ),
             (
                 re.compile(
@@ -250,6 +292,22 @@ class Dispatcher:
         "exe", "msi", "bat", "ps1", "lnk", "dll",
     }
 
+    _ORDINALS = {
+        "first": 1, "1st": 1,
+        "second": 2, "2nd": 2,
+        "third": 3, "3rd": 3,
+    }
+
+    @classmethod
+    def _route_open_last_found(cls, match: re.Match) -> dict:
+
+        ordinal = (match.group("ordinal") or "").lower()
+
+        return {
+            "tool": "open_last_found",
+            "arguments": {"which": cls._ORDINALS.get(ordinal, 1)},
+        }
+
     @classmethod
     def _route_open_website(cls, match: re.Match) -> dict:
 
@@ -373,6 +431,38 @@ class Dispatcher:
     def _route_set_volume(match: re.Match) -> dict:
 
         return {"tool": "set_volume", "arguments": {"level": int(match.group("level"))}}
+
+    # Spoken hedges -> the three step sizes adjust_volume understands.
+    _AMOUNTS = {
+        "a bit": "small", "a little": "small", "slightly": "small",
+        "a lot": "large", "way more": "large", "much": "large",
+    }
+    # Bare comparatives that carry their own direction.
+    _COMPARATIVE_DIR = {
+        "louder": "up", "quieter": "down", "softer": "down",
+        "brighter": "up", "dimmer": "down", "darker": "down",
+    }
+
+    @classmethod
+    def _relative_args(cls, match: re.Match) -> dict:
+        word = (match.groupdict().get("word") or "").lower()
+        direction = (
+            match.groupdict().get("dir1")
+            or match.groupdict().get("dir2")
+            or cls._COMPARATIVE_DIR.get(word, "up")
+        )
+        amount = cls._AMOUNTS.get((match.groupdict().get("amount") or "").lower(), "normal")
+        return {"direction": direction.lower(), "amount": amount}
+
+    @classmethod
+    def _route_adjust_volume(cls, match: re.Match) -> dict:
+
+        return {"tool": "adjust_volume", "arguments": cls._relative_args(match)}
+
+    @classmethod
+    def _route_adjust_brightness(cls, match: re.Match) -> dict:
+
+        return {"tool": "adjust_brightness", "arguments": cls._relative_args(match)}
 
     @staticmethod
     def _route_set_brightness(match: re.Match) -> dict:

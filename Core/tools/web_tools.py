@@ -18,10 +18,29 @@ except ImportError:
 # WEB SEARCH
 # =========================================================
 
+# A snippet is a page's meta description — often a full paragraph, and
+# occasionally an entire cookie-consent notice. Whole ones are wasted
+# tokens at best and unlistenable at worst.
+_SNIPPET_CHARS = 220
+
+
 def web_search(query: str, max_results: int = 5) -> str:
     """
     Search the live web (DuckDuckGo) and return a short, readable
     summary of the top results.
+
+    URLs are deliberately NOT included. This result is spoken aloud, and
+    a URL read by TTS is "h t t p s colon slash slash w w w dot youtube
+    dot com slash watch question mark v equals C K Z v W h C q x 1 s" —
+    confirmed in session_2026-08-01_14-24-11.jsonl, where a search
+    result's full YouTube link was read out to Vatsal character by
+    character. persona.md already forbids reading paths aloud for the
+    same reason; a link is worse, being longer and more random.
+
+    Nothing downstream needs the href either: FRED can't follow a link,
+    and open_website takes a domain the user says out loud, not one
+    scraped from a result. Titles and trimmed snippets are the whole
+    useful payload.
     """
 
     if not DDGS:
@@ -39,10 +58,14 @@ def web_search(query: str, max_results: int = 5) -> str:
     for r in results:
         title = r.get("title", "").strip()
         snippet = r.get("body", "").strip()
-        url = r.get("href", "").strip()
-        lines.append(f"- {title}: {snippet} ({url})")
 
-    return "\n".join(lines)
+        if len(snippet) > _SNIPPET_CHARS:
+            # Cut at a word boundary so TTS never reads half a word.
+            snippet = snippet[:_SNIPPET_CHARS].rsplit(" ", 1)[0] + "..."
+
+        lines.append(f"- {title}: {snippet}" if snippet else f"- {title}")
+
+    return f"Top results for '{query}':\n" + "\n".join(lines)
 
 
 # =========================================================
