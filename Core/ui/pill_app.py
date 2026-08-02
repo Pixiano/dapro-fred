@@ -364,6 +364,16 @@ class PillApp:
         def produce():
             try:
                 for piece in self.orchestrator.process_stream(text):
+                    # This early `return` is doing more than skipping
+                    # remaining output — abandoning this generator
+                    # without exhausting it is what actually stops
+                    # llama.cpp's token loop mid-generation. Confirmed
+                    # (llm_client.generate_stream's docstring): GPU load
+                    # drops from 74% to idle within 0.2-0.4s of this
+                    # return executing. Do not "simplify" this into
+                    # draining the rest of the loop and discarding
+                    # pieces afterward — that would silently reintroduce
+                    # the exact background-generation cost this avoids.
                     if self._cancel.is_set():
                         return
                     collected.append(piece)

@@ -158,6 +158,37 @@ class LLMClient:
 
         Falls back to yielding one complete string if streaming fails, so
         a caller never has to handle both shapes.
+
+        CANCELLATION (confirmed 2026-08-02, don't re-derive this): the
+        caller does NOT need to pass a cancel flag into this generator.
+        create_chat_completion(stream=True) is itself a Python generator
+        wrapping llama.cpp's token loop — the next token is only decoded
+        when something calls next() on it. pill_app.py's producer thread
+        already does the right thing by simply `return`ing out of its
+        `for piece in ...` loop the instant _cancel is set, abandoning
+        this generator without exhausting it. Measured directly: GPU
+        utilization was 74% mid-generation, then 1% within 0.2-0.4s of
+        the consuming loop abandoning the generator — Python's refcount-
+        based cleanup closes the whole generator chain (this ->
+        create_chat_completion's stream -> llama.cpp's token loop)
+        almost immediately, no extra plumbing needed. A cancel Event
+        threaded explicitly into this loop would be redundant with what
+        abandonment already does.
+
+        This does NOT extend to generate_with_tools() below — that path
+        is non-streaming (a single blocking create_chat_completion call)
+        and llama-cpp-python's public API doesn't expose the lower-level
+        stopping_criteria hook that WOULD allow the same trick there;
+        create_completion() takes it, create_chat_completion() doesn't
+        forward it. A tool-calling turn genuinely cannot be interrupted
+        mid-generation today — this is real, not laziness — because
+        interrupting one requires either that missing hook or manually
+        reimplementing chat-template application to call create_completion
+        directly, bypassing the chat-format handler this codebase relies
+        on for tool-calling grammar. Not attempted: real risk of
+        diverging from library-maintained, tested formatting for a
+        speed-of-interrupt win on turns that are already the minority
+        (most conversation happens on the streamed chat path above).
         """
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)
