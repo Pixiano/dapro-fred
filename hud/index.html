@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FRED · HUD</title>
+<style>
+  :root{
+    --cyan: #4fd8ff;
+    --dim:  #1d6f92;
+    --red:  #ff4438;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; background:#000; overflow:hidden; }
+  body{
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas,
+                 "Liberation Mono", "Courier New", monospace;
+    color: var(--cyan);
+    cursor: default;
+    -webkit-font-smoothing: antialiased;
+  }
+  #scene{ position:fixed; inset:0; display:block; }
+
+  /* Stats live in the DOM rather than the canvas: the spec wants a real
+     hover-expand panel, and hit-testing/animating that in canvas would be
+     hand-rolled for no gain. The scene itself stays pure canvas 2D. */
+  .panel{
+    position:fixed; top:16px;
+    font-size:12px; letter-spacing:.09em;
+    padding:9px 12px;
+    border:1px solid rgba(79,216,255,.20);
+    background:rgba(4,16,22,.55);
+    text-shadow:0 0 8px rgba(79,216,255,.45);
+    transition:border-color .25s ease, background .25s ease;
+    user-select:none;
+  }
+  .panel.tl{ left:16px;  border-left-width:2px;  }
+  .panel.tr{ right:16px; border-right-width:2px; text-align:right; }
+  .panel:hover{ border-color:rgba(79,216,255,.55); background:rgba(6,24,33,.78); }
+
+  .row{ white-space:nowrap; line-height:1.55; }
+  .k{ color:rgba(79,216,255,.50); }
+  .v{ color:var(--cyan); }
+  .big{ font-size:15px; letter-spacing:.12em; }
+
+  /* Expands downward from the pinned corner; the always-visible numbers
+     never move. */
+  .detail{
+    max-height:0; opacity:0; overflow:hidden;
+    transition:max-height .3s cubic-bezier(.2,.7,.3,1), opacity .22s ease, margin .3s ease;
+  }
+  .panel:hover .detail{ max-height:180px; opacity:1; margin-top:8px; }
+  .detail .row{ font-size:11px; color:rgba(79,216,255,.78); }
+  .sep{ height:1px; background:rgba(79,216,255,.22); margin:6px 0; }
+  .flavor{ font-size:11px; color:rgba(79,216,255,.95); letter-spacing:.06em; }
+
+  /* Text box — deliberately minimal; wiring is still to be discussed. */
+  #console{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:26px; width:min(520px, 62vw);
+  }
+  #echo{
+    font-size:11px; letter-spacing:.06em; height:15px; margin-bottom:6px;
+    text-align:center; color:rgba(79,216,255,.55); opacity:0;
+    transition:opacity .3s ease; white-space:nowrap; overflow:hidden;
+  }
+  #echo.on{ opacity:1; }
+  .inputwrap{
+    display:flex; align-items:center; gap:8px;
+    border:1px solid rgba(79,216,255,.22);
+    background:rgba(4,16,22,.55);
+    padding:8px 12px;
+    transition:border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  }
+  .inputwrap:focus-within{
+    border-color:rgba(79,216,255,.62);
+    background:rgba(6,24,33,.8);
+    box-shadow:0 0 18px rgba(79,216,255,.14);
+  }
+  .caret{ color:rgba(79,216,255,.6); font-size:13px; }
+  #cmd{
+    flex:1; background:transparent; border:0; outline:0;
+    color:var(--cyan); font:inherit; font-size:13px; letter-spacing:.05em;
+    text-shadow:0 0 8px rgba(79,216,255,.35);
+  }
+  #cmd::placeholder{ color:rgba(79,216,255,.28); letter-spacing:.08em; }
+
+  #fps{
+    position:fixed; left:16px; bottom:14px;
+    font-size:11px; color:rgba(79,216,255,.55); display:none;
+  }
+  #fps.on{ display:block; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="panel tl" id="panelL">
+  <div class="row big"><span class="k">CPU</span> <span class="v" id="cpu">--</span></div>
+  <div class="row big"><span class="k">RAM</span> <span class="v" id="ram">--</span></div>
+  <div class="detail">
+    <div class="sep"></div>
+    <div class="row"><span class="k">MEM</span> <span id="ramDetail">-- / --</span></div>
+    <div class="row"><span class="k">UP&nbsp;</span> <span id="uptime">--</span></div>
+  </div>
+</div>
+
+<div class="panel tr" id="panelR">
+  <div class="row big"><span class="k">GPU</span> <span class="v" id="gpu">--</span></div>
+  <div class="detail">
+    <div class="sep"></div>
+    <div class="row"><span class="k">VRAM</span> <span id="vram">-- / --</span></div>
+    <div class="row"><span class="k">TEMP</span> <span id="temp">--</span></div>
+    <div class="row flavor" id="flavor">&nbsp;</div>
+  </div>
+</div>
+
+<div id="console">
+  <div id="echo"></div>
+  <div class="inputwrap">
+    <span class="caret">&rsaquo;</span>
+    <input id="cmd" type="text" autocomplete="off" spellcheck="false"
+           placeholder="type here">
+  </div>
+</div>
+
+<div id="fps"></div>
+
+<script>
+"use strict";
+
+// =====================================================================
+// CONFIG
+// =====================================================================
+
+const TAU = Math.PI * 2;
+
+const POLL_MS   = 1200;   // /state poll; values are interpolated between polls
+const BOOT_MS   = 1600;   // "systems online" power-up
+
+// One continuously eased energy value, fast attack / slow release. These
+// are settling times (~95%); the exponential time constant is a third of
+// each, which is what actually goes into the per-frame lerp.
+const ATTACK_S  = 0.5;
+const RELEASE_S = 1.0;
+const TAU_UP    = ATTACK_S  / 3;
+const TAU_DOWN  = RELEASE_S / 3;
+
+// How fast the per-state style blend follows a state change. Separate from
+// the energy easing so a state switch never pops even when the two states
+// happen to share an energy target.
+const STYLE_LERP = 5.5;
+
+const CYAN = [79, 216, 255];
+const HOT  = [223, 249, 255];
+const RED  = [255, 68, 56];
+
+// energy   — target for the eased scalar (speaking overrides with voice level)
+// glow*    — glow axis:   glow   = glowBase   + glowSpan   * energy
+// motion*  — motion axis: motion = motionBase + motionSpan * energy
+// sweepA   — sweep prominence, independent of speed (listening is crisp but slow)
+// flicker  — core instability amount
+// alert    — 0..1 blend toward red + jitter
+const STATES = {
+  idle:      { energy:0.20, glowBase:0.06, glowSpan:0.50, motionBase:0.04, motionSpan:0.30, sweepA:0.22, flicker:0.00, alert:0 },
+  listening: { energy:0.55, glowBase:0.35, glowSpan:0.35, motionBase:0.08, motionSpan:0.40, sweepA:1.00, flicker:0.00, alert:0 },
+  thinking:  { energy:1.00, glowBase:0.20, glowSpan:0.25, motionBase:0.30, motionSpan:0.70, sweepA:0.72, flicker:0.85, alert:0 },
+  speaking:  { energy:0.85, glowBase:0.35, glowSpan:0.65, motionBase:0.10, motionSpan:0.14, sweepA:0.30, flicker:0.00, alert:0 },
+  alert:     { energy:0.95, glowBase:0.45, glowSpan:0.50, motionBase:0.30, motionSpan:0.47, sweepA:0.88, flicker:0.55, alert:1 },
+};
+const VALID = Object.keys(STATES);
+
+// =====================================================================
+// URL PARAMS  (?mockstate=  /  ?shot=<state>&t=<ms>)
+// =====================================================================
+
+const Q         = new URLSearchParams(location.search);
+const MOCKSTATE = VALID.includes(Q.get("mockstate")) ? Q.get("mockstate") : null;
+const SHOT      = Q.get("shot");                       // state name, or "boot"
+const SHOT_T    = parseFloat(Q.get("t") || "0");       // ms
+const SHOT_ON   = SHOT !== null;
+
+// =====================================================================
+// SMALL HELPERS
+// =====================================================================
+
+const clamp  = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp   = (a, b, t) => a + (b - a) * t;
+const mixCol = (a, b, t) => [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)];
+const rgba   = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${clamp(a,0,1)})`;
+
+// Deterministic value noise: a pure function of t, so ?shot=&t= renders
+// the exact same frame every time. An accumulating Math.random() flicker
+// could not be reproduced for screenshot verification.
+function hash1(n){ const s = Math.sin(n) * 43758.5453123; return s - Math.floor(s); }
+function noise1(x){
+  const i = Math.floor(x), f = x - i;
+  const u = f * f * (3 - 2 * f);
+  return lerp(hash1(i), hash1(i + 1), u);
+}
+
+// Frame-rate independent exponential approach.
+function ease(cur, target, dt, tau){
+  if (dt <= 0) return cur;
+  return cur + (target - cur) * (1 - Math.exp(-dt / tau));
+}
+
+// =====================================================================
+// CANVAS
+// =====================================================================
+
+const cv  = document.getElementById("scene");
+const ctx = cv.getContext("2d", { alpha:false });
+let W = 0, H = 0, DPR = 1;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width  = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  cv.style.width  = W + "px";
+  cv.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+// =====================================================================
+// LIVE STATE
+// =====================================================================
+
+let busState = "idle";     // from /state (or mockstate/shot override)
+let voiceLvl = 0;          // 0..1, only meaningful while speaking
+
+let energy   = 0;          // the one eased value
+let alertMix = 0;
+let style    = Object.assign({}, STATES.idle);   // eased copy of the active config
+
+const ang = { ring:0, inner:0, sweep:0, coil:0 };
+
+// Stats are polled at POLL_MS and interpolated between polls so the
+// readouts drift smoothly instead of stepping once a second.
+let statFrom = null, statTo = null, statT0 = 0;
+let live = { cpu:null, ramPct:null, ramUsed:null, ramTotal:null,
+             gpu:null, vramUsed:null, vramTotal:null, temp:null, uptime:null };
+
+function applyStats(j){
+  const next = {
+    cpu: j.cpu, ramPct: j.ram_pct, ramUsed: j.ram_used_gb, ramTotal: j.ram_total_gb,
+    gpu: j.gpu_pct, vramUsed: j.vram_used_mb, vramTotal: j.vram_total_mb,
+    temp: j.gpu_temp_c, uptime: j.uptime_s,
+  };
+  statFrom = statTo ? Object.assign({}, live) : next;
+  statTo   = next;
+  statT0   = performance.now();
+}
+
+function interpStats(now){
+  if (!statTo) return;
+  if (!statFrom){ live = Object.assign({}, statTo); return; }
+  const u = clamp((now - statT0) / POLL_MS, 0, 1);
+  for (const k in statTo){
+    const a = statFrom[k], b = statTo[k];
+    live[k] = (typeof a === "number" && typeof b === "number") ? lerp(a, b, u) : b;
+  }
+}
+
+// =====================================================================
+// POLLING
+// =====================================================================
+
+async function poll(){
+  try {
+    const r = await fetch("/state", { cache:"no-store" });
+    const j = await r.json();
+    if (!MOCKSTATE) {
+      busState = VALID.includes(j.state) ? j.state : "idle";
+      voiceLvl = clamp(typeof j.level === "number" ? j.level : 0, 0, 1);
+    }
+    applyStats(j);
+  } catch (e) {
+    // Server gone is the same story the bus tells when it goes stale:
+    // ease back to idle rather than freeze on the last live frame.
+    if (!MOCKSTATE){ busState = "idle"; voiceLvl = 0; }
+  } finally {
+    setTimeout(poll, POLL_MS);
+  }
+}
+
+if (MOCKSTATE) busState = MOCKSTATE;
+
+// =====================================================================
+// DRAWING
+// =====================================================================
+
+function drawSweep(cx, cy, R, a, alpha, col){
+  if (alpha <= 0.005) return;
+  const TRAIL = Math.PI * 0.72, N = 44;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < N; i++){
+    const f  = i / N;
+    const w  = Math.pow(1 - f, 2.3) * alpha * 0.26;
+    if (w <= 0.002) continue;
+    const a0 = a - TRAIL * f;
+    const a1 = a - TRAIL * (f + 1 / N) - 0.0015;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R, a1, a0);
+    ctx.closePath();
+    ctx.fillStyle = rgba(col, w);
+    ctx.fill();
+  }
+  ctx.strokeStyle = rgba(col, alpha * 0.95);
+  ctx.lineWidth   = 1.6;
+  ctx.shadowBlur  = 12;
+  ctx.shadowColor = rgba(col, alpha * 0.8);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSegRing(cx, cy, r, angle, segs, gapFrac, lw, col, alpha){
+  const step = TAU / segs, gap = step * gapFrac;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.lineWidth   = lw;
+  ctx.shadowBlur  = 8;
+  ctx.shadowColor = rgba(col, alpha * 0.7);
+  for (let i = 0; i < segs; i++){
+    // Every 4th segment reads as a major graduation.
+    const major = (i % 4 === 0);
+    ctx.strokeStyle = rgba(col, alpha * (major ? 1 : 0.45));
+    ctx.lineWidth   = major ? lw * 1.7 : lw;
+    const a0 = angle + i * step;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, a0, a0 + step - gap);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawInnerRing(cx, cy, r, angle, col, alpha){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = rgba(col, alpha * 0.55);
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, TAU);
+  ctx.stroke();
+  // Notches, so the rotation of an otherwise featureless ring is visible.
+  ctx.rotate(angle);
+  ctx.strokeStyle = rgba(col, alpha);
+  ctx.lineWidth   = 1.6;
+  for (let i = 0; i < 3; i++){
+    const a0 = i * (TAU / 3);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, a0, a0 + 0.26);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawTicks(cx, cy, r, col, alpha){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = rgba(col, alpha * 0.32);
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 72; i++){
+    const a = i * (TAU / 72);
+    const len = (i % 6 === 0) ? 9 : 4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    ctx.lineTo(Math.cos(a) * (r + len), Math.sin(a) * (r + len));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCore(cx, cy, R, glow, spin, col, hotCol){
+  const r = R * 0.54;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.globalCompositeOperation = "lighter";
+
+  // Ambient bloom.
+  let g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.5);
+  g.addColorStop(0.00, rgba(col, 0.42 * glow));
+  g.addColorStop(0.30, rgba(col, 0.15 * glow));
+  g.addColorStop(1.00, rgba(col, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r * 2.5, 0, TAU); ctx.fill();
+
+  // Coil ring — the arc reactor's signature, as flat trapezoids.
+  const N = 10, step = TAU / N;
+  ctx.save();
+  ctx.rotate(spin);
+  for (let i = 0; i < N; i++){
+    ctx.save();
+    ctx.rotate(i * step);
+    const r0 = r * 0.60, r1 = r * 0.98, h0 = r * 0.15, h1 = r * 0.23;
+    ctx.beginPath();
+    ctx.moveTo(r0, -h0); ctx.lineTo(r1, -h1);
+    ctx.lineTo(r1,  h1); ctx.lineTo(r0,  h0);
+    ctx.closePath();
+    ctx.fillStyle   = rgba(col, 0.07 + 0.26 * glow);
+    ctx.fill();
+    ctx.strokeStyle = rgba(col, 0.30 + 0.55 * glow);
+    ctx.lineWidth   = 1.1;
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Decagon containment outline.
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++){
+    const a = i * step + spin * 0.5;
+    const x = Math.cos(a) * r * 1.06, y = Math.sin(a) * r * 1.06;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.strokeStyle = rgba(col, 0.22 + 0.42 * glow);
+  ctx.lineWidth   = 1.3;
+  ctx.stroke();
+
+  // Triangle accents, counter-rotating.
+  ctx.save();
+  ctx.rotate(-spin * 1.4);
+  ctx.strokeStyle = rgba(col, 0.20 + 0.40 * glow);
+  ctx.lineWidth   = 1;
+  // Offset by a ninth of a turn per triangle: stepping by TAU/3 instead
+  // would land every triangle on the same three vertices and draw the
+  // same shape three times over.
+  for (let k = 0; k < 3; k++){
+    ctx.beginPath();
+    for (let i = 0; i <= 3; i++){
+      const a = k * (TAU / 9) + i * (TAU / 3);
+      const x = Math.cos(a) * r * 0.52, y = Math.sin(a) * r * 0.52;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // White-hot centre.
+  const cr = r * 0.46;
+  let cg = ctx.createRadialGradient(0, 0, 0, 0, 0, cr);
+  cg.addColorStop(0.00, rgba(hotCol, 0.30 + 0.70 * glow));
+  cg.addColorStop(0.45, rgba(col,    0.35 + 0.55 * glow));
+  cg.addColorStop(1.00, rgba(col, 0));
+  ctx.fillStyle = cg;
+  ctx.beginPath(); ctx.arc(0, 0, cr, 0, TAU); ctx.fill();
+
+  ctx.strokeStyle = rgba(hotCol, 0.25 + 0.6 * glow);
+  ctx.lineWidth   = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, cr * 0.52, 0, TAU); ctx.stroke();
+
+  ctx.restore();
+}
+
+// =====================================================================
+// FRAME
+// =====================================================================
+
+function drawFrame(t, boot){
+  // boot: 0..1 power-up progress (1 = fully online)
+  const cx = W / 2, cy = H / 2;
+  const R  = Math.min(W, H) * 0.30;
+
+  const glow   = clamp(style.glowBase   + style.glowSpan   * energy, 0, 1);
+  const motion = clamp(style.motionBase + style.motionSpan * energy, 0, 1);
+  const col    = mixCol(CYAN, RED, alertMix);
+  const hotCol = mixCol(HOT,  RED, alertMix * 0.75);
+
+  // Alert jitter — erratic, not a smooth wobble.
+  const jitter = alertMix * (noise1(t * 22) - 0.5) * 2;
+
+  // Core flicker (thinking = unstable, high motion, deliberately not glowy).
+  const flick = 1 - style.flicker * 0.45 * (noise1(t * 13.7) * noise1(t * 5.3));
+  const bootFade = boot * boot * (3 - 2 * boot);
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.globalAlpha = bootFade;
+  ctx.translate(cx, cy);
+  ctx.scale(0.72 + 0.28 * bootFade, 0.72 + 0.28 * bootFade);
+  ctx.translate(-cx, -cy);
+
+  drawTicks(cx, cy, R * 1.16, col, 0.5 + 0.5 * glow);
+  drawSegRing(cx, cy, R * 1.05, ang.ring + jitter * 0.05, 24, 0.35, 2.4, col, 0.35 + 0.6 * glow);
+  drawInnerRing(cx, cy, R * 0.90, ang.inner - jitter * 0.04, col, 0.35 + 0.55 * glow);
+  drawSweep(cx, cy, R * 1.12, ang.sweep, style.sweepA * (0.35 + 0.65 * bootFade), col);
+  drawCore(cx, cy, R, glow * flick, ang.coil, col, hotCol);
+
+  ctx.restore();
+
+  // Boot overlay: an expanding shock ring plus the power-up caption.
+  if (boot < 1){
+    const b = boot;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const rr = R * 1.9 * b;
+    ctx.strokeStyle = rgba(CYAN, (1 - b) * 0.85);
+    ctx.lineWidth   = 2.5 * (1 - b) + 0.5;
+    ctx.shadowBlur  = 24 * (1 - b);
+    ctx.shadowColor = rgba(CYAN, 1 - b);
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+
+    const fade = b < 0.65 ? 1 : 1 - (b - 0.65) / 0.35;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle  = rgba(CYAN, 0.9 * fade);
+    ctx.font       = "600 13px ui-monospace, Consolas, monospace";
+    ctx.textAlign  = "center";
+    const label = "SYSTEMS ONLINE";
+    const shown = label.slice(0, Math.max(0, Math.round(label.length * clamp(b / 0.55, 0, 1))));
+    // Clears the outer tick ring (R*1.16 + ticks) but stays above the
+    // text box pinned to the bottom of the viewport.
+    ctx.fillText(shown, cx, cy + R * 1.25);
+    ctx.restore();
+  }
+}
+
+// =====================================================================
+// SHOT MODE — one deterministic frame, no rAF loop
+// =====================================================================
+
+function settle(stateName){
+  const cfg = STATES[stateName] || STATES.idle;
+  style    = Object.assign({}, cfg);
+  energy   = (stateName === "speaking") ? 0.85 : cfg.energy;
+  alertMix = cfg.alert;
+}
+
+function renderShot(){
+  const isBoot = (SHOT === "boot");
+  const name   = VALID.includes(SHOT) ? SHOT : "idle";
+  settle(name);
+
+  const t      = SHOT_T / 1000;
+  const motion = clamp(style.motionBase + style.motionSpan * energy, 0, 1);
+
+  // Settled state ⇒ constant speeds ⇒ angle is a closed form of t, so the
+  // same ?t= always produces the same frame.
+  ang.ring  =  t * (0.10 + 1.30 * motion);
+  ang.inner = -t * (0.14 + 0.90 * motion);
+  ang.sweep =  t * (0.35 + 3.20 * motion);
+  ang.coil  =  t * (0.06 + 0.55 * motion);
+
+  live = { cpu:37, ramPct:58, ramUsed:18.6, ramTotal:32, gpu:71,
+           vramUsed:4566, vramTotal:16311, temp:63, uptime:9296 };
+  paintStats();
+
+  drawFrame(t, isBoot ? clamp(SHOT_T / BOOT_MS, 0, 1) : 1);
+
+  window.__shotReady = true;
+  document.title = "SHOT READY · " + SHOT + " @" + SHOT_T + "ms";
+}
+
+if (SHOT_ON){
+  renderShot();
+  // Setting canvas.width in resize() wipes the bitmap, and shot mode has
+  // no rAF loop to put it back — so a resize AFTER load leaves a blank
+  // scene. Headless Chrome does exactly that (it applies --window-size
+  // once the page is already up), which is how this was caught: DOM
+  // stats rendered, canvas came out empty.
+  window.addEventListener("resize", renderShot);
+}
+
+// =====================================================================
+// MAIN LOOP
+// =====================================================================
+
+let bootStart = null, last = 0, running = !SHOT_ON;
+const frameTimes = [];
+
+function tick(now){
+  if (!running) return;
+  if (bootStart === null) bootStart = now;
+  const dt = last ? Math.min((now - last) / 1000, 0.1) : 0.016;
+  last = now;
+
+  const t    = now / 1000;
+  const boot = clamp((now - bootStart) / BOOT_MS, 0, 1);
+
+  // --- target energy: speaking is driven live by the voice level
+  const cfg    = STATES[busState] || STATES.idle;
+  const target = (busState === "speaking")
+    ? clamp(0.30 + 0.70 * voiceLvl, 0, 1)
+    : cfg.energy;
+
+  energy   = ease(energy, target, dt, target > energy ? TAU_UP : TAU_DOWN);
+  alertMix = ease(alertMix, cfg.alert, dt, cfg.alert > alertMix ? TAU_UP : TAU_DOWN);
+
+  const k = 1 - Math.exp(-dt * STYLE_LERP);
+  for (const key in cfg) style[key] = lerp(style[key], cfg[key], k);
+
+  const motion = clamp(style.motionBase + style.motionSpan * energy, 0, 1);
+  const erratic = 1 + alertMix * (noise1(t * 9) - 0.5) * 1.6;
+
+  ang.ring  += dt * (0.10 + 1.30 * motion) * erratic;
+  ang.inner -= dt * (0.14 + 0.90 * motion);
+  ang.sweep += dt * (0.35 + 3.20 * motion) * erratic;
+  ang.coil  += dt * (0.06 + 0.55 * motion);
+
+  interpStats(now);
+  paintStats();
+  drawFrame(t, boot);
+
+  // FPS (F key)
+  frameTimes.push(dt);
+  if (frameTimes.length > 120) frameTimes.shift();
+  if (fpsBox.classList.contains("on") && frameTimes.length > 8){
+    const avg = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+    const worst = Math.max.apply(null, frameTimes);
+    fpsBox.textContent =
+      `${(1/avg).toFixed(1)} fps avg · ${(1/worst).toFixed(1)} min · ${busState}`;
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// =====================================================================
+// STATS READOUT
+// =====================================================================
+
+// Function declarations, not const arrows: shot mode calls paintStats()
+// from higher up the file, and a `const` helper would still be in its
+// temporal dead zone at that point — which throws and takes the whole
+// script down with it.
+function $(id){ return document.getElementById(id); }
+function pct(v){ return (v == null || isNaN(v)) ? "--" : Math.round(v) + "%"; }
+function gb(v){ return (v == null || isNaN(v)) ? "--" : v.toFixed(1); }
+function mb(v){ return (v == null || isNaN(v)) ? "--" : Math.round(v).toLocaleString(); }
+
+function tempWord(c){
+  if (c == null || isNaN(c)) return "unknown";
+  if (c < 35) return "cold";
+  if (c < 45) return "cool";
+  if (c < 55) return "cruising";
+  if (c < 65) return "warm";
+  if (c < 72) return "toasty";
+  if (c < 80) return "hot";
+  return "boiling";
+}
+function loadFlavor(u){
+  if (u == null || isNaN(u)) return "no telemetry";
+  if (u < 5)  return "idle & quiet";
+  if (u < 25) return "light duty";
+  if (u < 55) return "steady output";
+  if (u < 80) return "working";
+  return "under load";
+}
+function fmtUptime(s){
+  if (s == null || isNaN(s)) return "--";
+  s = Math.floor(s);
+  const d = Math.floor(s / 86400); s %= 86400;
+  const h = Math.floor(s / 3600);  s %= 3600;
+  const m = Math.floor(s / 60);    const ss = s % 60;
+  const p = n => String(n).padStart(2, "0");
+  return (d ? d + "d " : "") + `${p(h)}:${p(m)}:${p(ss)}`;
+}
+
+function paintStats(){
+  $("cpu").textContent = pct(live.cpu);
+  $("ram").textContent = pct(live.ramPct);
+  $("gpu").textContent = pct(live.gpu);
+  $("ramDetail").textContent = `${gb(live.ramUsed)} / ${gb(live.ramTotal)} GB`;
+  $("uptime").textContent    = fmtUptime(live.uptime);
+  $("vram").textContent      = `${mb(live.vramUsed)} / ${mb(live.vramTotal)} MB`;
+  $("temp").textContent      = (live.temp == null || isNaN(live.temp))
+                                 ? "--" : Math.round(live.temp) + "°C";
+  $("flavor").textContent    = `${tempWord(live.temp)} · ${loadFlavor(live.gpu)}`;
+}
+
+// =====================================================================
+// INPUT
+// =====================================================================
+
+const fpsBox = $("fps");
+const cmd    = $("cmd");
+const echo   = $("echo");
+let echoTimer = null;
+
+document.addEventListener("keydown", e => {
+  // Any key skips the boot intro.
+  if (bootStart !== null && performance.now() - bootStart < BOOT_MS){
+    bootStart = performance.now() - BOOT_MS;
+  }
+  if (e.target === cmd){
+    if (e.key === "Escape") cmd.blur();
+    return;                       // never treat typing as a hotkey
+  }
+  if (e.key === "f" || e.key === "F") fpsBox.classList.toggle("on");
+});
+
+cmd.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const text = cmd.value.trim();
+  if (!text) return;
+  cmd.value = "";
+  // TODO(wiring): this is where the box will hand `text` off — left
+  // deliberately local for now, pending that discussion.
+  echo.textContent = "› " + text;
+  echo.classList.add("on");
+  clearTimeout(echoTimer);
+  echoTimer = setTimeout(() => echo.classList.remove("on"), 2600);
+});
+
+// =====================================================================
+// GO
+// =====================================================================
+
+if (!SHOT_ON){
+  paintStats();
+  poll();
+  requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>

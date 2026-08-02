@@ -76,6 +76,14 @@ class PillApp:
         from vision.watcher_manager import ScreenWatcherManager
         self.screen_watcher = ScreenWatcherManager()
 
+        # Mirror the pill's state/level onto the ~/voice-line/ file bus so
+        # the HUD (hud/) can render the same turn. Purely one-way: if the
+        # bus can't be written the publisher disables itself and FRED
+        # behaves exactly as before.
+        from utils.voice_line import VoiceLineBus
+        self.voice_line = VoiceLineBus()
+        self._mirror_window_to_bus()
+
         # Show in the pill what FRED is doing when a tool fires, so an
         # action isn't audio-only (Phase 16's "visual confirmation").
         self.orchestrator.on_tool_event = self._on_tool_event
@@ -130,6 +138,38 @@ class PillApp:
         )
 
         self.tray = None
+
+    def _mirror_window_to_bus(self):
+        """
+        Wrap the pill window's set_state/set_level so every UI update also
+        lands on the voice-line bus.
+
+        Wrapping the two setters once beats adding a publish call at each
+        of the ~8 places that change pill state: a call site added later
+        can't silently forget to publish, and nothing existing had to be
+        touched to start mirroring. Both wrappers stay fire-and-forget —
+        a publisher failure must never take the pill's own update with
+        it, since the pill is the thing the user is actually looking at.
+        """
+        window = self.window
+        set_state, set_level = window.set_state, window.set_level
+
+        def state_and_publish(state, *args, **kwargs):
+            try:
+                self.voice_line.set_state(state)
+            except Exception as e:
+                print(f"[voice_line] state publish failed: {e}")
+            return set_state(state, *args, **kwargs)
+
+        def level_and_publish(level, *args, **kwargs):
+            try:
+                self.voice_line.set_level(level)
+            except Exception as e:
+                print(f"[voice_line] level publish failed: {e}")
+            return set_level(level, *args, **kwargs)
+
+        window.set_state = state_and_publish
+        window.set_level = level_and_publish
 
     # =========================================================
     # LIFECYCLE
@@ -199,6 +239,13 @@ class PillApp:
         self._cancel.set()
         self.lifecycle.stop()
         self.screen_watcher.stop()
+        # Leave the bus reading idle. Without this the HUD would sit on
+        # FRED's last live state for the full staleness window after a
+        # clean quit, which looks like a hang rather than a shutdown.
+        try:
+            self.voice_line.close()
+        except Exception:
+            pass
         try:
             self.hotkey.uninstall()
         except Exception:
@@ -318,6 +365,17 @@ class PillApp:
             except Exception as e:
                 print(f"[PillApp] turn failed: {e}")
                 event_log.log_error("turn", e)
+                # The HUD's only red state. Raised here rather than
+                # inside the bus wrapper because a failed turn is the one
+                # thing FRED knows is wrong but the pill itself shows no
+                # differently — it just drops back to idle. The flash is
+                # held briefly (see VoiceLineBus.alert) so the HUD's ~1s
+                # poll can't miss it between the failure and the idle
+                # that _to_idle_and_hide is about to publish.
+                try:
+                    self.voice_line.alert()
+                except Exception:
+                    pass
                 self._to_idle_and_hide()
 
     def _turn_body(self):
