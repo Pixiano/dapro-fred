@@ -5,721 +5,481 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FRED · HUD</title>
 <style>
-  :root{
-    --cyan: #4fd8ff;
-    --dim:  #1d6f92;
-    --red:  #ff4438;
-  }
-  *{ box-sizing:border-box; margin:0; padding:0; }
-  html,body{ height:100%; background:#000; overflow:hidden; }
-  body{
-    font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas,
-                 "Liberation Mono", "Courier New", monospace;
-    color: var(--cyan);
-    cursor: default;
-    -webkit-font-smoothing: antialiased;
-  }
-  #scene{ position:fixed; inset:0; display:block; }
+/* Fonts are local-only on purpose: the page has to work with no network
+   (see server.py's loopback-only bind). Chakra Petch / JetBrains Mono are
+   used when installed and fall back to the closest system faces when not. */
+html,body{margin:0;padding:0;background:#02060a;overflow:hidden;height:100%}
+*{box-sizing:border-box}
+:root{
+  --acc:#7fe9ff; --amber:#ffc466; --good:#8dffb0;
+  --spin-outer:46s; --spin-inner:30s; --coil:160s; --sweep:5.2s; --pulse:3.4s;
+  --glow:.45;   /* 0..1 overall energy, set per state */
+  --lvl:0;      /* live voice amplitude, 0..1, only moves while speaking */
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinR{to{transform:rotate(-360deg)}}
+@keyframes corePulse{0%,100%{opacity:.85;transform:scale(1)}50%{opacity:1;transform:scale(1.045)}}
+@keyframes haloPulse{0%,100%{opacity:.35;transform:scale(1)}50%{opacity:.75;transform:scale(1.12)}}
+@keyframes coilFlick{0%,100%{opacity:1}42%{opacity:.45}47%{opacity:1}}
+@keyframes sweep{to{transform:rotate(360deg)}}
+@keyframes scan{0%{transform:translateY(-200px)}100%{transform:translateY(1000px)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-  /* Stats live in the DOM rather than the canvas: the spec wants a real
-     hover-expand panel, and hit-testing/animating that in canvas would be
-     hand-rolled for no gain. The scene itself stays pure canvas 2D. */
-  .panel{
-    position:fixed; top:16px;
-    font-size:12px; letter-spacing:.09em;
-    padding:9px 12px;
-    border:1px solid rgba(79,216,255,.20);
-    background:rgba(4,16,22,.55);
-    text-shadow:0 0 8px rgba(79,216,255,.45);
-    transition:border-color .25s ease, background .25s ease;
-    user-select:none;
-  }
-  .panel.tl{ left:16px;  border-left-width:2px;  }
-  .panel.tr{ right:16px; border-right-width:2px; text-align:right; }
-  .panel:hover{ border-color:rgba(79,216,255,.55); background:rgba(6,24,33,.78); }
+#stage{position:absolute;left:50%;top:50%;width:1600px;height:900px;
+  transform:translate(-50%,-50%) scale(var(--hud-scale,1));transform-origin:center center;
+  background:radial-gradient(ellipse 70% 60% at 50% 50%,#06131b 0%,#03080c 55%,#01050700 100%),#02060a;
+  font-family:'Chakra Petch','Segoe UI',system-ui,sans-serif;color:var(--acc);
+  overflow:hidden;user-select:none;
+  /* Alert recolours the entire HUD in one property rather than swapping
+     ~80 hardcoded rgba() values. */
+  transition:filter .45s ease}
+.mono{font-family:'JetBrains Mono',Consolas,'Cascadia Mono',monospace}
 
-  .row{ white-space:nowrap; line-height:1.55; }
-  .k{ color:rgba(79,216,255,.50); }
-  .v{ color:var(--cyan); }
-  .big{ font-size:15px; letter-spacing:.12em; }
+.bar{height:7px;background:rgba(127,233,255,.12);border:1px solid rgba(127,233,255,.25)}
+.bar>i{display:block;height:100%;width:0;transition:width .5s ease;
+  background:linear-gradient(90deg,#2ea8d6,#a9f4ff);box-shadow:0 0 12px rgba(120,230,255,.8)}
+.bar.amber>i{background:linear-gradient(90deg,#d69a2e,#ffd79a);box-shadow:0 0 12px rgba(255,190,90,.7)}
+.barrow{display:flex;justify-content:space-between;font:500 11px/1 'JetBrains Mono',Consolas,monospace;
+  letter-spacing:.16em;color:rgba(190,245,255,.8);margin-bottom:5px}
+.tile{border:1px solid rgba(127,233,255,.22);padding:8px 9px;background:rgba(20,60,80,.22)}
+.tile b{display:block;font:400 9px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.2em;
+  color:rgba(127,233,255,.55);font-weight:400}
+.tile s{display:block;text-decoration:none;font:600 17px/1.2 'Chakra Petch','Segoe UI',sans-serif;color:#d8f8ff;margin-top:3px}
+.tile.hot{border-color:rgba(255,190,90,.28);background:rgba(80,55,15,.22)}
+.tile.hot b{color:rgba(255,196,102,.6)} .tile.hot s{color:#ffd79a}
 
-  /* Expands downward from the pinned corner; the always-visible numbers
-     never move. */
-  .detail{
-    max-height:0; opacity:0; overflow:hidden;
-    transition:max-height .3s cubic-bezier(.2,.7,.3,1), opacity .22s ease, margin .3s ease;
-  }
-  .panel:hover .detail{ max-height:180px; opacity:1; margin-top:8px; }
-  .detail .row{ font-size:11px; color:rgba(79,216,255,.78); }
-  .sep{ height:1px; background:rgba(79,216,255,.22); margin:6px 0; }
-  .flavor{ font-size:11px; color:rgba(79,216,255,.95); letter-spacing:.06em; }
+.sysrow{display:flex;align-items:center;gap:12px;
+  font:400 11px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.14em}
+.sysrow .i{width:30px;text-align:left;color:rgba(127,233,255,.4)}
+.sysrow .n{flex:1;text-align:left;color:rgba(200,248,255,.85)}
+.sysrow .v{width:74px;text-align:right;color:#d8f8ff}
+.sysrow .s{width:52px;text-align:right}
 
-  /* Text box — deliberately minimal; wiring is still to be discussed. */
-  #console{
-    position:fixed; left:50%; transform:translateX(-50%);
-    bottom:26px; width:min(520px, 62vw);
-  }
-  #echo{
-    font-size:11px; letter-spacing:.06em; height:15px; margin-bottom:6px;
-    text-align:center; color:rgba(79,216,255,.55); opacity:0;
-    transition:opacity .3s ease; white-space:nowrap; overflow:hidden;
-  }
-  #echo.on{ opacity:1; }
-  .inputwrap{
-    display:flex; align-items:center; gap:8px;
-    border:1px solid rgba(79,216,255,.22);
-    background:rgba(4,16,22,.55);
-    padding:8px 12px;
-    transition:border-color .2s ease, box-shadow .2s ease, background .2s ease;
-  }
-  .inputwrap:focus-within{
-    border-color:rgba(79,216,255,.62);
-    background:rgba(6,24,33,.8);
-    box-shadow:0 0 18px rgba(79,216,255,.14);
-  }
-  .caret{ color:rgba(79,216,255,.6); font-size:13px; }
-  #cmd{
-    flex:1; background:transparent; border:0; outline:0;
-    color:var(--cyan); font:inherit; font-size:13px; letter-spacing:.05em;
-    text-shadow:0 0 8px rgba(79,216,255,.35);
-  }
-  #cmd::placeholder{ color:rgba(79,216,255,.28); letter-spacing:.08em; }
+#spectrum{display:flex;justify-content:flex-end;align-items:flex-end;gap:4px;height:64px;
+  margin-top:18px;border-bottom:1px solid rgba(127,233,255,.25);padding-bottom:2px}
+#spectrum i{width:9px;height:100%;transform-origin:bottom;transform:scaleY(.06);
+  transition:transform .22s ease;
+  background:linear-gradient(180deg,#a9f4ff,rgba(46,168,214,.15))}
+#spectrum i.pk{background:linear-gradient(180deg,#ffd79a,rgba(214,154,46,.15))}
 
-  #fps{
-    position:fixed; left:16px; bottom:14px;
-    font-size:11px; color:rgba(79,216,255,.55); display:none;
-  }
-  #fps.on{ display:block; }
+.blip{position:absolute;width:6px;height:6px;border-radius:50%;margin:-3px 0 0 -3px;
+  background:#a9f4ff;box-shadow:0 0 10px #7fe9ff;transition:opacity .5s ease}
+
+#console{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);width:520px}
+#echo{font:400 10px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.14em;height:12px;
+  margin-bottom:7px;text-align:center;color:rgba(127,233,255,.5);opacity:0;transition:opacity .3s ease}
+#echo.on{opacity:1}
+.inwrap{display:flex;align-items:center;gap:9px;padding:8px 14px;
+  border:1px solid rgba(127,233,255,.24);background:rgba(8,28,40,.5);transition:border-color .2s,box-shadow .2s}
+.inwrap:focus-within{border-color:rgba(127,233,255,.6);box-shadow:0 0 18px rgba(127,233,255,.14)}
+#cmd{flex:1;background:transparent;border:0;outline:0;color:#d8f8ff;
+  font:400 12px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.1em}
+#cmd::placeholder{color:rgba(127,233,255,.3);letter-spacing:.18em}
+
+#fps{position:absolute;left:64px;top:26px;font:400 10px/1 'JetBrains Mono',Consolas,monospace;
+  color:rgba(127,233,255,.55);display:none}
+#fps.on{display:block}
+
+/* ?still — kill every animation and transition so a screenshot is a fair
+   picture of the page. The entry animations use `both` fill mode, which
+   holds their opacity:0 start frame until the delay elapses; headless
+   Chrome never advances them, so without this three whole panels capture
+   as blank. Also lets bars show their real width instead of a half-run
+   transition. */
+body.still *{animation:none!important;transition:none!important}
 </style>
 </head>
 <body>
-<canvas id="scene"></canvas>
+<div id="stage">
 
-<div class="panel tl" id="panelL">
-  <div class="row big"><span class="k">CPU</span> <span class="v" id="cpu">--</span></div>
-  <div class="row big"><span class="k">RAM</span> <span class="v" id="ram">--</span></div>
-  <div class="detail">
-    <div class="sep"></div>
-    <div class="row"><span class="k">MEM</span> <span id="ramDetail">-- / --</span></div>
-    <div class="row"><span class="k">UP&nbsp;</span> <span id="uptime">--</span></div>
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(120,230,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,230,255,.05) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(ellipse 60% 60% at 50% 50%,#000 20%,transparent 85%)"></div>
+  <div style="position:absolute;inset:0;background:repeating-linear-gradient(to bottom,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);pointer-events:none;mix-blend-mode:overlay"></div>
+  <div style="position:absolute;left:0;right:0;height:200px;background:linear-gradient(to bottom,rgba(120,230,255,0),rgba(120,230,255,.055),rgba(120,230,255,0));animation:scan 7.5s linear infinite;pointer-events:none"></div>
+  <div style="position:absolute;inset:0;box-shadow:inset 0 0 260px 40px rgba(0,0,0,.9);pointer-events:none"></div>
+
+  <div style="position:absolute;top:26px;left:26px;width:54px;height:54px;border-top:2px solid rgba(127,233,255,.6);border-left:2px solid rgba(127,233,255,.6)"></div>
+  <div style="position:absolute;top:26px;right:26px;width:54px;height:54px;border-top:2px solid rgba(127,233,255,.6);border-right:2px solid rgba(127,233,255,.6)"></div>
+  <div style="position:absolute;bottom:26px;left:26px;width:54px;height:54px;border-bottom:2px solid rgba(127,233,255,.6);border-left:2px solid rgba(127,233,255,.6)"></div>
+  <div style="position:absolute;bottom:26px;right:26px;width:54px;height:54px;border-bottom:2px solid rgba(127,233,255,.6);border-right:2px solid rgba(127,233,255,.6)"></div>
+
+  <!-- ================= CORE ================= -->
+  <!-- 1.1 rather than the mock's 1.2: at 1.2 the core's bottom caption
+       lands on top of the text box that the mock doesn't have. -->
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1.1);width:520px;height:520px;display:grid;place-items:center">
+
+    <div id="halo" style="position:absolute;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(120,230,255,.28) 0%,rgba(120,230,255,.06) 45%,transparent 70%);animation:haloPulse 3.4s ease-in-out infinite;filter:blur(6px)"></div>
+
+    <svg viewBox="0 0 460 460" style="position:absolute;width:460px;height:460px;animation:spin var(--spin-outer) linear infinite;overflow:visible">
+      <circle cx="230" cy="230" r="214" fill="none" stroke="rgba(127,233,255,.55)" stroke-width="1.5" stroke-dasharray="150 26 6 26"></circle>
+      <circle cx="230" cy="230" r="200" fill="none" stroke="rgba(127,233,255,.2)" stroke-width="6" stroke-dasharray="2 14"></circle>
+    </svg>
+
+    <svg viewBox="0 0 380 380" style="position:absolute;width:380px;height:380px;animation:spinR var(--spin-inner) linear infinite;overflow:visible">
+      <circle cx="190" cy="190" r="176" fill="none" stroke="rgba(255,190,90,.5)" stroke-width="1" stroke-dasharray="40 10 4 10"></circle>
+      <circle cx="190" cy="190" r="150" fill="none" stroke="rgba(127,233,255,.35)" stroke-width="10" stroke-dasharray="1 22" stroke-linecap="round"></circle>
+    </svg>
+
+    <div style="position:absolute;width:300px;height:300px;border-radius:50%;border:1px solid rgba(127,233,255,.35);box-shadow:0 0 30px rgba(60,200,255,.25) inset"></div>
+    <div id="coils" style="position:absolute;width:300px;height:300px;animation:spin var(--coil) linear infinite"></div>
+
+    <div style="position:absolute;width:232px;height:232px;border-radius:50%;border:2px solid rgba(150,235,255,.55);box-shadow:0 0 22px rgba(80,220,255,.3)"></div>
+    <div style="position:absolute;width:212px;height:212px;border-radius:50%;border:14px solid rgba(90,180,215,.28);border-style:dashed"></div>
+    <div style="position:absolute;width:186px;height:186px;border-radius:50%;border:6px solid rgba(20,60,80,.9);box-shadow:0 0 40px rgba(80,220,255,.45),0 0 90px rgba(80,220,255,.25) inset"></div>
+    <div style="position:absolute;width:150px;height:150px;border-radius:50%;background:conic-gradient(from 0deg,rgba(150,240,255,.15),rgba(150,240,255,.55),rgba(150,240,255,.15),rgba(150,240,255,.55),rgba(150,240,255,.15));animation:spin 6s linear infinite;filter:blur(3px)"></div>
+
+    <!-- The two innermost layers carry the live voice level: --lvl scales
+         them on top of the idle breathing animation, so a loud syllable
+         visibly punches the core. -->
+    <div id="core" style="position:absolute;width:112px;height:112px;border-radius:50%;background:radial-gradient(circle,#ffffff 0%,#d9fbff 22%,#63d8ff 52%,#0f6d9a 80%,#062c40 100%);box-shadow:0 0 60px 12px rgba(110,225,255,.65);animation:corePulse var(--pulse) ease-in-out infinite"></div>
+    <div id="spark" style="position:absolute;width:44px;height:44px;border-radius:50%;background:#fff;filter:blur(7px);animation:corePulse calc(var(--pulse) * .54) ease-in-out infinite"></div>
+
+    <div id="coreLabel" class="mono" style="position:absolute;bottom:-6px;text-align:center;font-size:11px;font-weight:500;letter-spacing:.34em;color:rgba(180,245,255,.75)">ARC CORE · BOOTING</div>
+    <div id="output" class="mono" style="position:absolute;top:-4px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.3em;color:rgba(255,196,102,.85)">— PTS</div>
   </div>
-</div>
 
-<div class="panel tr" id="panelR">
-  <div class="row big"><span class="k">GPU</span> <span class="v" id="gpu">--</span></div>
-  <div class="detail">
-    <div class="sep"></div>
-    <div class="row"><span class="k">VRAM</span> <span id="vram">-- / --</span></div>
-    <div class="row"><span class="k">TEMP</span> <span id="temp">--</span></div>
-    <div class="row flavor" id="flavor">&nbsp;</div>
+  <!-- ================= TOP LEFT ================= -->
+  <div style="position:absolute;top:64px;left:64px;width:360px;animation:rise .6s ease-out both">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid rgba(127,233,255,.35);padding-bottom:6px;margin-bottom:14px">
+      <span style="font:700 15px/1 'Chakra Petch','Segoe UI',sans-serif;letter-spacing:.22em">FRED</span>
+      <span class="mono" style="font-size:10px;letter-spacing:.18em;color:rgba(127,233,255,.5)">MK-VII</span>
+      <span id="nominal" class="mono" style="margin-left:auto;font-size:10px;color:var(--good);letter-spacing:.16em">● NOMINAL</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div><div class="barrow"><span>CPU LOAD</span><span id="cpuTxt">—</span></div><div class="bar"><i id="cpuBar"></i></div></div>
+      <div><div class="barrow"><span>MEMORY</span><span id="ramTxt">—</span></div><div class="bar amber"><i id="ramBar"></i></div></div>
+      <div><div class="barrow"><span>GPU LOAD</span><span id="gpuTxt">—</span></div><div class="bar"><i id="gpuBar"></i></div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px">
+      <div class="tile"><b>CYCLES</b><s id="cycles">—</s></div>
+      <div class="tile"><b>DRAW</b><s id="draw">—</s></div>
+      <div class="tile hot"><b>CORE TEMP</b><s id="temp">—</s></div>
+    </div>
   </div>
-</div>
 
-<div id="console">
-  <div id="echo"></div>
-  <div class="inputwrap">
-    <span class="caret">&rsaquo;</span>
-    <input id="cmd" type="text" autocomplete="off" spellcheck="false"
-           placeholder="type here">
+  <!-- ================= TOP RIGHT ================= -->
+  <div style="position:absolute;top:64px;right:64px;width:360px;text-align:right;animation:rise .6s ease-out .12s both">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid rgba(127,233,255,.35);padding-bottom:6px;margin-bottom:14px">
+      <span id="link" class="mono" style="font-size:10px;color:var(--good);letter-spacing:.16em">● LINK —</span>
+      <span class="mono" style="margin-left:auto;font-size:10px;letter-spacing:.18em;color:rgba(127,233,255,.5)">v1.0</span>
+      <span style="font:700 15px/1 'Chakra Petch','Segoe UI',sans-serif;letter-spacing:.22em">SYSTEMS</span>
+    </div>
+    <div id="systems" style="display:flex;flex-direction:column;gap:9px"></div>
+    <div id="spectrum"></div>
+    <div class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.45);margin-top:7px">VOICE LEVEL · LAST 12 SAMPLES</div>
   </div>
-</div>
 
-<div id="fps"></div>
+  <!-- ================= BOTTOM LEFT: radar ================= -->
+  <div style="position:absolute;bottom:64px;left:64px;width:190px;height:190px;animation:fadeIn .8s ease-out .3s both">
+    <div style="position:absolute;inset:0;border-radius:50%;border:1px solid rgba(127,233,255,.4);background:radial-gradient(circle,rgba(30,120,160,.18),rgba(3,10,14,.6))"></div>
+    <div style="position:absolute;inset:24px;border-radius:50%;border:1px solid rgba(127,233,255,.22)"></div>
+    <div style="position:absolute;inset:56px;border-radius:50%;border:1px solid rgba(127,233,255,.18)"></div>
+    <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:rgba(127,233,255,.2)"></div>
+    <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(127,233,255,.2)"></div>
+    <div style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(rgba(127,233,255,.55),rgba(127,233,255,0) 28%);animation:sweep var(--sweep) linear infinite"></div>
+    <div id="blips" style="position:absolute;inset:0"></div>
+    <div id="contacts" class="mono" style="position:absolute;bottom:-26px;left:0;font-size:9px;letter-spacing:.22em;color:rgba(127,233,255,.5)">ACTIVITY · 0 TURNS</div>
+  </div>
+
+  <!-- ================= BOTTOM RIGHT: log ================= -->
+  <div style="position:absolute;bottom:64px;right:64px;width:400px;text-align:right;animation:fadeIn .8s ease-out .4s both">
+    <div class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.5);margin-bottom:9px">DIAGNOSTIC STREAM</div>
+    <div id="log" style="display:flex;flex-direction:column;gap:5px"></div>
+  </div>
+
+  <!-- ================= TEXT BOX ================= -->
+  <div id="console">
+    <div id="echo" class="mono"></div>
+    <div class="inwrap">
+      <span class="mono" style="color:rgba(127,233,255,.6);font-size:13px">&rsaquo;</span>
+      <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder="type here">
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM CENTER ================= -->
+  <div style="position:absolute;bottom:44px;left:50%;transform:translateX(-50%);display:flex;align-items:center;white-space:nowrap;gap:22px;padding:9px 26px;border:1px solid rgba(127,233,255,.28);background:rgba(8,28,40,.55)">
+    <span id="clock" class="mono" style="font-size:11px;font-weight:500;letter-spacing:.2em;color:rgba(200,248,255,.85)">--:--:--</span>
+    <span style="width:1px;height:14px;background:rgba(127,233,255,.3)"></span>
+    <span id="statusMain" class="mono" style="font-size:11px;font-weight:500;letter-spacing:.2em;color:var(--good)">CONNECTING</span>
+    <span style="width:1px;height:14px;background:rgba(127,233,255,.3)"></span>
+    <span id="statusSub" class="mono" style="font-size:11px;font-weight:500;letter-spacing:.2em;color:rgba(255,196,102,.9)">STANDBY</span>
+  </div>
+
+  <div style="position:absolute;left:30px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:9px">
+    <div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:30px;height:1px;background:rgba(255,196,102,.8)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div>
+  </div>
+  <div style="position:absolute;right:30px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-end;gap:9px">
+    <div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:30px;height:1px;background:rgba(255,196,102,.8)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div>
+  </div>
+
+  <div id="fps" class="mono"></div>
+</div>
 
 <script>
 "use strict";
+const $ = function(id){ return document.getElementById(id); };
+const clamp = function(v,a,b){ return v<a?a:v>b?b:v; };
+const stage = $("stage");
 
-// =====================================================================
-// CONFIG
-// =====================================================================
+const POLL_MS = 1200;
+const Q = new URLSearchParams(location.search);
+if (Q.has("still")) document.body.classList.add("still");
+// ?mockstate=<state> pins the HUD to one state regardless of the bus, so
+// each look can be captured and compared without waiting for a real turn.
+const MOCKSTATE = Q.get("mockstate");
+const MOCKLEVEL = parseFloat(Q.get("level") || "0.7");
+const BIRTH = new Date(2011,0,24,11,0,0).getTime();   // 24 Jan 2011, 11:00 local
 
-const TAU = Math.PI * 2;
-
-const POLL_MS   = 1200;   // /state poll; values are interpolated between polls
-const BOOT_MS   = 1600;   // "systems online" power-up
-
-// One continuously eased energy value, fast attack / slow release. These
-// are settling times (~95%); the exponential time constant is a third of
-// each, which is what actually goes into the per-frame lerp.
-const ATTACK_S  = 0.5;
-const RELEASE_S = 1.0;
-const TAU_UP    = ATTACK_S  / 3;
-const TAU_DOWN  = RELEASE_S / 3;
-
-// How fast the per-state style blend follows a state change. Separate from
-// the energy easing so a state switch never pops even when the two states
-// happen to share an energy target.
-const STYLE_LERP = 5.5;
-
-const CYAN = [79, 216, 255];
-const HOT  = [223, 249, 255];
-const RED  = [255, 68, 56];
-
-// energy   — target for the eased scalar (speaking overrides with voice level)
-// glow*    — glow axis:   glow   = glowBase   + glowSpan   * energy
-// motion*  — motion axis: motion = motionBase + motionSpan * energy
-// sweepA   — sweep prominence, independent of speed (listening is crisp but slow)
-// flicker  — core instability amount
-// alert    — 0..1 blend toward red + jitter
+// ---- per-state look. One table drives every animation speed + glow. ----
 const STATES = {
-  idle:      { energy:0.20, glowBase:0.06, glowSpan:0.50, motionBase:0.04, motionSpan:0.30, sweepA:0.22, flicker:0.00, alert:0 },
-  listening: { energy:0.55, glowBase:0.35, glowSpan:0.35, motionBase:0.08, motionSpan:0.40, sweepA:1.00, flicker:0.00, alert:0 },
-  thinking:  { energy:1.00, glowBase:0.20, glowSpan:0.25, motionBase:0.30, motionSpan:0.70, sweepA:0.72, flicker:0.85, alert:0 },
-  speaking:  { energy:0.85, glowBase:0.35, glowSpan:0.65, motionBase:0.10, motionSpan:0.14, sweepA:0.30, flicker:0.00, alert:0 },
-  alert:     { energy:0.95, glowBase:0.45, glowSpan:0.50, motionBase:0.30, motionSpan:0.47, sweepA:0.88, flicker:0.55, alert:1 },
+  idle:      {outer:"46s",inner:"30s",coil:"160s",sweep:"5.2s",pulse:"3.4s",glow:.40,label:"STABLE"},
+  listening: {outer:"24s",inner:"16s",coil:"90s", sweep:"2.4s",pulse:"2.4s",glow:.80,label:"RECEIVING"},
+  thinking:  {outer:"8s", inner:"5s", coil:"32s", sweep:"1.0s",pulse:"1.0s",glow:.70,label:"COMPUTING"},
+  speaking:  {outer:"30s",inner:"20s",coil:"120s",sweep:"4.4s",pulse:"0.9s",glow:1.0,label:"TRANSMITTING"},
+  alert:     {outer:"11s",inner:"7s", coil:"44s", sweep:"0.8s",pulse:"0.7s",glow:1.0,label:"FAULT"},
 };
 const VALID = Object.keys(STATES);
 
-// =====================================================================
-// URL PARAMS  (?mockstate=  /  ?shot=<state>&t=<ms>)
-// =====================================================================
+// Six rows: three of FRED's own models, three machine subsystems.
+const SYSROWS = ["LLM","WHISPER","KOKORO","DISK","POWER","PAGEFILE"];
 
-const Q         = new URLSearchParams(location.search);
-const MOCKSTATE = VALID.includes(Q.get("mockstate")) ? Q.get("mockstate") : null;
-const SHOT      = Q.get("shot");                       // state name, or "boot"
-const SHOT_T    = parseFloat(Q.get("t") || "0");       // ms
-const SHOT_ON   = SHOT !== null;
+let state = "idle", level = 0, shownState = null;
+let latency = 0, levels = new Array(12).fill(0);
 
-// =====================================================================
-// SMALL HELPERS
-// =====================================================================
+// ---------- build the repeated bits once ----------
+(function build(){
+  let coils = "";
+  for (let i = 0; i < 10; i++){
+    coils += '<div style="position:absolute;top:50%;left:50%;width:34px;height:62px;margin:-31px -17px;'
+      + 'transform:rotate(' + (i*36) + 'deg) translateY(-116px);'
+      + 'background:repeating-linear-gradient(90deg,rgba(180,245,255,.95) 0 2px,rgba(40,130,175,.5) 2px 5px);'
+      + 'border:1.5px solid rgba(200,250,255,.85);box-shadow:0 0 14px rgba(110,225,255,.5);'
+      + 'animation:coilFlick 3.1s ease-in-out ' + (i*0.15) + 's infinite"></div>';
+  }
+  $("coils").innerHTML = coils;
 
-const clamp  = (v, a, b) => v < a ? a : v > b ? b : v;
-const lerp   = (a, b, t) => a + (b - a) * t;
-const mixCol = (a, b, t) => [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)];
-const rgba   = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${clamp(a,0,1)})`;
+  $("spectrum").innerHTML = new Array(12).fill('<i></i>').join("");
 
-// Deterministic value noise: a pure function of t, so ?shot=&t= renders
-// the exact same frame every time. An accumulating Math.random() flicker
-// could not be reproduced for screenshot verification.
-function hash1(n){ const s = Math.sin(n) * 43758.5453123; return s - Math.floor(s); }
-function noise1(x){
-  const i = Math.floor(x), f = x - i;
-  const u = f * f * (3 - 2 * f);
-  return lerp(hash1(i), hash1(i + 1), u);
+  $("systems").innerHTML = SYSROWS.map(function(name,i){
+    const n = String(i+1).padStart(2,"0");
+    return '<div class="sysrow"><span class="i">'+n+'</span><span class="n">'+name+'</span>'
+         + '<span class="v" id="sv'+i+'">—</span><span class="s" id="ss'+i+'">···</span></div>';
+  }).join("");
+})();
+
+function fit(){
+  stage.style.setProperty("--hud-scale",
+    Math.min(window.innerWidth/1600, window.innerHeight/900).toFixed(4));
+}
+window.addEventListener("resize", fit); fit();
+
+// ---------- state → look ----------
+function applyState(next){
+  if (next === shownState) return;
+  shownState = next;
+  const cfg = STATES[next] || STATES.idle;
+  const s = stage.style;
+  s.setProperty("--spin-outer", cfg.outer);
+  s.setProperty("--spin-inner", cfg.inner);
+  s.setProperty("--coil",       cfg.coil);
+  s.setProperty("--sweep",      cfg.sweep);
+  s.setProperty("--pulse",      cfg.pulse);
+  s.setProperty("--glow",       cfg.glow);
+  // Cyan sits near 190deg, so this lands the whole HUD on red without
+  // touching any individual colour.
+  // ponytail: blanket hue-rotate, so the few amber/green accents invert
+  // to cyan during an alert. Reads unmistakably as alarm anyway; give
+  // every colour a CSS variable and swap the palette if that bothers you.
+  s.filter = (next === "alert") ? "hue-rotate(158deg) saturate(1.35)" : "none";
+  $("coreLabel").textContent = "ARC CORE · " + cfg.label;
+  $("nominal").textContent = (next === "alert") ? "● FAULT" : "● NOMINAL";
+  $("nominal").style.color = (next === "alert") ? "#ff9c8d" : "var(--good)";
+  $("statusMain").textContent = (next === "alert") ? "FAULT DETECTED" : "ALL SYSTEMS ONLINE";
+  $("statusSub").textContent = next.toUpperCase();
 }
 
-// Frame-rate independent exponential approach.
-function ease(cur, target, dt, tau){
-  if (dt <= 0) return cur;
-  return cur + (target - cur) * (1 - Math.exp(-dt / tau));
+// ---------- formatting ----------
+function pct(v){ return (v==null||isNaN(v)) ? "—" : Math.round(v)+"%"; }
+function wide(v){ return (v==null||isNaN(v)) ? "0%" : clamp(v,0,100)+"%"; }
+
+function setBar(txtId, barId, value){
+  $(txtId).textContent = pct(value);
+  $(barId).style.width = wide(value);
 }
 
-// =====================================================================
-// CANVAS
-// =====================================================================
-
-const cv  = document.getElementById("scene");
-const ctx = cv.getContext("2d", { alpha:false });
-let W = 0, H = 0, DPR = 1;
-
-function resize(){
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth; H = window.innerHeight;
-  cv.width  = Math.round(W * DPR);
-  cv.height = Math.round(H * DPR);
-  cv.style.width  = W + "px";
-  cv.style.height = H + "px";
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-}
-window.addEventListener("resize", resize);
-resize();
-
-// =====================================================================
-// LIVE STATE
-// =====================================================================
-
-let busState = "idle";     // from /state (or mockstate/shot override)
-let voiceLvl = 0;          // 0..1, only meaningful while speaking
-
-let energy   = 0;          // the one eased value
-let alertMix = 0;
-let style    = Object.assign({}, STATES.idle);   // eased copy of the active config
-
-const ang = { ring:0, inner:0, sweep:0, coil:0 };
-
-// Stats are polled at POLL_MS and interpolated between polls so the
-// readouts drift smoothly instead of stepping once a second.
-let statFrom = null, statTo = null, statT0 = 0;
-let live = { cpu:null, ramPct:null, ramUsed:null, ramTotal:null,
-             gpu:null, vramUsed:null, vramTotal:null, temp:null, uptime:null };
-
-function applyStats(j){
-  const next = {
-    cpu: j.cpu, ramPct: j.ram_pct, ramUsed: j.ram_used_gb, ramTotal: j.ram_total_gb,
-    gpu: j.gpu_pct, vramUsed: j.vram_used_mb, vramTotal: j.vram_total_mb,
-    temp: j.gpu_temp_c, uptime: j.uptime_s,
-  };
-  statFrom = statTo ? Object.assign({}, live) : next;
-  statTo   = next;
-  statT0   = performance.now();
+function ageReadout(){
+  // Days alive / 100. Seven decimals so the last digit turns over about
+  // once a second — a static number here would read as a dead panel.
+  const days = (Date.now() - BIRTH) / 86400000;
+  return (days / 100).toFixed(7);
 }
 
-function interpStats(now){
-  if (!statTo) return;
-  if (!statFrom){ live = Object.assign({}, statTo); return; }
-  const u = clamp((now - statT0) / POLL_MS, 0, 1);
-  for (const k in statTo){
-    const a = statFrom[k], b = statTo[k];
-    live[k] = (typeof a === "number" && typeof b === "number") ? lerp(a, b, u) : b;
+function paintSystems(d){
+  const sub = d.subsystems || {};
+  const vram = (d.vram_used_mb && d.vram_total_mb) ? d.vram_used_mb/d.vram_total_mb*100 : null;
+  const power = (d.power_w && d.power_limit_w) ? d.power_w/d.power_limit_w*100 : null;
+  // For the three FRED rows the percentage is readiness, not utilisation:
+  // nothing reports a meaningful "how hard is Whisper working" number, and
+  // inventing one would be worse than a truthful 100/0.
+  const rows = [
+    {on: sub.llm,     val: vram,  act: state==="thinking"},
+    {on: sub.whisper, val: null,  act: state==="listening"},
+    {on: sub.kokoro,  val: null,  act: state==="speaking"},
+    {on: true,        val: d.disk_pct, act: false},
+    {on: true,        val: power,      act: false},
+    {on: true,        val: d.swap_pct, act: false},
+  ];
+  rows.forEach(function(r,i){
+    const v = (r.val != null) ? r.val : (r.on ? 100 : 0);
+    $("sv"+i).textContent = pct(v);
+    const word = r.act ? "ACT" : (r.on ? "RDY" : "IDLE");
+    const el = $("ss"+i);
+    el.textContent = word;
+    el.style.color = word==="ACT" ? "var(--amber)" : word==="RDY" ? "var(--good)" : "rgba(127,233,255,.35)";
+  });
+}
+
+function paintRadar(turns){
+  turns = turns || [];
+  // Angle = how long ago (clockwise from 12), radius = how long the turn
+  // took, clamped so a very slow turn parks at the rim instead of leaving
+  // the scope.
+  $("blips").innerHTML = turns.map(function(t){
+    const frac = clamp(t.ago / 300, 0, 1);
+    const ang  = -Math.PI/2 + frac * Math.PI * 2;
+    const rad  = 14 + clamp(t.duration / 12, 0, 1) * 74;
+    const x = 95 + Math.cos(ang)*rad, y = 95 + Math.sin(ang)*rad;
+    const op = (1 - frac*0.75).toFixed(2);
+    const hot = t.duration >= 6;
+    return '<div class="blip" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;opacity:'+op
+      + (hot ? ';background:#ffd79a;box-shadow:0 0 10px #ffbe5a' : '') + '"></div>';
+  }).join("");
+  $("contacts").textContent = "ACTIVITY · " + turns.length + " TURN" + (turns.length===1?"":"S");
+}
+
+function paintLog(lines){
+  lines = lines || [];
+  const n = lines.length;
+  $("log").innerHTML = lines.map(function(text,i){
+    const op = (0.35 + 0.65 * ((i+1)/n)).toFixed(2);
+    const col = /error|fail/i.test(text) ? "#ff9c8d" : (i===n-1 ? "#d8f8ff" : "rgba(180,240,255,.8)");
+    return '<div class="mono" style="font-size:11px;line-height:1.35;letter-spacing:.06em;color:'
+         + col + ';opacity:' + op + '">&rsaquo; ' + text.replace(/[<&]/g, "") + '</div>';
+  }).join("");
+}
+
+function paintSpectrum(){
+  const bars = $("spectrum").children;
+  const peak = Math.max.apply(null, levels);
+  for (let i = 0; i < bars.length; i++){
+    const v = levels[i] || 0;
+    bars[i].style.transform = "scaleY(" + Math.max(0.06, v).toFixed(3) + ")";
+    bars[i].classList.toggle("pk", v > 0.05 && v >= peak - 0.02);
   }
 }
 
-// =====================================================================
-// POLLING
-// =====================================================================
+// ---------- poll ----------
+function apply(d){
+  if (MOCKSTATE && VALID.indexOf(MOCKSTATE) >= 0){
+    state = MOCKSTATE;
+    level = (state === "speaking") ? clamp(MOCKLEVEL, 0, 1) : 0;
+  } else {
+    state = VALID.indexOf(d.state) >= 0 ? d.state : "idle";
+    level = clamp(d.level || 0, 0, 1);
+  }
+  applyState(state);
+
+  setBar("cpuTxt","cpuBar", d.cpu);
+  setBar("ramTxt","ramBar", d.ram_pct);
+  setBar("gpuTxt","gpuBar", d.gpu_pct);
+
+  $("cycles").textContent = (d.turns ? d.turns.length : 0);
+  $("draw").textContent   = d.power_w == null ? "—" : Math.round(d.power_w) + " W";
+  $("temp").textContent   = d.gpu_temp_c == null ? "—" : Math.round(d.gpu_temp_c) + "°C";
+
+  paintSystems(d);
+  paintRadar(d.turns);
+  paintLog(d.diagnostics);
+
+  levels.push(level); if (levels.length > 12) levels.shift();
+  paintSpectrum();
+
+  $("link").textContent = "● LINK " + Math.round(latency) + "ms";
+}
+
+function offline(){
+  state = "idle"; applyState("idle");
+  $("link").textContent = "● LINK LOST";
+  $("statusMain").textContent = "SERVER OFFLINE";
+}
 
 async function poll(){
+  const t0 = performance.now();
   try {
-    const r = await fetch("/state", { cache:"no-store" });
-    const j = await r.json();
-    if (!MOCKSTATE) {
-      busState = VALID.includes(j.state) ? j.state : "idle";
-      voiceLvl = clamp(typeof j.level === "number" ? j.level : 0, 0, 1);
-    }
-    applyStats(j);
+    const r = await fetch("/state", {cache:"no-store"});
+    const d = await r.json();
+    latency = performance.now() - t0;
+    apply(d);
   } catch (e) {
-    // Server gone is the same story the bus tells when it goes stale:
-    // ease back to idle rather than freeze on the last live frame.
-    if (!MOCKSTATE){ busState = "idle"; voiceLvl = 0; }
+    offline();
   } finally {
     setTimeout(poll, POLL_MS);
   }
 }
 
-if (MOCKSTATE) busState = MOCKSTATE;
-
-// =====================================================================
-// DRAWING
-// =====================================================================
-
-function drawSweep(cx, cy, R, a, alpha, col){
-  if (alpha <= 0.005) return;
-  const TRAIL = Math.PI * 0.72, N = 44;
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.globalCompositeOperation = "lighter";
-  for (let i = 0; i < N; i++){
-    const f  = i / N;
-    const w  = Math.pow(1 - f, 2.3) * alpha * 0.26;
-    if (w <= 0.002) continue;
-    const a0 = a - TRAIL * f;
-    const a1 = a - TRAIL * (f + 1 / N) - 0.0015;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, R, a1, a0);
-    ctx.closePath();
-    ctx.fillStyle = rgba(col, w);
-    ctx.fill();
-  }
-  ctx.strokeStyle = rgba(col, alpha * 0.95);
-  ctx.lineWidth   = 1.6;
-  ctx.shadowBlur  = 12;
-  ctx.shadowColor = rgba(col, alpha * 0.8);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawSegRing(cx, cy, r, angle, segs, gapFrac, lw, col, alpha){
-  const step = TAU / segs, gap = step * gapFrac;
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.lineWidth   = lw;
-  ctx.shadowBlur  = 8;
-  ctx.shadowColor = rgba(col, alpha * 0.7);
-  for (let i = 0; i < segs; i++){
-    // Every 4th segment reads as a major graduation.
-    const major = (i % 4 === 0);
-    ctx.strokeStyle = rgba(col, alpha * (major ? 1 : 0.45));
-    ctx.lineWidth   = major ? lw * 1.7 : lw;
-    const a0 = angle + i * step;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, a0, a0 + step - gap);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawInnerRing(cx, cy, r, angle, col, alpha){
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.strokeStyle = rgba(col, alpha * 0.55);
-  ctx.lineWidth   = 1;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, TAU);
-  ctx.stroke();
-  // Notches, so the rotation of an otherwise featureless ring is visible.
-  ctx.rotate(angle);
-  ctx.strokeStyle = rgba(col, alpha);
-  ctx.lineWidth   = 1.6;
-  for (let i = 0; i < 3; i++){
-    const a0 = i * (TAU / 3);
-    ctx.beginPath();
-    ctx.arc(0, 0, r, a0, a0 + 0.26);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawTicks(cx, cy, r, col, alpha){
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.strokeStyle = rgba(col, alpha * 0.32);
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 72; i++){
-    const a = i * (TAU / 72);
-    const len = (i % 6 === 0) ? 9 : 4;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-    ctx.lineTo(Math.cos(a) * (r + len), Math.sin(a) * (r + len));
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawCore(cx, cy, R, glow, spin, col, hotCol){
-  const r = R * 0.54;
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.globalCompositeOperation = "lighter";
-
-  // Ambient bloom.
-  let g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.5);
-  g.addColorStop(0.00, rgba(col, 0.42 * glow));
-  g.addColorStop(0.30, rgba(col, 0.15 * glow));
-  g.addColorStop(1.00, rgba(col, 0));
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(0, 0, r * 2.5, 0, TAU); ctx.fill();
-
-  // Coil ring — the arc reactor's signature, as flat trapezoids.
-  const N = 10, step = TAU / N;
-  ctx.save();
-  ctx.rotate(spin);
-  for (let i = 0; i < N; i++){
-    ctx.save();
-    ctx.rotate(i * step);
-    const r0 = r * 0.60, r1 = r * 0.98, h0 = r * 0.15, h1 = r * 0.23;
-    ctx.beginPath();
-    ctx.moveTo(r0, -h0); ctx.lineTo(r1, -h1);
-    ctx.lineTo(r1,  h1); ctx.lineTo(r0,  h0);
-    ctx.closePath();
-    ctx.fillStyle   = rgba(col, 0.07 + 0.26 * glow);
-    ctx.fill();
-    ctx.strokeStyle = rgba(col, 0.30 + 0.55 * glow);
-    ctx.lineWidth   = 1.1;
-    ctx.stroke();
-    ctx.restore();
-  }
-  ctx.restore();
-
-  // Decagon containment outline.
-  ctx.beginPath();
-  for (let i = 0; i <= N; i++){
-    const a = i * step + spin * 0.5;
-    const x = Math.cos(a) * r * 1.06, y = Math.sin(a) * r * 1.06;
-    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-  }
-  ctx.strokeStyle = rgba(col, 0.22 + 0.42 * glow);
-  ctx.lineWidth   = 1.3;
-  ctx.stroke();
-
-  // Triangle accents, counter-rotating.
-  ctx.save();
-  ctx.rotate(-spin * 1.4);
-  ctx.strokeStyle = rgba(col, 0.20 + 0.40 * glow);
-  ctx.lineWidth   = 1;
-  // Offset by a ninth of a turn per triangle: stepping by TAU/3 instead
-  // would land every triangle on the same three vertices and draw the
-  // same shape three times over.
-  for (let k = 0; k < 3; k++){
-    ctx.beginPath();
-    for (let i = 0; i <= 3; i++){
-      const a = k * (TAU / 9) + i * (TAU / 3);
-      const x = Math.cos(a) * r * 0.52, y = Math.sin(a) * r * 0.52;
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // White-hot centre.
-  const cr = r * 0.46;
-  let cg = ctx.createRadialGradient(0, 0, 0, 0, 0, cr);
-  cg.addColorStop(0.00, rgba(hotCol, 0.30 + 0.70 * glow));
-  cg.addColorStop(0.45, rgba(col,    0.35 + 0.55 * glow));
-  cg.addColorStop(1.00, rgba(col, 0));
-  ctx.fillStyle = cg;
-  ctx.beginPath(); ctx.arc(0, 0, cr, 0, TAU); ctx.fill();
-
-  ctx.strokeStyle = rgba(hotCol, 0.25 + 0.6 * glow);
-  ctx.lineWidth   = 1.2;
-  ctx.beginPath(); ctx.arc(0, 0, cr * 0.52, 0, TAU); ctx.stroke();
-
-  ctx.restore();
-}
-
-// =====================================================================
-// FRAME
-// =====================================================================
-
-function drawFrame(t, boot){
-  // boot: 0..1 power-up progress (1 = fully online)
-  const cx = W / 2, cy = H / 2;
-  const R  = Math.min(W, H) * 0.30;
-
-  const glow   = clamp(style.glowBase   + style.glowSpan   * energy, 0, 1);
-  const motion = clamp(style.motionBase + style.motionSpan * energy, 0, 1);
-  const col    = mixCol(CYAN, RED, alertMix);
-  const hotCol = mixCol(HOT,  RED, alertMix * 0.75);
-
-  // Alert jitter — erratic, not a smooth wobble.
-  const jitter = alertMix * (noise1(t * 22) - 0.5) * 2;
-
-  // Core flicker (thinking = unstable, high motion, deliberately not glowy).
-  const flick = 1 - style.flicker * 0.45 * (noise1(t * 13.7) * noise1(t * 5.3));
-  const bootFade = boot * boot * (3 - 2 * boot);
-
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.save();
-  ctx.globalAlpha = bootFade;
-  ctx.translate(cx, cy);
-  ctx.scale(0.72 + 0.28 * bootFade, 0.72 + 0.28 * bootFade);
-  ctx.translate(-cx, -cy);
-
-  drawTicks(cx, cy, R * 1.16, col, 0.5 + 0.5 * glow);
-  drawSegRing(cx, cy, R * 1.05, ang.ring + jitter * 0.05, 24, 0.35, 2.4, col, 0.35 + 0.6 * glow);
-  drawInnerRing(cx, cy, R * 0.90, ang.inner - jitter * 0.04, col, 0.35 + 0.55 * glow);
-  drawSweep(cx, cy, R * 1.12, ang.sweep, style.sweepA * (0.35 + 0.65 * bootFade), col);
-  drawCore(cx, cy, R, glow * flick, ang.coil, col, hotCol);
-
-  ctx.restore();
-
-  // Boot overlay: an expanding shock ring plus the power-up caption.
-  if (boot < 1){
-    const b = boot;
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    const rr = R * 1.9 * b;
-    ctx.strokeStyle = rgba(CYAN, (1 - b) * 0.85);
-    ctx.lineWidth   = 2.5 * (1 - b) + 0.5;
-    ctx.shadowBlur  = 24 * (1 - b);
-    ctx.shadowColor = rgba(CYAN, 1 - b);
-    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
-
-    const fade = b < 0.65 ? 1 : 1 - (b - 0.65) / 0.35;
-    ctx.shadowBlur = 12;
-    ctx.fillStyle  = rgba(CYAN, 0.9 * fade);
-    ctx.font       = "600 13px ui-monospace, Consolas, monospace";
-    ctx.textAlign  = "center";
-    const label = "SYSTEMS ONLINE";
-    const shown = label.slice(0, Math.max(0, Math.round(label.length * clamp(b / 0.55, 0, 1))));
-    // Clears the outer tick ring (R*1.16 + ticks) but stays above the
-    // text box pinned to the bottom of the viewport.
-    ctx.fillText(shown, cx, cy + R * 1.25);
-    ctx.restore();
-  }
-}
-
-// =====================================================================
-// SHOT MODE — one deterministic frame, no rAF loop
-// =====================================================================
-
-function settle(stateName){
-  const cfg = STATES[stateName] || STATES.idle;
-  style    = Object.assign({}, cfg);
-  energy   = (stateName === "speaking") ? 0.85 : cfg.energy;
-  alertMix = cfg.alert;
-}
-
-function renderShot(){
-  const isBoot = (SHOT === "boot");
-  const name   = VALID.includes(SHOT) ? SHOT : "idle";
-  settle(name);
-
-  const t      = SHOT_T / 1000;
-  const motion = clamp(style.motionBase + style.motionSpan * energy, 0, 1);
-
-  // Settled state ⇒ constant speeds ⇒ angle is a closed form of t, so the
-  // same ?t= always produces the same frame.
-  ang.ring  =  t * (0.10 + 1.30 * motion);
-  ang.inner = -t * (0.14 + 0.90 * motion);
-  ang.sweep =  t * (0.35 + 3.20 * motion);
-  ang.coil  =  t * (0.06 + 0.55 * motion);
-
-  live = { cpu:37, ramPct:58, ramUsed:18.6, ramTotal:32, gpu:71,
-           vramUsed:4566, vramTotal:16311, temp:63, uptime:9296 };
-  paintStats();
-
-  drawFrame(t, isBoot ? clamp(SHOT_T / BOOT_MS, 0, 1) : 1);
-
-  window.__shotReady = true;
-  document.title = "SHOT READY · " + SHOT + " @" + SHOT_T + "ms";
-}
-
-if (SHOT_ON){
-  renderShot();
-  // Setting canvas.width in resize() wipes the bitmap, and shot mode has
-  // no rAF loop to put it back — so a resize AFTER load leaves a blank
-  // scene. Headless Chrome does exactly that (it applies --window-size
-  // once the page is already up), which is how this was caught: DOM
-  // stats rendered, canvas came out empty.
-  window.addEventListener("resize", renderShot);
-}
-
-// =====================================================================
-// MAIN LOOP
-// =====================================================================
-
-let bootStart = null, last = 0, running = !SHOT_ON;
-const frameTimes = [];
-
+// ---------- per-frame: clock, age readout, live core pulse ----------
+let frames = [], last = 0;
 function tick(now){
-  if (!running) return;
-  if (bootStart === null) bootStart = now;
-  const dt = last ? Math.min((now - last) / 1000, 0.1) : 0.016;
-  last = now;
+  const dt = last ? (now-last)/1000 : 0.016; last = now;
 
-  const t    = now / 1000;
-  const boot = clamp((now - bootStart) / BOOT_MS, 0, 1);
+  const d = new Date(), p = function(n){ return String(n).padStart(2,"0"); };
+  $("clock").textContent = p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+  $("output").textContent = ageReadout() + " PTS";
 
-  // --- target energy: speaking is driven live by the voice level
-  const cfg    = STATES[busState] || STATES.idle;
-  const target = (busState === "speaking")
-    ? clamp(0.30 + 0.70 * voiceLvl, 0, 1)
-    : cfg.energy;
+  // Ease the displayed level so the core swells and settles rather than
+  // snapping between poll samples.
+  const target = (state === "speaking") ? level : 0;
+  const cur = parseFloat(stage.style.getPropertyValue("--lvl") || "0");
+  const eased = cur + (target - cur) * Math.min(1, dt * (target > cur ? 9 : 3.5));
+  stage.style.setProperty("--lvl", eased.toFixed(4));
+  const s = 1 + eased * 0.22;
+  $("core").style.transform  = "scale(" + s.toFixed(3) + ")";
+  $("spark").style.transform = "scale(" + (1 + eased*0.5).toFixed(3) + ")";
+  $("halo").style.opacity    = (0.35 + eased*0.5).toFixed(3);
 
-  energy   = ease(energy, target, dt, target > energy ? TAU_UP : TAU_DOWN);
-  alertMix = ease(alertMix, cfg.alert, dt, cfg.alert > alertMix ? TAU_UP : TAU_DOWN);
-
-  const k = 1 - Math.exp(-dt * STYLE_LERP);
-  for (const key in cfg) style[key] = lerp(style[key], cfg[key], k);
-
-  const motion = clamp(style.motionBase + style.motionSpan * energy, 0, 1);
-  const erratic = 1 + alertMix * (noise1(t * 9) - 0.5) * 1.6;
-
-  ang.ring  += dt * (0.10 + 1.30 * motion) * erratic;
-  ang.inner -= dt * (0.14 + 0.90 * motion);
-  ang.sweep += dt * (0.35 + 3.20 * motion) * erratic;
-  ang.coil  += dt * (0.06 + 0.55 * motion);
-
-  interpStats(now);
-  paintStats();
-  drawFrame(t, boot);
-
-  // FPS (F key)
-  frameTimes.push(dt);
-  if (frameTimes.length > 120) frameTimes.shift();
-  if (fpsBox.classList.contains("on") && frameTimes.length > 8){
-    const avg = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
-    const worst = Math.max.apply(null, frameTimes);
-    fpsBox.textContent =
-      `${(1/avg).toFixed(1)} fps avg · ${(1/worst).toFixed(1)} min · ${busState}`;
+  frames.push(dt); if (frames.length > 120) frames.shift();
+  if ($("fps").classList.contains("on") && frames.length > 8){
+    const avg = frames.reduce(function(a,b){return a+b;},0)/frames.length;
+    $("fps").textContent = (1/avg).toFixed(1) + " fps · " + state;
   }
-
   requestAnimationFrame(tick);
 }
 
-// =====================================================================
-// STATS READOUT
-// =====================================================================
-
-// Function declarations, not const arrows: shot mode calls paintStats()
-// from higher up the file, and a `const` helper would still be in its
-// temporal dead zone at that point — which throws and takes the whole
-// script down with it.
-function $(id){ return document.getElementById(id); }
-function pct(v){ return (v == null || isNaN(v)) ? "--" : Math.round(v) + "%"; }
-function gb(v){ return (v == null || isNaN(v)) ? "--" : v.toFixed(1); }
-function mb(v){ return (v == null || isNaN(v)) ? "--" : Math.round(v).toLocaleString(); }
-
-function tempWord(c){
-  if (c == null || isNaN(c)) return "unknown";
-  if (c < 35) return "cold";
-  if (c < 45) return "cool";
-  if (c < 55) return "cruising";
-  if (c < 65) return "warm";
-  if (c < 72) return "toasty";
-  if (c < 80) return "hot";
-  return "boiling";
-}
-function loadFlavor(u){
-  if (u == null || isNaN(u)) return "no telemetry";
-  if (u < 5)  return "idle & quiet";
-  if (u < 25) return "light duty";
-  if (u < 55) return "steady output";
-  if (u < 80) return "working";
-  return "under load";
-}
-function fmtUptime(s){
-  if (s == null || isNaN(s)) return "--";
-  s = Math.floor(s);
-  const d = Math.floor(s / 86400); s %= 86400;
-  const h = Math.floor(s / 3600);  s %= 3600;
-  const m = Math.floor(s / 60);    const ss = s % 60;
-  const p = n => String(n).padStart(2, "0");
-  return (d ? d + "d " : "") + `${p(h)}:${p(m)}:${p(ss)}`;
-}
-
-function paintStats(){
-  $("cpu").textContent = pct(live.cpu);
-  $("ram").textContent = pct(live.ramPct);
-  $("gpu").textContent = pct(live.gpu);
-  $("ramDetail").textContent = `${gb(live.ramUsed)} / ${gb(live.ramTotal)} GB`;
-  $("uptime").textContent    = fmtUptime(live.uptime);
-  $("vram").textContent      = `${mb(live.vramUsed)} / ${mb(live.vramTotal)} MB`;
-  $("temp").textContent      = (live.temp == null || isNaN(live.temp))
-                                 ? "--" : Math.round(live.temp) + "°C";
-  $("flavor").textContent    = `${tempWord(live.temp)} · ${loadFlavor(live.gpu)}`;
-}
-
-// =====================================================================
-// INPUT
-// =====================================================================
-
-const fpsBox = $("fps");
-const cmd    = $("cmd");
-const echo   = $("echo");
+// ---------- input ----------
+const cmd = $("cmd"), echo = $("echo");
 let echoTimer = null;
-
-document.addEventListener("keydown", e => {
-  // Any key skips the boot intro.
-  if (bootStart !== null && performance.now() - bootStart < BOOT_MS){
-    bootStart = performance.now() - BOOT_MS;
-  }
-  if (e.target === cmd){
-    if (e.key === "Escape") cmd.blur();
-    return;                       // never treat typing as a hotkey
-  }
-  if (e.key === "f" || e.key === "F") fpsBox.classList.toggle("on");
+document.addEventListener("keydown", function(e){
+  if (e.target === cmd){ if (e.key === "Escape") cmd.blur(); return; }
+  if (e.key === "f" || e.key === "F") $("fps").classList.toggle("on");
 });
-
-cmd.addEventListener("keydown", e => {
+cmd.addEventListener("keydown", function(e){
   if (e.key !== "Enter") return;
   const text = cmd.value.trim();
   if (!text) return;
   cmd.value = "";
-  // TODO(wiring): this is where the box will hand `text` off — left
-  // deliberately local for now, pending that discussion.
+  // TODO(wiring): hand `text` off once we've settled what it should do.
   echo.textContent = "› " + text;
   echo.classList.add("on");
   clearTimeout(echoTimer);
-  echoTimer = setTimeout(() => echo.classList.remove("on"), 2600);
+  echoTimer = setTimeout(function(){ echo.classList.remove("on"); }, 2600);
 });
 
-// =====================================================================
-// GO
-// =====================================================================
-
-if (!SHOT_ON){
-  paintStats();
-  poll();
-  requestAnimationFrame(tick);
-}
+applyState("idle");
+poll();
+requestAnimationFrame(tick);
 </script>
 </body>
 </html>

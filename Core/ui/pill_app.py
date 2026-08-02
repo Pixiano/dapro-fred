@@ -81,7 +81,7 @@ class PillApp:
         # bus can't be written the publisher disables itself and FRED
         # behaves exactly as before.
         from utils.voice_line import VoiceLineBus
-        self.voice_line = VoiceLineBus()
+        self.voice_line = VoiceLineBus(systems=self._subsystem_status)
         self._mirror_window_to_bus()
 
         # Show in the pill what FRED is doing when a tool fires, so an
@@ -138,6 +138,24 @@ class PillApp:
         )
 
         self.tray = None
+
+    def _subsystem_status(self):
+        """
+        Which of FRED's models are currently resident, for the HUD's
+        systems panel. Read through getattr because the bus is
+        constructed before ModelLifecycle is — its heartbeat can fire
+        during the rest of __init__, and a half-built app should report
+        "not loaded" rather than raise.
+        """
+        lifecycle = getattr(self, "lifecycle", None)
+        if lifecycle is None:
+            return {"llm": False, "whisper": False, "kokoro": False}
+        loaded = lambda m: bool(m is not None and m.is_loaded())
+        return {
+            "llm": loaded(lifecycle.llm),
+            "whisper": loaded(lifecycle.stt),
+            "kokoro": loaded(lifecycle.tts),
+        }
 
     def _mirror_window_to_bus(self):
         """

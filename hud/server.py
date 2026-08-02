@@ -129,25 +129,144 @@ def read_bus():
 # TELEMETRY
 # =========================================================
 
+_GPU_FIELDS = ("utilization.gpu", "memory.used", "memory.total",
+               "temperature.gpu", "power.draw", "power.limit")
+
+
 def read_gpu():
     """GPU numbers via nvidia-smi, or None if unavailable."""
     try:
         out = subprocess.run(
-            ["nvidia-smi",
-             "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
+            ["nvidia-smi", "--query-gpu=" + ",".join(_GPU_FIELDS),
              "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=4, creationflags=_NO_WINDOW,
         )
         if out.returncode != 0 or not out.stdout.strip():
             return None
         parts = [p.strip() for p in out.stdout.strip().splitlines()[0].split(",")]
+
+        def num(i):
+            # Fields a given card/driver doesn't support come back as
+            # "[N/A]" rather than being omitted, so parse per-field.
+            try:
+                return float(parts[i])
+            except (ValueError, IndexError):
+                return None
+
         return {
-            "gpu_pct": float(parts[0]),
-            "vram_used_mb": float(parts[1]),
-            "vram_total_mb": float(parts[2]),
-            "gpu_temp_c": float(parts[3]),
+            "gpu_pct": num(0), "vram_used_mb": num(1), "vram_total_mb": num(2),
+            "gpu_temp_c": num(3), "power_w": num(4), "power_limit_w": num(5),
         }
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+
+
+def read_subsystems():
+    """Which FRED models are resident, as published on the bus."""
+    try:
+        raw = (BUS_DIR / "systems").read_text(encoding="utf-8")
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+SESSIONS_DIR = HERE.parent / "Core" / "data" / "logs" / "sessions"
+TURN_WINDOW_SECONDS = 300      # radar scope depth
+LOG_TAIL_BYTES = 64_000        # plenty for a day's tail; avoids re-reading a big file
+
+
+def _session_events():
+    """Today's session log, newest last. Only the tail is read."""
+    path = SESSIONS_DIR / f"session_{time.strftime('%Y-%m-%d')}.jsonl"
+    try:
+        size = path.stat().st_size
+        with path.open("r", encoding="utf-8", errors="replace") as f:
+            if size > LOG_TAIL_BYTES:
+                f.seek(size - LOG_TAIL_BYTES)
+                f.readline()          # discard the partial line seek landed in
+            lines = f.readlines()
+    except OSError:
+        return []
+    events = []
+    for line in lines:
+        try:
+            events.append(json.loads(line))
+        except ValueError:
+            pass
+    return events
+
+
+def _ts(event):
+    try:
+        return time.mktime(time.strptime(event["ts"][:19], "%Y-%m-%dT%H:%M:%S"))
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def read_turns(events):
+    """
+    Recent turns as {ago, duration}, for the radar scope.
+
+    A turn is a user_speech paired with the next real reply. Filler is
+    skipped deliberately — it is spoken before the model has produced
+    anything, so pairing against it would report every turn as instant.
+    """
+    now = time.time()
+    turns = []
+    pending = None
+    for event in events:
+        kind = event.get("type")
+        when = _ts(event)
+        if when is None:
+            continue
+        if kind == "user_speech":
+            pending = when
+        elif kind == "fred_speech" and pending is not None and not event.get("filler"):
+            if now - when <= TURN_WINDOW_SECONDS:
+                turns.append({"ago": round(now - when, 1),
+                              "duration": round(max(0.0, when - pending), 2)})
+            pending = None
+    return turns[-12:]
+
+
+# Only events worth a line on a HUD — the log also carries bulky things
+# (full transcripts, health checks) that would just be noise here.
+_DIAG = {
+    "tool_call":        lambda e: f"tool {e.get('tool', '?')}",
+    "tool_event":       lambda e: str(e.get("label", "")).lower(),
+    "ambiguous_choice": lambda e: f"ambiguous: {e.get('top')} / {e.get('alt')}",
+    "error":            lambda e: f"error: {str(e.get('message', ''))[:48]}",
+    "system":           lambda e: str(e.get("note", "")),
+}
+
+
+def read_diagnostics(events, limit=6):
+    lines = []
+    for event in events:
+        fmt = _DIAG.get(event.get("type"))
+        if not fmt:
+            continue
+        try:
+            text = fmt(event)
+        except Exception:
+            continue
+        if text:
+            lines.append(text[:56])
+    return lines[-limit:]
+
+
+def _disk_pct():
+    try:
+        return psutil.disk_usage(str(HERE.anchor or "/")).percent
+    except OSError:
+        return None
+
+
+def _swap_pct():
+    try:
+        return psutil.swap_memory().percent
+    except (OSError, RuntimeError):
         return None
 
 
@@ -166,7 +285,9 @@ class Telemetry:
     def _blank():
         return {"cpu": None, "ram_pct": None, "ram_used_gb": None,
                 "ram_total_gb": None, "gpu_pct": None, "vram_used_mb": None,
-                "vram_total_mb": None, "gpu_temp_c": None, "uptime_s": None}
+                "vram_total_mb": None, "gpu_temp_c": None, "uptime_s": None,
+                "disk_pct": None, "swap_pct": None,
+                "power_w": None, "power_limit_w": None}
 
     def start(self):
         self._thread.start()
@@ -181,6 +302,8 @@ class Telemetry:
                 "gpu_pct": wob(5.0, 3, 97), "vram_used_mb": wob(9.0, 1200, 12800),
                 "vram_total_mb": 16311.0, "gpu_temp_c": wob(13.0, 38, 79),
                 "uptime_s": 93600 + t,
+                "disk_pct": wob(29.0, 61, 68), "swap_pct": wob(19.0, 4, 31),
+                "power_w": wob(6.0, 14, 168), "power_limit_w": 180.0,
             }
 
         vm = psutil.virtual_memory()
@@ -190,10 +313,14 @@ class Telemetry:
             "ram_used_gb": (vm.total - vm.available) / (1024 ** 3),
             "ram_total_gb": vm.total / (1024 ** 3),
             "uptime_s": time.time() - psutil.boot_time(),
+            "disk_pct": _disk_pct(),
+            "swap_pct": _swap_pct(),
         }
         gpu = read_gpu()
-        snap.update(gpu if gpu else {"gpu_pct": None, "vram_used_mb": None,
-                                     "vram_total_mb": None, "gpu_temp_c": None})
+        snap.update(gpu if gpu else {
+            "gpu_pct": None, "vram_used_mb": None, "vram_total_mb": None,
+            "gpu_temp_c": None, "power_w": None, "power_limit_w": None,
+        })
         return snap
 
     def _loop(self):
@@ -220,6 +347,14 @@ class Telemetry:
 MOCK_SCRIPT = [("idle", 4), ("listening", 3), ("thinking", 4),
                ("speaking", 6), ("alert", 3)]
 MOCK_CYCLE = sum(d for _s, d in MOCK_SCRIPT)
+
+
+def mock_turns(t0):
+    """A fixed spread of turns so the radar has blips at every radius."""
+    elapsed = time.time() - t0
+    return [{"ago": (elapsed * 3 + i * 47) % TURN_WINDOW_SECONDS,
+             "duration": 1.5 + (i * 2.3) % 9}
+            for i in range(5)]
 
 
 def mock_bus(t0):
@@ -277,9 +412,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/state":
             if self.mock:
                 state, level = mock_bus(self.mock_t0)
+                payload = self.telemetry.snapshot()
+                payload["subsystems"] = {"llm": True, "whisper": True, "kokoro": True}
+                payload["turns"] = mock_turns(self.mock_t0)
+                payload["diagnostics"] = [
+                    "telemetry uplink established", "diagnostics pass 04 complete",
+                    "harmonic drift corrected", "shield lattice re-knit",
+                    "tool get_current_time", "gyro re-trim +0.05 deg",
+                ]
             else:
                 state, level = read_bus()
-            payload = self.telemetry.snapshot()
+                payload = self.telemetry.snapshot()
+                payload["subsystems"] = read_subsystems()
+                events = _session_events()
+                payload["turns"] = read_turns(events)
+                payload["diagnostics"] = read_diagnostics(events)
             payload["state"] = state
             payload["level"] = round(level, 4)
             payload["ts"] = round(time.time(), 3)

@@ -34,6 +34,7 @@
 #   than the HUD's ~1.2s poll. Writes are rate-limited to something that
 #   still lands comfortably inside the 0.4s freshness window.
 
+import json
 import threading
 import time
 from pathlib import Path
@@ -61,7 +62,15 @@ class VoiceLineBus:
     when nothing is reading.
     """
 
-    def __init__(self, bus_dir=None):
+    def __init__(self, bus_dir=None, systems=None):
+        """
+        `systems` is an optional callable returning a dict of subsystem
+        name -> bool/loaded state. It exists because the HUD runs in its
+        own process and has no way to see whether Whisper or Kokoro are
+        currently resident; only FRED knows that. Published on the same
+        heartbeat as the state file rather than on change, since model
+        loads happen off in ModelLifecycle with nothing to hook.
+        """
         self.dir = Path(bus_dir) if bus_dir else BUS_DIR
         self._lock = threading.Lock()
         self._state = "idle"
@@ -69,10 +78,12 @@ class VoiceLineBus:
         self._alert_until = 0.0
         self._running = False
         self._thread = None
+        self._systems = systems
 
         self.enabled = self._ensure_dir()
         if self.enabled:
             self._write("state", "idle")
+            self._publish_systems()
             self._start_heartbeat()
 
     # =========================================================
@@ -190,3 +201,15 @@ class VoiceLineBus:
             # everything was fine again.
             if state != "idle" or releasing:
                 self._write("state", state)
+            self._publish_systems()
+
+    def _publish_systems(self):
+        """Never let a bad provider kill the heartbeat — the state file
+        matters more than the systems panel."""
+        if self._systems is None:
+            return
+        try:
+            payload = json.dumps(self._systems())
+        except Exception:
+            return
+        self._write("systems", payload)
