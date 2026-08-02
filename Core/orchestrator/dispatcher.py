@@ -24,6 +24,19 @@ class Dispatcher:
         # Order matters — more specific patterns first.
         self._rules = [
             (
+                # "Say that again" needs no model call at all — it's a
+                # pure state lookup (the last thing FRED said), and
+                # routing it here means it works even mid-outage on the
+                # LLM side, same as get_current_time.
+                re.compile(
+                    r"^(?:say (?:that|it) again|repeat that|repeat yourself|"
+                    r"what did you say|come again|say again|"
+                    r"can you repeat that)\??$",
+                    re.IGNORECASE,
+                ),
+                self._route_repeat_last,
+            ),
+            (
                 # "open it" / "open that one" / "open the second one" —
                 # a follow-up to a search whose spoken result carried no
                 # filename to repeat back. Must sit above the generic
@@ -332,6 +345,11 @@ class Dispatcher:
             "tool": "launch_application",
             "arguments": {"app_name": match.group("target").strip()},
         }
+
+    @staticmethod
+    def _route_repeat_last(match: re.Match) -> dict:
+
+        return {"tool": "repeat_last", "arguments": {}}
 
     @staticmethod
     def _route_get_time(match: re.Match) -> dict:

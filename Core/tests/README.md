@@ -26,6 +26,11 @@ another: if you can't point at the failure, it doesn't belong here.
 | `test_speech_safety.py` | URLs and unbounded clipboard contents being read aloud |
 | `test_tool_robustness.py` | STT punctuation (`"Spotify."`) and invented path arguments killing turns |
 | `test_vault_tables.py` | A table's Target column being reported as the Current value |
+| `test_memory_manager.py` | FAISS index / memory-file desync with no rebuild path, and cosine similarity on unnormalized vectors |
+| `test_kill_confirmation.py` | "Kill code" matching every process with "code" in its name, with no preview of what that includes before confirming |
+| `test_move_rename_collision.py` | Moving/renaming onto an existing file crashing with a raw `WinError` instead of a clear answer |
+| `test_event_log_retention.py` | Session logs (one file per launch) accumulating forever with no cleanup |
+| `test_repeat_last.py` | "Say that again" having no route at all |
 
 ## Which Python
 

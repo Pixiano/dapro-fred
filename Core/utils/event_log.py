@@ -17,6 +17,7 @@
 
 import json
 import threading
+import time
 from datetime import datetime
 
 from config.settings import LOG_DIR
@@ -25,6 +26,32 @@ SESSION_DIR = LOG_DIR / "sessions"
 
 _lock = threading.Lock()
 _path = None
+
+# A new file every launch, never cleaned up, was already at 45 files in
+# a handful of days by 2026-08-02 — this is meant to "run all day" (see
+# config/settings.py's idle-unload comments), so left alone it accumulates
+# without bound for as long as the machine is used. 30 days is generous
+# for "read back what happened recently" while keeping the total finite.
+_RETENTION_DAYS = 30
+
+
+def _prune_old_sessions():
+    """
+    Delete session logs older than _RETENTION_DAYS. Best-effort and
+    silent: a cleanup failure must never block starting a new session,
+    the same fail-open rule every write in this module already follows.
+    """
+    if not SESSION_DIR.exists():
+        return
+
+    cutoff = time.time() - (_RETENTION_DAYS * 86400)
+
+    for old_file in SESSION_DIR.glob("session_*.jsonl"):
+        try:
+            if old_file.stat().st_mtime < cutoff:
+                old_file.unlink()
+        except OSError:
+            continue
 
 
 def start_session():
@@ -40,6 +67,7 @@ def start_session():
     """
     global _path
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    _prune_old_sessions()
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     _path = SESSION_DIR / f"session_{stamp}.jsonl"
     log("system", note="session start")

@@ -340,14 +340,19 @@ def list_processes(filter_name: str = "") -> str:
     return "\n".join(rows[:50])
 
 
-def kill_process(name_or_pid: str) -> str:
+def matching_processes(name_or_pid: str) -> list:
     """
-    Kill a process by name or PID. Destructive — unsaved work in
-    that process is lost.
+    Every running process kill_process would act on, without killing
+    anything. Split out from kill_process so the orchestrator's
+    confirmation prompt can show the actual targets before the user
+    says yes — the substring match below matches "code" against
+    Code.exe, every one of its helper processes, and anything else with
+    "code" anywhere in its name, and a confirmation that only echoes the
+    raw argument back ("about to run kill_process (name_or_pid=code)")
+    gives no way to notice that before it happens.
     """
-
     target = str(name_or_pid).strip()
-    killed = []
+    matches = []
 
     for proc in psutil.process_iter(["pid", "name"]):
         info = proc.info
@@ -355,11 +360,30 @@ def kill_process(name_or_pid: str) -> str:
         pid = info.get("pid")
 
         if target.isdigit() and int(target) == pid:
-            proc.kill()
+            matches.append((name, pid))
+        elif target and target.lower() in name.lower():
+            matches.append((name, pid))
+
+    return matches
+
+
+def kill_process(name_or_pid: str) -> str:
+    """
+    Kill a process by name or PID. Destructive — unsaved work in
+    that process is lost. See matching_processes for what "matches"
+    means; the orchestrator shows that same list before this ever runs.
+    """
+
+    target = str(name_or_pid).strip()
+    matches = matching_processes(target)
+    killed = []
+
+    for name, pid in matches:
+        try:
+            psutil.Process(pid).kill()
             killed.append(f"{name} (PID {pid})")
-        elif target.lower() in name.lower():
-            proc.kill()
-            killed.append(f"{name} (PID {pid})")
+        except psutil.NoSuchProcess:
+            continue  # already gone between the preview and this call
 
     if not killed:
         return f"No process found matching '{target}'."
@@ -484,8 +508,20 @@ def move_file(source: str, destination: str) -> str:
         return f"Source not found: {src}"
 
     dest = Path(destination)
-    dest.parent.mkdir(parents=True, exist_ok=True)
 
+    # Path.rename() on Windows raises FileExistsError rather than
+    # overwriting — confirmed directly, unlike POSIX rename() which
+    # overwrites unconditionally. So this was never a silent-overwrite
+    # risk on this OS, but it WAS an unhandled crash: a destination
+    # collision surfaced as a raw "[WinError 183] Cannot create a file
+    # when that file already exists: '...'" instead of a clear answer.
+    # Checked explicitly so the behavior doesn't depend on which OS
+    # this happens to run on, and so it's a sentence instead of a
+    # stack trace either way.
+    if dest.exists():
+        return f"{dest.name} already exists there — not overwriting it."
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
     src.rename(dest)
 
     # "to" rather than "->" — spoken output, and a literal arrow either
@@ -504,6 +540,10 @@ def rename_file(path: str, new_name: str) -> str:
         return f"Path not found: {src}"
 
     dest = src.parent / new_name
+
+    if dest.exists():
+        return f"{dest.name} already exists — not overwriting it."
+
     src.rename(dest)
 
     return f"Renamed {src.name} to {dest.name}"

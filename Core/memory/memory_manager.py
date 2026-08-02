@@ -84,14 +84,16 @@ class MemoryManager:
         )
 
         # -----------------------------
+        # Cached memories — loaded BEFORE the index now, since a load
+        # failure's rebuild path (_load_or_create_index) needs
+        # self.memories to already exist.
+        # -----------------------------
+        self.memories = self._load_memories()
+
+        # -----------------------------
         # Load/create FAISS index
         # -----------------------------
         self.index = self._load_or_create_index()
-
-        # -----------------------------
-        # Cached memories
-        # -----------------------------
-        self.memories = self._load_memories()
 
     # =========================================================
     # PUBLIC METHODS
@@ -105,7 +107,7 @@ class MemoryManager:
         if not content.strip():
             return
 
-        embedding = self._generate_embedding(content)
+        embedding = self._normalize(self._generate_embedding(content))
 
         entry = {
             "role": role,
@@ -142,7 +144,13 @@ class MemoryManager:
         if not self.memories:
             return []
 
-        query_embedding = self._generate_embedding(query)
+        # self.index and self.memories can only be trusted together if
+        # they hold the same number of entries — see _load_or_create_index
+        # for the confirmed way they used to drift apart silently.
+        if self.index.ntotal != len(self.memories):
+            self._rebuild_index()
+
+        query_embedding = self._normalize(self._generate_embedding(query))
 
         query_vector = np.array(
             [query_embedding],
@@ -175,6 +183,66 @@ class MemoryManager:
 
         return result["data"][0]["embedding"]
 
+    @staticmethod
+    def _normalize(vector) -> list:
+        """
+        Unit-length the embedding before it goes anywhere near FAISS.
+
+        Confirmed bug (one of four listed as open in the vault's
+        active-priorities.md since 2026-07-29): the index was
+        IndexFlatL2 on raw, unnormalized vectors, so "distance" was
+        Euclidean distance, not cosine similarity — meaningfully
+        different rankings for embeddings whose magnitude varies with
+        text length, which most embedding models' do. Normalizing here
+        and switching the index to IndexFlatIP (below) makes inner
+        product BE cosine similarity, which is what "semantically
+        relevant" is actually supposed to mean.
+        """
+        arr = np.asarray(vector, dtype=np.float32)
+        norm = np.linalg.norm(arr)
+        if norm < 1e-8:
+            return arr.tolist()
+        return (arr / norm).tolist()
+
+    def _rebuild_index(self):
+        """
+        Re-embed every stored memory and rebuild the FAISS index from
+        scratch.
+
+        Confirmed bug (the second of the four listed in
+        active-priorities.md): _load_or_create_index caught ANY
+        exception from a bad/mismatched index file and silently
+        substituted an empty one, while self.memories still loaded
+        every entry from the JSONL. The next store() call then added a
+        vector at position 0 of the new empty index while memories
+        already had N entries — so index position 0 pointed at
+        memories[N], not memories[0], and every retrieval after that
+        returned entries next to the ones actually meant. There was no
+        rebuild path, so the desync was permanent until the process
+        was manually deleted.
+
+        This is the rebuild path. Called automatically the moment
+        retrieve_relevant notices the counts disagree, and directly by
+        _load_or_create_index on a load failure, so an empty-but-wrong
+        index is never left in place silently again.
+        """
+        if not self.memories:
+            self.index = faiss.IndexFlatIP(self.embedding_dim)
+            return
+
+        vectors = [
+            self._normalize(self._generate_embedding(m["content"]))
+            for m in self.memories
+        ]
+        index = faiss.IndexFlatIP(self.embedding_dim)
+        index.add(np.array(vectors, dtype=np.float32))
+        self.index = index
+
+        try:
+            faiss.write_index(self.index, str(self.index_file))
+        except OSError as e:
+            print(f"[MemoryManager] rebuilt index but couldn't persist it: {e}")
+
     def _load_memories(self) -> list:
         """
         Load memory entries from disk.
@@ -201,27 +269,41 @@ class MemoryManager:
 
     def _load_or_create_index(self):
         """
-        Load existing FAISS index or create new one.
+        Load an existing FAISS index, or build one from the memories
+        already loaded into self.memories.
+
+        A load failure or count mismatch used to fall through to a
+        silently empty IndexFlatL2 — see _rebuild_index's docstring for
+        the desync that produced. It now re-embeds and rebuilds instead,
+        so the index and self.memories can never disagree on count
+        after this returns.
+
+        IndexFlatIP (inner product), not IndexFlatL2 (Euclidean
+        distance) — see _normalize for why raw L2 distance on
+        unnormalized vectors wasn't actually measuring similarity.
         """
 
         if self.index_file.exists():
-
             try:
-                index = faiss.read_index(
-                    str(self.index_file)
-                )
+                index = faiss.read_index(str(self.index_file))
 
-                # Dimension safety check
                 if index.d != self.embedding_dim:
+                    raise ValueError("Embedding dimension mismatch.")
+                if index.ntotal != len(self.memories):
                     raise ValueError(
-                        "Embedding dimension mismatch."
+                        f"Index has {index.ntotal} vectors but "
+                        f"{len(self.memories)} memories are on disk."
                     )
 
                 return index
 
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[MemoryManager] index unusable ({e}) — rebuilding from memories")
+                self._rebuild_index()
+                return self.index
 
-        return faiss.IndexFlatL2(
-            self.embedding_dim
-        )
+        if self.memories:
+            self._rebuild_index()
+            return self.index
+
+        return faiss.IndexFlatIP(self.embedding_dim)

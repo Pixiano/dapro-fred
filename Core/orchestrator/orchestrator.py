@@ -337,6 +337,25 @@ class FREDOrchestrator:
 
         self.pending_action = {"tool": tool_name, "arguments": arguments}
 
+        # kill_process substring-matches by design ("code" matches every
+        # process with "code" anywhere in its name), and a confirmation
+        # that only echoes the raw argument back — "about to run
+        # kill_process (name_or_pid=code)" — gives no way to notice
+        # that before it happens. Naming the actual targets turns "yes"
+        # into an informed answer instead of a guess.
+        if tool_name == "kill_process":
+            target = arguments.get("name_or_pid", "")
+            matches = machine_tools.matching_processes(target)
+            if not matches:
+                self.pending_action = None
+                return f"Nothing matches '{target}' — nothing to kill."
+            names = ", ".join(f"{n} (PID {p})" for n, p in matches)
+            plural = "es" if len(matches) > 1 else ""
+            return (
+                f"This can't be undone — would kill {len(matches)} process{plural}: "
+                f"{names}. Confirm? (yes/no)"
+            )
+
         description = ", ".join(f"{k}={v}" for k, v in arguments.items())
 
         return (
@@ -1051,6 +1070,13 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="repeat_last",
+            function=self._repeat_last,
+            description="Repeat FRED's last spoken reply — for 'say that again', 'what did you say'.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
             name="summarise_today",
             function=self._summarise_today,
             description=(
@@ -1460,6 +1486,19 @@ class FREDOrchestrator:
             self.on_tool_event(TOOL_LABELS.get(name, name.replace("_", " ")))
         except Exception as e:
             print(f"[orchestrator] tool-event hook failed: {e}")
+
+    def _repeat_last(self) -> str:
+        """
+        "Say that again" — a pure state lookup, no model call, so it
+        still works even if the LLM path is having trouble. Searches
+        backwards past the just-added user turn for the most recent
+        real assistant message; canned/filler text was never added to
+        state in the first place, so nothing further needs excluding.
+        """
+        for msg in reversed(self.state.get_all_messages()):
+            if msg["role"] == "assistant" and msg["content"].strip():
+                return msg["content"]
+        return "I haven't said anything yet, sir."
 
     def _summarise_today(self) -> str:
         """Bound so the summariser can use the loaded model for real
