@@ -159,21 +159,26 @@ class LLMClient:
         Falls back to yielding one complete string if streaming fails, so
         a caller never has to handle both shapes.
 
-        CANCELLATION (confirmed 2026-08-02, don't re-derive this): the
-        caller does NOT need to pass a cancel flag into this generator.
+        CANCELLATION (confirmed 2026-08-02, don't re-derive this): this
+        generator itself takes no cancel flag, and needs none — but
+        cancellation still requires the CALLER to hold one and check it.
         create_chat_completion(stream=True) is itself a Python generator
         wrapping llama.cpp's token loop — the next token is only decoded
-        when something calls next() on it. pill_app.py's producer thread
-        already does the right thing by simply `return`ing out of its
-        `for piece in ...` loop the instant _cancel is set, abandoning
-        this generator without exhausting it. Measured directly: GPU
-        utilization was 74% mid-generation, then 1% within 0.2-0.4s of
-        the consuming loop abandoning the generator — Python's refcount-
-        based cleanup closes the whole generator chain (this ->
-        create_chat_completion's stream -> llama.cpp's token loop)
-        almost immediately, no extra plumbing needed. A cancel Event
-        threaded explicitly into this loop would be redundant with what
-        abandonment already does.
+        when something calls next() on it, so whoever is iterating this
+        must stop calling next() to stop generation. pill_app.py does
+        that with the `_cancel` Event it already keeps for other reasons
+        (stopping the TTS queue): its producer thread's `for piece in
+        ...` loop checks `_cancel.is_set()` each iteration and `return`s
+        the instant it's set, abandoning this generator without
+        exhausting it. Measured directly: GPU utilization was 74%
+        mid-generation, then 1% within 0.2-0.4s of that return executing
+        — Python's refcount-based cleanup closes the whole generator
+        chain (this -> create_chat_completion's stream -> llama.cpp's
+        token loop) almost immediately. No cancel plumbing needs to be
+        threaded INTO this generator or into llama.cpp — the existing
+        consumer-side flag plus ordinary generator abandonment is
+        sufficient — but that consumer-side flag is doing real work and
+        is not optional.
 
         This does NOT extend to generate_with_tools() below — that path
         is non-streaming (a single blocking create_chat_completion call)

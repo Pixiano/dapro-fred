@@ -26,6 +26,25 @@ def test_real_clipboard_requests_still_match():
         assert "clipboard" in intent.match_categories(phrase), phrase
 
 
+def test_compound_time_and_goals_is_flagged():
+    """
+    Real transcript: session_2026-08-02.jsonl, 16:31:14. "What is the
+    time and what are the goals for today?" called only get_current_time
+    (goals aren't a tool — they're answered from vault context by the
+    orchestrator's follow-up LLM call) and, because get_current_time is
+    in SELF_NARRATING_TOOLS, that follow-up call was skipped entirely.
+    FRED spoke only the time and never addressed the goals half. This
+    flag is what orchestrator._generate_with_tools now checks before
+    taking that shortcut.
+    """
+    assert intent.looks_compound("What is the time and what are the goals for today?")
+
+
+def test_single_self_narrating_ask_is_not_flagged():
+    for phrase in ("What is the time?", "set the volume to 50 and open chrome"):
+        assert not intent.looks_compound(phrase), phrase
+
+
 def test_on_track_is_not_a_volume_request():
     """The original cue collision: bare "track" vs. the idiom."""
     assert "audio" not in intent.match_categories("Am I on track with my bulk?")

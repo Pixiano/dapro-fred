@@ -264,6 +264,30 @@ def looks_social(text: str) -> bool:
     return bool(_SOCIAL.match(stripped))
 
 
+# Signals a turn is asking for more than one thing, e.g. "what's the
+# time and what are my goals for today". This matters for the
+# SELF_NARRATING_TOOLS shortcut in orchestrator.py: that shortcut skips
+# the follow-up LLM call and returns a tool's raw result directly, which
+# is correct when the tool result IS the whole answer ("what time is
+# it") but silently drops the rest of the turn when it's paired with
+# something else — confirmed live 2026-08-02: "What is the time and
+# what are the goals for today?" called only get_current_time (goals
+# aren't a tool at all, they're answered from vault context by the
+# follow-up LLM call) and FRED spoke only the time, never touching the
+# goals half. A second question word after a conjunction is the cheap,
+# reliable tell; it doesn't need to be exhaustive, only to catch the
+# common "X and Y" phrasing this shortcut is unsafe for.
+_QUESTION_WORD = r"(?:what|when|where|who|which|how|why|is there|do i|did i|can you|could you)"
+_COMPOUND_RE = re.compile(
+    r"\b(?:and|also|plus)\b\s+" + _QUESTION_WORD, re.IGNORECASE
+)
+
+
+def looks_compound(text: str) -> bool:
+    """True if the turn appears to ask more than one thing."""
+    return bool(_COMPOUND_RE.search(text or ""))
+
+
 def match_categories(text: str) -> list:
     """Every category whose cues appear, in declaration order."""
     stripped = normalise(text)

@@ -1288,7 +1288,11 @@ class FREDOrchestrator:
         # results for calculations embedded in a bigger question, which
         # need interpreting, not just stating.
         called_names = {c.get("function", {}).get("name") for c in tool_calls}
-        if called_names and called_names <= SELF_NARRATING_TOOLS:
+        if (
+            called_names
+            and called_names <= SELF_NARRATING_TOOLS
+            and not intent.looks_compound(last_user)
+        ):
             return " ".join(tool_results)
 
         # Ask once more, now with tool results in context, for the
