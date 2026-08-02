@@ -29,7 +29,7 @@ another: if you can't point at the failure, it doesn't belong here.
 | `test_memory_manager.py` | FAISS index / memory-file desync with no rebuild path, and cosine similarity on unnormalized vectors |
 | `test_kill_confirmation.py` | "Kill code" matching every process with "code" in its name, with no preview of what that includes before confirming |
 | `test_move_rename_collision.py` | Moving/renaming onto an existing file crashing with a raw `WinError` instead of a clear answer |
-| `test_event_log_retention.py` | Session logs (one file per launch) accumulating forever with no cleanup |
+| `test_event_log_merge.py` | One session file per launch multiplying forever; same-day launches now share a file, and legacy per-launch files merge into per-date files automatically |
 | `test_repeat_last.py` | "Say that again" having no route at all |
 
 ## Which Python

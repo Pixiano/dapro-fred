@@ -16,8 +16,8 @@
 # print to whatever stdout happens to be.
 
 import json
+import re
 import threading
-import time
 from datetime import datetime
 
 from config.settings import LOG_DIR
@@ -27,38 +27,67 @@ SESSION_DIR = LOG_DIR / "sessions"
 _lock = threading.Lock()
 _path = None
 
-# A new file every launch, never cleaned up, was already at 45 files in
-# a handful of days by 2026-08-02 — this is meant to "run all day" (see
-# config/settings.py's idle-unload comments), so left alone it accumulates
-# without bound for as long as the machine is used. 30 days is generous
-# for "read back what happened recently" while keeping the total finite.
-_RETENTION_DAYS = 30
+# One file per DAY, not per launch — every session on the same date
+# appends to the same file instead of starting a new one. Kept
+# deliberately unbounded: no retention, no pruning, grows for as long
+# as FRED is used. That's an explicit choice, not an oversight — a
+# prior version of this module deleted anything older than 30 days,
+# and that was reverted because the logs are meant to be a complete
+# record, not a rolling window.
+_DATE_FMT = "%Y-%m-%d"
+
+# Old naming, one file per launch: session_2026-08-02_11-46-12.jsonl.
+# Matched (not the new session_2026-08-02.jsonl form) so the one-time
+# merge below can tell "still needs merging" from "already merged"
+# without a separate migrated-or-not flag anywhere.
+_LEGACY_PATTERN = re.compile(r"^session_(\d{4}-\d{2}-\d{2})_\d{2}-\d{2}-\d{2}\.jsonl$")
 
 
-def _prune_old_sessions():
+def _merge_legacy_sessions():
     """
-    Delete session logs older than _RETENTION_DAYS. Best-effort and
-    silent: a cleanup failure must never block starting a new session,
-    the same fail-open rule every write in this module already follows.
+    One-time migration from one-file-per-launch to one-file-per-date.
+
+    Every legacy file for a given date is concatenated, in chronological
+    order (filenames sort lexicographically the same way their
+    timestamps do, so a plain sort is enough), into that date's single
+    file, then the legacy files are deleted. Idempotent by construction:
+    once no file matches _LEGACY_PATTERN, the glob below finds nothing
+    and this is a no-op — so it's safe to call on every startup instead
+    of needing a separate one-shot flag to say "already migrated".
     """
     if not SESSION_DIR.exists():
         return
 
-    cutoff = time.time() - (_RETENTION_DAYS * 86400)
+    by_date = {}
+    for path in sorted(SESSION_DIR.glob("session_*.jsonl")):
+        match = _LEGACY_PATTERN.match(path.name)
+        if match:
+            by_date.setdefault(match.group(1), []).append(path)
 
-    for old_file in SESSION_DIR.glob("session_*.jsonl"):
+    for date, legacy_files in by_date.items():
+        merged_path = SESSION_DIR / f"session_{date}.jsonl"
         try:
-            if old_file.stat().st_mtime < cutoff:
-                old_file.unlink()
-        except OSError:
-            continue
+            with open(merged_path, "a", encoding="utf-8") as out:
+                for legacy in legacy_files:
+                    content = legacy.read_text(encoding="utf-8")
+                    if content and not content.endswith("\n"):
+                        content += "\n"  # a missing trailing newline would
+                        # otherwise glue the next file's first line onto
+                        # this file's last one.
+                    out.write(content)
+            for legacy in legacy_files:
+                legacy.unlink()
+        except OSError as e:
+            print(f"[event_log] merge failed for {date}: {e}")
 
 
 def start_session():
     """
     Call once per process, as early as possible (fred_popup.py's main()
-    does this right after the crash-dump handler is installed). Creates
-    a new timestamped file for this run and returns its path.
+    does this right after the crash-dump handler is installed). Points
+    logging at today's file — creating it if this is the first session
+    of the day, appending to it if it already exists from an earlier
+    launch today — and returns its path.
 
     Not required before the first log() call — log() lazily starts a
     session itself, since a missed explicit start (e.g. the CLI path
@@ -67,8 +96,8 @@ def start_session():
     """
     global _path
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    _prune_old_sessions()
-    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    _merge_legacy_sessions()
+    stamp = datetime.now().strftime(_DATE_FMT)
     _path = SESSION_DIR / f"session_{stamp}.jsonl"
     log("system", note="session start")
     return _path
