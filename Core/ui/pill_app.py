@@ -94,6 +94,23 @@ class PillApp:
         self._turn_thread = None
         self._running = True
 
+        # Rapid repeat presses used to genuinely queue: _turn_lock only
+        # ever guaranteed two turns couldn't run AT THE SAME TIME, not
+        # that a backlog of them wouldn't each still run in full, one
+        # after another, long after the user had moved on — because
+        # llama.cpp's generate call has no cooperative cancel point, an
+        # interrupted turn only actually stops at its next checked
+        # boundary, so several presses in quick succession could each
+        # spawn a thread that patiently waits its turn on the lock and
+        # then executes anyway. This counter is how a stale one gets
+        # discarded instead: each press claims the next number, and a
+        # turn checks — only once it's actually about to run, immediately
+        # after acquiring the lock — whether it's still the latest
+        # number issued. If not, something newer superseded it while it
+        # was waiting, and it exits without transcribing, generating, or
+        # speaking a word.
+        self._turn_seq = 0
+
         # Set for the duration of one turn's TTS stream, so _on_tool_event
         # (called from the orchestrator, on the background generation
         # thread) can speak its caption through the SAME stream instead of
@@ -260,18 +277,41 @@ class PillApp:
         self._recording = False
         self.window.set_level(0.0)
         self.window.set_state("thinking")
-        self._turn_thread = threading.Thread(target=self._run_turn, daemon=True)
+
+        # Claim this turn's number BEFORE the thread starts, on this
+        # (the hotkey) thread — see _turn_seq's docstring in __init__.
+        # Claiming it here rather than inside _run_turn closes a race
+        # where two presses land close enough together that both threads
+        # could otherwise read the counter before either increments it.
+        self._turn_seq += 1
+        my_seq = self._turn_seq
+
+        self._turn_thread = threading.Thread(
+            target=self._run_turn, args=(my_seq,), daemon=True
+        )
         self._turn_thread.start()
 
     # =========================================================
     # ONE TURN
     # =========================================================
 
-    def _run_turn(self):
+    def _run_turn(self, my_seq: int):
         # Serialised: a new activation interrupts the old turn (via
-        # _cancel) and then waits here for it to actually finish, so two
-        # turns can never both be driving the pill.
+        # _cancel) and then waits here for its lock turn, so two turns
+        # can never both be driving the pill at once.
         with self._turn_lock:
+            # Checked the instant this turn actually gets to run, not
+            # when it was queued — my_seq being stale here means at
+            # least one newer press happened while this one was waiting
+            # on the lock. That newer press is either running now or
+            # about to be; this one is discarded outright rather than
+            # transcribing, generating, or speaking anything for a
+            # request the user has already moved past. No UI/state
+            # touch either — whatever superseded this already owns the
+            # pill's current state.
+            if my_seq != self._turn_seq:
+                return
+
             self._cancel.clear()
             try:
                 self._turn_body()
