@@ -25,6 +25,7 @@ import time
 
 from audio import phrase_cache
 from audio.fillers import ALL_FILLERS, pick_filler
+from audio.greetings import ALL_GREETINGS, pick_greeting
 from config.settings import TTS_ENABLED, STT_ENABLED
 from orchestrator import canned_replies
 from orchestrator.orchestrator import TOOL_LABELS, FREDOrchestrator
@@ -48,10 +49,17 @@ IDLE_LINGER = 0.7
 # to build "label..." — kept in sync by construction, not by hand.
 ALL_TOOL_CAPTIONS = tuple(f"{label}..." for label in TOOL_LABELS.values())
 
+# How long after boot FRED greets. Long at log-on because it is starting
+# alongside everything else Windows launches; near-immediate on a manual
+# launch, where the greeting is the confirmation it came up at all.
+GREETING_DELAY_STARTUP = 600.0
+GREETING_DELAY_NOW = 6.0
+
 
 class PillApp:
 
-    def __init__(self):
+    def __init__(self, greet_now: bool = False):
+        self.greet_now = greet_now
         self.orchestrator = FREDOrchestrator()
 
         self.stt = None
@@ -83,6 +91,9 @@ class PillApp:
         from utils.voice_line import VoiceLineBus
         self.voice_line = VoiceLineBus(systems=self._subsystem_status)
         self._mirror_window_to_bus()
+
+        from utils.hud_manager import HudManager
+        self.hud = HudManager()
 
         # Show in the pill what FRED is doing when a tool fires, so an
         # action isn't audio-only (Phase 16's "visual confirmation").
@@ -202,12 +213,49 @@ class PillApp:
         self._start_tray()
         self.lifecycle.start()
         self.screen_watcher.start()
+        self.hud.start_server()
+        self._schedule_greeting()
         if self.tts:
             threading.Thread(target=self._warm_phrase_cache, daemon=True).start()
         print(
             "[PillApp] Ready — hold LEFT Ctrl+Alt to talk. "
             "Quit from the tray icon."
         )
+
+    def _schedule_greeting(self):
+        """
+        Speak once, unprompted, shortly after coming up.
+
+        The delay is the whole design here. At log-on FRED is competing
+        with everything else Windows is starting — other startup chimes,
+        a cold Kokoro, a disk still thrashing — so greeting immediately
+        means talking into a mess nobody is listening to yet. Ten minutes
+        in, the machine is settled and the user is actually at it.
+
+        A manual launch is the opposite: you just double-clicked, so the
+        greeting IS the confirmation FRED came up, and waiting ten
+        minutes for it would be absurd. fred_popup passes --greet-now for
+        that case; the default stays the log-on behaviour so the existing
+        Startup shortcut needs no changes to get it.
+        """
+        if not self.tts:
+            return
+        delay = GREETING_DELAY_NOW if self.greet_now else GREETING_DELAY_STARTUP
+
+        def run():
+            time.sleep(delay)
+            if not self._running:
+                return
+            # Skipped rather than queued if the user got in first — a
+            # greeting arriving after a real exchange has begun is worse
+            # than no greeting at all.
+            if self._recording or self._turn_lock.locked():
+                print("[PillApp] greeting skipped — already in conversation")
+                return
+            self._speak_proactive(pick_greeting())
+
+        threading.Thread(target=run, daemon=True).start()
+        print(f"[PillApp] greeting in {delay:.0f}s")
 
     def _warm_phrase_cache(self):
         """
@@ -223,7 +271,9 @@ class PillApp:
         built, holding the model resident buys nothing further for a
         session that only ever speaks cached phrases.
         """
-        hit, miss = phrase_cache.warm(self.tts, ALL_FILLERS + ALL_TOOL_CAPTIONS)
+        hit, miss = phrase_cache.warm(
+            self.tts, ALL_FILLERS + ALL_TOOL_CAPTIONS + ALL_GREETINGS
+        )
         if miss:
             print(f"[PillApp] phrase cache: {hit} already cached, {miss} generated")
         if self.tts.unload():
@@ -244,6 +294,12 @@ class PillApp:
             self.tray = pystray.Icon(
                 "FRED", icon_img, "FRED — hold Left Ctrl+Alt",
                 menu=pystray.Menu(
+                    # Default item, so a plain left-click on the icon
+                    # opens the HUD — the tray is the only way to summon
+                    # it, and burying that behind a right-click menu
+                    # would make the HUD feel hidden rather than on call.
+                    pystray.MenuItem("Show HUD", lambda: self.hud.show(),
+                                     default=True),
                     pystray.MenuItem("Quit FRED", lambda: self.shutdown()),
                 ),
             )
@@ -257,6 +313,7 @@ class PillApp:
         self._cancel.set()
         self.lifecycle.stop()
         self.screen_watcher.stop()
+        self.hud.stop()
         # Leave the bus reading idle. Without this the HUD would sit on
         # FRED's last live state for the full staleness window after a
         # clean quit, which looks like a hang rather than a shutdown.
@@ -708,8 +765,8 @@ class PillApp:
         self._cancel.set()
 
 
-def main():
-    app = PillApp()
+def main(greet_now: bool = False):
+    app = PillApp(greet_now=greet_now)
     try:
         app.run()
     except KeyboardInterrupt:

@@ -105,6 +105,11 @@ def main():
         "--indicator", default=None,
         help="force an indicator style in mock mode (bars | ribbon)",
     )
+    parser.add_argument(
+        "--greet-now", action="store_true",
+        help="greet within seconds instead of the log-on delay; set by the "
+             "desktop launcher, where the greeting confirms FRED started",
+    )
     args = parser.parse_args()
 
     crash_log = _enable_crash_dump()
@@ -131,7 +136,7 @@ def main():
         print(f"[fred_popup] HEALTH FAILURE — {failure}")
 
     from ui.pill_app import main as app_main
-    app_main()
+    app_main(greet_now=args.greet_now)
 
 
 if __name__ == "__main__":
