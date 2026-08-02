@@ -1,0 +1,665 @@
+<title>F.R.E.D. — Capability Reference</title>
+<style>
+  :root {
+    --bg: #eef0f0;
+    --bg-raised: #ffffff;
+    --ink: #16201f;
+    --ink-soft: #47524f;
+    --ink-mute: #6f7975;
+    --line: #cfd6d3;
+    --line-soft: #dfe4e2;
+    --accent: #0f6e5e;
+    --accent-ink: #ffffff;
+    --accent-soft: #d9ede8;
+    --accent-soft-ink: #0a4a3f;
+    --amber: #8a5a12;
+    --amber-soft: #f3e6cf;
+    --red: #93342a;
+    --red-soft: #f5e0dd;
+    --mono: ui-monospace, "Cascadia Code", "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --radius: 10px;
+    --measure: 700px;
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181a;
+    --bg-raised: #1c2224;
+    --ink: #e6ebe9;
+    --ink-soft: #b3bdb9;
+    --ink-mute: #7c8886;
+    --line: #303a3c;
+    --line-soft: #262f31;
+    --accent: #4fc9ac;
+    --accent-ink: #08201b;
+    --accent-soft: #1c3833;
+    --accent-soft-ink: #8fe3cd;
+    --amber: #e4b76a;
+    --amber-soft: #3a2f18;
+    --red: #e58f83;
+    --red-soft: #3a201c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181a;
+      --bg-raised: #1c2224;
+      --ink: #e6ebe9;
+      --ink-soft: #b3bdb9;
+      --ink-mute: #7c8886;
+      --line: #303a3c;
+      --line-soft: #262f31;
+      --accent: #4fc9ac;
+      --accent-ink: #08201b;
+      --accent-soft: #1c3833;
+      --accent-soft-ink: #8fe3cd;
+      --amber: #e4b76a;
+      --amber-soft: #3a2f18;
+      --red: #e58f83;
+      --red-soft: #3a201c;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); color: var(--accent-soft-ink); }
+
+  a { color: var(--accent); }
+  h1, h2, h3, h4 { text-wrap: balance; font-weight: 600; margin: 0; }
+  code, .mono { font-family: var(--mono); }
+  .fig-num { font-variant-numeric: tabular-nums; }
+
+  /* ---- shell ---- */
+  .shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 0; max-width: 1180px; margin: 0 auto; }
+  @media (max-width: 880px) { .shell { grid-template-columns: 1fr; } .toc { display: none; } }
+
+  .toc {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: 2.5rem 1.25rem 2rem 0; border-right: 0.5px solid var(--line);
+  }
+  .toc-brand { font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.06em; color: var(--ink-mute); margin-bottom: 1.5rem; }
+  .toc-brand b { color: var(--ink); font-weight: 600; }
+  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: sec; }
+  .toc li { counter-increment: sec; }
+  .toc a {
+    display: flex; gap: 8px; padding: 6px 8px; margin: 1px 0; border-radius: 6px;
+    text-decoration: none; color: var(--ink-soft); font-size: 13.5px;
+  }
+  .toc a:hover { background: var(--line-soft); color: var(--ink); }
+  .toc a::before {
+    content: counter(sec, decimal-leading-zero); font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink-mute); padding-top: 1px;
+  }
+
+  main { padding: 2.75rem clamp(1.25rem, 4vw, 3.5rem) 6rem; min-width: 0; }
+
+  /* ---- header ---- */
+  .masthead { max-width: var(--measure); margin: 0 0 3.25rem; }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 0.75rem; display: flex; align-items: center; gap: 8px;
+  }
+  .kicker::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  h1.title { font-size: clamp(28px, 4vw, 38px); letter-spacing: -0.01em; line-height: 1.15; }
+  .dek { color: var(--ink-soft); font-size: 17px; max-width: 60ch; margin: 0.9rem 0 0; }
+
+  .statline {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem;
+  }
+  .stat {
+    border: 0.5px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 10px;
+    font-size: 12.5px; color: var(--ink-soft); display: flex; align-items: baseline; gap: 5px; background: var(--bg-raised);
+  }
+  .stat b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+
+  /* ---- sections ---- */
+  section { max-width: var(--measure); margin: 0 0 3.5rem; padding-top: 0.25rem; }
+  section > .sec-head { margin-bottom: 1.25rem; }
+  .sec-eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); margin: 0 0 0.35rem; }
+  h2 { font-size: 23px; letter-spacing: -0.005em; }
+  h3 { font-size: 17px; margin: 1.75rem 0 0.6rem; }
+  p { margin: 0.8rem 0; color: var(--ink-soft); }
+  p b, li b { color: var(--ink); font-weight: 600; }
+  .lede { font-size: 16.5px; }
+
+  /* ---- pipeline ---- */
+  .pipeline { display: flex; flex-direction: column; border: 0.5px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--bg-raised); }
+  .pstep { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 1rem 1.1rem; border-bottom: 0.5px solid var(--line); }
+  .pstep:last-child { border-bottom: none; }
+  .pstep-n { font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 1px; }
+  .pstep h4 { font-size: 14.5px; }
+  .pstep p { margin: 0.3rem 0 0; font-size: 14.5px; }
+  .pstep .tag { margin-left: 8px; }
+
+  .tag {
+    display: inline-flex; align-items: center; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.02em; padding: 2px 7px; border-radius: 5px; font-weight: 500; vertical-align: 1px;
+  }
+  .tag-fast { background: var(--accent-soft); color: var(--accent-soft-ink); }
+  .tag-llm { background: var(--line-soft); color: var(--ink-soft); }
+  .tag-danger { background: var(--red-soft); color: var(--red); }
+  .tag-warn { background: var(--amber-soft); color: var(--amber); }
+
+  /* ---- example card ---- */
+  .example {
+    display: grid; grid-template-columns: auto 1fr; gap: 0 12px; border: 0.5px solid var(--line);
+    border-radius: var(--radius); overflow: hidden; margin: 1rem 0; background: var(--bg-raised);
+  }
+  .ex-row { display: contents; }
+  .ex-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); padding: 0.75rem 0 0.75rem 1rem; white-space: nowrap; }
+  .ex-body { padding: 0.75rem 1rem 0.75rem 0; border-bottom: 0.5px solid var(--line-soft); font-size: 14.5px; }
+  .ex-row:last-child .ex-body { border-bottom: none; }
+  .ex-say { font-family: var(--mono); color: var(--ink); }
+  .ex-say::before { content: "\201C"; } .ex-say::after { content: "\201D"; }
+
+  /* ---- tier table ---- */
+  .tiers { overflow-x: auto; }
+  table.tiertab { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+  table.tiertab th { text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; padding: 0 10px 8px 0; border-bottom: 0.5px solid var(--line); }
+  table.tiertab td { padding: 10px 10px 10px 0; border-bottom: 0.5px solid var(--line-soft); vertical-align: top; color: var(--ink-soft); }
+  table.tiertab td.tname { color: var(--ink); font-weight: 600; }
+  table.tiertab td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.tiertab tr:last-child td { border-bottom: none; }
+
+  .callout {
+    border: 0.5px solid var(--line); border-left: 2.5px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--accent-soft); padding: 0.9rem 1.1rem; margin: 1rem 0; font-size: 14.5px; color: var(--accent-soft-ink);
+  }
+  .callout.warn { border-left-color: var(--amber); background: var(--amber-soft); color: var(--amber); }
+  .callout p { margin: 0; color: inherit; }
+  .callout p + p { margin-top: 0.5rem; }
+  .callout b { color: inherit; }
+
+  /* ---- tool catalog ---- */
+  .cat-group { margin-bottom: 2.75rem; }
+  .cat-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 0.9rem; }
+  .cat-head h3 { margin: 0; font-size: 16px; }
+  .cat-head .count { font-family: var(--mono); font-size: 12px; color: var(--ink-mute); }
+  .cat-desc { font-size: 13.5px; color: var(--ink-mute); margin: -0.5rem 0 1rem; }
+
+  .toolgrid { display: grid; gap: 8px; }
+  .tool {
+    border: 0.5px solid var(--line); border-radius: var(--radius); background: var(--bg-raised);
+    padding: 0.85rem 1rem; display: grid; grid-template-columns: minmax(0,1fr); gap: 6px;
+  }
+  .tool-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .tool-name { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .tool-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .tool-say { font-size: 14px; color: var(--ink-soft); }
+  .tool-say .q::before { content: "\2014\00a0"; color: var(--ink-mute); }
+  .tool-say b { font-family: var(--mono); font-weight: 600; color: var(--ink); background: var(--line-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .tool-does { font-size: 13px; color: var(--ink-mute); }
+
+  /* ---- vault/memory split ---- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 620px) { .split { grid-template-columns: 1fr; } }
+  .card { border: 0.5px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); padding: 1.1rem 1.2rem; }
+  .card h4 { font-size: 14.5px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 7px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.memory { background: #6b8fd6; }
+  .dot.vault { background: var(--accent); }
+  .card p { font-size: 13.5px; margin: 0.4rem 0; }
+  .card ul { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 13.5px; color: var(--ink-soft); }
+  .card li { margin: 0.25rem 0; }
+
+  /* ---- checks list ---- */
+  .checks { display: grid; gap: 10px; }
+  .check { border: 0.5px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); padding: 0.9rem 1.1rem; display: grid; grid-template-columns: 20px 1fr; gap: 12px; }
+  .check .n { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .check h4 { font-size: 14px; }
+  .check p { font-size: 13.5px; margin: 0.3rem 0 0; }
+  .check .thresh { font-family: var(--mono); font-size: 12px; background: var(--line-soft); padding: 1px 6px; border-radius: 4px; color: var(--ink); }
+
+  footer { max-width: var(--measure); border-top: 0.5px solid var(--line); padding-top: 1.5rem; font-size: 13px; color: var(--ink-mute); }
+
+  .anchor-offset { scroll-margin-top: 1.5rem; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <div class="toc-brand"><b>F.R.E.D.</b> — capability reference</div>
+    <ol>
+      <li><a href="#pipeline">How a request is handled</a></li>
+      <li><a href="#tiers">The model &amp; reasoning tiers</a></li>
+      <li><a href="#apps">Apps &amp; the desktop</a></li>
+      <li><a href="#files">Files &amp; search</a></li>
+      <li><a href="#git">Git</a></li>
+      <li><a href="#web">Web &amp; weather</a></li>
+      <li><a href="#audio">Volume &amp; display</a></li>
+      <li><a href="#windows">Windows &amp; processes</a></li>
+      <li><a href="#clipboard">Clipboard &amp; utility</a></li>
+      <li><a href="#power">Power &amp; safety-gated</a></li>
+      <li><a href="#schedule">Reminders &amp; recap</a></li>
+      <li><a href="#voice">The voice pipeline</a></li>
+      <li><a href="#memory">Memory &amp; the vault</a></li>
+      <li><a href="#proactive">Speaking unprompted</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="masthead">
+      <p class="kicker">Internal reference — as built, not as planned</p>
+      <h1 class="title">Everything F.R.E.D. can currently do</h1>
+      <p class="dek">A tool-by-tool, mechanism-by-mechanism account of the running system: what a spoken request actually triggers, which model answers it, and why. Every behavior below is read from the live code, not from a spec.</p>
+      <div class="statline">
+        <span class="stat"><b>49</b>&nbsp;tools</span>
+        <span class="stat"><b>1</b>&nbsp;model resident at a time</span>
+        <span class="stat"><b>Qwen3-8B</b>&nbsp;default tier</span>
+        <span class="stat"><b>CUDA</b>&nbsp;/&nbsp;RTX 5060 Ti</span>
+        <span class="stat"><b>4</b>&nbsp;confirm-gated actions</span>
+      </div>
+    </header>
+
+    <section id="pipeline" class="anchor-offset">
+      <div class="sec-head">
+        <p class="sec-eyebrow">Architecture</p>
+        <h2>How a request is handled</h2>
+      </div>
+      <p class="lede">Every spoken turn passes through the same six-stage pipeline, in this order, and most turns exit early — the expensive stages only run when a cheaper one couldn't answer.</p>
+
+      <div class="pipeline">
+        <div class="pstep">
+          <div class="pstep-n">01</div>
+          <div>
+            <h4>The dispatcher <span class="tag tag-fast">zero LLM calls</span></h4>
+            <p>A fixed list of regular expressions, checked top to bottom, for phrasing so unambiguous it doesn't need a model's judgment: <code>"open Spotify"</code>, <code>"what time is it"</code>, <code>"turn it up a bit"</code>, <code>"open it"</code>. A match executes immediately. This is why some replies come back in well under a second while others take several — the ones that hit here never touch the model at all.</p>
+          </div>
+        </div>
+        <div class="pstep">
+          <div class="pstep-n">02</div>
+          <div>
+            <h4>Canned replies</h4>
+            <p>A small set of purely social exchanges (acknowledgements, thanks) answered from a fixed pool, same zero-LLM reasoning as the dispatcher.</p>
+          </div>
+        </div>
+        <div class="pstep">
+          <div class="pstep-n">03</div>
+          <div>
+            <h4>Intent classification <span class="tag tag-llm">narrows the menu</span></h4>
+            <p>Anything the dispatcher didn't recognize is classified as <b>chat</b> or <b>action</b>. Chat skips tools entirely — this is the fix for a small model picking a random tool because "reply normally" was never on the menu. An action turn is matched against ~14 keyword categories (<code>files</code>, <code>audio</code>, <code>git</code>, …); matched categories are unioned into a short candidate list — typically 2–8 tools instead of all 49 — narrowed further by a semantic embedding ranker. Only if no cue matches at all does this fall back to asking the model directly.</p>
+          </div>
+        </div>
+        <div class="pstep">
+          <div class="pstep-n">04</div>
+          <div>
+            <h4>The tool-calling turn <span class="tag tag-llm">1 model call</span></h4>
+            <p>The narrowed tool list is offered to the resident model, which either answers directly or requests one or more tool calls. If a requested tool is <span class="tag tag-danger">destructive</span> (see below), execution stops here and a confirmation question is returned instead — nothing runs yet.</p>
+          </div>
+        </div>
+        <div class="pstep">
+          <div class="pstep-n">05</div>
+          <div>
+            <h4>Execution + the phrasing pass <span class="tag tag-llm">+1 model call</span></h4>
+            <p>The tool runs, and its raw result goes back to the model for a second, short call that turns it into something worth saying aloud — unless the tool already returns a full sentence (<code>get_weather</code>, <code>set_volume</code>, reminders, …), in which case that second call is skipped outright and the raw string is spoken as-is.</p>
+          </div>
+        </div>
+        <div class="pstep">
+          <div class="pstep-n">06</div>
+          <div>
+            <h4>Speech</h4>
+            <p>The reply streams to Kokoro sentence-by-sentence as it's generated — see <a href="#voice">the voice pipeline</a> for how that overlaps with generation instead of waiting for it to finish.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Two worked examples</h3>
+      <div class="example">
+        <div class="ex-row"><div class="ex-label">Say</div><div class="ex-body ex-say">What's the weather?</div></div>
+        <div class="ex-row"><div class="ex-label">Path</div><div class="ex-body">Stage 01 only. The dispatcher's weather pattern matches, <code>get_weather()</code> runs immediately against <code>wttr.in</code>, and the returned sentence is spoken directly — the model is never invoked for this turn at all.</div></div>
+      </div>
+      <div class="example">
+        <div class="ex-row"><div class="ex-label">Say</div><div class="ex-body ex-say">Find my health logs</div></div>
+        <div class="ex-row"><div class="ex-label">Path</div><div class="ex-body">Stages 01 → 03 → 04 → 05. No dispatcher pattern fits "find my X"; the <code>files</code> category matches on <code>find</code>; the model is offered <code>search_files</code>/<code>find_file_smart</code>/etc. and picks <code>find_file_smart</code>, which itself runs its own short internal loop (see <a href="#files">Files</a>) before the result comes back for phrasing.</div></div>
+      </div>
+    </section>
+
+    <section id="tiers" class="anchor-offset">
+      <div class="sec-head">
+        <p class="sec-eyebrow">Architecture</p>
+        <h2>The model &amp; reasoning tiers</h2>
+      </div>
+      <p class="lede">Four model tiers are configured. In practice, almost every turn today runs on exactly one of them.</p>
+
+      <div class="tiers">
+        <table class="tiertab">
+          <thead><tr><th>Tier</th><th>Model</th><th>Context</th><th>Reasoning</th><th>In use today</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="tname">Standard</td><td>Qwen3-8B, Q4_K_M</td><td class="num">24,576 tok</td>
+              <td>On by default</td><td><b>Every turn</b> — the default and only tier the live pipeline requests</td>
+            </tr>
+            <tr>
+              <td class="tname">Backup</td><td>Qwen3.5-4B, Q6_K</td><td class="num">16,384 tok</td>
+              <td>Off by default</td><td>Configured, not reachable — kept as a fast fallback if Standard's latency ever needs it</td>
+            </tr>
+            <tr>
+              <td class="tname">Deep</td><td>Qwen3-14B, Q4_K_M</td><td class="num">16,384 tok</td>
+              <td>On by default</td><td>Not requested by the live conversation pipeline; used only by the offline vault-ingest converter</td>
+            </tr>
+            <tr>
+              <td class="tname">Extreme</td><td>gpt-oss-20b</td><td class="num">16,384 tok</td>
+              <td>"High" (injected)</td><td>Configured, unverified — largest tier, VRAM budget not yet measured</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <p><b>The "long prompts switch tiers" behavior doesn't actually run right now.</b> A word-count-and-keyword heuristic exists in code — 45+ words plus a signal like "explain" or "debug" would select Deep; 65+ words plus "comprehensive" or "in depth" would select Extreme — but it's gated behind a flag that's currently <code>False</code>. Every request, short or long, technical or casual, is answered by Standard (Qwen3-8B). The heuristic is disabled rather than deleted because a better version of this idea — offering to switch and asking first, rather than silently picking a bigger model — is planned to replace it.</p>
+      </div>
+
+      <p>Only one tier is ever resident in memory at once. If a tool explicitly asks for a different tier than whatever's currently loaded, the resident model is unloaded first — there isn't VRAM to hold two at a time on this card, so a tool switching tiers costs a few seconds' reload rather than running alongside the first.</p>
+
+      <p>Standard runs with its reasoning ("thinking") turned on: the model works through a hidden <code>&lt;think&gt;…&lt;/think&gt;</code> block before answering, which is stripped out before anything is spoken or shown. If a reply runs out of its token budget mid-thought — genuinely still reasoning when the limit hits — the block never closes and there is no answer to give. Rather than say nothing, FRED reports that plainly rather than staying silent.</p>
+    </section>
+
+    <section id="apps" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Apps &amp; the desktop</h2></div>
+
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">launch_application</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Open Spotify</b></div>
+          <div class="tool-does">Resolves the name through four layers in order — an alias table, PATH, Windows' App Paths registry, then a Start Menu shortcut search — before falling back to a directory scan. STT punctuation ("Spotify.") and trailing filler words ("Spotify now") are stripped first.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">open_website</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Open youtube.com</b></div>
+          <div class="tool-does">Anything shaped like <code>word.word</code> is checked against a list of file extensions first — if it looks like a filename (<code>report.pdf</code>) it opens locally instead of as a URL.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">open_path</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Open dossier.pdf</b></div>
+          <div class="tool-does">Opens a specific file or folder with its default program. A bare filename is checked against Desktop, Downloads, Documents and Pictures before it's reported missing.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">open_last_found</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Open it</b> / <b>open the second one</b></div>
+          <div class="tool-does">Search results are spoken without file paths (paths read aloud is exactly what this avoids), so a follow-up needs its own memory of what was just found — the resolved paths are kept and re-verified against disk before opening.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="files" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Files &amp; search</h2></div>
+
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">search_files</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Find spotify.exe</b></div>
+          <div class="tool-does">Exact/substring filename match. Walks the folder tree while pruning heavy, irrelevant directories in place (<code>node_modules</code>, <code>.git</code>, package caches, model stores) — a full home-folder search went from 103.6s to 0.7s once this stopped walking into them. Repeats of the same query hit a resolved-path cache instead of re-scanning.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">find_file_smart</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span><span class="tag tag-warn">multi-step</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Find my notes about Suhani</b></div>
+          <div class="tool-does">For when the filename itself is unknown. Runs its own small loop, capped at 4 steps: list the current folder, ask the resident model to either descend into a subfolder or declare a match, repeat. Genuinely reasons about folder names rather than string-matching — confirmed live: "notes about a person called Suhani" correctly entered a <code>people/</code> folder before finding the file.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">list_directory</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's in my Documents folder?</b></div>
+          <div class="tool-does">Leads with folder/file counts before listing, so a truncated listing (capped at 40 items) can't silently hide what was actually asked about.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">read_file</span> · <span class="tool-name">create_text_file</span> · <span class="tool-name">append_to_file</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Add milk to the shopping list</b></div>
+          <div class="tool-does">Append is the quick-capture path — no read/edit/write-back round trip. A bare filename with no path anchors under <code>Documents/FRED</code>, not wherever the process happened to launch from.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">move_file</span> · <span class="tool-name">rename_file</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Rename report.txt to report_final.txt</b></div>
+          <div class="tool-does">A destination that already exists is refused with a plain sentence rather than crashing on the underlying OS error.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">delete_file</span><div class="tool-tags"><span class="tag tag-danger">confirm required</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Delete old_draft.docx</b></div>
+          <div class="tool-does">Irreversible. FRED states the file, asks yes/no, and does nothing until you answer.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">create_folder</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Create a folder called Taxes</b></div>
+          <div class="tool-does">Same Documents/FRED anchoring as the other file tools for a bare name.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="git" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Git</h2></div>
+      <p>Read-only, on purpose — write access (commit, push) is a different risk category and was deliberately left out.</p>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">git_status</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's my git status?</b></div>
+          <div class="tool-does">Branch plus staged/modified/untracked counts. Defaults to the FRED project itself if no path is given, and a guessed or nonexistent path falls back to that same default rather than failing the turn.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">git_log</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Show me recent commits</b></div>
+          <div class="tool-does">Subjects and relative times only — never raw hashes or diffs in speech.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">git_diff_summary</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's changed but not committed?</b></div>
+          <div class="tool-does">File and line-change counts — the actual diff body is exactly the kind of thing that shouldn't be read aloud.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="web" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Web &amp; weather</h2></div>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">web_search</span><div class="tool-tags"><span class="tag tag-fast">dispatcher*</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Search for the weather in Paris</b></div>
+          <div class="tool-does">*Dispatched instantly for self-contained queries. A query that's pronoun-led ("search it") or names a local scope ("search my desktop") deliberately declines the fast path and falls through to the LLM stage instead, where real conversation history is available to resolve what "it" means. Results never include a URL — a full link read aloud character-by-character is exactly what this avoids — and long result snippets are trimmed at a word boundary.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">get_weather</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's the weather?</b></div>
+          <div class="tool-does">Via <code>wttr.in</code>, phrased as a sentence rather than glued-together label:value fields. Blank means auto-detected location.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="audio" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Volume &amp; display</h2></div>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">set_volume</span> · <span class="tool-name">set_brightness</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Set volume to 30</b></div>
+          <div class="tool-does">Absolute values. Wins over the relative form below when a number is actually said.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">adjust_volume</span> · <span class="tool-name">adjust_brightness</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Turn it up a bit</b> / <b>louder</b> / <b>dim it a lot</b></div>
+          <div class="tool-does">Relative moves for phrasing that never names a number — the far more common way people actually ask. A hedge word maps to a step size: "a bit"/"slightly" → 10%, plain → 20%, "a lot"/"way" → 40%. Bare comparatives ("louder", "dimmer") carry their own direction.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">get_volume</span> · <span class="tool-name">get_brightness</span> · <span class="tool-name">mute</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Mute</b> / <b>what's my volume?</b></div>
+          <div class="tool-does">Direct reads and toggles.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">media_control</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Skip this song</b></div>
+          <div class="tool-does">Sends a real media key (play/pause, next, previous, stop) to whatever's playing.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">take_screenshot</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Take a screenshot</b></div>
+          <div class="tool-does">Saves to <code>Pictures/Screenshots</code> with a timestamped name by default.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="windows" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Windows &amp; processes</h2></div>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">list_windows</span> · <span class="tool-name">focus_window</span> · <span class="tool-name">minimize_window</span> · <span class="tool-name">maximize_window</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Switch to Chrome</b></div>
+          <div class="tool-does">Matched by partial window title.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">close_window</span><div class="tool-tags"><span class="tag tag-danger">confirm required</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Close Notepad</b></div>
+          <div class="tool-does">May discard unsaved work in that window, so it's confirmed first.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">list_processes</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's using all my CPU?</b></div>
+          <div class="tool-does">Optionally filtered by name substring.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">kill_process</span><div class="tool-tags"><span class="tag tag-danger">confirm required</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Kill Chrome</b></div>
+          <div class="tool-does">Matches by substring, so "code" would match every process with "code" anywhere in its name — the confirmation names every process this would actually end (with PIDs) before asking, rather than echoing the request back unexamined.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="clipboard" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Clipboard &amp; utility</h2></div>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">get_clipboard</span> · <span class="tool-name">set_clipboard</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's on my clipboard?</b></div>
+          <div class="tool-does">A copied article or a whole file of code shouldn't commit FRED to minutes of unbroken speech — the read is capped, with the remaining length stated rather than silently cut.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">calculate</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What's 17% of 300?</b></div>
+          <div class="tool-does">Parsed and evaluated by Python's <code>ast</code> module against an explicit operator whitelist — never <code>eval()</code> — so arithmetic is correct by construction instead of pattern-guessed by the model.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">get_current_time</span> · <span class="tool-name">get_system_status</span> · <span class="tool-name">get_network_status</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What time is it?</b> / <b>how's my battery?</b></div>
+          <div class="tool-does">Battery, CPU, RAM, disk and uptime as full sentences, not <code>label: value</code> fragments.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">repeat_last</span><div class="tool-tags"><span class="tag tag-fast">dispatcher</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Say that again</b></div>
+          <div class="tool-does">A pure lookup of the last thing actually said — no model call, so it still works even if the LLM stage is struggling.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="power" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Power &amp; the confirmation gate</h2></div>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">power_action</span><div class="tool-tags"><span class="tag tag-danger">confirm required</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Shut down</b> / <b>lock the screen</b> / <b>restart</b></div>
+          <div class="tool-does">Lock, sleep, restart and shut down are all here. Everything except lock asks first.</div>
+        </div>
+      </div>
+      <p>Four tools require confirmation: <code>delete_file</code>, <code>close_window</code>, <code>kill_process</code>, <code>power_action</code>. Once one fires, FRED states exactly what it's about to do — with the real targets named, not the raw arguments — and waits. Anything other than a clear "yes" cancels it; a changed subject or an unrelated new question is treated the same as "no" rather than guessed at.</p>
+    </section>
+
+    <section id="schedule" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Tool catalog</p><h2>Reminders &amp; the day's recap</h2></div>
+      <div class="toolgrid">
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">schedule_reminder</span> · <span class="tool-name">set_timer</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Remind me to call Dad at 7pm</b></div>
+          <div class="tool-does">Reminders persist across a restart and fire late rather than being lost if FRED was off past the due time. Timers are always a short relative countdown and are session-scoped.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">list_scheduled</span> · <span class="tool-name">cancel_scheduled</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What reminders do I have?</b></div>
+          <div class="tool-does">Cancel matches by ID or by a substring of the original message.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">schedule_file_watch</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Tell me when the export finishes</b></div>
+          <div class="tool-does">Polls for a path to appear, notifies once, then stops — gives up after 24 hours rather than polling forever unnoticed.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">summarise_today</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>What did we do today?</b></div>
+          <div class="tool-does">Built from today's actual session logs, not the model's memory of the conversation — so it's accurate even across a restart. States where it would be saved, but writes nothing yet.</div>
+        </div>
+        <div class="tool">
+          <div class="tool-top"><span class="tool-name">save_today_summary</span><div class="tool-tags"><span class="tag tag-llm">LLM-routed</span></div></div>
+          <div class="tool-say"><span class="q"></span> <b>Save that to the vault</b></div>
+          <div class="tool-does">The separate, explicit second step — nothing reaches the vault's daily note without this being asked for by name.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="voice" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Mechanism</p><h2>The voice pipeline</h2></div>
+      <p class="lede">Listening in, and the reply coming back out, are both built to hide latency rather than eliminate it.</p>
+
+      <h3>Hearing you</h3>
+      <p>Hold-to-talk: audio records while the hotkey is held, transcribed by <b>Whisper large-v3-turbo</b> the moment it's released. Recording itself needs no model loaded, so capture starts instantly regardless of what else is loading.</p>
+
+      <h3>Hiding the thinking gap</h3>
+      <p>The instant a turn needs the model, a short filler ("On it.", "Let me have a look.") starts playing while the real reply generates in the background on a separate thread — the two overlap instead of stacking. The filler itself is picked by a cheap word-cue check (social / action / general), not a model call, and every filler and tool-caption phrase is pre-synthesized once and cached to disk, so most turns never re-run Kokoro on "Working on it now." at all.</p>
+
+      <h3>Speaking the reply</h3>
+      <p>Kokoro synthesizes and plays sentence-by-sentence as the model streams tokens, rather than waiting for the full reply — the first words are audible seconds before the model has finished the rest. Filler, any tool-event caption, and the real reply all play through <b>one continuous audio stream</b>, not three separate ones, specifically so a Bluetooth output's own wake-up ramp only happens once, at the very start of the turn, instead of again right where the real answer begins.</p>
+
+      <div class="callout">
+        <p>Reasoning (<code>&lt;think&gt;</code> blocks and equivalent) is stripped before anything reaches the TTS layer — the model's working is never spoken, only its conclusion.</p>
+      </div>
+    </section>
+
+    <section id="memory" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Mechanism</p><h2>Memory &amp; the vault</h2></div>
+      <p class="lede">Two entirely separate long-term stores, both consulted on every turn, doing different jobs.</p>
+
+      <div class="split">
+        <div class="card">
+          <h4><span class="dot memory"></span>Long-term memory</h4>
+          <p>Every user/assistant turn, embedded and stored in a local FAISS index — a running record of the conversation itself.</p>
+          <ul>
+            <li>Retrieval is cosine similarity over unit-normalized vectors.</li>
+            <li>If the index and the stored record ever disagree on count, it's rebuilt from the record automatically rather than silently returning misaligned results.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4><span class="dot vault"></span>The vault</h4>
+          <p>A hand-curated set of markdown files — identity, profile, hard rules, and everything known about people, projects and health — retrieved by semantic search on every turn.</p>
+          <ul>
+            <li>Persona, profile and rules load in full, always — never left to a retrieval match.</li>
+            <li>Everything else is chunked, embedded, and the top 6 matching chunks are injected.</li>
+            <li>Tables are flattened to <code>row — Column: value</code> before injection, so a value can never be read out of the wrong column.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <p><b>Vault content is stated as the only admissible source for a fact about you.</b> The model is explicitly told not to state a number, date or detail that doesn't appear verbatim in what was retrieved, and that a truncated excerpt means missing information — never an invitation to fill in the rest. This exists because it was violated once: asked to review fitness progress, a reply invented a weight, a BMI and a full bloodwork panel that matched nothing in the actual file.</p>
+      </div>
+    </section>
+
+    <section id="proactive" class="anchor-offset">
+      <div class="sec-head"><p class="sec-eyebrow">Mechanism</p><h2>Speaking unprompted</h2></div>
+      <p class="lede">Three background checks run every 15 minutes, each capable of speaking up without being asked — and each fires at most once per stretch, so none of them can turn into nagging.</p>
+
+      <div class="checks">
+        <div class="check">
+          <div class="n">01</div>
+          <div><h4>Vault staleness</h4><p>If <code>active-priorities.md</code> hasn't been updated in <span class="thresh">7+ days</span>, FRED says so once — then stays quiet until either it's updated or a further week passes.</p></div>
+        </div>
+        <div class="check">
+          <div class="n">02</div>
+          <div><h4>Long session, no break</h4><p>Tracks real Windows-level keyboard/mouse idle time. <span class="thresh">3 hours</span> of continuous activity with no gap of at least <span class="thresh">15 minutes</span> triggers one nudge; any real break resets the clock.</p></div>
+        </div>
+        <div class="check">
+          <div class="n">03</div>
+          <div><h4>Deadline proximity</h4><p>Any vault file carrying an explicit <code>deadline:</code> date gets flagged once it's within <span class="thresh">7 days</span> out. No file uses this field yet — it's the read path for when one eventually does, not a guess at dates from prose.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Reflects the code as of this session. Read from source, not from design notes — where a doc and the running system would have disagreed, this describes the system.
+    </footer>
+  </main>
+</div>
