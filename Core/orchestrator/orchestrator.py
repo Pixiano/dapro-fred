@@ -16,6 +16,7 @@ from tools import assist_tools
 from tools import git_tools
 from tools import smart_search
 from tools import session_summary
+from tools import vision_tools
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
@@ -68,6 +69,7 @@ TOOL_LABELS = {
     "search_files": "Searching files",
     "find_file_smart": "Searching thoroughly",
     "open_last_found": "Opening",
+    "whats_on_screen": "Checking the screen",
     "summarise_today": "Reviewing today",
     "save_today_summary": "Saving to vault",
     "git_status": "Checking git status",
@@ -1077,6 +1079,17 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="whats_on_screen",
+            function=vision_tools.whats_on_screen,
+            description=(
+                "What was on screen last time the background watcher looked — "
+                "for 'what am I looking at' / 'what's on my screen'. Instant, "
+                "reads a cache rather than taking a new screenshot."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
             name="summarise_today",
             function=self._summarise_today,
             description=(
@@ -1189,6 +1202,14 @@ class FREDOrchestrator:
             return self.llm.generate(messages)
 
         print(f"[intent] tools ({reason})")
+
+        # The pill disambiguation chip: FRED still picks and acts on the
+        # top candidate below (never blocks on this), but if the top two
+        # were a genuine near-tie, show both so a wrong pick is visible
+        # and correctable next turn instead of silent.
+        close = intent.close_candidates(last_user, tool_names, self._tool_router())
+        if close:
+            self._announce_ambiguity(*close)
 
         # Read by _execute_tool_call so the log records what the model was
         # actually offered, not just what it picked.
@@ -1486,6 +1507,25 @@ class FREDOrchestrator:
             self.on_tool_event(TOOL_LABELS.get(name, name.replace("_", " ")))
         except Exception as e:
             print(f"[orchestrator] tool-event hook failed: {e}")
+
+    # Same shape as on_tool_event above, set by the UI controller — the
+    # pill disambiguation chip. Deliberately a SEPARATE hook rather than
+    # reusing on_tool_event: that one is spoken through Kokoro (see
+    # pill_app._on_tool_event), and adding speech time to every
+    # near-tie turn is exactly the "informative but non-blocking" bar
+    # this was built not to cross. This one is visual-only.
+    on_ambiguous_choice = None
+
+    def _announce_ambiguity(self, top: str, alt: str):
+        if not self.on_ambiguous_choice:
+            return
+        try:
+            self.on_ambiguous_choice(
+                TOOL_LABELS.get(top, top.replace("_", " ")),
+                TOOL_LABELS.get(alt, alt.replace("_", " ")),
+            )
+        except Exception as e:
+            print(f"[orchestrator] ambiguity-event hook failed: {e}")
 
     def _repeat_last(self) -> str:
         """

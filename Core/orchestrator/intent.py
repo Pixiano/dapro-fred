@@ -93,6 +93,7 @@ TOOL_CATEGORIES = {
     ),
     "git": ("git_status", "git_log", "git_diff_summary"),
     "recap": ("summarise_today", "save_today_summary"),
+    "vision": ("whats_on_screen",),
 }
 
 # Cue words per category. Over-inclusive on purpose: a spurious category
@@ -199,6 +200,10 @@ CATEGORY_CUES = {
         "summarize today", "today's summary", "wrap up", "sum up today",
         "log today", "save today",
     ),
+    "vision": (
+        "what's on my screen", "what am i looking at", "on my screen",
+        "what's on screen", "screen say", "what does my screen",
+    ),
 }
 
 
@@ -273,6 +278,39 @@ def tools_for_categories(categories) -> list:
             if tool not in names:
                 names.append(tool)
     return names
+
+
+# How close the top two candidates' embedding scores need to be for a
+# turn to count as genuinely ambiguous, for the pill's disambiguation
+# chip (see ui/pill_app.py). Deliberately tight — this should fire on
+# real near-ties ("turn it up" between set_volume/set_brightness), not
+# on every turn that merely has more than one candidate tool.
+CLOSE_CANDIDATE_MARGIN = 0.03
+
+
+def close_candidates(text: str, tool_names: list, router) -> tuple:
+    """
+    Returns (top_tool, runner_up_tool) if the two best-scoring names
+    among `tool_names` are within CLOSE_CANDIDATE_MARGIN of each other,
+    else None. Deliberately separate from classify() rather than a 4th
+    return value there — this is purely informational (for a UI hint),
+    not part of routing itself, and every existing classify() caller
+    should keep working unchanged if this is never called at all.
+    """
+    if router is None or len(tool_names) < 2:
+        return None
+
+    scored = [(name, score) for name, score in router.rank(text) if name in tool_names]
+    if len(scored) < 2:
+        return None
+
+    top_name, top_score = scored[0]
+    second_name, second_score = scored[1]
+
+    if (top_score - second_score) <= CLOSE_CANDIDATE_MARGIN:
+        return top_name, second_name
+
+    return None
 
 
 def classify(text: str, llm=None, router=None) -> tuple:

@@ -73,9 +73,13 @@ class PillApp:
             on_release=self._on_hold_end,
         )
 
+        from vision.watcher_manager import ScreenWatcherManager
+        self.screen_watcher = ScreenWatcherManager()
+
         # Show in the pill what FRED is doing when a tool fires, so an
         # action isn't audio-only (Phase 16's "visual confirmation").
         self.orchestrator.on_tool_event = self._on_tool_event
+        self.orchestrator.on_ambiguous_choice = self._on_ambiguous_choice
 
         # Proactive speech (reminders, timers) goes through Kokoro rather
         # than the SAPI fallback, so an interruption sounds like the same
@@ -122,6 +126,7 @@ class PillApp:
         self.hotkey.install()
         self._start_tray()
         self.lifecycle.start()
+        self.screen_watcher.start()
         if self.tts:
             threading.Thread(target=self._warm_phrase_cache, daemon=True).start()
         print(
@@ -176,6 +181,7 @@ class PillApp:
         self._running = False
         self._cancel.set()
         self.lifecycle.stop()
+        self.screen_watcher.stop()
         try:
             self.hotkey.uninstall()
         except Exception:
@@ -198,6 +204,13 @@ class PillApp:
     # =========================================================
 
     def _on_hold_start(self):
+        # First thing, before anything else — see watcher_manager.py's
+        # touch() docstring on why this has to be fast and unconditional.
+        # A real conversation turn is about to start and the screen
+        # watcher (if it happens to be mid-analysis right now) must never
+        # be competing for the GPU when that happens.
+        self.screen_watcher.touch()
+
         if not self.stt:
             return
 
@@ -237,6 +250,11 @@ class PillApp:
             self._to_idle_and_hide()
 
     def _on_hold_end(self):
+        # Re-stamp the idle clock from release, not press — the 5-minute
+        # "hasn't touched the hotkey" window should count from when he
+        # stopped talking to FRED, not when he started.
+        self.screen_watcher.touch()
+
         if not self._recording:
             return
         self._recording = False
@@ -495,6 +513,18 @@ class PillApp:
         if queue_ is not None and prefix is not None:
             prefix.append(caption)
             queue_.put(caption)
+
+    def _on_ambiguous_choice(self, top: str, alt: str):
+        """
+        The router found a genuine near-tie between two tools. FRED
+        already picked `top` and is acting on it — this is purely
+        informational, shown on the pill and NOT spoken (unlike
+        _on_tool_event above), so a correct-but-uncertain turn doesn't
+        cost extra speech time on every near-tie. A longer TTL than the
+        tool-event caption since there are two things to actually read.
+        """
+        self.window.set_transcript(f"Went with: {top} (also close: {alt})", ttl=3.5)
+        event_log.log("ambiguous_choice", top=top, alt=alt)
 
     def _speak_proactive(self, message: str):
         """

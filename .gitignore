@@ -101,6 +101,16 @@ Core/data/found_files.json
 # personal activity data.
 Core/data/proactive_state.json
 
+# Cross-process model-residency status (see Core/config/settings.py's
+# SCREEN WATCHER section) — pure runtime state, regenerates on launch.
+Core/data/llm_status.json
+
+# Screen-watcher's cached description of the screen. Never the
+# screenshot image itself (that never touches disk at all — see
+# Core/vision/screen_watcher.py) but the text description is still a
+# record of what was on his screen, so it stays out of the repo.
+Core/data/screen_context.json
+
 # Pre-synthesised filler/tool-caption audio cache — regenerates on
 # first launch after a clean clone, nothing authored lives here.
 Core/data/phrase_cache/

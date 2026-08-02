@@ -16,13 +16,33 @@ from config.settings import (
     TIER_ROUTING_ENABLED,
     CHAT_FORMAT_BY_TIER,
     TIER_PROMPT_MARKERS,
+    MMPROJ_PATH_BY_TIER,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
     GPU_LAYERS,
     TEMPERATURE,
     TOP_P,
     MAX_TOKENS,
+    LLM_STATUS_PATH,
 )
+
+
+def _write_llm_status(loaded_tiers):
+    """
+    Cross-process signal for screen_watcher.py: what's currently
+    resident in THIS process, so a separate watcher process can decide
+    whether it's safe to load its own model without risking two
+    multi-GB models on the card at once. Best-effort and silent — a
+    failed write here must never break a real turn, same fail-open rule
+    as every other logging/state path in this codebase.
+    """
+    try:
+        LLM_STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = LLM_STATUS_PATH.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"loaded": sorted(loaded_tiers)}), encoding="utf-8")
+        tmp.replace(LLM_STATUS_PATH)
+    except OSError:
+        pass
 
 
 class LLMClient:
@@ -254,6 +274,39 @@ class LLMClient:
                 "tool_calls": None,
             }
 
+    def describe_image(self, image_b64_data_uri: str, prompt: str, max_tokens: int = 200) -> str:
+        """
+        One-shot image description via the Vision tier. Takes a
+        data-URI-encoded image (base64, with the "data:image/..." prefix
+        llama-cpp-python's multimodal message format expects) rather than
+        raw bytes, since that's the shape create_chat_completion actually
+        wants for an image_url content part.
+
+        Separate from generate()/generate_with_tools() because the
+        message shape is genuinely different (image content parts, no
+        tool-calling), and because this always forces tier="Vision" —
+        callers never get to pick a different model for an image.
+        """
+        model = self._get_model("Vision")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_b64_data_uri}},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+
+        response = model.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=self.temperature,
+        )
+        content = response["choices"][0]["message"]["content"] or ""
+        return self._strip_thinking(content) or content
+
     # =========================================================
     # MODEL LOADING
     # =========================================================
@@ -305,6 +358,7 @@ class LLMClient:
             gc.collect()
             print(f"[LLM] unloaded {dropped} model(s) — VRAM released")
 
+        _write_llm_status(self._loaded.keys())
         return dropped
 
     def _get_model(self, tier: str) -> Llama:
@@ -349,17 +403,40 @@ class LLMClient:
         # discards anything that template alone provides. Gemma 4 handles
         # both tools and thinking natively, so it opts out via
         # CHAT_FORMAT_BY_TIER and keeps its own.
-        chat_format = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling")
+        mmproj_path = MMPROJ_PATH_BY_TIER.get(tier)
 
-        model = Llama(
-            model_path=str(model_path),
-            n_ctx=n_ctx,
-            n_gpu_layers=GPU_LAYERS,
-            verbose=False,
-            chat_format=chat_format,
-        )
+        if mmproj_path is not None:
+            # Vision tiers use a chat_handler, not chat_format — the
+            # handler is what actually knows how to fold an image into
+            # the prompt via the paired mmproj (CLIP) model. Passing
+            # both chat_format and chat_handler is not a supported
+            # combination, so this branch is exclusive of the one below.
+            if not mmproj_path.exists():
+                raise FileNotFoundError(
+                    f"mmproj file not found for tier '{tier}': {mmproj_path}"
+                )
+            from llama_cpp.llama_chat_format import Gemma4ChatHandler
+            chat_handler = Gemma4ChatHandler(clip_model_path=str(mmproj_path))
+
+            model = Llama(
+                model_path=str(model_path),
+                n_ctx=n_ctx,
+                n_gpu_layers=GPU_LAYERS,
+                verbose=False,
+                chat_handler=chat_handler,
+            )
+        else:
+            chat_format = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling")
+            model = Llama(
+                model_path=str(model_path),
+                n_ctx=n_ctx,
+                n_gpu_layers=GPU_LAYERS,
+                verbose=False,
+                chat_format=chat_format,
+            )
 
         self._loaded[tier] = model
+        _write_llm_status(self._loaded.keys())
 
         return model
 

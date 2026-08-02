@@ -181,6 +181,48 @@ PROACTIVE_DEADLINE_WARN_DAYS = 7
 PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 
 # =========================================================
+# SCREEN WATCHER — 2026-08-02 feedback session
+# =========================================================
+#
+# Background screen-content awareness: after enough idle time, a
+# separate OS PROCESS (not a thread — see screen_watcher.py's module
+# docstring for why) periodically screenshots the desktop, describes it
+# with the Vision tier, and caches the result for an on-demand "what's
+# on my screen" tool. Killed immediately on hotkey press so it can
+# never compete with a real conversation turn for the model or the GPU.
+
+# How long since the hotkey was last used before the watcher is allowed
+# to start. Short enough to actually be useful, long enough that normal
+# pauses mid-conversation don't repeatedly spin it up only to kill it
+# again seconds later.
+SCREEN_WATCHER_IDLE_MINUTES = 5
+
+# How often the watcher re-screenshots while it's running.
+SCREEN_WATCHER_INTERVAL_SECONDS = 60
+
+# Cross-process coordination. The main process's LLMClient writes its
+# currently-resident tier here on every load/unload; the watcher child
+# process reads it before loading its OWN model and skips a cycle
+# entirely if anything is already resident in the main process.
+# Necessary, not paranoia: the main LLM's idle-unload is a full hour
+# (LLM_IDLE_UNLOAD_SECONDS below), so for nearly all of a 5-minute
+# watcher window the conversation model is still loaded — without this
+# check, Standard (~9.9GB) and Vision (a further multi-GB) would
+# frequently both try to be resident at once, on a 16310 MiB card that
+# has a documented history of crashing exactly that way.
+LLM_STATUS_PATH = DATA_DIR / "llm_status.json"
+
+# Where the watcher's latest description lives. Only ever short text —
+# see screen_watcher.py for why the screenshot image itself never
+# touches disk.
+SCREEN_CONTEXT_PATH = DATA_DIR / "screen_context.json"
+
+# A description older than this is treated as stale rather than shown
+# as current — the watcher may have been killed mid-cycle by a hotkey
+# press, or simply not run yet this session.
+SCREEN_CONTEXT_MAX_AGE_SECONDS = 300
+
+# =========================================================
 # LLM SETTINGS — fully local inference via llama.cpp
 # =========================================================
 #
@@ -238,8 +280,29 @@ MODEL_TIERS = {
 
     # Bonsai-27B: NOT added. Only mmproj-Bonsai-27B-BF16.gguf (0.87GB,
     # the vision projector) has downloaded so far — the actual model
-    # weights aren't on disk yet. Goes through the same sandbox test
-    # process before it gets a real tier entry here.
+    # weights aren't on disk yet, still downloading as of 2026-08-02.
+    # Vision below deliberately targets gemma-4-12B instead, since it's
+    # actually usable today; swap this key's path to Bonsai's once its
+    # weights land (VRAM budget unverified for a 27B model — re-check
+    # before swapping, don't assume it fits the way 12B was measured to).
+    #
+    # Vision tier — gemma-4-12B-it-QAT, background screen-analysis only
+    # (Core/vision/screen_watcher.py), never the conversation pipeline.
+    # Confirmed present on disk: weights (6.5GB) + its own mmproj vision
+    # projector (168MB) — this is the ONLY configured model with a
+    # matching mmproj file, so it's the only one that can actually see
+    # an image. llama-cpp-python (0.3.31, this venv) confirmed to ship
+    # Gemma4ChatHandler for it.
+    "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
+            / "gemma-4-12B-it-QAT-Q4_0.gguf",
+}
+
+# mmproj (vision projector) path, only for tiers that are actually
+# multimodal — absence here means "this tier has no vision handler",
+# checked explicitly in _get_model rather than assumed.
+MMPROJ_PATH_BY_TIER = {
+    "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
+            / "mmproj-gemma-4-12B-it-QAT-BF16.gguf",
 }
 
 # Per-tier literal text injected into the system turn, because
@@ -363,6 +426,14 @@ CONTEXT_WINDOW_BY_TIER = {
     "Backup": 16384,
     "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, VRAM-bound
     "Extreme": 16384,
+    # Small on purpose — a screen description is a sentence or two, not
+    # a conversation. Keeping this tight also keeps the tier's VRAM
+    # footprint down, which matters more here than anywhere else: this
+    # is the one tier that can be resident in a SEPARATE process from
+    # the conversation model (see vision/screen_watcher.py), so unlike
+    # every other tier its footprint doesn't automatically get the
+    # single-process eviction guarantee below.
+    "Vision": 4096,
 }
 
 # Genuinely active: the venv's llama-cpp-python 0.3.31 is a CUDA build
