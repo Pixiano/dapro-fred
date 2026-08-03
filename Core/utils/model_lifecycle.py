@@ -22,6 +22,7 @@
 # Whisper gets a longer grace period than the LLM because it is both more
 # expensive to reload (2.9s vs 1.9s) and needed sooner after a keypress.
 
+import socket
 import threading
 import time
 
@@ -31,6 +32,19 @@ from config.settings import (
     KOKORO_UNLOAD_AFTER_WHISPER_SECONDS,
     MODEL_WATCHDOG_TICK_SECONDS,
 )
+
+
+def _is_online() -> bool:
+    # Same lightweight check as tools/assist_tools.py's get_network_status
+    # (DNS port on a fixed, always-up IP rather than an actual HTTP call).
+    # Short timeout deliberately: this runs on the hotkey-preload thread,
+    # not blocking anything, but a slow/hanging network shouldn't stall
+    # the LLM preload for multiple seconds either.
+    try:
+        with socket.create_connection(("1.1.1.1", 53), timeout=1.0):
+            return True
+    except OSError:
+        return False
 
 
 class ModelLifecycle:
@@ -69,6 +83,14 @@ class ModelLifecycle:
 
         Called on hotkey-down. Returns immediately — the caller is about to
         start recording and must not be blocked by a model load.
+
+        The LLM is the one exception to "preload unconditionally": since
+        llm_client.py now tries the cloud cascade (Groq/Cerebras) before
+        ever touching a local tier, eagerly loading ~9GB of local GGUF
+        onto the GPU on every hotkey press is dead weight whenever the
+        cloud path is going to answer anyway. The connectivity check
+        happens on the background thread below, not here, so a slow or
+        hanging network can never delay the "start recording" return.
         """
         self.touch()
 
@@ -87,7 +109,7 @@ class ModelLifecycle:
             # ONNX session, not a multi-GB CUDA context).
             if need_stt:
                 self.stt.ensure_loaded()
-            if need_llm:
+            if need_llm and not _is_online():
                 self.llm.ensure_loaded()
             if need_tts:
                 self.tts.ensure_loaded()
