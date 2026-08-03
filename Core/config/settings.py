@@ -537,6 +537,12 @@ MAX_TOKENS = 4096
 # as ranking quality here. Q8_0 over f16: near-lossless for embeddings
 # at roughly half the size/compute of full f16 (4.28GB vs 8.05GB).
 #
+# Q8_0 -> Q4_K_M 2026-08-03: side-by-side tested against the real vault
+# (goals.md "Priority order" scored 0.338/0.412/0.326 vs Q8_0's
+# 0.324/0.429/0.313 across the 3 calibration queries, same #1/#2 ranking
+# every time) — negligible quality loss, half the disk/VRAM (2.5GB vs
+# 4.28GB).
+#
 # Any embedding-model swap invalidates every cached vector: FAISS memory
 # indexes self-heal on dimension mismatch (see
 # MemoryManager._load_or_create_index), but vault_router.py's chunks.json
@@ -545,7 +551,7 @@ MAX_TOKENS = 4096
 # will silently mix old- and new-model vectors.
 EMBEDDING_MODEL_PATH = (
     MODELS_DIR / "Qwen" / "Qwen3-Embedding-4B-GGUF"
-    / "Qwen3-Embedding-4B-Q8_0.gguf"
+    / "Qwen3-Embedding-4B-Q4_K_M.gguf"
 )
 
 MEMORY_TOP_K = 5
