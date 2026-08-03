@@ -63,6 +63,13 @@ _MD_LINK = re.compile(r"\[([^\]]*)\]\(https?://[^\s)]+\)")
 # https://example.com/report, not the whole address read out loud.
 _URL = re.compile(r"https?://(?:www\.)?([a-z0-9-]+)\.\S+", re.IGNORECASE)
 
+# Bracket tags like list_scheduled()'s "[reminder_1785718306_1] Reminder:
+# ..." — an internal job id meant for matching, not for a listener to
+# hear as a string of digits. Runs after _MD_LINK, which has already
+# consumed every real [label](url) pair, so anything still bracketed at
+# this point is metadata, never content.
+_BRACKET_TAG = re.compile(r"\[[^\]]*\]")
+
 # Two attempts at the "quiet at the start, loud after ~0.2s" report were
 # made on 2026-08-01 and BOTH REVERTED, recorded here so neither gets
 # tried a third time:
@@ -84,6 +91,7 @@ _URL = re.compile(r"https?://(?:www\.)?([a-z0-9-]+)\.\S+", re.IGNORECASE)
 def clean_for_speech(text: str) -> str:
     text = _MD_LINK.sub(r"\1", text)
     text = _URL.sub(r"\1", text)
+    text = _BRACKET_TAG.sub("", text)
     text = _BULLET.sub("", text)
     text = _MD_NOISE.sub("", text)
     return re.sub(r"[ \t]+", " ", text).strip()

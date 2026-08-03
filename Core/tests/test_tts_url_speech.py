@@ -25,3 +25,14 @@ def test_bare_url_never_wrapped_in_markdown_also_collapses():
 def test_plain_text_with_no_links_is_unaffected():
     text = "Sir, your goals for today are logged."
     assert clean_for_speech(text) == text
+
+
+def test_list_scheduled_job_ids_are_not_spoken():
+    # Confirmed 2026-08-03: list_scheduled()'s own bracketed job id
+    # ("[reminder_1785718306_1]") was reaching Kokoro and being read out
+    # as a string of digits.
+    text = '- [reminder_1785718306_1] Reminder: "JEE Live Class" — today at 6:00 PM'
+    cleaned = clean_for_speech(text)
+    assert "reminder_1785718306_1" not in cleaned
+    assert "[" not in cleaned and "]" not in cleaned
+    assert 'Reminder: "JEE Live Class" — today at 6:00 PM' in cleaned
