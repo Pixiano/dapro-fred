@@ -46,7 +46,21 @@ VAULT_DIR = Path(r"C:\Users\Dhiraj Vatsal\VatsalDaPro\Projects\1_FRED_Memory\FRE
 # router — orchestrator/vault_router.py imports this same tuple to exclude
 # them from its index, so a file is never represented both ways at once
 # (one list, not two that could drift apart).
-VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md")
+#
+# active-priorities.md joined 2026-08-03. Its own docstring says it's
+# meant to be "scanned at the start of every session", but it was only
+# retrieval-gated — confirmed broken: asked "what abt the general active
+# priorities", its real content (## Open, ## Waiting on Vatsal) scored
+# -0.002 to -0.141 (centered cosine) against that query and never reached
+# the model; only its meta/intro paragraph scored well (0.389), so FRED
+# answered from personal/goals.md instead, which happened to also be
+# about priorities. The chunker already prefixes each section with
+# "Active Priorities — <heading>" before embedding, so the title signal
+# is there — it's just outweighed by the section's own technical content
+# in a small local embedder. Costs ~8KB extra on every turn (this file
+# alone is larger than persona+profile+rules combined) — accepted
+# deliberately for a file whose whole job is "never miss this".
+VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md", "active-priorities.md")
 
 # Unrestricted read access, with exactly one exception, measured rather
 # than assumed. Every .md file that isn't hardcoded above is indexed —
