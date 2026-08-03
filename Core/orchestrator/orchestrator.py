@@ -126,6 +126,16 @@ SELF_NARRATING_TOOLS = {
     "cancel_scheduled",
 }
 
+# A compound turn ("set a reminder and tell me if one exists") can need
+# two tool calls, but a small local model asked for both at once
+# reliably only manages one of them. This is how many extra round-trips
+# _generate_with_tools gets to let it ask for the one it forgot instead
+# of the request silently vanishing — see the loop's compound-request
+# comment. A model still requesting tools after this many rounds is
+# looping, not making progress, so the budget stops there rather than
+# never.
+MAX_TOOL_ROUNDS = 4
+
 
 class FREDOrchestrator:
     """
@@ -1222,99 +1232,108 @@ class FREDOrchestrator:
         tool_definitions = self.tools.get_tool_definitions(only=tool_names)
 
         message = self.llm.generate_with_tools(messages, tools=tool_definitions)
+        all_results = []
 
-        tool_calls = message.get("tool_calls")
+        for round_num in range(MAX_TOOL_ROUNDS):
+            tool_calls = message.get("tool_calls")
 
-        if not tool_calls:
-            # Some local models (Nemotron/Hermes-style templates) don't
-            # use llama.cpp's structured tool_calls field — they emit
-            # the call as plain text instead, e.g.:
-            #   <tool_call><function=get_current_time></function></tool_call>
-            tool_calls = self._parse_text_tool_calls(message.get("content") or "")
+            if not tool_calls:
+                # Some local models (Nemotron/Hermes-style templates) don't
+                # use llama.cpp's structured tool_calls field — they emit
+                # the call as plain text instead, e.g.:
+                #   <tool_call><function=get_current_time></function></tool_call>
+                tool_calls = self._parse_text_tool_calls(message.get("content") or "")
 
-        if not tool_calls:
-            content = message.get("content") or ""
+            if not tool_calls:
+                content = message.get("content") or ""
 
-            # Weaker models sometimes spit out broken tool-call syntax
-            # ("functions.get_current_time:") that's neither a real call
-            # nor a real answer. Never show that — regenerate once as a
-            # plain reply with no tools to tempt it.
-            if self._looks_like_leaked_tool_syntax(content):
-                return self.llm.generate(messages)
+                # Weaker models sometimes spit out broken tool-call syntax
+                # ("functions.get_current_time:") that's neither a real call
+                # nor a real answer. Never show that — regenerate once as a
+                # plain reply with no tools to tempt it. Only sensible
+                # before any tool has actually run; once results exist,
+                # showing those beats discarding them for a fresh, toolless
+                # generation that no longer knows what it just did.
+                if self._looks_like_leaked_tool_syntax(content):
+                    if round_num == 0:
+                        return self.llm.generate(messages)
+                    return " ".join(all_results)
 
-            return content or self.llm.generate(messages)
+                return content or (
+                    " ".join(all_results) if all_results else self.llm.generate(messages)
+                )
 
-        # If the model wants to run anything destructive, stop here
-        # and ask first — don't execute any call in this batch yet,
-        # including the safe ones, to keep the turn simple to reason
-        # about. The confirmed action resumes via
-        # _handle_pending_confirmation on the next turn.
-        for call in tool_calls:
-            function = call.get("function", {})
-            name = function.get("name")
+            # If the model wants to run anything destructive, stop here
+            # and ask first — don't execute any call in this batch yet,
+            # including the safe ones, to keep the turn simple to reason
+            # about. The confirmed action resumes via
+            # _handle_pending_confirmation on the next turn.
+            for call in tool_calls:
+                function = call.get("function", {})
+                name = function.get("name")
 
-            if self.tools.is_destructive(name):
-                try:
-                    arguments = json.loads(function.get("arguments") or "{}")
-                except json.JSONDecodeError:
-                    arguments = {}
+                if self.tools.is_destructive(name):
+                    try:
+                        arguments = json.loads(function.get("arguments") or "{}")
+                    except json.JSONDecodeError:
+                        arguments = {}
 
-                return self._request_confirmation(name, arguments)
+                    return self._request_confirmation(name, arguments)
 
-        # Echo the assistant's tool-call request, then append one
-        # result message per call, per the tool-calling protocol.
-        messages.append({
-            "role": "assistant",
-            "content": message.get("content"),
-            "tool_calls": tool_calls,
-        })
-
-        tool_results = []
-
-        for call in tool_calls:
-            result = self._execute_tool_call(call)
-            tool_results.append(str(result))
-
+            # Echo the assistant's tool-call request, then append one
+            # result message per call, per the tool-calling protocol.
             messages.append({
-                "role": "tool",
-                "tool_call_id": call.get("id", ""),
-                "content": str(result),
+                "role": "assistant",
+                "content": message.get("content"),
+                "tool_calls": tool_calls,
             })
 
-        # Skip the second LLM call entirely when every tool this turn
-        # called already returns a complete spoken sentence — see
-        # SELF_NARRATING_TOOLS, and its note on why calculate() is
-        # deliberately not in it: this loop only ever sees calculate()
-        # results for calculations embedded in a bigger question, which
-        # need interpreting, not just stating.
-        called_names = {c.get("function", {}).get("name") for c in tool_calls}
-        if (
-            called_names
-            and called_names <= SELF_NARRATING_TOOLS
-            and not intent.looks_compound(last_user)
-        ):
-            return " ".join(tool_results)
+            round_results = []
 
-        # Ask once more, now with tool results in context, for the
-        # natural-language reply FRED actually says out loud. The
-        # function-calling chat format needs `tools` passed again to
-        # correctly render the tool-result history — without it, the
-        # model loses track of what it just did and may contradict
-        # the action it actually took.
-        follow_up = self.llm.generate_with_tools(messages, tools=tool_definitions)
-        follow_up_content = follow_up.get("content") or ""
+            for call in tool_calls:
+                result = self._execute_tool_call(call)
+                round_results.append(str(result))
+                all_results.append(str(result))
 
-        # Same leaked-syntax risk applies to this turn too — a
-        # confused model can echo broken tool syntax here just as
-        # easily as on the first pass. Never show that.
-        if self._looks_like_leaked_tool_syntax(follow_up_content):
-            return " ".join(tool_results)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.get("id", ""),
+                    "content": str(result),
+                })
 
-        # llama.cpp's function-calling format sometimes returns empty
-        # content for this final turn regardless of model strength —
-        # fall back to the tool's own (already human-readable) result
-        # rather than a generic "Done." that says nothing real.
-        return follow_up_content or " ".join(tool_results)
+            # Skip the round-trip entirely when every tool called so far
+            # already returns a complete spoken sentence and the request
+            # wasn't compound — see SELF_NARRATING_TOOLS, and its note on
+            # why calculate() is deliberately not in it. A compound turn
+            # ("set a reminder and tell me if one exists") instead falls
+            # through to the loop asking again below: a local model that
+            # forgot the second tool on its first pass gets one more shot
+            # at requesting it now that the first result is in context,
+            # rather than that half of the request silently vanishing.
+            called_names = {c.get("function", {}).get("name") for c in tool_calls}
+            if (
+                called_names
+                and called_names <= SELF_NARRATING_TOOLS
+                and not intent.looks_compound(last_user)
+            ):
+                return " ".join(round_results)
+
+            # Ask again, now with these results in context — either for
+            # the natural-language reply FRED actually says out loud, or
+            # for another tool call if the model realises the turn isn't
+            # done yet. The function-calling chat format needs `tools`
+            # passed again to correctly render the tool-result history —
+            # without it, the model loses track of what it just did and
+            # may contradict the action it actually took.
+            message = self.llm.generate_with_tools(messages, tools=tool_definitions)
+
+        # Exhausted the round budget with the model still asking for
+        # tools — answer with whatever's actually been done rather than
+        # looping forever.
+        content = message.get("content") or ""
+        if self._looks_like_leaked_tool_syntax(content):
+            return " ".join(all_results)
+        return content or " ".join(all_results)
 
     def _parse_text_tool_calls(self, content: str) -> list:
         """
