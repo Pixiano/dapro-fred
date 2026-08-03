@@ -128,7 +128,11 @@ class SemanticToolRouter:
         if not self.build():
             return []
         try:
-            query = self.embed(text)
+            # is_query=True — asymmetric instruction convention, see
+            # memory_manager.py's _generate_embedding. The tool
+            # descriptions embedded in build() are documents; this is
+            # the query being matched against them.
+            query = self.embed(text, is_query=True)
         except Exception as e:
             print(f"[tool_router] embed failed ({e})")
             return []

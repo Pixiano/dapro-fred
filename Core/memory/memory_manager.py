@@ -13,7 +13,7 @@ ensure_cuda_dlls()
 
 from llama_cpp import Llama
 
-from config.settings import EMBEDDING_MODEL_PATH, MEMORY_DIR, INDEX_DIR
+from config.settings import EMBEDDING_MODEL_PATH, MEMORY_DIR, INDEX_DIR, GPU_LAYERS
 
 
 class MemoryManager:
@@ -72,10 +72,17 @@ class MemoryManager:
         # limit. 4096 is comfortably above any single embedded text here
         # (tool descriptions, vault chunks, memory entries) and the model
         # trained on 32768, so there's no accuracy tradeoff either way.
+        # GPU offload added 2026-08-03 alongside the 0.6B -> 4B upgrade:
+        # at 4B, CPU-only inference (this ran with 0 layers offloaded
+        # before, unlike the chat tiers in llm_client.py) made every
+        # turn's up-to-3 embedding calls noticeably slower. Same
+        # GPU_LAYERS the chat models use — the embedding model is small
+        # enough next to them that VRAM contention hasn't been an issue.
         self.embedding_model = Llama(
             model_path=str(EMBEDDING_MODEL_PATH),
             embedding=True,
             n_ctx=4096,
+            n_gpu_layers=GPU_LAYERS,
             verbose=False,
         )
 
@@ -150,7 +157,7 @@ class MemoryManager:
         if self.index.ntotal != len(self.memories):
             self._rebuild_index()
 
-        query_embedding = self._normalize(self._generate_embedding(query))
+        query_embedding = self._normalize(self._generate_embedding(query, is_query=True))
 
         query_vector = np.array(
             [query_embedding],
@@ -174,10 +181,32 @@ class MemoryManager:
     # INTERNAL METHODS
     # =========================================================
 
-    def _generate_embedding(self, text: str):
+    # Qwen3-Embedding's own usage examples: queries get this instruction
+    # prefix, documents/passages don't — asymmetric on purpose. Added
+    # 2026-08-03 after the 0.6B -> 4B upgrade: raw, unprefixed queries
+    # measurably hurt ranking (a project explicitly noted elsewhere as
+    # "archived as impulse ambitions" outranked the real priorities file
+    # for "what are my current priorities"). Generic rather than
+    # per-caller — this one function backs memory retrieval, tool
+    # routing, and vault search, and a single well-tested instruction
+    # covers "find the passage that answers this query" for all three
+    # well enough to not need three separately-tuned ones.
+    _QUERY_INSTRUCTION = (
+        "Instruct: Given a search query, retrieve relevant passages "
+        "that answer the query\nQuery: {query}"
+    )
+
+    def _generate_embedding(self, text: str, is_query: bool = False):
         """
         Generate embedding vector via llama.cpp, in-process.
+
+        `is_query` is only ever True for the text being searched WITH,
+        never for the text being searched — see the caller in
+        retrieve_relevant() below, and the same asymmetry in
+        tool_router.py's rank() and vault_router.py's retrieve().
         """
+        if is_query:
+            text = self._QUERY_INSTRUCTION.format(query=text)
 
         result = self.embedding_model.create_embedding(text)
 

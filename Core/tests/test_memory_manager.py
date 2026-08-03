@@ -29,7 +29,7 @@ def _make_manager(tmp_path, memories=None, dim=8):
     # Deterministic, content-dependent fake embedding — different text
     # must produce different vectors for a rebuild's rankings to mean
     # anything in these tests.
-    def fake_embed(text):
+    def fake_embed(text, is_query=False):
         rng = np.random.RandomState(abs(hash(text)) % (2**31))
         return rng.rand(dim).tolist()
 
@@ -47,6 +47,39 @@ def test_normalize_handles_zero_vector_without_dividing_by_zero():
     mgr = MemoryManager.__new__(MemoryManager)
     result = mgr._normalize([0.0, 0.0, 0.0])
     assert result == [0.0, 0.0, 0.0]
+
+
+class _RecordingEmbeddingModel:
+    """Stands in for the real llama.cpp model, recording exactly what
+    text it was asked to embed."""
+
+    def __init__(self):
+        self.seen = None
+
+    def create_embedding(self, text):
+        self.seen = text
+        return {"data": [{"embedding": [0.0]}]}
+
+
+def test_query_embeddings_get_the_instruction_prefix():
+    # Confirmed 2026-08-03: after the 0.6B -> 4B embedding model upgrade,
+    # sending raw unprefixed queries measurably hurt vault/tool-routing
+    # ranking. Qwen3-Embedding's own usage examples prefix queries with
+    # "Instruct: ...\nQuery: ..." — documents/passages get no prefix.
+    mgr = MemoryManager.__new__(MemoryManager)
+    mgr.embedding_model = _RecordingEmbeddingModel()
+
+    mgr._generate_embedding("what are my priorities", is_query=True)
+    assert mgr.embedding_model.seen.startswith("Instruct:")
+    assert mgr.embedding_model.seen.endswith("Query: what are my priorities")
+
+
+def test_document_embeddings_have_no_prefix():
+    mgr = MemoryManager.__new__(MemoryManager)
+    mgr.embedding_model = _RecordingEmbeddingModel()
+
+    mgr._generate_embedding("the vault chunk's raw text")
+    assert mgr.embedding_model.seen == "the vault chunk's raw text"
 
 
 def test_rebuild_index_recovers_from_a_count_mismatch(tmp_path):

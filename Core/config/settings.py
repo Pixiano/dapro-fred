@@ -527,9 +527,25 @@ MAX_TOKENS = 4096
 # MEMORY SETTINGS — fully local embeddings via llama.cpp
 # =========================================================
 
+# Upgraded 2026-08-03 from Qwen3-Embedding-0.6B-f16 (MTEB ~64) after that
+# model's ranking couldn't surface active-priorities.md's real content
+# for "what are my priorities" (scored -0.002 to -0.141 centered cosine —
+# see settings.py's VAULT_HARDCODED_FILES note for the numbers). 4B
+# (MTEB ~69) over 8B: this model runs synchronously on CPU, uncached, up
+# to 3x per turn (memory retrieval, tool routing, vault routing — see
+# memory_manager.py's n_ctx comment), so inference speed matters as much
+# as ranking quality here. Q8_0 over f16: near-lossless for embeddings
+# at roughly half the size/compute of full f16 (4.28GB vs 8.05GB).
+#
+# Any embedding-model swap invalidates every cached vector: FAISS memory
+# indexes self-heal on dimension mismatch (see
+# MemoryManager._load_or_create_index), but vault_router.py's chunks.json
+# cache trusts a content-hash match regardless of which model produced
+# the stored vector, so it must be deleted by hand after a swap or it
+# will silently mix old- and new-model vectors.
 EMBEDDING_MODEL_PATH = (
-    MODELS_DIR / "Qwen" / "Qwen3-Embedding-0.6B-GGUF"
-    / "Qwen3-Embedding-0.6B-f16.gguf"
+    MODELS_DIR / "Qwen" / "Qwen3-Embedding-4B-GGUF"
+    / "Qwen3-Embedding-4B-Q8_0.gguf"
 )
 
 MEMORY_TOP_K = 5

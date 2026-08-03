@@ -264,7 +264,11 @@ class VaultRouter:
             return []
 
         try:
-            q_vector = self.embed(query)
+            # is_query=True — asymmetric instruction convention, see
+            # memory_manager.py's _generate_embedding. The vault chunks
+            # embedded in build() are documents; this is the query being
+            # matched against them.
+            q_vector = self.embed(query, is_query=True)
         except Exception as e:
             print(f"[vault_router] query embed failed: {e}")
             return []
