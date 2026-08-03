@@ -51,6 +51,18 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _MD_NOISE = re.compile(r"[*_`#>]+")
 _BULLET = re.compile(r"^\s*[-•]\s*", re.MULTILINE)
 
+# A markdown link speaks its label, never the URL underneath — confirmed
+# 2026-08-03: a task saved with the link as its own label (no separate
+# name given) had Kokoro reading "h t t p s colon slash slash example
+# dot com slash report" character by character.
+_MD_LINK = re.compile(r"\[([^\]]*)\]\(https?://[^\s)]+\)")
+
+# Whatever URL is still there afterward — the link's label having been
+# the raw URL itself, or a bare URL never wrapped in markdown at all —
+# collapses to just its first hostname label. "example" out of
+# https://example.com/report, not the whole address read out loud.
+_URL = re.compile(r"https?://(?:www\.)?([a-z0-9-]+)\.\S+", re.IGNORECASE)
+
 # Two attempts at the "quiet at the start, loud after ~0.2s" report were
 # made on 2026-08-01 and BOTH REVERTED, recorded here so neither gets
 # tried a third time:
@@ -70,6 +82,8 @@ _BULLET = re.compile(r"^\s*[-•]\s*", re.MULTILINE)
 
 
 def clean_for_speech(text: str) -> str:
+    text = _MD_LINK.sub(r"\1", text)
+    text = _URL.sub(r"\1", text)
     text = _BULLET.sub("", text)
     text = _MD_NOISE.sub("", text)
     return re.sub(r"[ \t]+", " ", text).strip()

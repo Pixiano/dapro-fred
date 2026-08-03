@@ -1,0 +1,27 @@
+# Confirmed 2026-08-03: a saved task whose markdown link had no separate
+# label (just the raw URL as both label and href) made Kokoro read the
+# whole address out character by character. clean_for_speech() now
+# collapses any URL — markdown-linked or bare — down to just its
+# hostname's first label before it ever reaches TTS.
+
+from audio.tts_kokoro import clean_for_speech
+
+
+def test_markdown_link_with_a_real_label_speaks_only_the_label():
+    text = "Visit [Qwen3.5 Docs](https://unsloth.ai/docs/models/qwen3.5) for later"
+    assert clean_for_speech(text) == "Visit Qwen3.5 Docs for later"
+
+
+def test_markdown_link_whose_label_is_the_raw_url_collapses_to_the_hostname():
+    text = "Visit [https://example.com/report](https://example.com/report) for later"
+    assert clean_for_speech(text) == "Visit example for later"
+
+
+def test_bare_url_never_wrapped_in_markdown_also_collapses():
+    text = "Check https://colab.research.google.com/github/foo/bar for details"
+    assert clean_for_speech(text) == "Check colab for details"
+
+
+def test_plain_text_with_no_links_is_unaffected():
+    text = "Sir, your goals for today are logged."
+    assert clean_for_speech(text) == text
