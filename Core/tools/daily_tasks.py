@@ -104,7 +104,12 @@ def list_tasks(day: str = None) -> str:
     parsed = [p for p in (_parse_task_line(t) for t in tasks) if p]
     if not parsed:
         return "No tasks logged for today."
-    return "\n".join(f"[{'done' if done else 'open'}] {text}" for done, text in parsed)
+    # Not bracket-tagged ("[open] ...") on purpose — clean_for_speech()
+    # (Core/audio/tts_kokoro.py) strips any [bracket] as machine noise
+    # like list_scheduled()'s job ids, which would silently swallow the
+    # done/open status right along with it before this ever reached
+    # speech. Plain words survive that pass.
+    return "\n".join(f"{'Done' if done else 'Open'}: {text}" for done, text in parsed)
 
 
 def complete_task(match: str, done: bool = True, day: str = None) -> str:

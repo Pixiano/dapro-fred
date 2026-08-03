@@ -27,6 +27,16 @@ def test_plain_text_with_no_links_is_unaffected():
     assert clean_for_speech(text) == text
 
 
+def test_bracket_stripping_does_not_silently_drop_task_status():
+    # The bracket fix above (list_scheduled job ids) would have also
+    # eaten list_tasks()'s "[open]"/"[done]" tags — that's exactly why
+    # daily_tasks.list_tasks() was changed to say "Open:"/"Done:"
+    # instead of bracket-tagging. Pin the actual format here so a
+    # future revert of either side gets caught.
+    text = "Open: Study SS (History)\nDone: Chemistry journal"
+    assert clean_for_speech(text) == text
+
+
 def test_list_scheduled_job_ids_are_not_spoken():
     # Confirmed 2026-08-03: list_scheduled()'s own bracketed job id
     # ("[reminder_1785718306_1]") was reaching Kokoro and being read out

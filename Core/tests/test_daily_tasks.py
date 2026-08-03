@@ -29,8 +29,8 @@ def test_add_twice_appends_both_without_losing_the_first(tmp_path, monkeypatch):
     daily_tasks.add_task("Second link", day="2026-08-03")
 
     listed = daily_tasks.list_tasks(day="2026-08-03")
-    assert "[open] First link" in listed
-    assert "[open] Second link" in listed
+    assert "Open: First link" in listed
+    assert "Open: Second link" in listed
 
 
 def test_complete_task_toggles_the_matching_line(tmp_path, monkeypatch):
@@ -43,14 +43,14 @@ def test_complete_task_toggles_the_matching_line(tmp_path, monkeypatch):
     assert "complete" in result.lower()
 
     listed = daily_tasks.list_tasks(day="2026-08-03")
-    assert "[done] Maths activity" in listed
-    assert "[open] SS studying" in listed
+    assert "Done: Maths activity" in listed
+    assert "Open: SS studying" in listed
 
     # Reversible — matches the earlier real conversation where Vatsal
     # corrected FRED from complete back to incomplete.
     daily_tasks.complete_task("maths", done=False, day="2026-08-03")
     listed = daily_tasks.list_tasks(day="2026-08-03")
-    assert "[open] Maths activity" in listed
+    assert "Open: Maths activity" in listed
 
 
 def test_complete_task_reports_no_match_instead_of_guessing(tmp_path, monkeypatch):
