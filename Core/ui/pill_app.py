@@ -52,7 +52,7 @@ ALL_TOOL_CAPTIONS = tuple(f"{label}..." for label in TOOL_LABELS.values())
 # How long after boot FRED greets. Long at log-on because it is starting
 # alongside everything else Windows launches; near-immediate on a manual
 # launch, where the greeting is the confirmation it came up at all.
-GREETING_DELAY_STARTUP = 600.0
+GREETING_DELAY_STARTUP = 120.0
 GREETING_DELAY_NOW = 6.0
 
 

@@ -271,10 +271,17 @@ let latency = 0, levels = new Array(12).fill(0);
 })();
 
 function fit(){
-  stage.style.setProperty("--hud-scale",
-    Math.min(window.innerWidth/1600, window.innerHeight/900).toFixed(4));
+  const w = window.innerWidth, h = window.innerHeight;
+  // A kiosk window can run this before Chrome has actually composited a
+  // frame (innerWidth/innerHeight still 0) — applying that would freeze
+  // --hud-scale at 0 forever, since fullscreen kiosk rarely fires another
+  // resize. Skip and let the next resize/visibility change retry.
+  if (!w || !h) return;
+  stage.style.setProperty("--hud-scale", Math.min(w/1600, h/900).toFixed(4));
 }
-window.addEventListener("resize", fit); fit();
+window.addEventListener("resize", fit);
+document.addEventListener("visibilitychange", fit);
+fit();
 
 // ---------- state → look ----------
 function applyState(next){
