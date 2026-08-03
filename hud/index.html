@@ -64,11 +64,20 @@ html,body{margin:0;padding:0;background:#02060a;overflow:hidden;height:100%}
   background:linear-gradient(180deg,#a9f4ff,rgba(46,168,214,.15))}
 #spectrum i.pk{background:linear-gradient(180deg,#ffd79a,rgba(214,154,46,.15))}
 
+#muteBtn{width:20px;height:20px;flex:0 0 auto;padding:0;display:grid;place-items:center;
+  border:1px solid rgba(127,233,255,.3);border-radius:50%;background:rgba(20,60,80,.22);
+  color:rgba(127,233,255,.7);cursor:pointer;
+  transition:border-color .2s,box-shadow .2s,color .2s,background-color .2s}
+#muteBtn svg{width:12px;height:12px}
+#muteBtn:hover{border-color:rgba(127,233,255,.65);box-shadow:0 0 10px rgba(127,233,255,.3)}
+#muteBtn.muted{color:rgba(255,140,140,.9);border-color:rgba(255,120,120,.45);background:rgba(80,20,20,.25)}
+#muteBtn.muted:hover{box-shadow:0 0 10px rgba(255,120,120,.35)}
+
 .blip{position:absolute;width:6px;height:6px;border-radius:50%;margin:-3px 0 0 -3px;
   background:#a9f4ff;box-shadow:0 0 10px #7fe9ff;transition:opacity .5s ease}
 
 #console{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);width:520px}
-#echo{font:400 10px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.14em;height:12px;
+#echo{font:400 10px/1.5 'JetBrains Mono',Consolas,monospace;letter-spacing:.14em;min-height:12px;
   margin-bottom:7px;text-align:center;color:rgba(127,233,255,.5);opacity:0;transition:opacity .3s ease}
 #echo.on{opacity:1}
 .inwrap{display:flex;align-items:center;gap:9px;padding:8px 14px;
@@ -169,7 +178,16 @@ body.still *{animation:none!important;transition:none!important}
     </div>
     <div id="systems" style="display:flex;flex-direction:column;gap:9px"></div>
     <div id="spectrum"></div>
-    <div class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.45);margin-top:7px">VOICE LEVEL · LAST 12 SAMPLES</div>
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:7px">
+      <span class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.45)">VOICE LEVEL · LAST 12 SAMPLES</span>
+      <button id="muteBtn" type="button" title="Mute" aria-label="Mute">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" stroke="none"></path>
+          <path id="muteWaves" d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"></path>
+          <path id="muteX" d="M15.5 9.5l5 5M20.5 9.5l-5 5" style="display:none"></path>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- ================= BOTTOM LEFT: radar ================= -->
@@ -324,8 +342,20 @@ function ageReadout(){
   return (days / 100).toFixed(7);
 }
 
+function paintMuteIcon(muted){
+  muteBtn.classList.toggle("muted", muted);
+  muteBtn.title = muted ? "Unmute" : "Mute";
+  muteBtn.setAttribute("aria-label", muted ? "Unmute" : "Mute");
+  $("muteWaves").style.display = muted ? "none" : "";
+  $("muteX").style.display = muted ? "" : "none";
+}
+
 function paintSystems(d){
   const sub = d.subsystems || {};
+  // Skipped while a click is in flight so the optimistic icon set by the
+  // click handler doesn't flicker back to the old state on the next poll
+  // landing before FRED has actually applied the change.
+  if (!muteBusy && typeof sub.muted === "boolean") paintMuteIcon(sub.muted);
   const vram = (d.vram_used_mb && d.vram_total_mb) ? d.vram_used_mb/d.vram_total_mb*100 : null;
   const power = (d.power_w && d.power_limit_w) ? d.power_w/d.power_limit_w*100 : null;
   // For the three FRED rows the percentage is readiness, not utilisation:
@@ -466,8 +496,9 @@ function tick(now){
 }
 
 // ---------- input ----------
-const cmd = $("cmd"), echo = $("echo");
+const cmd = $("cmd"), echo = $("echo"), muteBtn = $("muteBtn");
 let echoTimer = null;
+let muteBusy = false;
 document.addEventListener("keydown", function(e){
   if (e.target === cmd){ if (e.key === "Escape") cmd.blur(); return; }
   if (e.key === "f" || e.key === "F") $("fps").classList.toggle("on");
@@ -475,13 +506,48 @@ document.addEventListener("keydown", function(e){
 cmd.addEventListener("keydown", function(e){
   if (e.key !== "Enter") return;
   const text = cmd.value.trim();
-  if (!text) return;
+  if (!text || cmd.disabled) return;
   cmd.value = "";
-  // TODO(wiring): hand `text` off once we've settled what it should do.
+  cmd.disabled = true;
+
   echo.textContent = "› " + text;
   echo.classList.add("on");
   clearTimeout(echoTimer);
-  echoTimer = setTimeout(function(){ echo.classList.remove("on"); }, 2600);
+
+  fetch("/command", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text: text}),
+  })
+    .then(function(res){ return res.json(); })
+    .then(function(data){ echo.textContent = data.reply || "(no reply)"; })
+    .catch(function(){ echo.textContent = "connection lost"; })
+    .finally(function(){
+      cmd.disabled = false;
+      cmd.focus();
+      clearTimeout(echoTimer);
+      echoTimer = setTimeout(function(){ echo.classList.remove("on"); }, 6000);
+    });
+});
+
+// Sends the same "mute"/"unmute" a spoken command would — the deterministic
+// dispatcher (Core/orchestrator/dispatcher.py) routes those instantly, no
+// LLM round trip, so the button feels immediate despite going through the
+// same /command channel as the console. Optimistic: flips the icon right
+// away and reverts only on an actual failure; paintSystems() reconciles it
+// with the real state on the next poll once the request has landed.
+muteBtn.addEventListener("click", function(){
+  if (muteBusy) return;
+  const wantMuted = !muteBtn.classList.contains("muted");
+  muteBusy = true;
+  paintMuteIcon(wantMuted);
+  fetch("/command", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text: wantMuted ? "mute" : "unmute"}),
+  })
+    .catch(function(){ paintMuteIcon(!wantMuted); })
+    .finally(function(){ muteBusy = false; });
 });
 
 applyState("idle");

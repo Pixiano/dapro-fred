@@ -15,8 +15,8 @@ is no reason for anything off this box to be able to read it.
 THE BUS
 -------
 State arrives as plain files under ~/voice-line/, read-only — this server
-never writes there, so whatever owns the bus can never be corrupted by the
-HUD looking at it:
+never writes the state/waveform/systems files, so whatever owns the bus can
+never be corrupted by the HUD looking at them:
 
     ~/voice-line/state      one word: idle | listening | thinking | speaking | alert
     ~/voice-line/waveform   voice amplitude, one or more floats in 0..1
@@ -24,6 +24,11 @@ HUD looking at it:
 Neither file has to exist. Nothing there yet just means "idle", which is
 also exactly what a crashed or stopped producer looks like — one code path
 for both.
+
+The one deliberate exception is the console's text box: typed text has
+nowhere else to go, so POST /command writes command.json and waits on
+command_reply.json — see submit_command(). FRED (Core/ui/pill_app.py) is
+the only thing that reads the former and writes the latter.
 
 Two rules make it robust against a producer that updates one file but not
 the other:
@@ -45,6 +50,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -63,6 +69,9 @@ POLL_SECONDS = 1.0          # stats refresh; the page interpolates between these
 STALE_SECONDS = 5.0         # state file older than this -> idle
 STOMP_FRESH_SECONDS = 0.4   # waveform newer than this -> speaking, no argument
 SPEAK_LEVEL_FLOOR = 0.02    # ignore a fresh-but-silent waveform
+
+COMMAND_TIMEOUT = 45.0      # a "thinking" turn can run long; wait it out
+COMMAND_POLL = 0.25
 
 VALID_STATES = ("idle", "listening", "thinking", "speaking", "alert")
 
@@ -123,6 +132,37 @@ def read_bus():
         return state, level
 
     return "idle", 0.0
+
+
+def submit_command(text):
+    """
+    Hands typed text to FRED and waits for the matching reply.
+
+    A fresh id per request means a slow reply from a stale request
+    (FRED restarted, or two commands landed close together) is never
+    mistaken for the answer to this one — only a command_reply.json
+    whose id matches counts.
+    """
+    req_id = uuid.uuid4().hex
+    try:
+        (BUS_DIR / "command.json").write_text(
+            json.dumps({"id": req_id, "text": text}), encoding="utf-8"
+        )
+    except OSError:
+        return "Couldn't reach FRED (bus write failed)."
+
+    reply_path = BUS_DIR / "command_reply.json"
+    deadline = time.time() + COMMAND_TIMEOUT
+    while time.time() < deadline:
+        time.sleep(COMMAND_POLL)
+        try:
+            data = json.loads(reply_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if data.get("id") == req_id:
+            return str(data.get("text") or "").strip() or "(empty reply)"
+
+    return "FRED didn't respond in time."
 
 
 # =========================================================
@@ -413,7 +453,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.mock:
                 state, level = mock_bus(self.mock_t0)
                 payload = self.telemetry.snapshot()
-                payload["subsystems"] = {"llm": True, "whisper": True, "kokoro": True}
+                payload["subsystems"] = {"llm": True, "whisper": True, "kokoro": True, "muted": False}
                 payload["turns"] = mock_turns(self.mock_t0)
                 payload["diagnostics"] = [
                     "telemetry uplink established", "diagnostics pass 04 complete",
@@ -436,6 +476,32 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._send(404, b"not found", "text/plain; charset=utf-8")
+
+    def do_POST(self):
+        if self.path.split("?", 1)[0] != "/command":
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            data = json.loads(self.rfile.read(length) or b"{}")
+            text = str(data.get("text", "")).strip()
+        except (ValueError, TypeError):
+            text = ""
+
+        if not text:
+            self._send(400, b'{"reply":"say something first"}', "application/json")
+            return
+
+        if self.mock:
+            # Nothing is listening on the bus in mock mode — echo back so
+            # the console still feels alive during a HUD-only preview.
+            reply = f'Mock mode, no FRED listening. You said: "{text}"'
+        else:
+            reply = submit_command(text)
+
+        body = json.dumps({"reply": reply}).encode("utf-8")
+        self._send(200, body, "application/json", {"Cache-Control": "no-store"})
 
 
 def main():

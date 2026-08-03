@@ -19,6 +19,7 @@
 # return immediately (Windows unhooks a slow callback with no warning),
 # so they only flip state and hand off to the turn thread.
 
+import json
 import queue
 import threading
 import time
@@ -30,10 +31,19 @@ from config.settings import TTS_ENABLED, STT_ENABLED
 from orchestrator import canned_replies
 from orchestrator.orchestrator import TOOL_LABELS, FREDOrchestrator
 from input.hotkey import HoldHotkey
+from tools import machine_tools
 from ui.pill.indicators import random_indicator
 from ui.pill.window import PillWindow
 from utils import event_log
 from utils.model_lifecycle import ModelLifecycle
+from utils.voice_line import BUS_DIR
+
+# How often to check for a typed HUD command, and how long a stale
+# command.json (left over from a HUD that's since closed) stays eligible
+# — well under the HUD's own 20s wait, so a dead consumer never leaves
+# the browser hanging on a command nobody will ever answer.
+HUD_COMMAND_POLL = 0.4
+HUD_COMMAND_MAX_AGE = 15.0
 
 # How long the transcript of what you said stays on screen.
 TRANSCRIPT_TTL = 2.5
@@ -94,6 +104,7 @@ class PillApp:
 
         from utils.hud_manager import HudManager
         self.hud = HudManager()
+        self._hud_cmd_seen = None  # last command.json id already answered
 
         # Show in the pill what FRED is doing when a tool fires, so an
         # action isn't audio-only (Phase 16's "visual confirmation").
@@ -160,12 +171,17 @@ class PillApp:
         """
         lifecycle = getattr(self, "lifecycle", None)
         if lifecycle is None:
-            return {"llm": False, "whisper": False, "kokoro": False}
+            return {"llm": False, "whisper": False, "kokoro": False, "muted": False}
         loaded = lambda m: bool(m is not None and m.is_loaded())
+        try:
+            muted = machine_tools.is_muted()
+        except Exception:
+            muted = False
         return {
             "llm": loaded(lifecycle.llm),
             "whisper": loaded(lifecycle.stt),
             "kokoro": loaded(lifecycle.tts),
+            "muted": muted,
         }
 
     def _mirror_window_to_bus(self):
@@ -214,6 +230,7 @@ class PillApp:
         self.lifecycle.start()
         self.screen_watcher.start()
         self.hud.start_server()
+        threading.Thread(target=self._hud_command_loop, daemon=True).start()
         self._schedule_greeting()
         if self.tts:
             threading.Thread(target=self._warm_phrase_cache, daemon=True).start()
@@ -750,6 +767,114 @@ class PillApp:
                 self._to_idle_and_hide()
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _hud_command_loop(self):
+        """
+        Answers text typed into the HUD's console (hud/index.html's
+        #cmd). hud/server.py's submit_command() is the only thing that
+        writes command.json and the only thing that reads
+        command_reply.json — this is that channel's other end.
+
+        Polling a plain file rather than anything fancier because this
+        is one text box, used occasionally, not a stream: the whole
+        point of the file bus (see voice_line.py) is that neither side
+        has to be running for the other to work.
+        """
+        cmd_path = BUS_DIR / "command.json"
+        reply_path = BUS_DIR / "command_reply.json"
+
+        while self._running:
+            time.sleep(HUD_COMMAND_POLL)
+            try:
+                stat = cmd_path.stat()
+                data = json.loads(cmd_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+
+            req_id = data.get("id")
+            text = str(data.get("text", "")).strip()
+            if not req_id or not text or req_id == self._hud_cmd_seen:
+                continue
+            self._hud_cmd_seen = req_id
+
+            # A command left over from before FRED (re)started, or from a
+            # browser tab that's since given up waiting — answering it
+            # now would just write a reply nobody reads.
+            if time.time() - stat.st_mtime > HUD_COMMAND_MAX_AGE:
+                continue
+
+            def write_reply(reply_text, _req_id=req_id):
+                # Fires as soon as the text exists — the browser gets its
+                # answer the moment generation finishes, not after FRED
+                # has also finished reading it aloud. See
+                # _answer_hud_command's on_reply note for why speaking
+                # still happens after this, inside the same lock.
+                try:
+                    reply_path.write_text(
+                        json.dumps({"id": _req_id, "text": reply_text}),
+                        encoding="utf-8",
+                    )
+                except OSError:
+                    pass
+
+            self._answer_hud_command(text, on_reply=write_reply)
+
+    def _answer_hud_command(self, text: str, on_reply) -> None:
+        """
+        Runs typed text through the same orchestrator a spoken turn
+        uses, then speaks the reply same as a mic turn would — a typed
+        question still gets FRED's voice, not just text back. Held
+        under _turn_lock like a mic turn, and unlike the mic path this
+        call is synchronous (no background producer thread), so the
+        lock's lifetime already covers both the llama.cpp call and the
+        speech: the two can never overlap in the model, same guarantee
+        _run_turn relies on.
+
+        `on_reply(text)` fires the instant the reply text exists, before
+        speaking starts — the HTTP request on the other end (see
+        hud/server.py's submit_command) is waiting on that text, not on
+        FRED finishing a possibly-long read-aloud. Speaking still runs
+        inside this same _turn_lock hold afterward, so a second command
+        (typed or spoken) still can't start until this one has actually
+        finished talking — same serialisation a mic turn gets, just with
+        the network response no longer sitting behind it.
+
+        set_state/set_level go through self.window rather than
+        self.voice_line directly — window.py is wrapped to mirror both
+        onto the bus (see _mirror_window_to_bus), so the HUD's arc
+        reactor animates through this exactly like a mic turn, with no
+        second thing to keep in sync. window.show() is deliberately
+        never called: a HUD-typed turn has no reason to pop the pill
+        onto the desktop too.
+        """
+        print(f"[hud console] {text}")
+        event_log.log("user_speech", text=text, source="hud")
+
+        with self._turn_lock:
+            self.window.set_state("thinking")
+            try:
+                reply = self.orchestrator.process(text)
+            except Exception as e:
+                print(f"[PillApp] hud command failed: {e}")
+                event_log.log_error("hud_command", e)
+                self.window.set_state("idle")
+                on_reply("Sorry, something went wrong.")
+                return
+
+            event_log.log("fred_speech", text=reply, spoken=bool(self.tts), source="hud")
+            on_reply(reply)
+
+            if self.tts and reply:
+                self.window.set_state("speaking")
+                try:
+                    self.tts.speak(reply, on_level=self.window.set_level)
+                except Exception as e:
+                    print(f"[PillApp] hud command speech failed: {e}")
+                    event_log.log_error("hud_command_speech", e)
+
+            self.lifecycle.touch()
+            self.window.set_level(0.0)
+            self.window.set_state("idle")
 
     def _on_cancel_button(self):
         self._cancel.set()

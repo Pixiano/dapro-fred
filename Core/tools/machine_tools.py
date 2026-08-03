@@ -142,6 +142,11 @@ def mute(should_mute: bool = True) -> str:
     return "Muted" if should_mute else "Unmuted"
 
 
+def is_muted() -> bool:
+    """Current system mute state — for the HUD's mute indicator."""
+    return bool(_get_volume_interface().GetMute())
+
+
 # =========================================================
 # BRIGHTNESS
 # =========================================================
