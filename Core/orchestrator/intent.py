@@ -94,6 +94,7 @@ TOOL_CATEGORIES = {
     "git": ("git_status", "git_log", "git_diff_summary"),
     "recap": ("summarise_today", "save_today_summary"),
     "vision": ("whats_on_screen",),
+    "tasks": ("add_task", "list_tasks", "complete_task"),
 }
 
 # Cue words per category. Over-inclusive on purpose: a spurious category
@@ -203,6 +204,14 @@ CATEGORY_CUES = {
     "vision": (
         "what's on my screen", "what am i looking at", "on my screen",
         "what's on screen", "screen say", "what does my screen",
+    ),
+    "tasks": (
+        # Bare "to do" is deliberately left out — "things to do", "what
+        # should I do" are common phrasing with nothing to do with the
+        # task list, and would widen the menu on nearly every turn.
+        "task", "tasks", "to-do", "to-do list", "to do list", "todo",
+        "checklist", "today's tasks", "my tasks", "mark as done",
+        "mark as complete", "mark complete", "mark incomplete", "mark done",
     ),
 }
 

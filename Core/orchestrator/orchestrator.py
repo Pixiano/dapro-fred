@@ -17,6 +17,7 @@ from tools import git_tools
 from tools import smart_search
 from tools import session_summary
 from tools import vision_tools
+from tools import daily_tasks
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
@@ -82,6 +83,9 @@ TOOL_LABELS = {
     "set_timer": "Setting timer",
     "schedule_file_watch": "Watching for file",
     "list_scheduled": "Checking reminders",
+    "add_task": "Adding task",
+    "list_tasks": "Checking tasks",
+    "complete_task": "Updating task",
     "cancel_scheduled": "Cancelling",
 }
 
@@ -124,6 +128,9 @@ SELF_NARRATING_TOOLS = {
     "set_timer",
     "list_scheduled",
     "cancel_scheduled",
+    "add_task",
+    "list_tasks",
+    "complete_task",
 }
 
 # A compound turn ("set a reminder and tell me if one exists") can need
@@ -1118,6 +1125,61 @@ class FREDOrchestrator:
                 "call after the user has explicitly confirmed saving."
             ),
             parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="add_task",
+            function=daily_tasks.add_task,
+            description=(
+                "Add an item to today's task list, saved to the vault's "
+                "daily note. Use for 'add to my tasks', 'I need to ...', "
+                "a to-do item — call once per item for a compound request."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": (
+                            "The task, written out plainly. Include a URL "
+                            "as a markdown link if one was given — this "
+                            "only ever records the task, it never opens "
+                            "anything."
+                        ),
+                    }
+                },
+                "required": ["text"],
+            },
+        )
+
+        self.tools.register(
+            name="list_tasks",
+            function=daily_tasks.list_tasks,
+            description="List today's tasks and whether each is done.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="complete_task",
+            function=daily_tasks.complete_task,
+            description=(
+                "Mark a task from today's list done or not done. Match "
+                "on whatever part of the task text identifies it."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "match": {
+                        "type": "string",
+                        "description": "Text that identifies the task.",
+                    },
+                    "done": {
+                        "type": "boolean",
+                        "description": "True to mark complete, false to mark incomplete. Defaults true.",
+                    },
+                },
+                "required": ["match"],
+            },
         )
 
         self.tools.register(
