@@ -4,6 +4,8 @@ import gc
 import json
 import re
 
+import requests
+
 from utils.gpu_bootstrap import ensure_cuda_dlls
 
 ensure_cuda_dlls()
@@ -24,7 +26,58 @@ from config.settings import (
     TOP_P,
     MAX_TOKENS,
     LLM_STATUS_PATH,
+    CLOUD_PROVIDERS,
 )
+
+
+def _cloud_request(provider: dict, messages: list, tools=None, tool_choice=None,
+                    temperature=0.7, top_p=1.0, max_tokens=None, stream=False):
+    """
+    One call to one OpenAI-compatible /chat/completions endpoint. Raises
+    on any failure (network, auth, rate limit, HTTP error) — the caller
+    decides what to do next (try the next provider, fall back to local).
+    """
+    payload = {
+        "model": provider["model"],
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+        "stream": stream,
+    }
+    if max_tokens:
+        payload["max_tokens"] = max_tokens
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = tool_choice or "auto"
+
+    headers = {"Authorization": f"Bearer {provider['api_key']}"}
+
+    response = requests.post(
+        provider["base_url"], headers=headers, json=payload, timeout=30, stream=stream
+    )
+    response.raise_for_status()
+
+    if not stream:
+        return response.json()
+    return _iter_sse(response)
+
+
+def _iter_sse(response):
+    # SSE ("data: {...}\n\n", terminated by "data: [DONE]") — same wire
+    # format on Groq and Cerebras (both OpenAI-compatible), and each
+    # decoded chunk already matches the {"choices": [{"delta": ...}]}
+    # shape generate_stream()'s parsing loop expects from a llama.cpp
+    # chunk, so it needs no cloud-specific handling downstream.
+    for line in response.iter_lines():
+        if not line:
+            continue
+        line = line.decode("utf-8")
+        if not line.startswith("data: "):
+            continue
+        data = line[len("data: "):]
+        if data == "[DONE]":
+            return
+        yield json.loads(data)
 
 
 def _write_llm_status(loaded_tiers):
@@ -47,10 +100,19 @@ def _write_llm_status(loaded_tiers):
 
 class LLMClient:
     """
-    Fully local LLM inference for F.R.E.D., via llama.cpp.
+    LLM inference for F.R.E.D.
 
-    Models are loaded directly from disk — no server, no API,
-    nothing leaves this machine.
+    Two independent systems, tried in order, not one merged into the
+    other:
+      1. CLOUD_PROVIDERS (settings.py) — Groq, then Cerebras. Tried
+         first on every call. Neither trains on or retains inputs (see
+         settings.py's comment on CLOUD_PROVIDERS for what was actually
+         checked).
+      2. The local tier system below (MODEL_TIERS/DEFAULT_TIER) —
+         llama.cpp, GGUFs loaded from disk, nothing leaves this
+         machine. Reached only once every cloud provider has failed
+         (no key, no internet, rate limited, outage), at which point it
+         runs exactly as it did before the cloud cascade existed.
 
     Responsibilities:
     - Pick the right model tier for the job (nano/standard/deep)
@@ -75,9 +137,67 @@ class LLMClient:
     # PUBLIC INTERFACE
     # =========================================================
 
+    def _cloud_providers(self) -> list:
+        return [p for p in CLOUD_PROVIDERS if p.get("api_key")]
+
+    def _cloud_generate(self, messages: list, tools=None, tool_choice=None,
+                         max_tokens: int = None) -> dict:
+        """
+        Try each configured cloud provider in order, returning the raw
+        response JSON from the first one that succeeds. Raises only
+        once every provider has failed — the caller (generate() /
+        generate_with_tools()) treats that as "no cloud available" and
+        drops straight through to the ORIGINAL local tier system,
+        unmodified.
+        """
+        providers = self._cloud_providers()
+        if not providers:
+            raise RuntimeError("No cloud provider has an API key configured.")
+
+        errors = []
+        for provider in providers:
+            try:
+                return _cloud_request(
+                    provider, messages, tools=tools, tool_choice=tool_choice,
+                    temperature=self.temperature, top_p=self.top_p,
+                    max_tokens=max_tokens or self.max_tokens,
+                )
+            except Exception as e:
+                print(f"[LLM] cloud provider '{provider['name']}' failed, trying next: {e}")
+                errors.append(f"{provider['name']}: {e}")
+
+        raise RuntimeError(f"All cloud providers failed: {'; '.join(errors)}")
+
+    def _cloud_stream(self, messages: list):
+        """
+        Same cascade as _cloud_generate, but for the streaming path.
+        Returns the SSE-decoding generator from the first provider whose
+        connection succeeds, or None if every provider failed to even
+        connect — the caller then falls through to local streaming.
+
+        Only the connection setup (POST + status check) needs to
+        succeed here; a failure mid-stream after that is handled by
+        generate_stream()'s own existing try/except around iterating
+        the stream, same as a local model's stream failing mid-way.
+        """
+        for provider in self._cloud_providers():
+            try:
+                return _cloud_request(
+                    provider, messages, temperature=self.temperature,
+                    top_p=self.top_p, max_tokens=self.max_tokens, stream=True,
+                )
+            except Exception as e:
+                print(f"[LLM] cloud provider '{provider['name']}' streaming setup failed, trying next: {e}")
+        return None
+
     def generate(self, messages: list, tier: str = None, max_tokens: int = None) -> str:
         """
         Unified generation interface.
+
+        Tries the cloud cascade (CLOUD_PROVIDERS) first, regardless of
+        `tier` — cloud isn't tier-scoped, it's a separate system in
+        front of the whole local one. Only on total cloud failure does
+        `tier` start to matter, exactly as it always has.
 
         tier: "Standard" | "Deep" | "Extreme" — if not given, FRED
         picks one based on the latest user message.
@@ -87,6 +207,15 @@ class LLMClient:
         model's full budget on every step of a loop (see
         tools/smart_search.py). Defaults to self.max_tokens.
         """
+
+        try:
+            response = self._cloud_generate(messages, max_tokens=max_tokens)
+            return self._finish_response(response) or (
+                "I ran out of room thinking that one through, sir. "
+                "Ask me again, or narrow it down a little."
+            )
+        except Exception as cloud_error:
+            print(f"[LLM] cloud cascade unavailable, falling back to local: {cloud_error}")
 
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)
@@ -195,22 +324,25 @@ class LLMClient:
         speed-of-interrupt win on turns that are already the minority
         (most conversation happens on the streamed chat path above).
         """
-        chosen_tier = tier or self._pick_tier(messages)
-        messages = self._apply_thinking(messages, chosen_tier)
+        stream = self._cloud_stream(messages)
+        chosen_tier = None
 
-        try:
-            model = self._get_model(chosen_tier)
-            stream = model.create_chat_completion(
-                messages=messages,
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_tokens=self.max_tokens,
-                stream=True,
-            )
-        except Exception as error:
-            print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
-            yield self.generate(messages, tier=chosen_tier)
-            return
+        if stream is None:
+            chosen_tier = tier or self._pick_tier(messages)
+            messages = self._apply_thinking(messages, chosen_tier)
+            try:
+                model = self._get_model(chosen_tier)
+                stream = model.create_chat_completion(
+                    messages=messages,
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    max_tokens=self.max_tokens,
+                    stream=True,
+                )
+            except Exception as error:
+                print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
+                yield self.generate(messages, tier=chosen_tier)
+                return
 
         buffer = ""
         state = "unknown"  # unknown -> thinking -> done, or unknown -> done
@@ -273,10 +405,27 @@ class LLMClient:
         dict (content + optional tool_calls) so the orchestrator can
         execute any requested tools and continue the conversation.
 
+        Tries the cloud cascade first, same as generate() — cloud
+        providers speak plain OpenAI tool_calls, no template quirks to
+        fight. Falls through to the local tier system (and, within
+        that, to a plain no-tools response) only once cloud has failed
+        entirely.
+
         Not every local model's chat template supports tool-calling
         grammar — if the call fails for that reason, falls back to a
         plain text response with no tool calls.
         """
+
+        try:
+            response = self._cloud_generate(
+                messages, tools=tools, tool_choice="auto", max_tokens=self.max_tokens
+            )
+            message = response["choices"][0]["message"]
+            if message.get("content"):
+                message["content"] = self._strip_thinking(message["content"])
+            return message
+        except Exception as cloud_error:
+            print(f"[LLM] cloud cascade unavailable for tool-calling, falling back to local: {cloud_error}")
 
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)
@@ -546,14 +695,24 @@ class LLMClient:
             max_tokens=max_tokens or self.max_tokens,
         )
 
+        return self._finish_response(response)
+
+    @staticmethod
+    def _finish_response(response: dict) -> str:
+        """
+        Shared by the local path (_generate, above) and the cloud path
+        (generate()'s _cloud_generate call) — same response shape
+        either way ({"choices": [{"message": {"content": ...}}]}), so
+        one extraction+strip routine covers both.
+        """
         content = response["choices"][0]["message"]["content"]
 
         # A genuinely empty completion is a model/runtime failure worth
         # retrying on another tier, so it still raises.
         if not content:
-            raise ValueError("Empty response from local model.")
+            raise ValueError("Empty response from model.")
 
-        stripped = self._strip_thinking(content)
+        stripped = LLMClient._strip_thinking(content)
 
         # "Only unfinished reasoning" is NOT a failure and must not
         # raise: the model worked fine, it just spent its whole budget

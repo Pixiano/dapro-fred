@@ -1,5 +1,6 @@
 # Core/config/settings.py
 
+import os
 from pathlib import Path
 
 # =========================================================
@@ -310,6 +311,61 @@ MODEL_TIERS = {
     "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
             / "gemma-4-12B-it-QAT-Q4_0.gguf",
 }
+
+# Cloud cascade, 2026-08-03 — deliberately a SEPARATE system from
+# MODEL_TIERS/DEFAULT_TIER above, not a replacement wired into it. The
+# local tier system (Standard = Qwen3-8B, thinking-on, ~13s/turn) is
+# left exactly as it was and untouched by this: llm_client.py tries
+# CLOUD_PROVIDERS first, in order, and only falls through to the
+# original local _pick_tier/_get_model flow — completely unmodified —
+# if every cloud provider fails. That local flow is the tertiary rung,
+# reached with no special-casing: it just runs as if the cloud attempt
+# never happened.
+#
+# Checked before wiring this in, both providers' own data-processing
+# terms: neither trains on API inputs/outputs.
+#   Groq     — no retention by default; the only exception is a
+#              transient abuse/troubleshooting log capped at 30 days,
+#              itself opt-outable via GroqCloud's zero-data-retention
+#              console setting (console.groq.com/docs/your-data).
+#   Cerebras — no retention at all; inputs/outputs are processed for
+#              the response and immediately discarded (cerebras.ai/privacy).
+# Real exposure either way is "this leaves the machine and is processed
+# on a third party's servers," not "they train on your vault" —
+# acceptable for FRED's own conversation content, not a reason to start
+# routing raw financial/ID documents through it.
+#
+# Order matches the user's own account setup: Groq main (free, until
+# the $5 threshold in ~14 days), Cerebras secondary (smaller free-tier
+# quota — 5 req/min, 2,400 req/day, 1M tokens/day — but same
+# no-retention terms). Each entry tried in order in llm_client.py; only
+# once ALL of these fail does control reach the original local tier
+# system.
+#
+# openai/gpt-oss-120b picked for BOTH providers deliberately (it's on
+# both catalogs) rather than a different model per provider: same
+# reasoning-channel syntax on either leg, and TIER_PROMPT_MARKERS /
+# _strip_thinking already parse gpt-oss's <|channel|> format correctly
+# (Extreme tier below is gpt-oss-20b, same syntax, already confirmed
+# live) — a provider failover mid-outage changes nothing about how the
+# reply gets parsed.
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
+
+CLOUD_PROVIDERS = [
+    {
+        "name": "groq",
+        "base_url": "https://api.groq.com/openai/v1/chat/completions",
+        "api_key": GROQ_API_KEY,
+        "model": "openai/gpt-oss-120b",
+    },
+    {
+        "name": "cerebras",
+        "base_url": "https://api.cerebras.ai/v1/chat/completions",
+        "api_key": CEREBRAS_API_KEY,
+        "model": "gpt-oss-120b",
+    },
+]
 
 # mmproj (vision projector) path, only for tiers that are actually
 # multimodal — absence here means "this tier has no vision handler",
