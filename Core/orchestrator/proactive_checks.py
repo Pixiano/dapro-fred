@@ -26,8 +26,10 @@ from config.settings import (
     PROACTIVE_BREAK_IDLE_MINUTES,
     PROACTIVE_LONG_SESSION_HOURS,
     PROACTIVE_DEADLINE_WARN_DAYS,
+    PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
 )
+from tools import daily_tasks
 from utils.notifier import notify
 from utils.vault_md import parse_frontmatter
 
@@ -221,6 +223,60 @@ def check_deadlines():
 
 
 # =========================================================
+# 4. TASK DEADLINES (daily notes, not frontmatter)
+# =========================================================
+
+def check_task_deadlines():
+    """
+    Warns about a still-open task whose own text says when it's due.
+
+    check_deadlines above reads a `deadline:` frontmatter field that no
+    vault file has ever used. Real deadlines live in the daily notes'
+    task lines instead — "Chemistry journal completion — due Thursday in
+    school" (daily/2026-08/2026-08-03.md). Confirmed 2026-08-04: that
+    task, and a physics one alongside it, went unmentioned until Vatsal
+    pushed back twice asking what else was pending. Nothing was watching
+    them.
+
+    Dedup is per task per due date, so a task that gets re-dated warns
+    again but an unchanged one doesn't nag every 15 minutes.
+    """
+    state = _load_state()
+    notified = state.setdefault("task_deadlines", {})
+    changed = False
+
+    try:
+        due = daily_tasks.open_due_tasks(within_days=PROACTIVE_TASK_DUE_DAYS)
+    except Exception as e:
+        print(f"[proactive] task deadline check failed: {e}")
+        return
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    for deadline, text in due:
+        key = f"{text}|{deadline:%Y-%m-%d}"
+        if notified.get(key):
+            continue
+
+        days = (deadline - today).days
+        if days < 0:
+            when = f"{abs(days)} day(s) overdue"
+        elif days == 0:
+            when = "due today"
+        elif days == 1:
+            when = "due tomorrow"
+        else:
+            when = f"due in {days} day(s)"
+
+        notify(f"{text} — {when}, sir.", title="Task deadline")
+        notified[key] = True
+        changed = True
+
+    if changed:
+        _save_state(state)
+
+
+# =========================================================
 # WIRING
 # =========================================================
 
@@ -234,4 +290,7 @@ def register(scheduler):
     )
     scheduler.add_periodic(
         check_deadlines, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_deadlines"
+    )
+    scheduler.add_periodic(
+        check_task_deadlines, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_task_deadlines"
     )

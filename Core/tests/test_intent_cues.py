@@ -41,8 +41,27 @@ def test_compound_time_and_goals_is_flagged():
 
 
 def test_single_self_narrating_ask_is_not_flagged():
-    for phrase in ("What is the time?", "set the volume to 50 and open chrome"):
+    for phrase in ("What is the time?", "add milk and eggs to the shopping list"):
         assert not intent.looks_compound(phrase), phrase
+
+
+def test_two_actions_joined_by_a_conjunction_is_flagged():
+    """
+    "set the volume to 50 and open chrome" was asserted NOT compound
+    here until 2026-08-04, which was wrong: it is two actions, and
+    set_volume is in SELF_NARRATING_TOOLS, so the shortcut returned
+    after setting the volume and Chrome was never opened — the same
+    shape as the confirmed "open LM studio and go to cerebras.com"
+    failure. _COMPOUND_RE only looked for a second QUESTION word, so a
+    second IMPERATIVE went unnoticed.
+    """
+    for phrase in (
+        "set the volume to 50 and open chrome",
+        "open LM studio and go to cerebras.com",
+        "I want you to open LM studio THEN proceed to open the cerebras website",
+        "set a reminder for 6pm and open Spotify",
+    ):
+        assert intent.looks_compound(phrase), phrase
 
 
 def test_two_reminders_two_weekdays_is_flagged():

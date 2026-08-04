@@ -194,6 +194,127 @@ def describe_when(when: datetime, now: datetime = None) -> str:
     return f"{when.strftime('%A %d %B')} at {clock}"
 
 
+# APScheduler's cron day_of_week vocabulary. Its own abbreviations, so
+# the parsed value can be handed straight to add_job without a second
+# translation step.
+_CRON_DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+_DAY_WORDS = {
+    "monday": "mon", "mon": "mon",
+    "tuesday": "tue", "tue": "tue", "tues": "tue",
+    "wednesday": "wed", "wed": "wed",
+    "thursday": "thu", "thu": "thu", "thur": "thu", "thurs": "thu",
+    "friday": "fri", "fri": "fri",
+    "saturday": "sat", "sat": "sat",
+    "sunday": "sun", "sun": "sun",
+}
+
+# Phrases naming a whole set of days at once.
+_DAY_SETS = {
+    "every day": "mon,tue,wed,thu,fri,sat,sun",
+    "everyday": "mon,tue,wed,thu,fri,sat,sun",
+    "daily": "mon,tue,wed,thu,fri,sat,sun",
+    "weekday": "mon,tue,wed,thu,fri",
+    "weekdays": "mon,tue,wed,thu,fri",
+    "weekend": "sat,sun",
+    "weekends": "sat,sun",
+}
+
+# "every"/"each" is what separates a repeating request from a one-off.
+# parse_when() deliberately has no notion of it — it returns a single
+# datetime by contract (pinned by test_scheduler_parse_when.py), so
+# recurrence is parsed here instead of complicating that function.
+#
+# The plural day-set words carry recurrence on their own: "weekends at
+# noon" names no "every" but is unambiguously repeating, and without
+# them it fell through to the one-shot path. Singular "weekday" is
+# deliberately absent — "remind me on a weekday" is not a schedule.
+_RECURRING_RE = re.compile(
+    r"\b(every|each|daily|weekly|weekends?|weekdays)\b", re.IGNORECASE
+)
+
+
+def looks_recurring(text: str) -> bool:
+    """True if the phrasing asks for a repeating reminder rather than a
+    single one. Used by the tool layer to pick between schedule_reminder
+    and schedule_recurring."""
+    return bool(text) and bool(_RECURRING_RE.search(str(text)))
+
+
+def parse_recurrence(text: str):
+    """
+    Resolve a repeating time expression to (day_of_week, hour, minute)
+    for an APScheduler cron trigger, or None if it isn't recurring.
+
+    Handles "every day at 7am", "every weekday at 6:30pm", "every monday
+    and wednesday at 5", "weekends at noon".
+
+    Reuses parse_when() for the clock half rather than duplicating its
+    am/pm and evening-word rules — that logic is subtle (see its
+    docstring) and having two copies drift apart would produce a
+    recurring reminder that fires an hour off from the one-shot version
+    of the same phrasing.
+    """
+    if not looks_recurring(text):
+        return None
+
+    lowered = str(text).strip().lower()
+
+    days = None
+    for phrase, value in _DAY_SETS.items():
+        if phrase in lowered:
+            days = value
+            break
+
+    if days is None:
+        named = [
+            _DAY_WORDS[word]
+            for word in re.findall(r"[a-z]+", lowered)
+            if word in _DAY_WORDS
+        ]
+        if named:
+            # dict.fromkeys rather than set(): preserves the order spoken
+            # so "monday and wednesday" doesn't come back as "wed,mon".
+            days = ",".join(dict.fromkeys(named))
+
+    # "every day" is the sensible default for a bare "remind me every
+    # day"-shaped request that named no days at all.
+    if days is None:
+        days = _DAY_SETS["every day"]
+
+    # Strip the day words before handing the rest to parse_when — left
+    # in, "every monday at 5" would send it down its own _WEEKDAY_RE
+    # branch and shift the date, which is meaningless here since cron
+    # supplies the day and only the time-of-day is wanted.
+    time_text = _WEEKDAY_RE.sub(" ", lowered)
+    when = parse_when(time_text)
+    if when is None:
+        return None
+
+    return days, when.hour, when.minute
+
+
+def describe_recurrence(days: str, hour: int, minute: int) -> str:
+    """Human phrasing for a recurring confirmation, spoken aloud."""
+    clock = datetime(2000, 1, 1, hour, minute).strftime("%I:%M %p").lstrip("0")
+
+    for phrase, value in (("every day", _DAY_SETS["every day"]),
+                          ("every weekday", _DAY_SETS["weekday"]),
+                          ("every weekend", _DAY_SETS["weekend"])):
+        if days == value:
+            return f"{phrase} at {clock}"
+
+    spoken = {
+        "mon": "Monday", "tue": "Tuesday", "wed": "Wednesday",
+        "thu": "Thursday", "fri": "Friday", "sat": "Saturday",
+        "sun": "Sunday",
+    }
+    names = [spoken.get(d.strip(), d.strip()) for d in days.split(",")]
+    if len(names) == 1:
+        return f"every {names[0]} at {clock}"
+    return f"every {', '.join(names[:-1])} and {names[-1]} at {clock}"
+
+
 class ReminderScheduler:
     """
     Wraps APScheduler's BackgroundScheduler with the two proactive
@@ -352,6 +473,76 @@ class ReminderScheduler:
         suffix = f" for {label}" if label else ""
         return f"Timer set for {duration_text}{suffix}."
 
+    def schedule_recurring(
+        self,
+        message: str,
+        when: str = None,
+        days: str = None,
+        hour: int = None,
+        minute: int = None,
+        job_id: str = None,
+    ) -> str:
+        """
+        A reminder that repeats, on a cron trigger.
+
+        Give either `when` as a phrase ("every weekday at 6:30pm") or the
+        structured form (`days="mon,wed,fri"`, `hour`, `minute`). The
+        structured form exists for callers that already know the schedule
+        and shouldn't have to render it to English just to have it parsed
+        back — see tools/workout_plan.py.
+
+        `job_id` makes a recurring reminder replaceable: re-registering
+        the same id updates the existing job in place rather than
+        stacking a duplicate. Without it, re-running the workout setup
+        would leave two reminders firing at once.
+
+        Persists like schedule_reminder. coalesce=True so a laptop that
+        was off for three days fires ONE catch-up reminder rather than
+        three at once — the misfire_grace_time=None used by the one-shot
+        jobs means "no grace limit", which on a repeating trigger would
+        otherwise mean every missed occurrence firing on boot.
+        """
+        if days is None or hour is None:
+            parsed = parse_recurrence(when or message)
+            if parsed is None:
+                return (
+                    f"I couldn't read \"{when or message}\" as a repeating time. "
+                    "Try something like \"every weekday at 7am\" or "
+                    "\"every monday and thursday at 6pm\"."
+                )
+            days, hour, minute = parsed
+
+        minute = int(minute or 0)
+        hour = int(hour)
+
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return "That isn't a valid time of day."
+
+        wanted = [d.strip().lower() for d in str(days).split(",") if d.strip()]
+        bad = [d for d in wanted if d not in _CRON_DAYS]
+        if bad or not wanted:
+            return f"I don't recognise those days: {', '.join(bad) or 'none given'}."
+        days = ",".join(wanted)
+
+        self._scheduler.add_job(
+            _fire_reminder,
+            args=[message],
+            trigger="cron",
+            day_of_week=days,
+            hour=hour,
+            minute=minute,
+            id=job_id or self._next_job_id("recurring"),
+            jobstore="default",
+            replace_existing=True,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
+
+        return (
+            f"Recurring reminder set for "
+            f"{describe_recurrence(days, hour, minute)}: \"{message}\""
+        )
+
     # =========================================================
     # FILE WATCH (in-memory only — see class docstring)
     # =========================================================
@@ -411,10 +602,21 @@ class ReminderScheduler:
         lines = []
 
         for job in jobs:
+            # The proactive checks (proactive_vault_staleness etc.) live
+            # in the memory jobstore and get_jobs() returns both stores,
+            # so they land here too — they aren't reminders and reading
+            # them out as "File watch: ''" was pure noise.
+            if job.id.startswith("proactive_"):
+                continue
+
             if job.id.startswith("reminder_"):
                 kind = "Reminder"
             elif job.id.startswith("timer_"):
                 kind = "Timer"
+            elif job.id.startswith("workout_"):
+                kind = "Workout"
+            elif job.id.startswith("recurring_"):
+                kind = "Recurring"
             else:
                 kind = "File watch"
 
@@ -427,6 +629,14 @@ class ReminderScheduler:
             )
             detail = job.args[0] if job.args else ""
             lines.append(f"- [{job.id}] {kind}: \"{detail}\" — {when}")
+
+        # The early "no jobs at all" return above doesn't cover this: the
+        # proactive checks are always registered, so `jobs` is never
+        # empty in a live process and a user with nothing of their own
+        # scheduled would otherwise get an empty string read aloud as
+        # silence.
+        if not lines:
+            return "Nothing scheduled right now."
 
         return "\n".join(lines)
 
@@ -462,6 +672,22 @@ class ReminderScheduler:
 
         described = ", ".join(str(j.args[0]) for j in matches if j.args)
         return f"Cancelled: {described}"
+
+    def cancel_job_id(self, job_id: str) -> bool:
+        """
+        Remove one job by its exact id, quietly. True if it existed.
+
+        Distinct from cancel_scheduled(), which is the spoken-command
+        path — it matches fuzzily on message text and reports back in a
+        sentence. This is for callers that manage their own stable ids
+        and need to retract one without narrating anything (see
+        tools/workout_plan.py retiring a day that became a rest day).
+        """
+        job = self._scheduler.get_job(job_id, jobstore="default")
+        if job is None:
+            return False
+        self._remove_job(job_id, "default")
+        return True
 
     def _remove_job(self, job_id: str, jobstore: str):
 

@@ -21,7 +21,7 @@ class _FakeLLM:
         self._replies = list(replies)
         self.calls = 0
 
-    def generate_with_tools(self, messages, tools):
+    def generate_with_tools(self, messages, tools, local_only=False):
         reply = self._replies[self.calls]
         self.calls += 1
         return reply

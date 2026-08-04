@@ -89,6 +89,18 @@ VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md", "active-priorit
 # vault, and nothing should.
 VAULT_EXCLUDED_FILES = {"_TEMPLATE.md"}
 
+# File types the vault indexer reads. PDFs were added 2026-08-04: two
+# had been sitting in personal/ (workout_split_June.pdf,
+# skill_progressions.pdf) since before the index existed, holding the
+# actual training split — the indexer globbed "*.md" only, so FRED could
+# not see them at all and answered questions about the routine from the
+# prose summary in fitness.md instead of the plan itself.
+#
+# Adding a suffix here is not free: whatever reads it must produce text
+# (see vault_router._chunk_file), and tools/vault_files.py opens indexed
+# paths as UTF-8 text, so a new binary format needs a branch there too.
+VAULT_INDEXED_SUFFIXES = {".md", ".pdf"}
+
 # Vector store for the vault router. Lives at <vault>/vectors/ so the
 # index travels with the memory vault it describes rather than with
 # Project_FRED — the vault is the thing that outlives any one project
@@ -192,6 +204,13 @@ PROACTIVE_LONG_SESSION_HOURS = 3
 # whenever a real deadline gets added, not speculative parsing of dates
 # from prose.
 PROACTIVE_DEADLINE_WARN_DAYS = 7
+
+# How far ahead a task whose text says "due <day>" gets raised. Two
+# days rather than the 7 used for frontmatter deadlines: a daily-note
+# task is a same-week errand ("Chemistry journal completion — due
+# Thursday in school"), and warning a full week out would fire on
+# something that isn't actionable yet and train him to ignore it.
+PROACTIVE_TASK_DUE_DAYS = 2
 
 PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 

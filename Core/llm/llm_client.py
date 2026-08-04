@@ -193,7 +193,8 @@ class LLMClient:
                 event_log.log_error(f"cloud_llm_stream:{provider['name']}", e)
         return None
 
-    def generate(self, messages: list, tier: str = None, max_tokens: int = None) -> str:
+    def generate(self, messages: list, tier: str = None, max_tokens: int = None,
+                 local_only: bool = False) -> str:
         """
         Unified generation interface.
 
@@ -209,17 +210,25 @@ class LLMClient:
         one short line and who would otherwise pay for a thinking-on
         model's full budget on every step of a loop (see
         tools/smart_search.py). Defaults to self.max_tokens.
+
+        local_only: never touch a cloud provider for this call. Set when
+        the prompt carries content the vault marks sensitive — see
+        utils/sensitive.py. This is a HARD constraint from the vault's
+        rules.md ("Never send personal/ or people/ anywhere. No hosted
+        model, no API"), not a preference: the cascade would otherwise
+        POST health and identity details about a minor to Groq.
         """
 
-        try:
-            response = self._cloud_generate(messages, max_tokens=max_tokens)
-            return self._finish_response(response) or (
-                "I ran out of room thinking that one through, sir. "
-                "Ask me again, or narrow it down a little."
-            )
-        except Exception as cloud_error:
-            print(f"[LLM] cloud cascade unavailable, falling back to local: {cloud_error}")
-            event_log.log_error("cloud_llm_cascade", cloud_error)
+        if not local_only:
+            try:
+                response = self._cloud_generate(messages, max_tokens=max_tokens)
+                return self._finish_response(response) or (
+                    "I ran out of room thinking that one through, sir. "
+                    "Ask me again, or narrow it down a little."
+                )
+            except Exception as cloud_error:
+                print(f"[LLM] cloud cascade unavailable, falling back to local: {cloud_error}")
+                event_log.log_error("cloud_llm_cascade", cloud_error)
 
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)
@@ -278,7 +287,7 @@ class LLMClient:
             for opener in cls._THOUGHT_OPENERS
         )
 
-    def generate_stream(self, messages: list, tier: str = None):
+    def generate_stream(self, messages: list, tier: str = None, local_only: bool = False):
         """
         Yield reply text as it is generated, with any reasoning block
         withheld.
@@ -328,7 +337,11 @@ class LLMClient:
         speed-of-interrupt win on turns that are already the minority
         (most conversation happens on the streamed chat path above).
         """
-        stream = self._cloud_stream(messages)
+        # local_only: see generate()'s docstring — a hard vault rule, not
+        # a preference. None here means "no cloud stream", which is the
+        # same shape a total cloud failure produces, so the local path
+        # below needs no separate branch.
+        stream = None if local_only else self._cloud_stream(messages)
         chosen_tier = None
 
         if stream is None:
@@ -345,7 +358,7 @@ class LLMClient:
                 )
             except Exception as error:
                 print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
-                yield self.generate(messages, tier=chosen_tier)
+                yield self.generate(messages, tier=chosen_tier, local_only=local_only)
                 return
 
         buffer = ""
@@ -403,6 +416,7 @@ class LLMClient:
         messages: list,
         tools: list,
         tier: str = None,
+        local_only: bool = False,
     ) -> dict:
         """
         Tool-calling interface. Returns the raw assistant message
@@ -420,17 +434,18 @@ class LLMClient:
         plain text response with no tool calls.
         """
 
-        try:
-            response = self._cloud_generate(
-                messages, tools=tools, tool_choice="auto", max_tokens=self.max_tokens
-            )
-            message = response["choices"][0]["message"]
-            if message.get("content"):
-                message["content"] = self._strip_thinking(message["content"])
-            return message
-        except Exception as cloud_error:
-            print(f"[LLM] cloud cascade unavailable for tool-calling, falling back to local: {cloud_error}")
-            event_log.log_error("cloud_llm_cascade_tools", cloud_error)
+        if not local_only:
+            try:
+                response = self._cloud_generate(
+                    messages, tools=tools, tool_choice="auto", max_tokens=self.max_tokens
+                )
+                message = response["choices"][0]["message"]
+                if message.get("content"):
+                    message["content"] = self._strip_thinking(message["content"])
+                return message
+            except Exception as cloud_error:
+                print(f"[LLM] cloud cascade unavailable for tool-calling, falling back to local: {cloud_error}")
+                event_log.log_error("cloud_llm_cascade_tools", cloud_error)
 
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)

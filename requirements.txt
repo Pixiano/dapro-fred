@@ -53,3 +53,9 @@ sqlalchemy>=2.0.0
 psutil>=5.9.0
 comtypes>=1.4.0
 pywin32>=312
+
+# Vault PDF indexing — personal/workout_split_June.pdf and
+# skill_progressions.pdf hold the actual training plan; the vault
+# indexer reads them via vault_router._chunk_pdf (see
+# VAULT_INDEXED_SUFFIXES in config/settings.py).
+pypdf>=6.0.0

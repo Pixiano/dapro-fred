@@ -89,9 +89,10 @@ TOOL_CATEGORIES = {
         "open_vault_file",
     ),
     "schedule": (
-        "schedule_reminder", "set_timer", "schedule_file_watch",
-        "list_scheduled", "cancel_scheduled",
+        "schedule_reminder", "schedule_recurring", "set_timer",
+        "schedule_file_watch", "list_scheduled", "cancel_scheduled",
     ),
+    "workout": ("workout_split", "todays_workout", "schedule_workouts"),
     "git": ("git_status", "git_log", "git_diff_summary"),
     "recap": ("summarise_today", "save_today_summary"),
     "vision": ("whats_on_screen",),
@@ -209,6 +210,14 @@ CATEGORY_CUES = {
         "remind", "reminder", "reminders", "schedule", "alarm", "alarms",
         "timer", "timers", "countdown", "wake me", "tomorrow", "tonight",
         "cancel", "pending", "in an hour", "at 7", "later",
+        # Recurrence words, so "remind me every weekday" reaches
+        # schedule_recurring rather than only the one-shot tools.
+        "every", "each", "daily", "weekly", "weekdays", "weekends",
+        "recurring", "repeating",
+    ),
+    "workout": (
+        "workout", "workouts", "training", "train", "gym", "split",
+        "exercise", "rest day", "muscles", "lifting", "session",
     ),
     "git": (
         "git", "commit", "commits", "branch", "repo", "repository",
@@ -331,11 +340,38 @@ _MULTI_COUNT_RE = re.compile(
 )
 
 
+# The third tell: a conjunction followed by a second ACTION verb.
+# _COMPOUND_RE above only catches a second QUESTION ("...and what are
+# the goals"), so "set the volume to 50 and open chrome" — two actions,
+# no question word — read as a single request and the
+# SELF_NARRATING_TOOLS shortcut returned after set_volume, never opening
+# Chrome. Same shape as the confirmed 2026-08-04 LM Studio failure
+# ("open LM studio and go to cerebras.com"), which dispatcher.py had to
+# grow its own _COMPOUND_CONNECTOR guard for; this is that guard's
+# equivalent one layer up, where it decides whether the tool loop gets a
+# second round.
+#
+# "then" is included here but deliberately NOT in _COMPOUND_RE: "what is
+# the time then" is a filler word after a question, whereas "then open
+# X" is genuinely sequencing two actions.
+_ACTION_VERB = (
+    r"(?:open|launch|start|play|close|stop|set|turn|add|remind|schedule|"
+    r"tell|show|check|create|make|send|search|find|mute|unmute|pause|"
+    r"skip|take|save|delete|move|rename|read|list|cancel|go)"
+)
+_COMPOUND_ACTION_RE = re.compile(
+    r"\b(?:and|then|also|plus|after that)\b\s+(?:please\s+|proceed\s+to\s+)?"
+    + _ACTION_VERB + r"\b",
+    re.IGNORECASE,
+)
+
+
 def looks_compound(text: str) -> bool:
     """True if the turn appears to ask for more than one thing."""
     text = text or ""
     return bool(
         _COMPOUND_RE.search(text)
+        or _COMPOUND_ACTION_RE.search(text)
         or _MULTI_DAY_RE.search(text)
         or _MULTI_COUNT_RE.search(text)
     )
@@ -413,11 +449,19 @@ def classify(text: str, llm=None, router=None) -> tuple:
     if categories:
         names = tools_for_categories(categories)
 
-        # Semantic ranking narrows a broad cue hit. "files" alone is ten
-        # tools; the embedder usually knows which two or three are meant,
-        # and intersecting keeps the cue result as a safety bound so a bad
-        # embedding can't pull in something unrelated.
-        if router is not None:
+        # A compound turn keeps the FULL cue union — narrowing is what
+        # breaks it. The embedder ranks each tool against the whole
+        # utterance, so on "set a reminder and open Spotify" the second
+        # half's tool competes against the first half's wording and can
+        # fall below the six-tool cut. And because the tool menu is
+        # computed once and reused for every round of the loop (see
+        # _generate_with_tools), a tool dropped here is unreachable for
+        # the entire turn no matter how many rounds the model gets — the
+        # forgotten half can never be recovered.
+        #
+        # Costs a longer tool list on compound turns only, which is the
+        # case where the model most needs to see both options anyway.
+        if router is not None and not looks_compound(text):
             ranked_all = [n for n, _ in router.rank(text)]
             narrowed = [n for n in ranked_all if n in names]
 

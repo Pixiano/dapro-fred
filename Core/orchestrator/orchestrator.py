@@ -19,7 +19,9 @@ from tools import session_summary
 from tools import vision_tools
 from tools import daily_tasks
 from tools import vault_files
+from tools import workout_plan
 from audio import device_info
+from utils import confidence, sensitive
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
@@ -91,6 +93,10 @@ TOOL_LABELS = {
     "complete_task": "Updating task",
     "cancel_scheduled": "Cancelling",
     "restart_fred": "Restarting",
+    "schedule_recurring": "Setting recurring reminder",
+    "workout_split": "Checking your split",
+    "todays_workout": "Checking today's workout",
+    "schedule_workouts": "Setting workout reminders",
 }
 
 
@@ -136,6 +142,24 @@ SELF_NARRATING_TOOLS = {
     "list_tasks",
     "complete_task",
     "restart_fred",
+    "schedule_recurring",
+    "workout_split",
+    "todays_workout",
+    "schedule_workouts",
+}
+
+# Tools whose RESULT contains vault content marked sensitive — today
+# that means anything reading personal/. Executing one forces the rest
+# of the turn onto the local model (see _execute_tool_call), because the
+# tool-calling loop feeds every result back to the LLM for phrasing and
+# the cloud cascade would otherwise carry it off the machine. This is
+# the tool-side half of the same rule utils/sensitive.py enforces on the
+# retrieval side; a tool added later that reads personal/ or people/
+# belongs here.
+SENSITIVE_TOOLS = {
+    "workout_split",
+    "todays_workout",
+    "schedule_workouts",
 }
 
 # A compound turn ("set a reminder and tell me if one exists") can need
@@ -161,6 +185,12 @@ class FREDOrchestrator:
     - Persist conversation state
     """
 
+    # Class-level default so it exists even on an instance built without
+    # __init__ — tests construct a bare orchestrator via __new__ (see
+    # tests/test_compound_tool_calls.py) to exercise the tool loop
+    # without booting an LLM, and the tool loop reads this.
+    _turn_local_only = False
+
     def __init__(self):
         self.state = ConversationState()
         self.memory = MemoryManager()
@@ -183,6 +213,13 @@ class FREDOrchestrator:
         # turn (see _tool_router).
         self._router = None
         self._vault = None
+
+        # Latched by _build_messages when this turn's vault retrieval
+        # pulled sensitive content, and read by every LLM call below so
+        # the cloud cascade is skipped entirely. Defaults False and is
+        # recomputed per turn — a turn that retrieves nothing sensitive
+        # must not inherit the previous turn's restriction.
+        self._turn_local_only = False
 
         # Per-turn scratch, set at the top of process()/process_stream()
         # and read by the tool-execution paths below — orchestrator
@@ -308,7 +345,7 @@ class FREDOrchestrator:
             user_input=user_input,
         )
 
-        for piece in self.llm.generate_stream(messages):
+        for piece in self.llm.generate_stream(messages, local_only=self._turn_local_only):
             if piece:
                 pieces.append(piece)
                 yield piece
@@ -317,7 +354,7 @@ class FREDOrchestrator:
         if not reply:
             # Streaming produced nothing usable — fall back rather than
             # leaving the turn silent.
-            reply = self.llm.generate(messages)
+            reply = self.llm.generate(messages, local_only=self._turn_local_only)
             yield reply
 
         finish(reply)
@@ -1216,6 +1253,84 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="schedule_recurring",
+            function=self.scheduler.schedule_recurring,
+            description=(
+                "Set a REPEATING reminder — one that fires on a schedule "
+                "rather than once. Use whenever the request says every, "
+                "each, daily, weekly, weekdays or weekends ('remind me "
+                "every weekday at 7am'). For a one-off use "
+                "schedule_reminder instead."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "What to say when it fires.",
+                    },
+                    "when": {
+                        "type": "string",
+                        "description": (
+                            "The repeating time in words, e.g. 'every weekday "
+                            "at 7am', 'every monday and thursday at 6pm'."
+                        ),
+                    },
+                },
+                "required": ["message", "when"],
+            },
+        )
+
+        self.tools.register(
+            name="workout_split",
+            function=workout_plan.describe_split,
+            description=(
+                "Vatsal's weekly training split — which muscle group he "
+                "trains on each day, read from his workout plan. Use for "
+                "'what's my split', 'what do I train on Friday'."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="todays_workout",
+            function=workout_plan.today_workout,
+            description=(
+                "What Vatsal is training today, or that today is a rest "
+                "day. Use for 'what am I training today', 'is today a rest "
+                "day', 'what's my workout'."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="schedule_workouts",
+            function=lambda **kw: workout_plan.schedule_workouts(
+                self.scheduler, **kw
+            ),
+            description=(
+                "Set up recurring daily workout reminders from Vatsal's "
+                "training plan, one per training day, labelled with that "
+                "day's muscle group. Use for 'set up my workout reminders', "
+                "'remind me to work out'. Safe to re-run — it replaces the "
+                "existing ones rather than duplicating them."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "hour": {
+                        "type": "integer",
+                        "description": "Hour in 24h time. Defaults to 16 (4pm).",
+                    },
+                    "minute": {
+                        "type": "integer",
+                        "description": "Minute. Defaults to 55, i.e. 4:55pm.",
+                    },
+                },
+            },
+        )
+
+        self.tools.register(
             name="complete_task",
             function=daily_tasks.complete_task,
             description=(
@@ -1336,7 +1451,7 @@ class FREDOrchestrator:
         """
 
         if not TOOLS_ENABLED:
-            return self.llm.generate(messages)
+            return self.llm.generate(messages, local_only=self._turn_local_only)
 
         # Conversation bypasses tools entirely. Handing the model ~30 tool
         # definitions on a turn that needs none is what made it choose one
@@ -1353,7 +1468,7 @@ class FREDOrchestrator:
         )
         if not needs_tools:
             print(f"[intent] chat ({reason})")
-            return self.llm.generate(messages)
+            return self.llm.generate(messages, local_only=self._turn_local_only)
 
         print(f"[intent] tools ({reason})")
 
@@ -1375,7 +1490,7 @@ class FREDOrchestrator:
         # not, and that mismatch was the whole source of erratic calls.
         tool_definitions = self.tools.get_tool_definitions(only=tool_names)
 
-        message = self.llm.generate_with_tools(messages, tools=tool_definitions)
+        message = self.llm.generate_with_tools(messages, tools=tool_definitions, local_only=self._turn_local_only)
         all_results = []
 
         for round_num in range(MAX_TOOL_ROUNDS):
@@ -1400,11 +1515,11 @@ class FREDOrchestrator:
                 # generation that no longer knows what it just did.
                 if self._looks_like_leaked_tool_syntax(content):
                     if round_num == 0:
-                        return self.llm.generate(messages)
+                        return self.llm.generate(messages, local_only=self._turn_local_only)
                     return " ".join(all_results)
 
                 return content or (
-                    " ".join(all_results) if all_results else self.llm.generate(messages)
+                    " ".join(all_results) if all_results else self.llm.generate(messages, local_only=self._turn_local_only)
                 )
 
             # If the model wants to run anything destructive, stop here
@@ -1462,6 +1577,25 @@ class FREDOrchestrator:
             ):
                 return " ".join(round_results)
 
+            # On a compound turn, restate the original request before
+            # asking again. By this point the model is looking at its own
+            # tool call and a result, several messages after what was
+            # actually asked — nothing in that recent context says a
+            # second half exists, so it tends to summarise what it just
+            # did and stop. One line naming the goal is what turns "I set
+            # the reminder" into "...and I still need to open Spotify".
+            # Only on compound turns: on a simple one this would be an
+            # invitation to invent extra work.
+            if intent.looks_compound(last_user):
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"That was part of this request: \"{last_user}\". "
+                        "If any part of it has not been done yet, call the "
+                        "tool for it now. If it is all done, reply normally."
+                    ),
+                })
+
             # Ask again, now with these results in context — either for
             # the natural-language reply FRED actually says out loud, or
             # for another tool call if the model realises the turn isn't
@@ -1469,7 +1603,7 @@ class FREDOrchestrator:
             # passed again to correctly render the tool-result history —
             # without it, the model loses track of what it just did and
             # may contradict the action it actually took.
-            message = self.llm.generate_with_tools(messages, tools=tool_definitions)
+            message = self.llm.generate_with_tools(messages, tools=tool_definitions, local_only=self._turn_local_only)
 
         # Exhausted the round budget with the model still asking for
         # tools — answer with whatever's actually been done rather than
@@ -1739,6 +1873,14 @@ class FREDOrchestrator:
 
         self._announce_tool(name)
 
+        # A tool that reads personal/ puts sensitive content into the
+        # tool-result message, which the loop then sends BACK to the LLM
+        # for phrasing — so the retrieval-side check in _build_messages
+        # doesn't cover this path. Latch here too, before the tool runs,
+        # so the follow-up round can't reach the cloud cascade.
+        if name in SENSITIVE_TOOLS:
+            self._turn_local_only = True
+
         try:
             result = self.tools.execute(name, **arguments)
         except Exception as error:
@@ -1851,6 +1993,13 @@ class FREDOrchestrator:
 
         messages = []
 
+        # Cleared before retrieval, never after: this must reflect THIS
+        # turn's context only. Leaving it latched would be the safe
+        # direction (an unnecessary local turn), but leaving it set from
+        # a previous turn would silently pin every later turn to the
+        # local model with no way back.
+        self._turn_local_only = False
+
         # -----------------------------
         # System prompt — ONE message, not one per section.
         # -----------------------------
@@ -1880,16 +2029,39 @@ class FREDOrchestrator:
         if vault_router:
             hits = vault_router.retrieve(user_input)
             if hits:
+                # Sensitivity is decided BEFORE the text is formatted into
+                # the prompt, and latches for the whole turn — see
+                # utils/sensitive.py. Confirmed 2026-08-04: retrieval runs
+                # with VAULT_RETRIEVAL_FLOOR = -1.0, i.e. six chunks come
+                # back on EVERY turn regardless of relevance, so personal/
+                # and people/ excerpts were reaching the prompt routinely
+                # and the cloud cascade was POSTing them to Groq. That is
+                # the exact thing rules.md forbids ("no hosted model, no
+                # API"), and nothing was enforcing it.
+                self._turn_local_only = sensitive.any_sensitive(
+                    [{"source": label, "text": text} for label, text, _ in hits]
+                )
+                if self._turn_local_only:
+                    print("[vault] sensitive content retrieved — local LLM only this turn")
+
+                # Provenance is tagged PER EXCERPT, not once for the turn.
+                # A turn-level minimum would hedge a fact Vatsal stated
+                # outright just because some unrelated sixth chunk was a
+                # guess — and with VAULT_RETRIEVAL_FLOOR = -1.0 forcing
+                # six hits every turn regardless of relevance, an
+                # irrelevant weak chunk is the normal case, not the
+                # exception. See utils/confidence.py.
                 # Tables are flattened to "row — Column: value" BEFORE
                 # truncation, so a value can never be read out of the
                 # wrong column — see utils.vault_md.flatten_tables for
                 # the confirmed failure that motivated it.
                 vault_text = "\n".join(
-                    f"- [{label}] {flat[:VAULT_CHUNK_INJECT_CHARS]}"
+                    f"- [{label}] ({confidence.name(level)}) "
+                    f"{flat[:VAULT_CHUNK_INJECT_CHARS]}"
                     + ("..." if len(flat) > VAULT_CHUNK_INJECT_CHARS else "")
-                    for label, flat, _score in (
-                        (label, flatten_tables(text), score)
-                        for label, text, score in hits
+                    for label, flat, level in (
+                        (label, flatten_tables(text), confidence.classify(text))
+                        for label, text, _score in hits
                     )
                 )
                 # The anti-fabrication instruction is NOT optional framing.
@@ -1924,7 +2096,12 @@ class FREDOrchestrator:
                     "Baseline is where he started, and only Current is true "
                     "now. Never report a target as if it were current. A dash "
                     "or blank cell means that value is genuinely unknown — say "
-                    "so rather than substituting a number from another column."
+                    "so rather than substituting a number from another column.\n"
+                    "Each excerpt is tagged with how well-sourced it is. "
+                    "'stated' and 'confirmed' you may say plainly. 'derived' "
+                    "should be attributed to his notes. 'inferred' and "
+                    "'speculative' were never said by him — say that you are "
+                    "inferring, or ask, rather than asserting them as fact."
                 )
 
         # Long-term memory

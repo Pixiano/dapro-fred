@@ -35,6 +35,7 @@ from config.settings import (
     VAULT_DIR,
     VAULT_HARDCODED_FILES,
     VAULT_EXCLUDED_FILES,
+    VAULT_INDEXED_SUFFIXES,
     VAULT_INDEX_DIR,
     VAULT_RETRIEVAL_TOP_K,
     VAULT_RETRIEVAL_FLOOR,
@@ -61,13 +62,15 @@ def _cosine(a, b) -> float:
 
 
 def _iter_vault_files():
-    """Every .md file under VAULT_DIR except the hardcoded and excluded
-    ones, as (relative_path_str, absolute_path)."""
+    """Every indexable file under VAULT_DIR except the hardcoded and
+    excluded ones, as (relative_path_str, absolute_path)."""
     skip = set(VAULT_HARDCODED_FILES) | set(VAULT_EXCLUDED_FILES)
     if not VAULT_DIR.exists():
         return
-    for path in sorted(VAULT_DIR.rglob("*.md")):
-        if path.name in skip:
+    for path in sorted(VAULT_DIR.rglob("*")):
+        if path.suffix.lower() not in VAULT_INDEXED_SUFFIXES:
+            continue
+        if path.name in skip or not path.is_file():
             continue
         yield str(path.relative_to(VAULT_DIR)).replace("\\", "/"), path
 
@@ -129,8 +132,56 @@ def _center(entries):
     ]
 
 
+def _chunk_pdf(rel_path: str, path: Path):
+    """
+    (label, embed_text, display_text) per PAGE of a PDF.
+
+    Per page rather than per document on purpose: a PDF has no "##"
+    headings for split_sections() to work with, so the whole file would
+    otherwise become one unbounded chunk — and the embedding model runs
+    at n_ctx=4096 (see memory_manager.py), so a long document would be
+    silently truncated at embed time and retrieve badly for anything
+    past the cut. Pages are the only structural boundary a PDF reliably
+    has.
+
+    Returns [] and warns rather than raising: a malformed or
+    image-only PDF must not take down the whole vault index, which is
+    built lazily on the first turn of a session.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        print(f"[vault] pypdf not installed — skipping {rel_path}")
+        return []
+
+    try:
+        reader = PdfReader(str(path))
+    except Exception as e:
+        print(f"[vault] couldn't read {rel_path}: {e}")
+        return []
+
+    chunks = []
+    for number, page in enumerate(reader.pages, start=1):
+        try:
+            text = (page.extract_text() or "").strip()
+        except Exception as e:
+            print(f"[vault] {rel_path} page {number} failed to extract: {e}")
+            continue
+        if not text:
+            # Scanned/image-only page — nothing to embed, and a chunk of
+            # empty text would just be noise near every query.
+            continue
+        label = f"{rel_path} — p{number}"
+        chunks.append((label, f"{rel_path} — page {number}\n{text}", text))
+
+    return chunks
+
+
 def _chunk_file(rel_path: str, path: Path):
     """(section_label, embed_text, display_text) for every chunk in one file."""
+    if path.suffix.lower() == ".pdf":
+        return _chunk_pdf(rel_path, path)
+
     raw = path.read_text(encoding="utf-8")
     body = strip_frontmatter(raw)
     title = extract_h1_title(body) or rel_path
