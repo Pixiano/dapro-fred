@@ -637,7 +637,9 @@ def rename_file(path: str, new_name: str) -> str:
     return f"Renamed {src.name} to {dest.name}"
 
 
-def read_file(path: str, max_chars: int = 4000) -> str:
+# 4000 silently cut the daily note the day it passed 4000 chars — a note
+# only grows, so the tail (newest entries) is exactly what gets lost.
+def read_file(path: str, max_chars: int = 8000) -> str:
     """
     Read a text file's contents (truncated for very large files).
     """
