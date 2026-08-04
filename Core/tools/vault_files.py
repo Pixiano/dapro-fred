@@ -28,6 +28,11 @@ from utils.vault_md import strip_frontmatter, extract_h1_title
 
 _index = None  # {normalized_key: Path} — built lazily, once per process
 
+# See resolve_vault_file's comment on the reverse substring direction —
+# below this, a stored key is too likely to appear coincidentally inside
+# an unrelated query.
+_MIN_REVERSE_MATCH_LEN = 5
+
 
 def _normalize(text: str) -> str:
     """
@@ -65,7 +70,14 @@ def _build_index() -> dict:
         _add(index, rel_path, path)
         try:
             title = extract_h1_title(strip_frontmatter(path.read_text(encoding="utf-8")))
-        except OSError:
+        except (OSError, ValueError):
+            # ValueError covers UnicodeDecodeError, which a PDF raises
+            # here — _iter_vault_files() started yielding those on
+            # 2026-08-04 (see VAULT_INDEXED_SUFFIXES). UnicodeDecodeError
+            # is NOT an OSError, so before this it escaped and took the
+            # whole name index down, disabling resolve_vault_file and
+            # open_vault_file entirely. A PDF simply has no H1 to read;
+            # its filename and stem are already indexed above.
             title = ""
         if title:
             _add(index, title, path)
@@ -106,10 +118,38 @@ def resolve_vault_file(name: str):
     index = _get_index()
     key = _normalize(name)
 
+    # A name that's punctuation-only normalizes to "" — without this,
+    # `"" in norm` below is trivially true for every entry (empty string
+    # is a substring of anything), so an all-punctuation query would
+    # "resolve" whenever the vault happens to contain exactly one file.
+    if not key:
+        return None
+
     if key in index:
         return index[key]
 
-    matches = {path for norm, path in index.items() if key in norm}
+    # Bidirectional on purpose. Confirmed bug (session_2026-08-04.jsonl):
+    # "open active priorities file" produces query "activeprioritiesfile"
+    # (the dispatcher rule keeps a trailing "file"/"document"/etc. — it
+    # only strips leading filler and politeness, not every possible
+    # trailing noun someone might say). A one-directional `key in norm`
+    # only catches a SHORTER query inside a longer stored key ("priorities"
+    # inside "activepriorities") — it can never match here, since the
+    # query is the longer string. `norm in key` catches this direction:
+    # the stored key ("activepriorities") is itself a substring of the
+    # longer query.
+    #
+    # The reverse direction (`norm in key`) needs its own minimum length,
+    # confirmed live against the real vault: "open https://example.com/a.pdf"
+    # matched MAP.md, because normalized "map" (3 chars) is a substring of
+    # normalized "...comapdf" purely by coincidence. A short stored key is
+    # near-guaranteed to turn up somewhere inside an unrelated long string;
+    # real vault filenames/stems are practically never this short, so this
+    # costs nothing real.
+    matches = {
+        path for norm, path in index.items()
+        if key in norm or (len(norm) >= _MIN_REVERSE_MATCH_LEN and norm in key)
+    }
     if len(matches) == 1:
         return matches.pop()
 

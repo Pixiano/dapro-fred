@@ -71,3 +71,41 @@ def test_blank_name_returns_none(monkeypatch):
         vault_files._normalize("active-priorities"): Path("/vault/active-priorities.md"),
     })
     assert vault_files.resolve_vault_file("   ") is None
+
+
+def test_punctuation_only_name_returns_none(monkeypatch):
+    # Regression guard: an empty normalized key must never trivially
+    # match every index entry via "" being a substring of everything.
+    _fake_index(monkeypatch, {
+        vault_files._normalize("active-priorities"): Path("/vault/active-priorities.md"),
+    })
+    assert vault_files.resolve_vault_file("...") is None
+
+
+def test_short_key_does_not_spuriously_match_inside_unrelated_query(monkeypatch):
+    """
+    Real regression from wiring the bidirectional fix above: "open
+    https://example.com/a.pdf" (a URL, nothing to do with the vault)
+    matched a real file MAP.md, because normalized "map" (3 chars) is a
+    coincidental substring of normalized "...comapdf". Short stored
+    keys need a minimum length before they're eligible for the reverse
+    substring direction.
+    """
+    _fake_index(monkeypatch, {"map": Path("/vault/MAP.md")})
+    assert vault_files.resolve_vault_file("https://example.com/a.pdf") is None
+
+
+def test_trailing_word_the_dispatcher_does_not_strip_still_resolves(monkeypatch):
+    """
+    Real transcript (session_2026-08-04.jsonl): "open active priorities
+    file." -> dispatcher's target-extraction only strips leading filler
+    ("up"/"the") and trailing politeness ("please"/"for me") -- it does
+    NOT strip every trailing noun someone might say, so the actual query
+    passed to resolve_vault_file was "active priorities file". The old
+    one-directional substring check (`key in norm`) can never match here
+    because the QUERY is longer than the stored key, not shorter.
+    """
+    path = Path("/vault/active-priorities.md")
+    _fake_index(monkeypatch, {vault_files._normalize("active-priorities"): path})
+    assert vault_files.resolve_vault_file("active priorities file") == path
+    assert vault_files.resolve_vault_file("the active priorities file") == path
