@@ -206,6 +206,24 @@ def read_gpu():
         return None
 
 
+def _wasapi_index():
+    """PortAudio lists every physical device once per host API (MME,
+    DirectSound, WASAPI, WDM-KS) — confirmed 2026-08-04: ~35 entries for
+    4 real devices on a 2-mic/2-speaker machine. WASAPI is the one that
+    matches what Windows itself calls the default device, so filtering
+    to it removes the duplicates. See Core/audio/device_info.py's
+    identical filter — duplicated rather than imported because this
+    server is deliberately stdlib-only otherwise (see module docstring)
+    and doesn't import the Core package."""
+    try:
+        for i, api in enumerate(sd.query_hostapis()):
+            if api["name"] == "Windows WASAPI":
+                return i
+    except Exception:
+        pass
+    return None
+
+
 def read_devices():
     """
     Mic/speaker catalog for the HUD's hover dropdown. The catalog itself
@@ -218,12 +236,16 @@ def read_devices():
         return {"input": [], "output": [], "selected_input": None, "selected_output": None}
 
     try:
-        devices = sd.query_devices()
+        devices = list(enumerate(sd.query_devices()))
     except Exception:
         devices = []
 
-    inputs = [{"index": i, "name": d["name"]} for i, d in enumerate(devices) if d["max_input_channels"] > 0]
-    outputs = [{"index": i, "name": d["name"]} for i, d in enumerate(devices) if d["max_output_channels"] > 0]
+    wasapi = _wasapi_index()
+    if wasapi is not None:
+        devices = [(i, d) for i, d in devices if d["hostapi"] == wasapi]
+
+    inputs = [{"index": i, "name": d["name"]} for i, d in devices if d["max_input_channels"] > 0]
+    outputs = [{"index": i, "name": d["name"]} for i, d in devices if d["max_output_channels"] > 0]
 
     selected_input = selected_output = None
     try:

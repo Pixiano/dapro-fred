@@ -24,6 +24,7 @@ import time
 import numpy as np
 import sounddevice as sd
 
+from audio import device_info
 from config.settings import (
     WHISPER_MODEL,
     WHISPER_DEVICE,
@@ -213,6 +214,7 @@ class WhisperSTT:
                 dtype="float32",
                 blocksize=BLOCK_FRAMES,
                 callback=self._callback,
+                extra_settings=device_info.input_extra_settings(),
             )
             self._stream.start()
 

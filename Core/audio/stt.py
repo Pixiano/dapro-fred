@@ -8,6 +8,7 @@ import sounddevice as sd
 
 from vosk import Model, KaldiRecognizer
 
+from audio import device_info
 from config.settings import STT_MODEL_PATH, STT_SAMPLE_RATE
 
 
@@ -89,7 +90,8 @@ class STTManager:
                 samplerate=self.samplerate,
                 channels=1,
                 dtype="int16",
-                callback=self._audio_callback
+                callback=self._audio_callback,
+                extra_settings=device_info.input_extra_settings(),
             ):
 
                 while True:

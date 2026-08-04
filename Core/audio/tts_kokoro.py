@@ -30,7 +30,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 
-from audio import mute_state, phrase_cache
+from audio import device_info, mute_state, phrase_cache
 from config.settings import (
     KOKORO_MODEL_PATH,
     KOKORO_VOICES_PATH,
@@ -402,7 +402,8 @@ class KokoroTTS:
 
                     if stream is None:
                         stream = sd.OutputStream(
-                            samplerate=sr, channels=1, dtype="float32"
+                            samplerate=sr, channels=1, dtype="float32",
+                            extra_settings=device_info.output_extra_settings(),
                         )
                         stream.start()
                         # Let a Bluetooth link do its wake-up ramp against
