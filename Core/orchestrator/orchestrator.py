@@ -31,7 +31,11 @@ from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
 from utils import event_log
 from utils.vault_md import flatten_tables
-from config.settings import TOOLS_ENABLED, VAULT_CHUNK_INJECT_CHARS
+from config.settings import (
+    TOOLS_ENABLED,
+    VAULT_CHUNK_INJECT_CHARS,
+    SENSITIVE_LOCAL_ONLY,
+)
 
 
 # Present-tense phrases for the pill's tool-fire confirmation. Written as
@@ -1878,7 +1882,7 @@ class FREDOrchestrator:
         # for phrasing — so the retrieval-side check in _build_messages
         # doesn't cover this path. Latch here too, before the tool runs,
         # so the follow-up round can't reach the cloud cascade.
-        if name in SENSITIVE_TOOLS:
+        if SENSITIVE_LOCAL_ONLY and name in SENSITIVE_TOOLS:
             self._turn_local_only = True
 
         try:
@@ -2038,7 +2042,7 @@ class FREDOrchestrator:
                 # and the cloud cascade was POSTing them to Groq. That is
                 # the exact thing rules.md forbids ("no hosted model, no
                 # API"), and nothing was enforcing it.
-                self._turn_local_only = sensitive.any_sensitive(
+                self._turn_local_only = SENSITIVE_LOCAL_ONLY and sensitive.any_sensitive(
                     [{"source": label, "text": text} for label, text, _ in hits]
                 )
                 if self._turn_local_only:

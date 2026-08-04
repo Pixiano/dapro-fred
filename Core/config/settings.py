@@ -386,6 +386,18 @@ CLOUD_PROVIDERS = [
     },
 ]
 
+# Whether retrieved personal/ or people/ content pins a turn to the
+# local model (utils/sensitive.py + the orchestrator's per-turn latch).
+#
+# Turned OFF 2026-08-04 at Vatsal's explicit instruction: "allow the
+# APIs to access everything, keep local as last resort". This overrides
+# the vault's rules.md line about never sending personal/ to a hosted
+# model — his data, his call, and both providers' terms are in the
+# comment above. The enforcement machinery is left fully wired
+# (LLMClient.local_only, sensitive.py, SENSITIVE_TOOLS); flip this back
+# to True to re-arm it in one line.
+SENSITIVE_LOCAL_ONLY = False
+
 # mmproj (vision projector) path, only for tiers that are actually
 # multimodal — absence here means "this tier has no vision handler",
 # checked explicitly in _get_model rather than assumed.
