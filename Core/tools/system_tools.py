@@ -1,5 +1,6 @@
 # Core/tools/system_tools.py
 
+import json
 import os
 import re
 import shutil
@@ -10,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 
 from tools.assist_tools import resolve_user_path
+from config.settings import DATA_DIR
 
 
 # =========================================================
@@ -76,6 +78,33 @@ _APP_ALIASES = {
     "excel": "excel.exe",
     "powerpoint": "powerpnt.exe",
 }
+
+# Self-healing on top of the hardcoded table above: whatever the Start
+# Menu / search-root walk finds gets written here, so the next launch of
+# the same name is a dict lookup instead of a directory walk — and apps
+# with no hardcoded alias (LM Studio, anything vendor-custom) stop
+# needing to be found the slow way more than once. Confirmed 2026-08-04:
+# "LM Studio" isn't in _APP_ALIASES and has to walk Start Menu /
+# LOCALAPPDATA every single time it's launched by name.
+_LEARNED_ALIASES_PATH = DATA_DIR / "app_aliases.json"
+
+
+def _load_learned_aliases() -> dict:
+    try:
+        return json.loads(_LEARNED_ALIASES_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _learn_alias(key: str, resolved_path: str):
+    aliases = _load_learned_aliases()
+    aliases[key] = resolved_path
+    try:
+        _LEARNED_ALIASES_PATH.write_text(
+            json.dumps(aliases, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
 
 # Where to hunt for an installed .exe when PATH / App Paths both miss.
 #
@@ -178,6 +207,16 @@ _TRAILING_NOISE = re.compile(
 )
 
 
+def _launch_failure_message(raw: str, e: Exception) -> str:
+    """Distinguish *why* os.startfile failed once a real path was already
+    found — a permission bounce and a corrupt/missing target need
+    different fixes from the user, and both were previously collapsed
+    into one generic 'Failed to launch' string."""
+    if getattr(e, "winerror", None) == 5:
+        return f"Found {raw} but don't have permission to launch it — try running FRED as administrator."
+    return f"Found {raw} but launching it failed: {e}"
+
+
 def launch_application(app_name: str) -> str:
     """
     Launch a desktop application by friendly name, resolving it via
@@ -188,15 +227,16 @@ def launch_application(app_name: str) -> str:
     raw = _TRAILING_NOISE.sub("", app_name.strip()).strip()
     key = raw.lower()
 
-    target = _APP_ALIASES.get(key, raw)
+    learned = _load_learned_aliases()
+    target = _APP_ALIASES.get(key) or learned.get(key) or raw
 
     # shell:/ms-settings:/etc. protocol targets — let the shell open them.
     if target.endswith(":") or target.startswith(("shell:", "ms-")):
         try:
             os.startfile(target)
             return f"Launched {raw}"
-        except Exception as e:
-            return f"Failed to launch {raw}: {e}"
+        except OSError as e:
+            return _launch_failure_message(raw, e)
 
     exe_name = target if target.lower().endswith(".exe") else f"{target}.exe"
 
@@ -210,24 +250,33 @@ def launch_application(app_name: str) -> str:
     # 3. Start Menu shortcut, by display name — catches apps installed
     # somewhere neither of the above knows to look (Spotify's
     # %APPDATA% install, UWP packages, anything vendor-custom).
+    learn = False
     if not resolved:
         resolved = _resolve_from_start_menu(raw)
+        learn = resolved is not None
 
-    # 4. common install dirs — last resort, a full directory walk.
+    # 4. common install dirs — last resort, a full directory walk. Only
+    # these two slow paths get learned: PATH/App Paths hits are already
+    # as fast as a lookup gets, nothing to cache.
     if not resolved:
         resolved = _resolve_from_search_roots(exe_name)
+        learn = learn or resolved is not None
 
     if not resolved:
         return (
-            f"Couldn't find '{raw}' on this PC. "
+            f"Couldn't find '{raw}' on this PC — checked PATH, the App Paths "
+            "registry, Start Menu shortcuts, and common install directories. "
             "Try the exact app name, or open it once manually so I can learn its path."
         )
+
+    if learn and key not in _APP_ALIASES:
+        _learn_alias(key, resolved)
 
     try:
         os.startfile(resolved)
         return f"Launched {raw}"
-    except Exception as e:
-        return f"Failed to launch {raw}: {e}"
+    except OSError as e:
+        return _launch_failure_message(raw, e)
 
 
 # =========================================================

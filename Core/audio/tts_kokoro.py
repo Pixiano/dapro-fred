@@ -30,7 +30,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 
-from audio import phrase_cache
+from audio import mute_state, phrase_cache
 from config.settings import (
     KOKORO_MODEL_PATH,
     KOKORO_VOICES_PATH,
@@ -283,6 +283,20 @@ class KokoroTTS:
             source = iter(text)
 
         cancel = cancel or threading.Event()
+
+        # Muted: drain the reply text without synthesising or playing any
+        # audio at all — no model call, no output stream. Conversation
+        # state still needs the full text (see the docstring's note on
+        # returning what was "spoken"), so the join happens here rather
+        # than skipping the whole reply.
+        if mute_state.is_muted():
+            pieces = []
+            for piece in source:
+                if cancel.is_set():
+                    break
+                pieces.append(piece or "")
+            return "".join(pieces).strip()
+
         spoken = []
 
         # Separate from `cancel` on purpose. `cancel` belongs to the

@@ -73,6 +73,22 @@ html,body{margin:0;padding:0;background:#02060a;overflow:hidden;height:100%}
 #muteBtn.muted{color:rgba(255,140,140,.9);border-color:rgba(255,120,120,.45);background:rgba(80,20,20,.25)}
 #muteBtn.muted:hover{box-shadow:0 0 10px rgba(255,120,120,.35)}
 
+#audioMenu{position:relative}
+#deviceDropdown{position:absolute;top:calc(100% + 8px);right:0;width:220px;z-index:20;
+  background:rgba(8,28,40,.92);border:1px solid rgba(127,233,255,.3);box-shadow:0 8px 24px rgba(0,0,0,.5);
+  padding:10px;opacity:0;visibility:hidden;transform:translateY(-4px);
+  transition:opacity .15s ease,transform .15s ease,visibility .15s}
+#audioMenu:hover #deviceDropdown{opacity:1;visibility:visible;transform:translateY(0)}
+.ddSection+.ddSection{margin-top:9px;padding-top:9px;border-top:1px solid rgba(127,233,255,.15)}
+.ddSection b{display:block;font:400 9px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.2em;
+  color:rgba(127,233,255,.5);margin-bottom:6px}
+.ddItem{font:400 11px/1.4 'JetBrains Mono',Consolas,monospace;letter-spacing:.04em;color:rgba(200,248,255,.8);
+  padding:4px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddItem:hover{background:rgba(127,233,255,.12);color:#d8f8ff}
+.ddItem.sel{color:#a9f4ff}
+.ddItem.sel::before{content:"● ";color:#7fe9ff}
+.ddEmpty{font:400 10px/1 'JetBrains Mono',Consolas,monospace;color:rgba(127,233,255,.35);padding:4px 6px}
+
 .blip{position:absolute;width:6px;height:6px;border-radius:50%;margin:-3px 0 0 -3px;
   background:#a9f4ff;box-shadow:0 0 10px #7fe9ff;transition:opacity .5s ease}
 
@@ -180,13 +196,19 @@ body.still *{animation:none!important;transition:none!important}
     <div id="spectrum"></div>
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:7px">
       <span class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.45)">VOICE LEVEL · LAST 12 SAMPLES</span>
-      <button id="muteBtn" type="button" title="Mute" aria-label="Mute">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" stroke="none"></path>
-          <path id="muteWaves" d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"></path>
-          <path id="muteX" d="M15.5 9.5l5 5M20.5 9.5l-5 5" style="display:none"></path>
-        </svg>
-      </button>
+      <div id="audioMenu">
+        <button id="muteBtn" type="button" title="Mute" aria-label="Mute">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" stroke="none"></path>
+            <path id="muteWaves" d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"></path>
+            <path id="muteX" d="M15.5 9.5l5 5M20.5 9.5l-5 5" style="display:none"></path>
+          </svg>
+        </button>
+        <div id="deviceDropdown">
+          <div class="ddSection"><b>MICROPHONE</b><div id="ddMics"></div></div>
+          <div class="ddSection"><b>SPEAKERS</b><div id="ddSpeakers"></div></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -549,6 +571,53 @@ muteBtn.addEventListener("click", function(){
     .catch(function(){ paintMuteIcon(!wantMuted); })
     .finally(function(){ muteBusy = false; });
 });
+
+// ---------- mic/speaker dropdown ----------
+// Fetched lazily on first hover rather than on load — the list barely
+// ever changes mid-session, so there is no reason to pay the query on
+// every page load whether the user ever opens the menu or not.
+const audioMenu = $("audioMenu");
+let devicesLoaded = false;
+
+function renderDeviceList(containerId, devices, selected, kind){
+  const el = $(containerId);
+  el.innerHTML = "";
+  if (!devices.length){
+    const empty = document.createElement("div");
+    empty.className = "ddEmpty";
+    empty.textContent = "none found";
+    el.appendChild(empty);
+    return;
+  }
+  devices.forEach(function(d){
+    const item = document.createElement("div");
+    item.className = "ddItem" + (d.index === selected ? " sel" : "");
+    item.textContent = d.name;
+    item.title = d.name;
+    item.addEventListener("click", function(){
+      fetch("/command", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({text: "set " + kind + " to " + d.index}),
+      }).then(function(){ devicesLoaded = false; loadDevices(); });
+    });
+    el.appendChild(item);
+  });
+}
+
+function loadDevices(){
+  if (devicesLoaded) return;
+  devicesLoaded = true;
+  fetch("/devices")
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      renderDeviceList("ddMics", data.input || [], data.selected_input, "microphone");
+      renderDeviceList("ddSpeakers", data.output || [], data.selected_output, "speaker");
+    })
+    .catch(function(){ devicesLoaded = false; });
+}
+
+audioMenu.addEventListener("mouseenter", loadDevices);
 
 applyState("idle");
 poll();

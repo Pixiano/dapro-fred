@@ -77,9 +77,22 @@ GREETING_DELAY_STARTUP = 120.0
 GREETING_DELAY_NOW = 6.0
 
 
+_current_app = None  # set by PillApp.__init__ — see get_current_app()
+
+
+def get_current_app():
+    """The one running PillApp instance, or None before __init__ / after
+    shutdown. machine_tools.restart_fred() uses this to tear the app
+    down cleanly (HUD server, tray icon) before exiting the process,
+    without machine_tools importing this module at load time — pill_app
+    already imports machine_tools, so that import would be circular."""
+    return _current_app
+
+
 class PillApp:
 
     def __init__(self, greet_now: bool = False):
+        global _current_app
         self.greet_now = greet_now
         self.orchestrator = FREDOrchestrator()
 
@@ -171,6 +184,7 @@ class PillApp:
         )
 
         self.tray = None
+        _current_app = self
 
     def _subsystem_status(self):
         """
@@ -328,6 +342,10 @@ class PillApp:
                     # would make the HUD feel hidden rather than on call.
                     pystray.MenuItem("Show HUD", lambda: self.hud.show(),
                                      default=True),
+                    # Same function the "restart yourself" voice/HUD
+                    # command calls (machine_tools.restart_fred) — one
+                    # implementation, two triggers.
+                    pystray.MenuItem("Restart FRED", lambda: machine_tools.restart_fred()),
                     pystray.MenuItem("Quit FRED", lambda: self.shutdown()),
                 ),
             )

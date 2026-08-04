@@ -59,6 +59,11 @@ try:
 except ImportError:
     sys.exit("psutil is required:  pip install psutil")
 
+try:
+    import sounddevice as sd
+except ImportError:
+    sd = None  # /devices reports itself unavailable rather than crashing the server
+
 HERE = Path(__file__).resolve().parent
 BUS_DIR = Path.home() / "voice-line"
 
@@ -199,6 +204,37 @@ def read_gpu():
         }
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):
         return None
+
+
+def read_devices():
+    """
+    Mic/speaker catalog for the HUD's hover dropdown. The catalog itself
+    (sd.query_devices()) is host-level and fine to read from this
+    process; the *selection* is FRED's, published to the bus by
+    Core/audio/device_info.py — see its module docstring for why that
+    hop is needed instead of just reading sd.default.device here.
+    """
+    if sd is None:
+        return {"input": [], "output": [], "selected_input": None, "selected_output": None}
+
+    try:
+        devices = sd.query_devices()
+    except Exception:
+        devices = []
+
+    inputs = [{"index": i, "name": d["name"]} for i, d in enumerate(devices) if d["max_input_channels"] > 0]
+    outputs = [{"index": i, "name": d["name"]} for i, d in enumerate(devices) if d["max_output_channels"] > 0]
+
+    selected_input = selected_output = None
+    try:
+        sel = json.loads((BUS_DIR / "audio_devices.json").read_text(encoding="utf-8"))
+        selected_input = sel.get("input")
+        selected_output = sel.get("output")
+    except (OSError, ValueError):
+        pass
+
+    return {"input": inputs, "output": outputs,
+            "selected_input": selected_input, "selected_output": selected_output}
 
 
 def read_subsystems():
@@ -473,6 +509,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(payload).encode("utf-8")
             self._send(200, body, "application/json",
                        {"Cache-Control": "no-store"})
+            return
+
+        if path == "/devices":
+            body = json.dumps(read_devices()).encode("utf-8")
+            self._send(200, body, "application/json", {"Cache-Control": "no-store"})
             return
 
         self._send(404, b"not found", "text/plain; charset=utf-8")

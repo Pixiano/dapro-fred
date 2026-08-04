@@ -165,6 +165,22 @@ class Dispatcher:
                 self._route_set_volume,
             ),
             (
+                # Sent by the HUD's mic/speaker dropdown (see
+                # hud/index.html) as an exact device index, never spoken —
+                # a voice command naming a device by index would be
+                # unnatural, so this route exists for the UI, not STT.
+                re.compile(
+                    r"^set (?:microphone|mic) to (?P<index>\d+)$", re.IGNORECASE
+                ),
+                self._route_set_input_device,
+            ),
+            (
+                re.compile(
+                    r"^set (?:speaker|speakers|output) to (?P<index>\d+)$", re.IGNORECASE
+                ),
+                self._route_set_output_device,
+            ),
+            (
                 # Relative moves — "turn it up a bit", "volume down",
                 # "louder", "a lot quieter". Deterministic because the
                 # phrasing is closed and the action is trivial; leaving
@@ -275,6 +291,16 @@ class Dispatcher:
                     re.IGNORECASE,
                 ),
                 self._route_close_window,
+            ),
+            (
+                # Deliberately narrow — "restart" alone stays ambiguous
+                # (could mean the PC; see power_action) and goes to the
+                # LLM, but "restart yourself/FRED" is unambiguous enough
+                # to route deterministically, same as kill/close above.
+                re.compile(
+                    r"^restart (?:yourself|fred)$", re.IGNORECASE
+                ),
+                self._route_restart_fred,
             ),
         ]
 
@@ -495,6 +521,21 @@ class Dispatcher:
     def _route_unmute(match: re.Match) -> dict:
 
         return {"tool": "mute", "arguments": {"should_mute": False}}
+
+    @staticmethod
+    def _route_restart_fred(match: re.Match) -> dict:
+
+        return {"tool": "restart_fred", "arguments": {}}
+
+    @staticmethod
+    def _route_set_input_device(match: re.Match) -> dict:
+
+        return {"tool": "set_input_device", "arguments": {"index": int(match.group("index"))}}
+
+    @staticmethod
+    def _route_set_output_device(match: re.Match) -> dict:
+
+        return {"tool": "set_output_device", "arguments": {"index": int(match.group("index"))}}
 
     @staticmethod
     def _route_set_volume(match: re.Match) -> dict:

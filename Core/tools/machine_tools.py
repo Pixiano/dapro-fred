@@ -10,11 +10,16 @@
 # always just do the thing when called.
 
 import os
+import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from datetime import datetime
 
 from tools.assist_tools import resolve_user_path
 from tools import found_cache
+from audio import mute_state
 
 import psutil
 import pyperclip
@@ -22,6 +27,81 @@ import pygetwindow as gw
 import screen_brightness_control as sbc
 from mss import mss
 from pycaw.pycaw import AudioUtilities
+
+
+# =========================================================
+# FRED LIFECYCLE
+# =========================================================
+
+# fred_popup.py is Core/tools/machine_tools.py's great-grandparent dir
+# (Core/tools/ -> Core/ -> project root) — same relationship
+# hud_manager.py's PROJECT_DIR has to Core/.
+_PROJECT_DIR = Path(__file__).resolve().parents[2]
+_POPUP_SCRIPT = _PROJECT_DIR / "fred_popup.py"
+# Same launcher FRED_POPUP.bat uses — pythonw.exe so no console window
+# flashes up, matching how a manual restart would actually be started.
+_VENV_PYTHONW = _PROJECT_DIR / "Core" / "venv" / "Scripts" / "pythonw.exe"
+
+_DETACHED = getattr(subprocess, "DETACHED_PROCESS", 0) if os.name == "nt" else 0
+_NEW_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
+
+
+def _wait_then_exit():
+    """
+    Runs on a background thread after a new FRED process has already
+    been spawned. Waits for the CURRENT turn to actually finish (so the
+    "Restarting, sir" reply gets spoken instead of being cut off
+    mid-sentence — this function starts while _turn_lock is still held
+    by the turn that called restart_fred()), tears the old process down
+    cleanly (HUD server, tray icon), then exits.
+
+    os._exit rather than sys.exit: this runs in the GUI's message loop
+    process, and a normal exit doesn't reliably unblock pystray's/the
+    window's own blocking run() calls. os._exit is the same hard stop
+    the crash-dump path already has to tolerate (see fred_popup.py's
+    faulthandler note).
+    """
+    from ui.pill_app import get_current_app
+    app = get_current_app()
+
+    lock = getattr(app, "_turn_lock", None)
+    deadline = time.time() + 30
+    if lock is not None:
+        while lock.locked() and time.time() < deadline:
+            time.sleep(0.2)
+
+    if app is not None:
+        try:
+            app.shutdown()
+        except Exception as e:
+            print(f"[machine_tools] restart: shutdown before exit failed: {e}")
+
+    os._exit(0)
+
+
+def restart_fred() -> str:
+    """
+    Relaunch FRED as a fresh detached process, then tear this one down
+    once the current reply has finished speaking. The new process
+    starts with --greet-now, so its startup greeting is the audible
+    confirmation the restart actually worked.
+    """
+    if not _POPUP_SCRIPT.is_file():
+        return "Can't restart — fred_popup.py isn't where I expected it."
+
+    python = str(_VENV_PYTHONW) if _VENV_PYTHONW.is_file() else sys.executable
+    try:
+        subprocess.Popen(
+            [python, str(_POPUP_SCRIPT), "--greet-now"],
+            cwd=str(_PROJECT_DIR),
+            creationflags=_DETACHED | _NEW_GROUP,
+            close_fds=True,
+        )
+    except OSError as e:
+        return f"Restart failed — couldn't launch a new instance: {e}"
+
+    threading.Thread(target=_wait_then_exit, daemon=True).start()
+    return "Restarting."
 
 
 # =========================================================
@@ -108,14 +188,15 @@ def _get_volume_interface():
 
 def get_volume() -> str:
     """
-    Get the current system volume (0-100) and mute state.
+    Get the current system volume (0-100) and FRED's own mute state
+    (see mute() — muting FRED does not touch system volume, so the
+    system level is reported on its own).
     """
 
     volume = _get_volume_interface()
     level = round(volume.GetMasterVolumeLevelScalar() * 100)
-    muted = bool(volume.GetMute())
 
-    return f"Volume: {level}%{' (muted)' if muted else ''}"
+    return f"Volume: {level}%{' (FRED muted)' if is_muted() else ''}"
 
 
 def set_volume(level: int) -> str:
@@ -133,18 +214,20 @@ def set_volume(level: int) -> str:
 
 def mute(should_mute: bool = True) -> str:
     """
-    Mute or unmute system audio.
+    Mute or unmute FRED's own voice output. Deliberately does not touch
+    system audio (see mute_state.py) — a mute button on FRED's HUD
+    should silence FRED, not everything else playing on the PC.
     """
 
-    volume = _get_volume_interface()
-    volume.SetMute(1 if should_mute else 0, None)
+    mute_state.set_muted(should_mute)
 
     return "Muted" if should_mute else "Unmuted"
 
 
 def is_muted() -> bool:
-    """Current system mute state — for the HUD's mute indicator."""
-    return bool(_get_volume_interface().GetMute())
+    """Whether FRED's own voice output is muted — for the HUD's mute
+    indicator. Not the system mute state; see mute()."""
+    return mute_state.is_muted()
 
 
 # =========================================================

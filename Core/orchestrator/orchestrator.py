@@ -19,6 +19,7 @@ from tools import session_summary
 from tools import vision_tools
 from tools import daily_tasks
 from tools import vault_files
+from audio import device_info
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
@@ -89,6 +90,7 @@ TOOL_LABELS = {
     "list_tasks": "Checking tasks",
     "complete_task": "Updating task",
     "cancel_scheduled": "Cancelling",
+    "restart_fred": "Restarting",
 }
 
 
@@ -133,6 +135,7 @@ SELF_NARRATING_TOOLS = {
     "add_task",
     "list_tasks",
     "complete_task",
+    "restart_fred",
 }
 
 # A compound turn ("set a reminder and tell me if one exists") can need
@@ -631,7 +634,7 @@ class FREDOrchestrator:
         self.tools.register(
             name="get_volume",
             function=machine_tools.get_volume,
-            description="Get the current system volume and mute state.",
+            description="Get the current system volume and whether FRED's own voice output is muted.",
             parameters={"type": "object", "properties": {}},
         )
 
@@ -651,12 +654,45 @@ class FREDOrchestrator:
         self.tools.register(
             name="mute",
             function=machine_tools.mute,
-            description="Mute or unmute system audio.",
+            description="Mute or unmute FRED's own voice output. Does not affect system audio or other apps.",
             parameters={
                 "type": "object",
                 "properties": {
                     "should_mute": {"type": "boolean", "description": "True to mute, false to unmute."}
                 },
+            },
+        )
+
+        self.tools.register(
+            name="list_audio_devices",
+            function=device_info.list_audio_devices,
+            description="List available microphones and speakers with their device indices.",
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="set_input_device",
+            function=device_info.set_input_device,
+            description="Switch FRED's microphone to a different input device by index (see list_audio_devices).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "index": {"type": "integer", "description": "Device index from list_audio_devices."}
+                },
+                "required": ["index"],
+            },
+        )
+
+        self.tools.register(
+            name="set_output_device",
+            function=device_info.set_output_device,
+            description="Switch FRED's speaker to a different output device by index (see list_audio_devices).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "index": {"type": "integer", "description": "Device index from list_audio_devices."}
+                },
+                "required": ["index"],
             },
         )
 
@@ -1058,6 +1094,18 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="restart_fred",
+            function=machine_tools.restart_fred,
+            description=(
+                "Restart FRED itself — relaunch a fresh process and shut "
+                "this one down. Use for 'restart yourself', 'restart FRED', "
+                "not for restarting the PC (see power_action)."
+            ),
+            parameters={"type": "object", "properties": {}},
+            destructive=True,
+        )
+
+        self.tools.register(
             name="append_to_file",
             function=assist_tools.append_to_file,
             description=(
@@ -1135,7 +1183,13 @@ class FREDOrchestrator:
             description=(
                 "Add an item to today's task list, saved to the vault's "
                 "daily note. Use for 'add to my tasks', 'I need to ...', "
-                "a to-do item — call once per item for a compound request."
+                "a to-do item — call once per item for a compound request. "
+                "Call this the moment a task, deadline, or pending item is "
+                "mentioned at all, even offhand in the middle of other "
+                "conversation ('chemistry journal is due Thursday') — "
+                "confirmed 2026-08-04: replying as if a task were saved "
+                "without actually calling this tool leaves the vault "
+                "silently out of sync with what was told to the user."
             ),
             parameters={
                 "type": "object",
