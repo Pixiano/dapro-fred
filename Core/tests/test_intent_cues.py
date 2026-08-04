@@ -45,6 +45,45 @@ def test_single_self_narrating_ask_is_not_flagged():
         assert not intent.looks_compound(phrase), phrase
 
 
+def test_two_reminders_two_weekdays_is_flagged():
+    """
+    Real transcript (session_2026-08-03.jsonl): "Set two reminders, on
+    Wednesday and Friday, called live class, at 5:55 pm." has no
+    question word after "and" at all, so the original _COMPOUND_RE
+    missed it entirely. schedule_reminder is a SELF_NARRATING_TOOLS
+    entry, so its shortcut fired after the FIRST reminder (Wednesday)
+    and returned immediately — Friday was silently never scheduled.
+    """
+    assert intent.looks_compound(
+        "Set two reminders, on Wednesday and Friday, called live class, at 5:55 pm."
+    )
+    assert intent.looks_compound("remind me on Monday and on Thursday")
+
+
+def test_plural_reminders_matches_the_schedule_category():
+    """
+    Same real transcript, second bug: word-boundary cue matching means
+    \\breminder\\b never matches inside "reminders" (no boundary after
+    "remind"/"reminder", only after the trailing s). With no category
+    matched at all, classify() fell through to the LLM ACTION/CHAT
+    classifier, which returns tool_names=[] --
+    get_tool_definitions(only=[]) treats that as "no filter" and sends
+    literally every registered tool's schema on every round of an
+    already multi-round tool-calling turn. That's what actually 413'd
+    Groq (task_faf27f8d) -- fixed by adding the plural cues explicitly,
+    same convention as "windows" elsewhere in CATEGORY_CUES.
+    """
+    assert "schedule" in intent.match_categories(
+        "Set two reminders, on Wednesday and Friday, called live class, at 5:55 pm."
+    )
+    assert "schedule" in intent.match_categories("cancel all my alarms")
+    assert "schedule" in intent.match_categories("what timers do I have")
+
+
+def test_single_day_reminder_is_not_flagged():
+    assert not intent.looks_compound("remind me on Wednesday at 5:55 pm to call live class")
+
+
 def test_on_track_is_not_a_volume_request():
     """The original cue collision: bare "track" vs. the idiom."""
     assert "audio" not in intent.match_categories("Am I on track with my bulk?")

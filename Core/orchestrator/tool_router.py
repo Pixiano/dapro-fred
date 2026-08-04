@@ -34,6 +34,10 @@ TOOL_EXAMPLES = {
     "launch_application": ["open spotify", "start vs code", "fire up the browser"],
     "open_website": ["go to youtube", "open google dot com", "take me to that website"],
     "open_path": ["open that file", "show me this folder", "open my downloads folder"],
+    "open_vault_file": [
+        "open active priorities", "open my goals file", "pull up my priorities note",
+        "show me the machine spec file", "open the vault note on X",
+    ],
     "get_volume": ["how loud is it", "what's the volume at", "is it muted"],
     "set_volume": ["turn it up", "make it quieter", "set volume to forty percent"],
     "mute": ["mute the sound", "silence it", "unmute"],

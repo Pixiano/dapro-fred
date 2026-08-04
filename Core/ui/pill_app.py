@@ -53,6 +53,17 @@ TRANSCRIPT_TTL = 2.5
 # crash rather than a completion.
 IDLE_LINGER = 0.7
 
+# How long merged_source() waits for the first real generated piece
+# before giving up and injecting a filler. The cloud cascade in
+# llm_client.py (Groq, then Cerebras) answers with sub-second
+# time-to-first-token when it's up; the filler's whole reason to exist
+# is masking SLOW generation, so playing it unconditionally in front of
+# a fast cloud reply was pure added latency with nothing to hide. Only
+# the local-tier fallback (or a genuinely slow API response) is slow
+# enough to ever miss this window, so the filler now effectively means
+# "the fast path didn't come through" rather than firing every turn.
+FILLER_GRACE_SECONDS = 1.2
+
 # Every caption _on_tool_event can speak, spelled out here so it can be
 # pre-cached alongside the filler pool at startup (see _warm_phrase_cache).
 # TOOL_LABELS is the same fixed ~30-entry dict _on_tool_event reads from
@@ -568,17 +579,39 @@ class PillApp:
         self._active_queue = gen_queue
         self._active_prefix = prefix_texts
 
+        _NOTHING_YET = object()  # sentinel: distinguishes "timed out" from a real None
+
         def merged_source():
             # The filler exists to hide the model's reasoning latency
             # (see audio/fillers.py) — a canned reply
             # never touches the model at all, so playing ~1s of filler in
             # front of "thank you" would only add delay that has nothing
             # to hide.
-            if not canned_replies.is_canned(text):
+            if canned_replies.is_canned(text):
+                yield from queued_source()
+                return
+
+            # Wait briefly for real content before committing to a filler
+            # at all — see FILLER_GRACE_SECONDS. Only if nothing shows up
+            # in time (the fast cloud path didn't come through) does the
+            # filler get spoken; a fast reply is yielded immediately with
+            # no filler in front of it.
+            try:
+                first_item = gen_queue.get(timeout=FILLER_GRACE_SECONDS)
+            except queue.Empty:
+                first_item = _NOTHING_YET
+
+            if first_item is _NOTHING_YET:
                 filler = pick_filler(text)
                 prefix_texts.append(filler)
                 event_log.log("fred_speech", text=filler, spoken=True, filler=True)
                 yield filler
+                yield from queued_source()
+                return
+
+            if first_item is None or self._cancel.is_set():
+                return
+            yield first_item
             yield from queued_source()
 
         # If the real reply isn't ready the moment the filler (and any

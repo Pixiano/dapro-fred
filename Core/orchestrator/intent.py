@@ -72,7 +72,7 @@ TOOL_CATEGORIES = {
     "math": ("calculate",),
     "search": ("web_search",),
     "sysinfo": ("get_system_status", "get_network_status"),
-    "apps": ("launch_application", "open_website", "open_path"),
+    "apps": ("launch_application", "open_website", "open_path", "open_vault_file"),
     "audio": ("get_volume", "set_volume", "adjust_volume", "mute", "media_control"),
     "display": ("get_brightness", "set_brightness", "adjust_brightness", "take_screenshot"),
     "clipboard": ("get_clipboard", "set_clipboard"),
@@ -86,6 +86,7 @@ TOOL_CATEGORIES = {
         "create_text_file", "create_folder", "append_to_file", "read_file",
         "list_directory", "search_files", "find_file_smart", "move_file",
         "rename_file", "delete_file", "open_path", "open_last_found",
+        "open_vault_file",
     ),
     "schedule": (
         "schedule_reminder", "set_timer", "schedule_file_watch",
@@ -178,6 +179,7 @@ CATEGORY_CUES = {
         "file", "folder", "directory", "note", "save", "create", "make",
         "write", "rename", "move", "delete", "remove", "read", "append",
         "add to", "list", "what's in", "document", "shopping list", "find",
+        "vault", "priorities", "priority",
         # "find" added after a confirmed misroute: "find spotify.exe"
         # matched only "apps" (via the "spotify" cue), so search_files/
         # find_file_smart were never offered at all — the model had no
@@ -187,10 +189,26 @@ CATEGORY_CUES = {
         # offers both the file-search tools AND launch_application,
         # letting the model pick correctly instead of only seeing one.
     ),
+    # Plurals added explicitly (not stemmed) alongside their singulars,
+    # same convention as "windows" below. Confirmed bug
+    # (session_2026-08-03.jsonl, tool_call_log.jsonl): "Set two
+    # reminders, on Wednesday and Friday..." matched NEITHER "remind"
+    # nor "reminder" — cue matching is \b-anchored on both sides
+    # (_build_cue_regex), and "reminders" has no word boundary after
+    # "remind"/"reminder", only after the trailing "s". With no
+    # category matched, classify() fell all the way through to the LLM
+    # ACTION/CHAT classifier, which returns tool_names=[] — and
+    # get_tool_definitions(only=[]) treats empty as "no filter", so
+    # EVERY registered tool's full schema (~40) was sent on every round
+    # of an already multi-round tool-calling turn. That's what
+    # eventually 413'd Groq and, on the same bloated messages/tools
+    # payload, plausibly overflowed the local tier's context window too
+    # (task_faf27f8d) — one missed plural took out both the cloud and
+    # local fallback paths for this turn.
     "schedule": (
-        "remind", "reminder", "schedule", "alarm", "timer", "countdown",
-        "wake me", "tomorrow", "tonight", "cancel", "pending", "in an hour",
-        "at 7", "later",
+        "remind", "reminder", "reminders", "schedule", "alarm", "alarms",
+        "timer", "timers", "countdown", "wake me", "tomorrow", "tonight",
+        "cancel", "pending", "in an hour", "at 7", "later",
     ),
     "git": (
         "git", "commit", "commits", "branch", "repo", "repository",
@@ -291,10 +309,36 @@ _COMPOUND_RE = re.compile(
     r"\b(?:and|also|plus)\b\s+" + _QUESTION_WORD, re.IGNORECASE
 )
 
+# Two more "cheap, reliable tells" for the same SELF_NARRATING_TOOLS
+# problem, but for "do the same action twice" rather than "ask two
+# questions". Confirmed bug (session_2026-08-03.jsonl): "Set two
+# reminders, on Wednesday and Friday, called live class, at 5:55 pm."
+# has no question word after "and" at all, so the original _COMPOUND_RE
+# missed it — schedule_reminder (a SELF_NARRATING_TOOLS entry) fired
+# once for Wednesday and the shortcut returned immediately, silently
+# dropping Friday. A turn naming two different weekdays, or an explicit
+# count word before a plural tool-ish noun, is asking for more than one
+# of something regardless of phrasing.
+_MULTI_DAY_RE = re.compile(
+    r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r".*\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    re.IGNORECASE,
+)
+_MULTI_COUNT_RE = re.compile(
+    r"\b(?:two|three|four|five|both|several|multiple)\s+"
+    r"(?:reminders?|timers?|tasks?|alarms?)\b",
+    re.IGNORECASE,
+)
+
 
 def looks_compound(text: str) -> bool:
-    """True if the turn appears to ask more than one thing."""
-    return bool(_COMPOUND_RE.search(text or ""))
+    """True if the turn appears to ask for more than one thing."""
+    text = text or ""
+    return bool(
+        _COMPOUND_RE.search(text)
+        or _MULTI_DAY_RE.search(text)
+        or _MULTI_COUNT_RE.search(text)
+    )
 
 
 def match_categories(text: str) -> list:

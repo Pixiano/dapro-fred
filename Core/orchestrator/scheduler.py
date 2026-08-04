@@ -34,6 +34,31 @@ _CLOCK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "2026-08-05 17:55" / "2026-08-05" — the form the model itself reaches
+# for once IT has already resolved a relative/named date to a specific
+# calendar day (see schedule_reminder's tool description). Confirmed
+# bug (session_2026-08-03.jsonl): the model correctly computed
+# when="2026-08-05 17:55" for "Wednesday at 5:55pm", but _CLOCK_RE is
+# unanchored and greedily matched "20" out of "2026" as the hour before
+# this branch existed — produced "tomorrow at 8:00 PM" (20:00, rolled
+# forward because 8pm today had already passed), nowhere close to what
+# was asked. Checked before _CLOCK_RE below so an ISO date's digits are
+# never reachable by that regex at all.
+_ISO_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})(?:[ t](\d{1,2}):(\d{2}))?\b")
+
+# Named weekdays — "remind me Wednesday at 6", "next Friday". Resolved
+# to the closest occurrence that isn't in the past; same "roll forward
+# if already gone by" rule the rest of this function uses for bare
+# clock times, applied via day_offset below rather than a special case.
+_WEEKDAY_RE = re.compile(
+    r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    re.IGNORECASE,
+)
+_WEEKDAY_INDEX = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
 def _fire_reminder(message: str):
     """
     The reminder job's actual target — never notify() directly, so the
@@ -81,7 +106,25 @@ def parse_when(text: str, now: datetime = None) -> datetime:
         unit = _UNIT_MINUTES.get(relative.group(2).lower(), 1)
         return now + timedelta(minutes=amount * unit)
 
+    iso = _ISO_DATE_RE.search(text)
+    if iso:
+        year, month, day, hour, minute = iso.groups()
+        try:
+            candidate = datetime(
+                int(year), int(month), int(day), int(hour or 0), int(minute or 0)
+            )
+        except ValueError:
+            return None
+        # Unlike a bare clock time, an explicit calendar date in the
+        # past is unambiguous — nothing to roll forward to.
+        return candidate if candidate > now else None
+
     day_offset = 1 if "tomorrow" in text else 0
+
+    weekday = _WEEKDAY_RE.search(text)
+    if weekday:
+        target = _WEEKDAY_INDEX[weekday.group(1).lower()]
+        day_offset = (target - now.weekday()) % 7
 
     # "tonight at 10" means 22:00, not 10:00 — an evening word carries
     # the same information as an explicit "pm" for a bare hour.

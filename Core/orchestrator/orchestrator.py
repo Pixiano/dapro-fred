@@ -18,6 +18,7 @@ from tools import smart_search
 from tools import session_summary
 from tools import vision_tools
 from tools import daily_tasks
+from tools import vault_files
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
@@ -37,6 +38,7 @@ TOOL_LABELS = {
     "open_website": "Opening website",
     "launch_application": "Launching app",
     "open_path": "Opening",
+    "open_vault_file": "Opening vault file",
     "web_search": "Searching the web",
     "get_weather": "Checking weather",
     "get_current_time": "Checking the time",
@@ -1206,7 +1208,12 @@ class FREDOrchestrator:
             function=assist_tools.open_path,
             description=(
                 "Open an existing file or folder with its default program. "
-                "For programs use launch_application; for sites use open_website."
+                "For programs use launch_application; for sites use open_website. "
+                "For a file that lives in the personal knowledge vault "
+                "(persona/profile/rules, active-priorities, daily notes, or "
+                "anything under projects/jobs/people/personal/reference/etc.), "
+                "use open_vault_file instead — it resolves the file by name or "
+                "title without needing a real path."
             ),
             parameters={
                 "type": "object",
@@ -1214,6 +1221,27 @@ class FREDOrchestrator:
                     "path": {"type": "string", "description": "File or folder to open."}
                 },
                 "required": ["path"],
+            },
+        )
+
+        self.tools.register(
+            name="open_vault_file",
+            function=vault_files.open_vault_file,
+            description=(
+                "Open a file from the personal knowledge vault by its name, "
+                "filename, or title — e.g. 'active priorities', 'goals', "
+                "'machine spec'. Resolves vault files without needing a path; "
+                "use this instead of open_path/read_file for anything in the vault."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The vault file's name, filename, or title.",
+                    }
+                },
+                "required": ["name"],
             },
         )
 

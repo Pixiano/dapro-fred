@@ -52,6 +52,28 @@ class Dispatcher:
                 self._route_open_last_found,
             ),
             (
+                # Vault files first, before the website/app rules below —
+                # a vault name is never a valid app or website, so trying
+                # it here costs nothing when it doesn't match. Confirmed
+                # bug (session_2026-08-03.jsonl): "open up active
+                # priorities for me." and "open up the
+                # activepriorities.md please." both fell through to the
+                # generic launch_application catch-all below (they don't
+                # match the strict single-token website/file pattern,
+                # having spaces and filler words), which then tried to
+                # launch an "app" literally named "up active priorities
+                # for me." Declines (returns None) when nothing in the
+                # vault matches, so non-vault "open X" phrasing is
+                # completely unaffected.
+                re.compile(
+                    r"^(?:open|launch|start|pull up|bring up)\s+(?:up\s+)?(?:the\s+)?"
+                    r"(?:file\s+(?:called|named)\s+)?(?P<target>.+?)"
+                    r"(?:\s+(?:please|for me))?\.?$",
+                    re.IGNORECASE,
+                ),
+                self._route_open_vault_file,
+            ),
+            (
                 re.compile(
                     r"^(?:open|launch|start)\s+(?P<target>https?://\S+|\S+\.\S+)$",
                     re.IGNORECASE,
@@ -310,6 +332,20 @@ class Dispatcher:
         "second": 2, "2nd": 2,
         "third": 3, "3rd": 3,
     }
+
+    @staticmethod
+    def _route_open_vault_file(match: re.Match) -> dict | None:
+
+        target = match.group("target").strip()
+        if not target:
+            return None
+
+        from tools.vault_files import resolve_vault_file
+
+        if resolve_vault_file(target) is None:
+            return None
+
+        return {"tool": "open_vault_file", "arguments": {"name": target}}
 
     @classmethod
     def _route_open_last_found(cls, match: re.Match) -> dict:

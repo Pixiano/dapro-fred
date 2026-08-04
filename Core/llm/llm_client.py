@@ -6,6 +6,7 @@ import re
 
 import requests
 
+from utils import event_log
 from utils.gpu_bootstrap import ensure_cuda_dlls
 
 ensure_cuda_dlls()
@@ -164,6 +165,7 @@ class LLMClient:
                 )
             except Exception as e:
                 print(f"[LLM] cloud provider '{provider['name']}' failed, trying next: {e}")
+                event_log.log_error(f"cloud_llm:{provider['name']}", e)
                 errors.append(f"{provider['name']}: {e}")
 
         raise RuntimeError(f"All cloud providers failed: {'; '.join(errors)}")
@@ -188,6 +190,7 @@ class LLMClient:
                 )
             except Exception as e:
                 print(f"[LLM] cloud provider '{provider['name']}' streaming setup failed, trying next: {e}")
+                event_log.log_error(f"cloud_llm_stream:{provider['name']}", e)
         return None
 
     def generate(self, messages: list, tier: str = None, max_tokens: int = None) -> str:
@@ -216,6 +219,7 @@ class LLMClient:
             )
         except Exception as cloud_error:
             print(f"[LLM] cloud cascade unavailable, falling back to local: {cloud_error}")
+            event_log.log_error("cloud_llm_cascade", cloud_error)
 
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)
@@ -426,6 +430,7 @@ class LLMClient:
             return message
         except Exception as cloud_error:
             print(f"[LLM] cloud cascade unavailable for tool-calling, falling back to local: {cloud_error}")
+            event_log.log_error("cloud_llm_cascade_tools", cloud_error)
 
         chosen_tier = tier or self._pick_tier(messages)
         messages = self._apply_thinking(messages, chosen_tier)
