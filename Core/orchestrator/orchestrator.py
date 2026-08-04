@@ -176,6 +176,30 @@ SENSITIVE_TOOLS = {
 # never.
 MAX_TOOL_ROUNDS = 4
 
+# A short follow-up carries no subject, so retrieving on it alone matches
+# the vault on filler words and drops the entry the question is about —
+# the model then answers from nothing and invents the content. Prepending
+# the previous user turn puts the referent back in the query. Confirmed
+# 2026-08-04 against the live index.
+#
+# ponytail: word count, not a pronoun/cue list — every follow-up shape
+# shares only being short. Swap in a cue list if it misfires in practice.
+FOLLOW_UP_MAX_WORDS = 6
+
+
+def _retrieval_query(user_input: str, recent_messages: list) -> str:
+    """A short follow-up gets the previous user turn prepended."""
+    if len(user_input.split()) > FOLLOW_UP_MAX_WORDS:
+        return user_input
+
+    for msg in reversed(recent_messages or []):
+        content = (msg.get("content") or "").strip()
+        # The current turn is already in state, so it comes back here too.
+        if msg.get("role") == "user" and content and content != user_input.strip():
+            return f"{content} {user_input}"
+
+    return user_input
+
 
 class FREDOrchestrator:
     """
@@ -2031,7 +2055,9 @@ class FREDOrchestrator:
         # loaded directly and always, see personality/system_prompt.py)
         vault_router = self._vault_router()
         if vault_router:
-            hits = vault_router.retrieve(user_input)
+            hits = vault_router.retrieve(
+                _retrieval_query(user_input, recent_messages)
+            )
             if hits:
                 # Sensitivity is decided BEFORE the text is formatted into
                 # the prompt, and latches for the whole turn — see
