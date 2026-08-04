@@ -36,11 +36,21 @@ _TOOL = "tool_call"
 
 
 def _today_logs(day: str = None):
-    """Every session log file for `day` (YYYY-MM-DD), oldest first."""
+    """
+    Every session log file for `day` (YYYY-MM-DD), oldest first.
+
+    The glob is `session_{day}*.jsonl`, not `session_{day}_*.jsonl`: logs
+    were consolidated to one file per day (event_log.py), and the trailing
+    underscore only matched the pre-consolidation per-launch names. It
+    silently matched nothing from then on, so summarise_today answered
+    "Nothing logged today yet, sir." every single day regardless of how
+    much had happened. No error, no empty file — just a glob that stopped
+    matching. Keeping the `*` covers any unmerged legacy file too.
+    """
     day = day or datetime.now().strftime("%Y-%m-%d")
     if not SESSIONS_DIR.exists():
         return []
-    return sorted(SESSIONS_DIR.glob(f"session_{day}_*.jsonl"))
+    return sorted(SESSIONS_DIR.glob(f"session_{day}*.jsonl"))
 
 
 def _read_events(paths):
@@ -83,7 +93,10 @@ def collect_today(day: str = None) -> dict:
 
     return {
         "day": day or datetime.now().strftime("%Y-%m-%d"),
-        "sessions": len(_today_logs(day)),
+        # One file per day now, so counting files would always say "1
+        # session" however many times FRED was restarted. The start marker
+        # is what actually counts a session.
+        "sessions": sum(1 for e in events if e.get("note") == "session start") or 1,
         "asks": asks,
         "reply_count": len(replies),
         "interrupted": interrupted,

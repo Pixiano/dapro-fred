@@ -346,11 +346,14 @@ class LLMClient:
 
         if stream is None:
             chosen_tier = tier or self._pick_tier(messages)
-            messages = self._apply_thinking(messages, chosen_tier)
+            # Separate name, same reason as generate_with_tools below: the
+            # except branch re-enters generate(), which tries the cloud,
+            # and the adapted copy is rejected there with a 400.
+            local_messages = self._apply_thinking(messages, chosen_tier)
             try:
                 model = self._get_model(chosen_tier)
                 stream = model.create_chat_completion(
-                    messages=messages,
+                    messages=local_messages,
                     temperature=self.temperature,
                     top_p=self.top_p,
                     max_tokens=self.max_tokens,
@@ -448,13 +451,23 @@ class LLMClient:
                 event_log.log_error("cloud_llm_cascade_tools", cloud_error)
 
         chosen_tier = tier or self._pick_tier(messages)
-        messages = self._apply_thinking(messages, chosen_tier)
+
+        # Kept under a separate name, NOT rebound over `messages`. The
+        # adapted copy has tool_call arguments as dicts (see
+        # _apply_thinking), which is what a local native template needs
+        # and exactly what the OpenAI wire format forbids — it requires a
+        # JSON string. The fallback below re-enters generate(), which
+        # tries the cloud first, so handing it the adapted list makes both
+        # providers answer 400 Bad Request and the user hears "cognitive
+        # malfunction". Confirmed live 2026-08-04, both legs 400 in the
+        # same second, immediately after a tool ran.
+        local_messages = self._apply_thinking(messages, chosen_tier)
 
         try:
             model = self._get_model(chosen_tier)
 
             response = model.create_chat_completion(
-                messages=messages,
+                messages=local_messages,
                 tools=tools,
                 tool_choice="auto",
                 temperature=self.temperature,
