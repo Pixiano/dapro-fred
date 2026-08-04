@@ -642,7 +642,15 @@ def read_file(path: str, max_chars: int = 4000) -> str:
     Read a text file's contents (truncated for very large files).
     """
 
-    target = Path(path)
+    # resolve_user_path, not Path() — this resolved against the working
+    # directory, which for a detached app is wherever it was launched
+    # from, so every relative path missed. That is how a daily note that
+    # existed came back as "File not found" (2026-08-04). The shared
+    # resolver handles the vault, the home folders and the Documents/FRED
+    # anchor; duplicating any of that here is how the two drifted apart.
+    from tools.assist_tools import resolve_user_path
+
+    target = resolve_user_path(path)
 
     if not target.exists():
         return f"File not found: {target}"

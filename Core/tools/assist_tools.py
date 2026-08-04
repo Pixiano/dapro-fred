@@ -19,6 +19,8 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from config.settings import VAULT_DIR
+
 # Where loose files go when no directory is given. Anything else lands
 # wherever the process happened to start, which for a background app is
 # effectively random.
@@ -63,6 +65,25 @@ def resolve_user_path(raw: str, default_dir: Path = None) -> Path:
     parts = [p for p in path.parts if p not in (".", "")]
     if not parts:
         return default_dir or _ensure_docs()
+
+    # An existing vault-relative path wins over the Documents/FRED
+    # anchor. The model asks for vault files by their vault-relative path
+    # ("daily/2026-08/2026-08-04.md") because that is how MAP.md and the
+    # retrieval labels present them — and every one of those landed under
+    # Documents/FRED instead. Confirmed 2026-08-04: read_file answered
+    # "File not found" for a daily note that existed, and append_to_file
+    # silently CREATED Documents/FRED/daily/2026-08/2026-08-04.md and
+    # reported success, so a note Vatsal dictated went to a phantom file
+    # while the real one stayed untouched.
+    #
+    # Deliberately an exists() check on the literal path, not
+    # vault_files.resolve_vault_file: that resolver does fuzzy substring
+    # matching, which is right for "open my priorities" and badly wrong
+    # here, where a brand-new "shopping-list.txt" must never be captured
+    # by a vault file that happens to share a substring.
+    vault_path = VAULT_DIR.joinpath(*parts)
+    if vault_path.exists():
+        return vault_path
 
     first = parts[0].lower()
     home = Path(os.path.expanduser("~"))

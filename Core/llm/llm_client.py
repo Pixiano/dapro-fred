@@ -830,6 +830,30 @@ class LLMClient:
         # No system turn to attach it to — give the marker one to live in.
         return [{"role": "system", "content": marker}] + out
 
+    # A tool call that the chat handler failed to parse stays in the
+    # content and gets SPOKEN. Confirmed live 2026-08-04, this reached the
+    # speaker verbatim: `{"path":"daily/2026-08"}We need to list
+    # directory.{"path":"daily"}The date check is done...`. Qwen3's own
+    # template emits tool calls inline; llama.cpp lifts the first one out
+    # and leaves any others behind as text.
+    #
+    # ponytail: strips <tool_call> wrappers and any bare {...} object. A
+    # reply that legitimately contains braces would lose them — for a
+    # voice assistant that never happens, and speaking JSON aloud is
+    # always wrong. Narrow it to argument-shaped objects if it ever bites.
+    _TOOL_DEBRIS = re.compile(
+        r"</?tool_call>|<\|?tool▁calls?▁begin\|?>|\{[^{}]*\}", re.DOTALL
+    )
+
+    @staticmethod
+    def _strip_tool_call_debris(content: str) -> str:
+        """Remove unparsed tool-call syntax so it is never spoken."""
+        if "{" not in content and "tool_call" not in content:
+            return content
+        cleaned = LLMClient._TOOL_DEBRIS.sub(" ", content)
+        # Collapse the gaps the removals leave mid-sentence.
+        return re.sub(r"[ \t]{2,}", " ", cleaned)
+
     @staticmethod
     def _strip_thinking(content: str) -> str:
         """
@@ -881,6 +905,8 @@ class LLMClient:
         # masked as the generic "cognitive malfunction" reply.
         for marker in TIER_PROMPT_MARKERS.values():
             content = content.replace(marker, "")
+
+        content = LLMClient._strip_tool_call_debris(content)
 
         content = content.strip()
 
