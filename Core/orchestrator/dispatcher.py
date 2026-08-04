@@ -52,18 +52,27 @@ class Dispatcher:
                 self._route_open_last_found,
             ),
             (
-                # Vault files first, before the website/app rules below —
-                # a vault name is never a valid app or website, so trying
-                # it here costs nothing when it doesn't match. Confirmed
-                # bug (session_2026-08-03.jsonl): "open up active
-                # priorities for me." and "open up the
-                # activepriorities.md please." both fell through to the
-                # generic launch_application catch-all below (they don't
-                # match the strict single-token website/file pattern,
-                # having spaces and filler words), which then tried to
-                # launch an "app" literally named "up active priorities
-                # for me." Declines (returns None) when nothing in the
-                # vault matches, so non-vault "open X" phrasing is
+                re.compile(
+                    r"^(?:open|launch|start)\s+(?P<target>https?://\S+|\S+\.\S+)$",
+                    re.IGNORECASE,
+                ),
+                self._route_open_website,
+            ),
+            (
+                # Vault files: after the single-token website/file rule
+                # above (a bare "youtube.com" must stay a website even if
+                # the vault happens to ALSO have a projects/youtube.md —
+                # confirmed live: the vault resolver correctly matched
+                # youtube.md there, but that's the wrong call for this
+                # phrasing), and before the generic launch_application
+                # catch-all below. Confirmed bug (session_2026-08-03.jsonl):
+                # "open up active priorities for me." and "open up the
+                # activepriorities.md please." both fell through to that
+                # catch-all (they don't match the strict single-token
+                # pattern above, having spaces and filler words), which
+                # then tried to launch an "app" literally named "up active
+                # priorities for me." Declines (returns None) when nothing
+                # in the vault matches, so non-vault "open X" phrasing is
                 # completely unaffected.
                 re.compile(
                     r"^(?:open|launch|start|pull up|bring up)\s+(?:up\s+)?(?:the\s+)?"
@@ -72,13 +81,6 @@ class Dispatcher:
                     re.IGNORECASE,
                 ),
                 self._route_open_vault_file,
-            ),
-            (
-                re.compile(
-                    r"^(?:open|launch|start)\s+(?P<target>https?://\S+|\S+\.\S+)$",
-                    re.IGNORECASE,
-                ),
-                self._route_open_website,
             ),
             (
                 re.compile(
@@ -374,12 +376,25 @@ class Dispatcher:
 
         return {"tool": "open_website", "arguments": {"url": f"https://{target}"}}
 
-    @staticmethod
-    def _route_launch_application(match: re.Match) -> dict:
+    # Compound commands ("open X and go to Y", "open X then Y") must not
+    # be launched as one literal app name — confirmed 2026-08-04: "open
+    # LM studio and go to cerebras.com" got passed whole to
+    # launch_application, which naturally found no app named that.
+    # Declining sends it to the LLM's multi-tool-call path instead,
+    # which already handles this correctly (same request phrased with
+    # "then" skipped this regex entirely and worked).
+    _COMPOUND_CONNECTOR = re.compile(r"\s+(?:and|then)\s+", re.IGNORECASE)
+
+    @classmethod
+    def _route_launch_application(cls, match: re.Match) -> dict | None:
+
+        target = match.group("target").strip()
+        if cls._COMPOUND_CONNECTOR.search(target):
+            return None
 
         return {
             "tool": "launch_application",
-            "arguments": {"app_name": match.group("target").strip()},
+            "arguments": {"app_name": target},
         }
 
     @staticmethod

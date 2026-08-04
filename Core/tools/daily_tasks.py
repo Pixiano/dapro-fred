@@ -98,18 +98,34 @@ def add_task(text: str, day: str = None) -> str:
 
 
 def list_tasks(day: str = None) -> str:
+    """Today's tasks, plus any still-open task from earlier in the
+    month rolled forward — confirmed 2026-08-04: a chemistry journal
+    task logged 2026-08-03 (due Thursday) was invisible the next day
+    because this only ever looked at `day`'s note. Later days win on
+    conflicting status, so completing a rolled-forward task today
+    still marks it Done."""
     day = day or datetime.now().strftime("%Y-%m-%d")
-    _, tasks, _ = _split_tasks_section(_read_lines(_daily_note_path(day)))
+    month_dir = _daily_note_path(day).parent
 
-    parsed = [p for p in (_parse_task_line(t) for t in tasks) if p]
-    if not parsed:
+    by_text = {}
+    if month_dir.is_dir():
+        for path in sorted(month_dir.glob("*.md")):
+            if path.stem > day:
+                continue
+            _, tasks, _ = _split_tasks_section(_read_lines(path))
+            for parsed in (_parse_task_line(t) for t in tasks):
+                if parsed:
+                    done, text = parsed
+                    by_text[text] = done
+
+    if not by_text:
         return "No tasks logged for today."
     # Not bracket-tagged ("[open] ...") on purpose — clean_for_speech()
     # (Core/audio/tts_kokoro.py) strips any [bracket] as machine noise
     # like list_scheduled()'s job ids, which would silently swallow the
     # done/open status right along with it before this ever reached
     # speech. Plain words survive that pass.
-    return "\n".join(f"{'Done' if done else 'Open'}: {text}" for done, text in parsed)
+    return "\n".join(f"{'Done' if done else 'Open'}: {text}" for text, done in by_text.items())
 
 
 def complete_task(match: str, done: bool = True, day: str = None) -> str:
