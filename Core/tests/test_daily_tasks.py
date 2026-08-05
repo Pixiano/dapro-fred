@@ -65,7 +65,26 @@ def test_complete_task_reports_no_match_instead_of_guessing(tmp_path, monkeypatc
 def test_list_tasks_with_nothing_logged(tmp_path, monkeypatch):
     monkeypatch.setattr(daily_tasks, "VAULT_DIR", tmp_path)
 
-    assert daily_tasks.list_tasks(day="2026-08-03") == "No tasks logged for today."
+    listed = daily_tasks.list_tasks(day="2026-08-03")
+    assert "no tasks logged for 2026-08-03" in listed.lower()
+    assert "no daily note" in listed.lower()
+
+
+def test_rolled_forward_tasks_are_labelled_with_their_day(tmp_path, monkeypatch):
+    """The 2026-08-05 bug: yesterday's open tasks were spoken as today's,
+    because the merged list said nothing about where each came from."""
+    monkeypatch.setattr(daily_tasks, "VAULT_DIR", tmp_path)
+    daily_tasks.add_task("older thing", day="2026-08-04")
+
+    listed = daily_tasks.list_tasks(day="2026-08-05")
+
+    assert "(from 2026-08-04)" in listed
+    assert "no daily note for 2026-08-05" in listed.lower()
+
+    daily_tasks.add_task("todays thing", day="2026-08-05")
+    listed = daily_tasks.list_tasks(day="2026-08-05")
+    assert "Open: todays thing" in listed          # today's: no origin tag
+    assert "older thing (from 2026-08-04)" in listed
 
 
 def test_add_task_preserves_content_outside_the_tasks_section(tmp_path, monkeypatch):

@@ -219,6 +219,13 @@ class FREDOrchestrator:
     # without booting an LLM, and the tool loop reads this.
     _turn_local_only = False
 
+    # Carry-forward state for _classify_turn. Class-level for the same
+    # reason as _turn_local_only: tests build a bare orchestrator via
+    # __new__ and still reach the tool loop.
+    _classified_turn = (None, None)
+    _carry_tools = []
+    _carry_left = 0
+
     def __init__(self):
         self.state = ConversationState()
         self.memory = MemoryManager()
@@ -352,9 +359,7 @@ class FREDOrchestrator:
         if not TOOLS_ENABLED:
             needs_tools, tool_names, reason = False, [], "tools disabled"
         else:
-            needs_tools, tool_names, reason = intent.classify(
-                user_input, llm=self.llm, router=self._tool_router()
-            )
+            needs_tools, tool_names, reason = self._classify_turn(user_input)
 
         if needs_tools:
             print(f"[intent] tools ({reason}) — not streaming")
@@ -1471,6 +1476,49 @@ class FREDOrchestrator:
     # TOOL-CALLING LOOP
     # =========================================================
 
+    # How many follow-up turns may reuse the previous turn's tools.
+    # 2 because that is what the confirmed failure needed: FRED listed
+    # tasks, Vatsal said "No, that was for yesterday..." (turn 1) and
+    # then "Check it then" (turn 2), and neither matched a cue, so both
+    # were answered from context — the second by asserting a vault file
+    # didn't exist without ever looking.
+    # ponytail: fixed count, not a decay or topic check. Two turns of a
+    # stale 3-tool menu is cheap; widen only if follow-ups get dropped.
+    CARRY_TOOLS_TURNS = 2
+
+    def _classify_turn(self, text: str) -> tuple:
+        """
+        intent.classify(), plus one rule: a turn that matches no cue but
+        immediately follows a tool turn re-offers that turn's tools
+        rather than being answered from conversation context. Corrections
+        and "check it then" carry their subject in the previous turn, not
+        in themselves, so classify() sees nothing actionable and FRED
+        answers from what it already believes.
+
+        Memoised on `text` because both process_stream() and
+        _generate_with_tools() ask, on the same turn — and the
+        carry-forward is consumed, so asking twice must not change it.
+        """
+        if self._classified_turn[0] == text:
+            return self._classified_turn[1]
+
+        result = intent.classify(text, llm=self.llm, router=self._tool_router())
+        needs_tools, tool_names, reason = result
+
+        if needs_tools:
+            self._carry_tools, self._carry_left = tool_names, self.CARRY_TOOLS_TURNS
+        elif self._carry_left and self._carry_tools and not intent.looks_social(text):
+            self._carry_left -= 1
+            result = (
+                True, self._carry_tools,
+                f"{reason}; re-offering last turn's tools (follow-up)",
+            )
+        else:
+            self._carry_tools, self._carry_left = [], 0
+
+        self._classified_turn = (text, result)
+        return result
+
     def _generate_with_tools(self, messages: list) -> str:
         """
         Asks the LLM for a response. If it requests one or more
@@ -1491,9 +1539,7 @@ class FREDOrchestrator:
              if m.get("role") == "user"),
             "",
         )
-        needs_tools, tool_names, reason = intent.classify(
-            last_user, llm=self.llm, router=self._tool_router()
-        )
+        needs_tools, tool_names, reason = self._classify_turn(last_user)
         if not needs_tools:
             print(f"[intent] chat ({reason})")
             return self.llm.generate(messages, local_only=self._turn_local_only)

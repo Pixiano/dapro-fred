@@ -160,8 +160,13 @@ def add_task(text: str, day: str = None) -> str:
 
 def _all_tasks(day: str = None) -> dict:
     """
-    {task_text: done} across every daily note up to and including `day`,
-    later days winning on status.
+    {task_text: (done, origin_day)} across every daily note up to and
+    including `day`, later days winning on status. `origin_day` is the
+    note the winning entry came from — list_tasks needs it to say which
+    tasks are today's and which rolled forward, because a merged list
+    that doesn't distinguish them reads as "today's tasks" to FRED and
+    to Vatsal alike (confirmed 2026-08-05: yesterday's list was spoken
+    as today's).
 
     Shared by list_tasks and open_due_tasks so the roll-forward rule
     (see list_tasks) has exactly one implementation — a proactive
@@ -180,7 +185,7 @@ def _all_tasks(day: str = None) -> dict:
             for parsed in (_parse_task_line(t) for t in tasks):
                 if parsed:
                     done, text = parsed
-                    by_text[text] = done
+                    by_text[text] = (done, path.stem)
     return by_text
 
 
@@ -195,7 +200,7 @@ def open_due_tasks(day: str = None, within_days: int = 2) -> list:
     )
 
     due = []
-    for text, done in _all_tasks(day).items():
+    for text, (done, _origin) in _all_tasks(day).items():
         if done:
             continue
         deadline = parse_due(text, today=today)
@@ -213,17 +218,35 @@ def list_tasks(day: str = None) -> str:
     task logged 2026-08-03 (due Thursday) was invisible the next day
     because this only ever looked at `day`'s note. Later days win on
     conflicting status, so completing a rolled-forward task today
-    still marks it Done."""
+    still marks it Done.
+
+    Each line carries the day it came from, and the header says outright
+    whether today's note exists — without that, a roll-forward-only list
+    is indistinguishable from a list of today's own tasks."""
+    day = day or datetime.now().strftime("%Y-%m-%d")
     by_text = _all_tasks(day)
+    today_exists = _daily_note_path(day).exists()
 
     if not by_text:
-        return "No tasks logged for today."
+        return (
+            f"No tasks logged for {day}"
+            + ("." if today_exists else f"; no daily note for {day} yet.")
+        )
     # Not bracket-tagged ("[open] ...") on purpose — clean_for_speech()
     # (Core/audio/tts_kokoro.py) strips any [bracket] as machine noise
     # like list_scheduled()'s job ids, which would silently swallow the
     # done/open status right along with it before this ever reached
     # speech. Plain words survive that pass.
-    return "\n".join(f"{'Done' if done else 'Open'}: {text}" for text, done in by_text.items())
+    header = (
+        f"Tasks as of {day}:" if today_exists
+        else f"No daily note for {day} yet; these carried over from earlier days:"
+    )
+    lines = [
+        f"{'Done' if done else 'Open'}: {text}"
+        + ("" if origin == day else f" (from {origin})")
+        for text, (done, origin) in by_text.items()
+    ]
+    return "\n".join([header] + lines)
 
 
 def complete_task(match: str, done: bool = True, day: str = None) -> str:
