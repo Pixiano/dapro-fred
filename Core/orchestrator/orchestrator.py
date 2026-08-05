@@ -2089,6 +2089,23 @@ class FREDOrchestrator:
         # more correct prompt construction regardless of model.
         system_sections = [SYSTEM_PROMPT]
 
+        # Today's date, rebuilt every turn. Nothing in SYSTEM_PROMPT, the
+        # vault, or the tool menu carried it, so the model dated things
+        # from whatever it had just read — confirmed 2026-08-05: asked to
+        # log that day's event, it wrote "2026-08-02" into a people/ file
+        # and the wrong date is now persisted where it will be believed.
+        # Stated rather than made a tool call: a date the model must ask
+        # for is a date it can decide it already knows, and at ~15k
+        # tokens a round-trip this is the expensive way to learn one line.
+        now = datetime.now()
+        system_sections.append(
+            f"Today is {now.strftime('%A, %d %B %Y')} "
+            f"(ISO date {now.strftime('%Y-%m-%d')}), local time "
+            f"{now.strftime('%H:%M')}. Use this date for anything you "
+            f"write, log or schedule. Never date an entry from a date "
+            f"you read in a file — those are past entries, not today."
+        )
+
         # Ambient screen context: what's in front of the user right now,
         # so "what am I doing" and app-implicit requests ("close this",
         # "what's this error") have something to resolve against. Cheap:

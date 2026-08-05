@@ -371,13 +371,20 @@ MODEL_TIERS = {
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
 
+# Groq removed 2026-08-05. Not a preference — it cannot serve FRED at
+# all on the free tier. Probed against the live API:
+#     Limit 8000, Requested 15076   (tokens per minute)
+#     x-ratelimit-limit-tokens = 8000
+# One FRED request is ~15k tokens (SYSTEM_PROMPT alone is ~7k, the
+# unfiltered tool menu another ~5k), i.e. nearly double the ENTIRE
+# per-minute allowance, so every single call 413s no matter how quiet
+# the minute has been. It had a 100% failure rate from 2026-08-03 to
+# 2026-08-05 — 24/24 on the last day — while Cerebras silently carried
+# every turn and, on multi-round tool loops, hit its own 429.
+# Leaving it first in the cascade cost a guaranteed-dead round-trip
+# before every real request. Re-add above Cerebras if the account moves
+# to Dev Tier; the entry is the four lines below with groq's URL/model.
 CLOUD_PROVIDERS = [
-    {
-        "name": "groq",
-        "base_url": "https://api.groq.com/openai/v1/chat/completions",
-        "api_key": GROQ_API_KEY,
-        "model": "openai/gpt-oss-120b",
-    },
     {
         "name": "cerebras",
         "base_url": "https://api.cerebras.ai/v1/chat/completions",
