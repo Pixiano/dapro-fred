@@ -212,6 +212,30 @@ def open_due_tasks(day: str = None, within_days: int = 2) -> list:
     return sorted(due)
 
 
+def ensure_day_note(day: str = None) -> Path:
+    """The daily note for `day`, created empty (header only) if missing."""
+    day = day or datetime.now().strftime("%Y-%m-%d")
+    path = _daily_note_path(day)
+    _ensure_note(path, day)
+    return path
+
+
+def carryover_candidates(day: str = None) -> list:
+    """
+    Still-open tasks that came from a day BEFORE `day` — the raw material
+    for the overnight rollover in orchestrator/proactive_checks.py.
+
+    Anything already logged under `day` itself is excluded, so running the
+    rollover twice can't duplicate a line.
+    """
+    day = day or datetime.now().strftime("%Y-%m-%d")
+    return [
+        text
+        for text, (done, origin) in _all_tasks(day).items()
+        if not done and origin != day
+    ]
+
+
 def list_tasks(day: str = None) -> str:
     """Today's tasks, plus any still-open task from earlier in the
     month rolled forward — confirmed 2026-08-04: a chemistry journal

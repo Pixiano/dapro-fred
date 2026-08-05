@@ -232,7 +232,7 @@ class FREDOrchestrator:
         self.llm = LLMClient()
 
         self.scheduler = ReminderScheduler()
-        proactive_checks.register(self.scheduler)
+        proactive_checks.register(self.scheduler, llm=self.llm)
 
         self.tools = ToolRegistry()
         self._register_tools()

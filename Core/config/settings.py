@@ -212,6 +212,13 @@ PROACTIVE_DEADLINE_WARN_DAYS = 7
 # something that isn't actionable yet and train him to ignore it.
 PROACTIVE_TASK_DUE_DAYS = 2
 
+# How long the machine must sit untouched before FRED treats the day as
+# over and rolls the still-open tasks into the new day's note. Two hours
+# rather than a fixed clock time: the sleep hour moves, a two-hour gap
+# doesn't happen mid-work. The check only ever acts once the wall date
+# has actually changed, so an afternoon nap costs nothing.
+ROLLOVER_IDLE_HOURS = 2
+
 PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 
 # =========================================================

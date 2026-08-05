@@ -17,10 +17,12 @@
 
 import ctypes
 import json
+import re
 from datetime import datetime, timedelta
 
 from config.settings import (
     VAULT_DIR,
+    ROLLOVER_IDLE_HOURS,
     PROACTIVE_CHECK_INTERVAL_MINUTES,
     PROACTIVE_STALE_DAYS,
     PROACTIVE_BREAK_IDLE_MINUTES,
@@ -29,7 +31,7 @@ from config.settings import (
     PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
 )
-from tools import daily_tasks
+from tools import daily_tasks, session_summary
 from utils.notifier import notify
 from utils.vault_md import parse_frontmatter
 
@@ -277,11 +279,123 @@ def check_task_deadlines():
 
 
 # =========================================================
+# 5. OVERNIGHT DAY ROLLOVER
+# =========================================================
+
+def _recent_transcript(today: str) -> str:
+    """
+    What was actually said over the stretch being closed out: the
+    previous day plus today's own turns, in order. Both, because a
+    rollover that fires at 01:00 sits on the far side of midnight from
+    the evening it is summarising, and a session that ran past midnight
+    lands in today's log.
+    """
+    prev = (
+        datetime.strptime(today, _DATE_FMT) - timedelta(days=1)
+    ).strftime(_DATE_FMT)
+    parts = [session_summary.transcript(d) for d in (prev, today)]
+    return "\n".join(p for p in parts if p)
+
+
+def _judge_carryover(candidates: list, llm, today: str) -> list:
+    """
+    Which of yesterday's open tasks are still worth carrying. Judged by
+    the Deep tier (Qwen3-14B) and pinned local_only — this reads the
+    vault's task text AND the day's raw conversation, which is exactly
+    the material that shouldn't leave the machine for a filtering job a
+    local model does fine.
+
+    Anything the model can't be matched back to a real candidate line is
+    dropped, so a hallucinated task can never enter the note. If the
+    judgement fails outright, everything carries: losing a task silently
+    is worse than carrying one that was already dead.
+    """
+    if llm is None:
+        return candidates
+
+    listing = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidates))
+    convo = _recent_transcript(today) or "(nothing logged)"
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You decide which unfinished tasks are still worth carrying "
+                "into the next day. Use the conversation log: a task he said "
+                "he finished, dropped, or that the log shows is no longer "
+                "relevant should not carry. Drop tasks that are clearly "
+                "obsolete or tied to a date that has passed and cannot be "
+                "redone. When unsure, keep the task. Answer with the numbers "
+                "to keep, comma-separated, and nothing else."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Conversation log:\n{convo}\n\n"
+                f"Unfinished tasks:\n{listing}"
+            ),
+        },
+    ]
+
+    try:
+        answer = llm.generate(messages, tier="Deep", local_only=True)
+    except Exception as e:
+        print(f"[proactive] carryover judgement failed, keeping all: {e}")
+        return candidates
+
+    kept = [
+        candidates[int(n) - 1]
+        for n in re.findall(r"\d+", answer or "")
+        if 0 < int(n) <= len(candidates)
+    ]
+    # An empty or unparseable answer means "no judgement", not "drop
+    # everything" — the model refusing to answer must not wipe the list.
+    return kept or candidates
+
+
+def check_day_rollover(llm=None):
+    """
+    Starts the new day's note with whatever is still outstanding.
+
+    Fires when the machine has been idle for ROLLOVER_IDLE_HOURS — the
+    overnight gap in practice. Keyed on the wall date, so a two-hour gap
+    inside the same day does nothing: the date has to have turned over
+    since the last rollover for there to be a new day to write.
+    """
+    if _idle_seconds() < ROLLOVER_IDLE_HOURS * 3600:
+        return
+
+    today = datetime.now().strftime(_DATE_FMT)
+    state = _load_state()
+    if state.get("rollover_day") == today:
+        return
+
+    try:
+        candidates = daily_tasks.carryover_candidates(today)
+    except Exception as e:
+        print(f"[proactive] rollover read failed: {e}")
+        return
+
+    # The note gets created even with nothing to carry — "there is a log
+    # for today" is the point; an empty one still gets appended to by
+    # add_task and the session recap later in the day.
+    daily_tasks.ensure_day_note(today)
+    for text in _judge_carryover(candidates, llm, today):
+        daily_tasks.add_task(text, day=today)
+
+    state["rollover_day"] = today
+    _save_state(state)
+
+
+# =========================================================
 # WIRING
 # =========================================================
 
-def register(scheduler):
+def register(scheduler, llm=None):
     """Call once at orchestrator startup — see orchestrator.py's __init__."""
+    scheduler.add_periodic(
+        lambda: check_day_rollover(llm), PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_day_rollover"
+    )
     scheduler.add_periodic(
         check_vault_staleness, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_vault_staleness"
     )

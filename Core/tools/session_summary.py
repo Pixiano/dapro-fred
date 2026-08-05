@@ -104,6 +104,31 @@ def collect_today(day: str = None) -> dict:
     }
 
 
+def transcript(day: str = None, limit: int = 200) -> str:
+    """
+    The day's conversation in order — both sides, plus which tools ran
+    between them. collect_today splits the turns into separate lists and
+    throws the reply text away, which is fine for a recap but useless as
+    context: "did you finish the journal?" and the answer to it only mean
+    something adjacent to each other.
+
+    Fillers are dropped (they carry no information) and the LAST `limit`
+    turns are kept, not the first — a long day's context is its end.
+    """
+    lines = []
+    for e in _read_events(_today_logs(day)):
+        kind = e.get("type")
+        text = e.get("text", "").strip()
+        if kind == _USER and text:
+            lines.append(f"Vatsal: {text}")
+        elif kind == _FRED and text and not e.get("filler"):
+            lines.append(f"FRED: {text}")
+        elif kind == _TOOL and e.get("tool"):
+            lines.append(f"[tool: {e['tool']}]")
+
+    return "\n".join(lines[-limit:])
+
+
 def summarise_today(day: str = None, llm=None) -> str:
     """
     A spoken-length recap of the day. With an `llm` handle it writes
