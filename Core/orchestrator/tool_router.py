@@ -58,6 +58,10 @@ TOOL_EXAMPLES = {
         "this app is not responding", "it has stopped responding close it",
     ],
     "power_action": ["lock my pc", "put the computer to sleep", "shut down", "restart the machine"],
+    "end_of_day": [
+        "end of day", "wind down for the night", "I'm done for today",
+        "close everything and shut down", "goodnight fred", "call it a day",
+    ],
     "create_text_file": ["make me a new text file", "create a document called notes"],
     "create_folder": ["make a new folder", "create a directory for this"],
     "append_to_file": ["add milk to my shopping list", "jot this down in my notes", "add a line to that file"],

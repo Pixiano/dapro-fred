@@ -54,6 +54,7 @@ TOOL_LABELS = {
     "get_network_status": "Checking network",
     "media_control": "Media",
     "power_action": "Power",
+    "end_of_day": "Winding down",
     "get_volume": "Checking volume",
     "set_volume": "Setting volume",
     "adjust_volume": "Adjusting volume",
@@ -243,6 +244,13 @@ class FREDOrchestrator:
         # it's allowed to run. See _request_confirmation /
         # _handle_pending_confirmation.
         self.pending_action = None
+
+        # Queued confirmations for the end-of-day sequence, walked one
+        # per turn. Deliberately built on pending_action rather than a
+        # parallel state machine: the yes/no parsing, the tool logging
+        # and the cancelled path all already live there, and the only
+        # thing missing was "and then ask the next one".
+        self.pending_chain = []
 
         # Semantic tool router, built lazily on the first tool-eligible
         # turn (see _tool_router).
@@ -458,12 +466,76 @@ class FREDOrchestrator:
             "Confirm? (yes/no)"
         )
 
+    # ---------------------------------------------------
+    # END-OF-DAY SEQUENCE
+    # ---------------------------------------------------
+    #
+    _ABORT_WORDS = {
+        "stop", "cancel", "abort", "never mind", "nevermind",
+        "stop it", "forget it", "quit",
+    }
+
+    def _arm_next_step(self) -> str:
+        """
+        Move the next queued step into pending_action and return the
+        question to ask about it. Empty string when the queue is done.
+        """
+        if not self.pending_chain:
+            return ""
+
+        step = self.pending_chain.pop(0)
+        self.pending_action = {"tool": step["tool"], "arguments": step["arguments"]}
+        return step["prompt"]
+
+    def end_of_day(self) -> str:
+        """
+        The wind-down: close each open window one at a time, recap the
+        day, then offer to shut the machine down.
+        """
+        titles = machine_tools.open_window_titles()
+
+        self.pending_chain = [
+            {
+                "tool": "close_window",
+                "arguments": {"title": title},
+                "prompt": f"Close {title}? (yes/no)",
+            }
+            for title in titles
+        ]
+
+        # Summarised NOW, not when the last window closes: closing
+        # windows adds nothing to the day's log, and generating it here
+        # means the recap doesn't stall the sequence at its end. Say
+        # "stop" at any point to leave the rest of it alone.
+        summary = session_summary.summarise_today(llm=self.llm)
+
+        self.pending_chain.append({
+            "tool": "power_action",
+            "arguments": {"action": "shutdown"},
+            "prompt": (
+                f"{summary}\n\nThat's the day, sir. Shut the machine down? (yes/no)"
+            ),
+        })
+
+        opening = (
+            f"Winding down. {len(titles)} window(s) open — one at a time."
+            if titles else "Nothing open to close."
+        )
+        return f"{opening}\n{self._arm_next_step()}"
+
     def _handle_pending_confirmation(self, user_input: str) -> str:
 
         action = self.pending_action
         self.pending_action = None
 
         affirmative = {"yes", "y", "yeah", "yep", "yup", "confirm", "do it", "go ahead", "sure", "ok", "okay"}
+
+        # "no" declines one step and moves on; only an abort word ends
+        # the whole wind-down. Without this an unwanted window keeps its
+        # answer from cancelling everything queued behind it.
+        if self.pending_chain and user_input.strip().lower() in self._ABORT_WORDS:
+            self.pending_chain = []
+            return "Stopped. Leaving the rest as it is."
 
         if user_input.strip().lower() in affirmative:
             try:
@@ -485,7 +557,7 @@ class FREDOrchestrator:
                 "tool_call", tool=action["tool"], arguments=action["arguments"],
                 result=result[:300], path="confirmed_destructive",
             )
-            return result
+            return "\n".join(filter(None, [result, self._arm_next_step()]))
 
         tool_call_log.log_tool_call(
             self.last_turn_id, self._turn_utterance, action["tool"],
@@ -495,7 +567,10 @@ class FREDOrchestrator:
             "tool_call", tool=action["tool"], arguments=action["arguments"],
             result="Cancelled by user", path="confirmed_destructive",
         )
-        return "Cancelled — didn't run it."
+        return "\n".join(filter(None, [
+            "Left that one open." if self.pending_chain else "Cancelled — didn't run it.",
+            self._arm_next_step(),
+        ]))
 
     def _process_with_llm(self, user_input: str) -> str:
         """
@@ -1164,6 +1239,18 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="end_of_day",
+            function=self.end_of_day,
+            description=(
+                "The wind-down sequence: close every open window one at a "
+                "time, recap the day, then offer to shut the PC down. Use "
+                "for 'end of day', 'wind down', 'shut everything down', "
+                "'I'm done for today', 'goodnight'."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
             name="restart_fred",
             function=machine_tools.restart_fred,
             description=(
@@ -1592,6 +1679,11 @@ class FREDOrchestrator:
                         return self.llm.generate(messages, local_only=self._turn_local_only)
                     return " ".join(all_results)
 
+                # The debris strip llm_client skips on this path (see its
+                # debris=False note) happens here instead — after the
+                # parser and the leak check have had the raw text.
+                content = LLMClient._strip_tool_call_debris(content).strip()
+
                 return content or (
                     " ".join(all_results) if all_results else self.llm.generate(messages, local_only=self._turn_local_only)
                 )
@@ -1685,7 +1777,7 @@ class FREDOrchestrator:
         content = message.get("content") or ""
         if self._looks_like_leaked_tool_syntax(content):
             return " ".join(all_results)
-        return content or " ".join(all_results)
+        return LLMClient._strip_tool_call_debris(content).strip() or " ".join(all_results)
 
     def _parse_text_tool_calls(self, content: str) -> list:
         """
@@ -1767,6 +1859,36 @@ class FREDOrchestrator:
                 calls.append({
                     "id": f"text_call_{len(calls)}",
                     "function": {"name": name, "arguments": raw_args},
+                })
+
+        # Bare JSON, no wrapper at all: {"name": "x", "arguments": {...}}
+        # Qwen emits this when its template's <tool_call> tags don't make
+        # it into the output. Confirmed 2026-08-05: "today's tasks?"
+        # produced exactly this for list_tasks, nothing here parsed it,
+        # and the model then answered "no tasks recorded" for a day with
+        # six of them. raw_decode rather than a regex — it stops at the
+        # end of the object, so a nested arguments dict is handled and
+        # trailing prose after the call is left alone.
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(content):
+            if char != "{":
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(content[index:])
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            name = parsed.get("name")
+            if name in valid and not any(
+                c["function"]["name"] == name for c in calls
+            ):
+                calls.append({
+                    "id": f"text_call_{len(calls)}",
+                    "function": {
+                        "name": name,
+                        "arguments": json.dumps(parsed.get("arguments") or {}),
+                    },
                 })
 
         # Gemma style: functions.NAME: {args}  or  functions.NAME(args)
@@ -1867,6 +1989,12 @@ class FREDOrchestrator:
             or "<tool_call|>" in text
             or "<|channel>" in text
             or re.match(r"^<function=", text)
+            # A tool call the parser above couldn't rescue — malformed
+            # JSON ({"name": "list_tasks", "arguments": } was spoken
+            # aloud on 2026-08-05), or a name that isn't a real tool.
+            # Either way it's scaffolding, so regenerate rather than say
+            # it.
+            or re.search(r'\{\s*"name"\s*:\s*"[\w_]+"', text)
         )
 
     # Set by the UI controller to show what FRED just did. Left as None

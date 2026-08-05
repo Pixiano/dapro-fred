@@ -404,6 +404,12 @@ def media_control(action: str = "playpause") -> str:
 # POWER
 # =========================================================
 
+# The countdown the user gets to say "cancel shutdown" in. The end-of-day
+# sequence hands the machine over to this same timer rather than exiting
+# FRED first — FRED has to be alive to hear the cancellation.
+SHUTDOWN_DELAY = 10
+
+
 def power_action(action: str) -> str:
     """Lock, sleep, restart or shut down. Destructive — confirmed first."""
     verb = str(action or "").strip().lower()
@@ -417,8 +423,8 @@ def power_action(action: str) -> str:
         "hibernate": ["shutdown", "/h"],
         "restart": ["shutdown", "/r", "/t", "5"],
         "reboot": ["shutdown", "/r", "/t", "5"],
-        "shutdown": ["shutdown", "/s", "/t", "5"],
-        "power off": ["shutdown", "/s", "/t", "5"],
+        "shutdown": ["shutdown", "/s", "/t", str(SHUTDOWN_DELAY)],
+        "power off": ["shutdown", "/s", "/t", str(SHUTDOWN_DELAY)],
         "cancel": ["shutdown", "/a"],
     }
 
@@ -439,9 +445,10 @@ def power_action(action: str) -> str:
 
     if verb == "cancel":
         return "Cancelled the pending shutdown."
-    # The 5s delay above is deliberate: it leaves a window to say
+    # The delay above is deliberate: it leaves a window to say
     # "cancel that" before anything actually happens.
-    return f"{verb.capitalize()} in 5 seconds — say cancel shutdown to stop it."
+    delay = 5 if verb in ("restart", "reboot") else SHUTDOWN_DELAY
+    return f"{verb.capitalize()} in {delay} seconds — say cancel shutdown to stop it."
 
 
 # =========================================================

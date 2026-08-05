@@ -274,6 +274,19 @@ class Dispatcher:
                 ),
                 self._route_cancel_all_scheduled,
             ),
+            # Before the kill rule below, which starts `(?:kill|terminate|
+            # end)\s+(.+)` and otherwise swallows "end of day" as a
+            # request to kill a process called "of day".
+            (
+                re.compile(
+                    r"^(?:end\s+of\s+(?:the\s+)?day|wind\s+down|"
+                    r"call\s+it\s+a\s+day|wrap\s+up\s+for\s+the\s+day|"
+                    r"(?:i'?m\s+)?done\s+for\s+(?:the\s+day|today)|"
+                    r"close\s+everything\s+and\s+shut\s+down)\b.*$",
+                    re.IGNORECASE,
+                ),
+                lambda match: {"tool": "end_of_day", "arguments": {}},
+            ),
             # Destructive — routed here deterministically so the
             # confirmation gate ALWAYS fires, instead of relying on a
             # small model to choose to call kill_process/close_window

@@ -367,6 +367,40 @@ class LLMClient:
         buffer = ""
         state = "unknown"  # unknown -> thinking -> done, or unknown -> done
 
+        # _strip_tool_call_debris can't run here: it needs a whole `{...}`
+        # and this path yields token-sized pieces, so a leaked call is
+        # already half-spoken by the time the closing brace arrives.
+        # Confirmed live 2026-08-05: FRED said `{"name": "list_tasks",
+        # "arguments": }` out loud after the cloud cascade 429'd and the
+        # local model emitted the call as plain text. Hold text back from
+        # a `{` until its `}` lands, then drop the object — same rule as
+        # the non-streaming path, just applied incrementally.
+        pending = ""
+
+        def emit(text: str) -> str:
+            nonlocal pending
+            pending += text
+            out = ""
+            while True:
+                open_at = pending.find("{")
+                if open_at < 0:
+                    out, pending = out + pending, ""
+                    return out
+                out += pending[:open_at]
+                # Depth-counted, not first-"}": a real call nests its
+                # arguments object, and stopping at the inner brace would
+                # emit the outer wrapper's tail.
+                depth, end = 0, -1
+                for i, ch in enumerate(pending[open_at:], open_at):
+                    depth += (ch == "{") - (ch == "}")
+                    if depth == 0:
+                        end = i
+                        break
+                if end < 0:
+                    pending = pending[open_at:]
+                    return out
+                pending = pending[end + 1:]
+
         try:
             for chunk in stream:
                 delta = (
@@ -378,7 +412,9 @@ class LLMClient:
                     continue
 
                 if state == "done":
-                    yield delta
+                    piece = emit(delta)
+                    if piece:
+                        yield piece
                     continue
 
                 buffer += delta
@@ -389,8 +425,10 @@ class LLMClient:
                     elif not self._could_start_thought(buffer.lstrip()[:12]):
                         # Long enough to be sure no opener is coming.
                         state = "done"
-                        yield buffer
+                        piece = emit(buffer)
                         buffer = ""
+                        if piece:
+                            yield piece
                         continue
 
                 if state == "thinking":
@@ -400,8 +438,9 @@ class LLMClient:
                             remainder = buffer[index + len(closer):]
                             state = "done"
                             buffer = ""
-                            if remainder.strip():
-                                yield remainder
+                            piece = emit(remainder) if remainder.strip() else ""
+                            if piece:
+                                yield piece
                             break
 
         except Exception as error:
@@ -444,7 +483,9 @@ class LLMClient:
                 )
                 message = response["choices"][0]["message"]
                 if message.get("content"):
-                    message["content"] = self._strip_thinking(message["content"])
+                    message["content"] = self._strip_thinking(
+                        message["content"], debris=False
+                    )
                 return message
             except Exception as cloud_error:
                 print(f"[LLM] cloud cascade unavailable for tool-calling, falling back to local: {cloud_error}")
@@ -478,7 +519,9 @@ class LLMClient:
             message = response["choices"][0]["message"]
 
             if message.get("content"):
-                message["content"] = self._strip_thinking(message["content"])
+                message["content"] = self._strip_thinking(
+                    message["content"], debris=False
+                )
 
             return message
 
@@ -850,12 +893,23 @@ class LLMClient:
         """Remove unparsed tool-call syntax so it is never spoken."""
         if "{" not in content and "tool_call" not in content:
             return content
-        cleaned = LLMClient._TOOL_DEBRIS.sub(" ", content)
+        # Repeat to a fixpoint: the pattern only matches an object with
+        # no braces inside it, so a nested one is peeled innermost-first
+        # and a single pass leaves the outer wrapper behind. Confirmed
+        # live 2026-08-05 — {"name": "list_tasks", "arguments": {}} had
+        # its {} removed and FRED spoke the remaining
+        # `{"name": "list_tasks", "arguments": }` out loud.
+        cleaned = content
+        while True:
+            once = LLMClient._TOOL_DEBRIS.sub(" ", cleaned)
+            if once == cleaned:
+                break
+            cleaned = once
         # Collapse the gaps the removals leave mid-sentence.
         return re.sub(r"[ \t]{2,}", " ", cleaned)
 
     @staticmethod
-    def _strip_thinking(content: str) -> str:
+    def _strip_thinking(content: str, debris: bool = True) -> str:
         """
         Remove reasoning blocks so only the conclusion is spoken.
 
@@ -906,7 +960,15 @@ class LLMClient:
         for marker in TIER_PROMPT_MARKERS.values():
             content = content.replace(marker, "")
 
-        content = LLMClient._strip_tool_call_debris(content)
+        # debris=False on the tool-calling path only: the orchestrator
+        # parses tool calls the model wrote as plain text, and it can't
+        # parse what was already deleted here. Confirmed 2026-08-05 —
+        # asking for today's tasks made the model emit its list_tasks
+        # call as bare JSON, this erased it, and the model then answered
+        # "no tasks recorded" for a day with six of them. The
+        # orchestrator strips (or regenerates) once it has had its look.
+        if debris:
+            content = LLMClient._strip_tool_call_debris(content)
 
         content = content.strip()
 

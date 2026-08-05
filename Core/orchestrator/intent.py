@@ -81,7 +81,7 @@ TOOL_CATEGORIES = {
         "maximize_window", "close_window",
     ),
     "processes": ("list_processes", "kill_process"),
-    "power": ("power_action",),
+    "power": ("power_action", "end_of_day"),
     "files": (
         "create_text_file", "create_folder", "append_to_file", "read_file",
         "list_directory", "search_files", "find_file_smart", "move_file",
@@ -175,6 +175,8 @@ CATEGORY_CUES = {
     "power": (
         "lock", "sleep", "shut down", "shutdown", "restart", "reboot",
         "power off", "hibernate", "log off",
+        "end of day", "wind down", "done for today", "goodnight",
+        "good night", "call it a day", "wrap up for the day",
     ),
     "files": (
         "file", "folder", "directory", "note", "save", "create", "make",

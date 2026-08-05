@@ -32,3 +32,32 @@ def test_ordinary_replies_are_untouched():
 
 def test_debris_inside_a_sentence_does_not_weld_words_together():
     assert strip('The date{"path":"x"}is confirmed.') == "The date is confirmed."
+
+
+# The streamed path yields token-sized pieces, so a leaked call arrives
+# split across deltas and strip() never sees a whole object. Second case
+# is what FRED actually spoke on 2026-08-05.
+def _streamed(text, size=4):
+    chunks = [text[i:i + size] for i in range(0, len(text), size)]
+    client = LLMClient.__new__(LLMClient)
+    client._cloud_stream = lambda *a, **k: (
+        {"choices": [{"delta": {"content": c}}]} for c in chunks
+    )
+    return "".join(client.generate_stream([], local_only=False))
+
+
+def test_nested_arguments_object_leaves_nothing_behind():
+    # The 2026-08-05 leak: the inner {} matched first and the outer
+    # wrapper was spoken.
+    assert strip('{"name": "list_tasks", "arguments": {}}') == ""
+    assert strip('{"name": "x", "arguments": {"a": {"b": 1}}}Done.') == "Done."
+
+
+def test_streamed_tool_call_is_never_spoken():
+    assert _streamed('{"name": "list_tasks", "arguments": {}}') == ""
+    assert _streamed('{"name": "list_tasks", "arguments": }') == ""
+    assert _streamed('Sure.{"name": "x"}Done.') == "Sure.Done."
+
+
+def test_streamed_ordinary_reply_survives():
+    assert _streamed("It's 10:42 PM on Tuesday, sir.") == "It's 10:42 PM on Tuesday, sir."

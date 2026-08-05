@@ -108,12 +108,53 @@ def restart_fred() -> str:
 # WINDOW MANAGEMENT
 # =========================================================
 
+# Shell windows that are always "open" and never anything a person
+# means: 16 windows on a machine showing six. Checked directly — every
+# one of these reports visible=1 at full screen size, so geometry and
+# the visible flag can't tell them from a real window.
+#
+# ponytail: a name list, not a real classification. The correct test is
+# the one alt-tab uses (no WS_EX_TOOLWINDOW, no owner), which needs
+# pywin32 — add that if this list starts needing per-machine entries.
+_SHELL_WINDOWS = {
+    "Shell Handwriting Canvas", "Windows Input Experience",
+    "Program Manager", "NVIDIA GeForce Overlay", "Status",
+}
+
+
+def open_window_titles() -> list:
+    """
+    Titles of windows a person would call "open" — the list end_of_day
+    walks, one confirmation each. Minimized windows count: a minimized
+    Spotify is still open, and closing it is still a decision.
+    """
+    seen, titles = set(), []
+    for window in gw.getAllWindows():
+        title = window.title.strip()
+        # Duplicates are real: an app with two top-level windows of the
+        # same name would be asked about twice with no way to tell them
+        # apart, and close_window closes the first match both times.
+        # FRED's own HUD is excluded: closing it mid-sequence takes away
+        # the thing the remaining questions are being asked through, and
+        # the one place the shutdown can still be cancelled from.
+        if (
+            not title
+            or title in _SHELL_WINDOWS
+            or title in seen
+            or "FRED · HUD" in title
+        ):
+            continue
+        seen.add(title)
+        titles.append(title)
+    return titles
+
+
 def list_windows() -> str:
     """
     List titles of all open, visible windows.
     """
 
-    titles = [w.title for w in gw.getAllWindows() if w.title.strip()]
+    titles = open_window_titles()
 
     if not titles:
         return "No open windows found."
