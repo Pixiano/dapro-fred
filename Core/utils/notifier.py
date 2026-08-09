@@ -8,6 +8,32 @@ from winotify import Notification
 
 _tts = None
 _voice = None
+_recorder = None
+
+
+def set_recorder(record_callable):
+    """
+    Route what FRED says proactively back into its own conversation
+    history, so a reply to it isn't answered from amnesia.
+
+    Confirmed 2026-08-09: a proactive check asked "are you prepped for
+    [the movie you just logged]?", the user answered "No, not yet.",
+    and FRED replied "I won't log the movie" — treating the negative as
+    declining to LOG something, because notify() never told
+    ConversationState this question had been asked at all.
+    _build_messages only ever sees self.state.get_recent_messages(), and
+    proactive speech happens entirely outside process()/process_stream(),
+    the only places that ever wrote to it. Every check in
+    proactive_checks.py has this gap, not just the ones that ask a
+    question — this fixes it once, at the one place all of them speak
+    through, rather than patching each check that happens to ask
+    something.
+
+    Pass None (the default) to record nothing — the CLI, or any caller
+    with no conversation state to keep in sync.
+    """
+    global _recorder
+    _recorder = record_callable
 
 
 def set_voice(speak_callable):
@@ -69,3 +95,9 @@ def notify(message: str, title: str = "F.R.E.D."):
         _speak(message)
     except Exception as e:
         print(f"[NOTIFY ERROR] TTS failed: {e}")
+
+    if _recorder is not None:
+        try:
+            _recorder(message)
+        except Exception as e:
+            print(f"[NOTIFY ERROR] Recording to conversation state failed: {e}")

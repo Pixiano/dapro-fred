@@ -18,7 +18,7 @@ from tools import smart_search
 from tools import session_summary
 from tools import vision_tools
 from tools import daily_tasks
-from tools import school_tasks
+from tools import agenda
 from tools import vault_files
 from tools import workout_plan
 from audio import device_info
@@ -30,7 +30,7 @@ from orchestrator import proactive_checks
 from orchestrator import intent
 from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
-from utils import event_log
+from utils import event_log, notifier
 from utils.vault_md import flatten_tables
 from config.settings import (
     TOOLS_ENABLED,
@@ -97,10 +97,10 @@ TOOL_LABELS = {
     "add_task": "Adding task",
     "list_tasks": "Checking tasks",
     "complete_task": "Updating task",
-    "add_school_item": "Logging",
-    "list_school_items": "Checking school",
-    "update_school_item": "Updating",
-    "delete_school_item": "Removing",
+    "add_agenda_item": "Logging",
+    "list_agenda_items": "Checking agenda",
+    "update_agenda_item": "Updating",
+    "delete_agenda_item": "Removing",
     "cancel_scheduled": "Cancelling",
     "restart_fred": "Restarting",
     "schedule_recurring": "Setting recurring reminder",
@@ -156,9 +156,9 @@ SELF_NARRATING_TOOLS = {
     "workout_split",
     "todays_workout",
     "schedule_workouts",
-    "add_school_item",
-    "list_school_items",
-    "update_school_item",
+    "add_agenda_item",
+    "list_agenda_items",
+    "update_agenda_item",
 }
 
 # Stricter than SELF_NARRATING_TOOLS above: for these, the raw tool
@@ -167,7 +167,7 @@ SELF_NARRATING_TOOLS = {
 #
 # Built for "3 questions in Geography and 1 in physics, due in 3
 # days" — the canonical example this feature was built to answer. Two
-# add_school_item calls across two rounds is exactly the compound
+# add_agenda_item calls across two rounds is exactly the compound
 # shape SELF_NARRATING_TOOLS' own compound check exists to catch, but
 # THAT check exists to give a local model a second round to call the
 # tool it forgot, not to improve phrasing — once both calls have
@@ -188,9 +188,9 @@ SELF_NARRATING_TOOLS = {
 # action, which raw concatenation would make worse, not better. That
 # case stays on the existing path; only the tools below skip it.
 EXACT_READBACK_TOOLS = {
-    "add_school_item",
-    "list_school_items",
-    "update_school_item",
+    "add_agenda_item",
+    "list_agenda_items",
+    "update_agenda_item",
 }
 
 # Tools whose RESULT contains vault content marked sensitive — today
@@ -272,9 +272,14 @@ class FREDOrchestrator:
         self.memory = MemoryManager()
         self.llm = LLMClient()
 
+        # So a reply to a proactive notification isn't answered from
+        # amnesia — see notifier.set_recorder's own docstring for the
+        # confirmed failure this closes.
+        notifier.set_recorder(lambda msg: self.state.add_message("assistant", msg))
+
         self.scheduler = ReminderScheduler()
         proactive_checks.register(
-            self.scheduler, llm=self.llm, on_school_ask=self._prime_carry
+            self.scheduler, llm=self.llm, on_agenda_ask=self._prime_carry
         )
 
         self.tools = ToolRegistry()
@@ -1516,17 +1521,16 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
-            name="add_school_item",
-            function=school_tasks.add_item,
+            name="add_agenda_item",
+            function=agenda.add_item,
             description=(
-                "Log one piece of school work: homework, a project, or "
-                "an event that needs getting-ready lead time (a class "
-                "trip, a movie, meeting friends). Call this the moment "
-                "one is mentioned, even offhand — the same reasoning as "
-                "add_task, but for anything that has its own due date "
-                "or progress. Call it ONCE PER ITEM: 'geography and "
-                "physics homework, due in 3 days' is two separate "
-                "calls, not one."
+                "Log one homework item, project, or event that needs "
+                "getting-ready lead time (a class trip, a movie, meeting "
+                "friends). Call this the moment one is mentioned, even "
+                "offhand — the same reasoning as add_task, but for "
+                "anything that has its own due date or progress. Call it "
+                "ONCE PER ITEM: 'geography and physics homework, due in "
+                "3 days' is two separate calls, not one."
             ),
             parameters={
                 "type": "object",
@@ -1576,13 +1580,13 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
-            name="list_school_items",
-            function=school_tasks.list_items,
+            name="list_agenda_items",
+            function=agenda.list_items,
             description=(
-                "Answer any question about school homework, projects or "
-                "events — what's due, what's left, progress on "
-                "something, what's happening tomorrow. Always reads the "
-                "current record; never answer this from memory."
+                "Answer any question about homework, projects or events "
+                "— what's due, what's left, progress on something, "
+                "what's happening tomorrow. Always reads the current "
+                "record; never answer this from memory."
             ),
             parameters={
                 "type": "object",
@@ -1607,15 +1611,16 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
-            name="update_school_item",
-            function=school_tasks.update_item,
+            name="update_agenda_item",
+            function=agenda.update_item,
             description=(
-                "Update an existing school item: progress, done state, "
-                "reschedule, or a note. This is where the ANSWER to a "
-                "question FRED asked about something overdue or "
-                "upcoming actually gets recorded — 'did you finish the "
-                "geography questions' followed by 'yeah, two of them' "
-                "must call this, never just get acknowledged in speech."
+                "Update an existing homework/project/event item: "
+                "progress, done state, reschedule, or a note. This is "
+                "where the ANSWER to a question FRED asked about "
+                "something overdue or upcoming actually gets recorded — "
+                "'did you finish the geography questions' followed by "
+                "'yeah, two of them' must call this, never just get "
+                "acknowledged in speech."
             ),
             parameters={
                 "type": "object",
@@ -1658,13 +1663,14 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
-            name="delete_school_item",
-            function=school_tasks.delete_item,
+            name="delete_agenda_item",
+            function=agenda.delete_item,
             description=(
-                "Remove a school item outright — for something logged "
-                "wrong (two things merged into one, the wrong kind, a "
-                "duplicate). Not for marking something done — use "
-                "update_school_item's done for that."
+                "Remove a homework/project/event item outright — for "
+                "something logged wrong (two things merged into one, "
+                "the wrong kind, a duplicate). Not for marking "
+                "something done — use update_agenda_item's done for "
+                "that."
             ),
             parameters={
                 "type": "object",
@@ -1782,9 +1788,9 @@ class FREDOrchestrator:
     def _prime_carry(self, tool_names: list):
         """
         Called by proactive_checks.py right after it SPEAKS a question
-        whose answer should update a school item — "you had Geography
+        whose answer should update an agenda item — "you had Geography
         due today, did you finish it, or find a workaround?" — so the
-        next user reply reaches update_school_item instead of landing
+        next user reply reaches update_agenda_item instead of landing
         wherever _classify_turn's cues happen to fall, or the chat path
         on a bare "yeah I did it".
 
