@@ -20,15 +20,15 @@
 
 from vision import screen_context
 
-_FORCE_CAPTURE_AGE_SECONDS = 180  # 3 minutes
+_FORCE_CAPTURE_AGE_SECONDS = 10
 
 
 def whats_on_screen() -> str:
     """What the background screen watcher last saw. If that's more than
-    three minutes old, tries a real on-demand capture first (see
-    module docstring) — falls back to an honest 'don't know' / 'stale'
-    if nothing's been captured yet, or a capture can't run safely right
-    now."""
+    _FORCE_CAPTURE_AGE_SECONDS old, tries a real on-demand capture
+    first (see module docstring) — falls back to an honest 'don't
+    know' / 'stale' if nothing's been captured yet, or a capture can't
+    run safely right now."""
     description, age = screen_context.read()
 
     if age is None or age > _FORCE_CAPTURE_AGE_SECONDS:
