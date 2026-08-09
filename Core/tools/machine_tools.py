@@ -631,12 +631,15 @@ def move_file(source: str, destination: str) -> str:
     Move (or rename) a file or folder to a new location.
     """
 
-    src = Path(source)
+    # Both ends resolved, same reason as delete_file below: a relative
+    # source missed the vault entirely, and a relative destination would
+    # have written the file out next to whatever launched the app.
+    src = resolve_user_path(source)
 
     if not src.exists():
         return f"Source not found: {src}"
 
-    dest = Path(destination)
+    dest = resolve_user_path(destination)
 
     # Path.rename() on Windows raises FileExistsError rather than
     # overwriting — confirmed directly, unlike POSIX rename() which
@@ -663,7 +666,7 @@ def rename_file(path: str, new_name: str) -> str:
     Rename a file or folder in place.
     """
 
-    src = Path(path)
+    src = resolve_user_path(path)
 
     if not src.exists():
         return f"Path not found: {src}"
@@ -714,7 +717,13 @@ def delete_file(path: str) -> str:
     Delete a file or folder. Destructive — irreversible.
     """
 
-    target = Path(path)
+    # resolve_user_path for the same reason read_file uses it, with more
+    # at stake: a bare Path() resolved "personal/identity.md" against the
+    # working directory, so the file the user was looking at reported
+    # "Path not found" three times running (2026-08-06, 18:52-18:53) —
+    # and had a same-named path happened to sit under the launch
+    # directory, this would have deleted THAT instead.
+    target = resolve_user_path(path)
 
     if not target.exists():
         return f"Path not found: {target}"
