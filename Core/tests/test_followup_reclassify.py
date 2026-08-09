@@ -20,19 +20,60 @@ def _bare():
 
 
 def test_followups_reuse_the_previous_turns_tools():
+    """The two follow-ups below take two DIFFERENT correct paths, not
+    the same one — "I mean today" independently re-matches a category
+    (the "today" agenda cue added 2026-08-09) and goes through the
+    correction-union branch, while "Check it then" matches no cue at
+    all and goes through the plain no-cue follow-up branch. Both must
+    still keep list_tasks reachable; that's the actual invariant, not
+    which internal branch name produced it."""
     o = _bare()
 
-    needs, names, _ = o._classify_turn("what are my tasks for today")
+    needs, names, reason = o._classify_turn("what are my tasks for today")
     assert needs and "list_tasks" in names
 
-    for follow_up in ("No, that was for yesterday. I mean today.", "Check it then"):
-        needs, names, reason = o._classify_turn(follow_up)
-        assert needs, f"{follow_up!r} was answered from context"
+    needs, names, reason = o._classify_turn("No, that was for yesterday. I mean today.")
+    assert needs, "the correction was answered from context"
+    assert "list_tasks" in names
+    assert "correction" in reason
+
+    needs, names, reason = o._classify_turn("Check it then")
+    assert needs, "the follow-up was answered from context"
+    assert "list_tasks" in names
+    assert "follow-up" in reason
+
+    # No expiry check here on purpose: the correction turn above is a
+    # POSITIVE match (it independently re-matches "agenda" via "today"),
+    # which resets the carry window to a fresh CARRY_TOOLS_TURNS rather
+    # than consuming one — correct (a correction re-anchors the subject,
+    # so it earns a full follow-up allowance again), but it means the
+    # exact turn this window would next expire on depends on phrasing
+    # that isn't this test's concern. See
+    # test_an_ordinary_carry_expires_after_bounded_turns below for that,
+    # using phrasing that doesn't re-match anything mid-sequence.
+
+
+def test_an_ordinary_carry_expires_after_bounded_turns():
+    """Same shape as test_followups_reuse_the_previous_turns_tools, but
+    every follow-up is cue-free, so the carry only ever decrements —
+    nothing re-matches and resets the window mid-sequence. Each
+    follow-up uses distinct wording: _classify_turn memoises on the
+    literal text (asking twice about the SAME turn must not double-
+    consume it — see its own docstring), so repeating one string here
+    would look like re-asking about one turn, not a new one."""
+    o = _bare()
+    o._classify_turn("what are my tasks")
+
+    follow_ups = ["Check it then", "go on then", "and also"][: o.CARRY_TOOLS_TURNS]
+    assert len(follow_ups) == o.CARRY_TOOLS_TURNS
+
+    for phrase in follow_ups:
+        needs, names, reason = o._classify_turn(phrase)
+        assert needs
         assert "list_tasks" in names
         assert "follow-up" in reason
 
-    # Bounded: CARRY_TOOLS_TURNS follow-ups, then back to normal routing.
-    needs, _, _ = o._classify_turn("mm alright I see")
+    needs, _, _ = o._classify_turn("one more after that")
     assert not needs
 
 
@@ -139,11 +180,11 @@ def test_an_affirmative_out_of_the_blue_is_still_chat():
 
 def test_primed_carry_survives_into_the_next_turn():
     o = _bare()
-    o._prime_carry(["update_school_item"])
+    o._prime_carry(["update_agenda_item"])
 
     needs, names, reason = o._classify_turn("yeah I finished it")
     assert needs
-    assert "update_school_item" in names
+    assert "update_agenda_item" in names
     assert "follow-up" in reason
 
 
@@ -153,21 +194,21 @@ def test_primed_carry_reaches_a_no_that_carries_a_reason():
     alternative is end-anchored and doesn't match once more follows it),
     so `not looks_social(...)` is what carries this one."""
     o = _bare()
-    o._prime_carry(["update_school_item"])
+    o._prime_carry(["update_agenda_item"])
 
     needs, names, _ = o._classify_turn("no, teacher extended it to friday")
     assert needs
-    assert "update_school_item" in names
+    assert "update_agenda_item" in names
 
 
 def test_primed_carry_lets_a_bare_no_stay_conversation():
     """A carryover question's bare "no" means the item is unchanged —
     still open, nothing to update — so there is genuinely nothing for
-    update_school_item to do here; matches the deletion-confirmation
+    update_agenda_item to do here; matches the deletion-confirmation
     precedent (test_a_bare_no_stays_conversation above) that a lone "no"
     must not re-arm the menu."""
     o = _bare()
-    o._prime_carry(["update_school_item"])
+    o._prime_carry(["update_agenda_item"])
 
     needs, _, _ = o._classify_turn("no")
     assert not needs
@@ -175,7 +216,7 @@ def test_primed_carry_lets_a_bare_no_stay_conversation():
 
 def test_primed_carry_is_bounded_the_same_as_an_ordinary_carry():
     o = _bare()
-    o._prime_carry(["update_school_item"])
+    o._prime_carry(["update_agenda_item"])
     o._classify_turn("no")
     o._classify_turn("teacher extended it")
 

@@ -31,13 +31,13 @@ from config.settings import (
     PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
 )
-from tools import daily_tasks, school_tasks, session_summary
+from tools import agenda, daily_tasks, session_summary
 from utils.notifier import notify
 from utils.vault_md import parse_frontmatter
 
 _DATE_FMT = "%Y-%m-%d"
 
-# How far ahead an event counts as "upcoming" for check_school_events_upcoming
+# How far ahead an event counts as "upcoming" for check_agenda_events_upcoming
 # — matches the "due tomorrow" framing used everywhere else in this file,
 # not a separate concept.
 _EVENT_UPCOMING_HOURS = 24
@@ -284,28 +284,28 @@ def check_task_deadlines():
 
 
 # =========================================================
-# 6. SCHOOL DEADLINES (homework/project — statement, not a question)
+# 6. AGENDA DEADLINES (homework/project — statement, not a question)
 # =========================================================
 
-def check_school_deadlines():
+def check_agenda_deadlines():
     """
     Warns about a still-open homework/project item due soon or overdue.
 
     Dedup key bakes in the item's `when` value, not the current
     "days until" phrasing — same precedent as check_task_deadlines
     above. An item that stays overdue day after day does not re-nag
-    here; check_school_carryover below is the mechanism for asking
+    here; check_agenda_carryover below is the mechanism for asking
     about it again each new day, deliberately separate because that
     one is a question expecting an answer, not a statement.
     """
     state = _load_state()
-    notified = state.setdefault("school_deadlines", {})
+    notified = state.setdefault("agenda_deadlines", {})
     changed = False
 
     try:
-        due = school_tasks.due_within(PROACTIVE_TASK_DUE_DAYS)
+        due = agenda.due_within(PROACTIVE_TASK_DUE_DAYS)
     except Exception as e:
-        print(f"[proactive] school deadline check failed: {e}")
+        print(f"[proactive] agenda deadline check failed: {e}")
         return
 
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -326,7 +326,7 @@ def check_school_deadlines():
             when = f"due in {days} day(s)"
 
         subject = item["subject"] + (f", {item['detail']}" if item["detail"] else "")
-        notify(f"{subject} — {when}, sir.", title="School deadline")
+        notify(f"{subject} — {when}, sir.", title="Agenda deadline")
         notified[key] = True
         changed = True
 
@@ -335,20 +335,20 @@ def check_school_deadlines():
 
 
 # =========================================================
-# 7. SCHOOL EVENTS — prep-time reached (statement) and upcoming (question)
+# 7. AGENDA EVENTS — prep-time reached (statement) and upcoming (question)
 # =========================================================
 
-def check_school_event_prep():
+def check_agenda_event_prep():
     """One notification the moment an event's getting-ready window
     opens: "Sir, [event] starts at [time] — time to start getting
     ready." Dedup key includes `when`, so a rescheduled event's prep
     warning fires again for the new time."""
     state = _load_state()
-    notified = state.setdefault("school_event_prep", {})
+    notified = state.setdefault("agenda_event_prep", {})
     changed = False
 
     try:
-        due = school_tasks.events_needing_prep()
+        due = agenda.events_needing_prep()
     except Exception as e:
         print(f"[proactive] event prep check failed: {e}")
         return
@@ -367,20 +367,20 @@ def check_school_event_prep():
         _save_state(state)
 
 
-def check_school_events_upcoming(on_school_ask=None):
+def check_agenda_events_upcoming(on_agenda_ask=None):
     """
     An event starting within _EVENT_UPCOMING_HOURS gets asked about
     once: "you have X tomorrow — are you prepped for it?" A QUESTION,
     unlike every check above — the answer needs to land on
-    update_school_item, not conversation memory, so on_school_ask primes
+    update_agenda_item, not conversation memory, so on_agenda_ask primes
     the orchestrator's carry-forward the moment this actually speaks.
     """
     state = _load_state()
-    notified = state.setdefault("school_event_upcoming", {})
+    notified = state.setdefault("agenda_event_upcoming", {})
     changed = False
 
     try:
-        upcoming = school_tasks.events_upcoming(within_hours=_EVENT_UPCOMING_HOURS)
+        upcoming = agenda.events_upcoming(within_hours=_EVENT_UPCOMING_HOURS)
     except Exception as e:
         print(f"[proactive] event upcoming check failed: {e}")
         return
@@ -399,39 +399,39 @@ def check_school_events_upcoming(on_school_ask=None):
         notified[key] = True
         changed = True
 
-        if on_school_ask is not None:
+        if on_agenda_ask is not None:
             try:
-                on_school_ask(["update_school_item"])
+                on_agenda_ask(["update_agenda_item"])
             except Exception as e:
-                print(f"[proactive] on_school_ask callback failed: {e}")
+                print(f"[proactive] on_agenda_ask callback failed: {e}")
 
     if changed:
         _save_state(state)
 
 
 # =========================================================
-# 8. SCHOOL CARRYOVER (homework/project — question, re-asked daily)
+# 8. AGENDA CARRYOVER (homework/project — question, re-asked daily)
 # =========================================================
 
-def check_school_carryover(on_school_ask=None):
+def check_agenda_carryover(on_agenda_ask=None):
     """
     A still-open homework/project item due today or earlier gets asked
     about once PER DAY: "you had Geography due today — did you finish
-    it, or find a workaround?" Unlike check_school_deadlines, the dedup
+    it, or find a workaround?" Unlike check_agenda_deadlines, the dedup
     key includes TODAY's date on purpose — this is meant to keep
     checking in on an item every day it remains outstanding, not warn
-    once and go quiet. Same on_school_ask priming as the upcoming-event
+    once and go quiet. Same on_agenda_ask priming as the upcoming-event
     question above, same reason: the reply is the actual record update,
     not small talk to be forgotten once spoken.
     """
     state = _load_state()
-    notified = state.setdefault("school_carryover", {})
+    notified = state.setdefault("agenda_carryover", {})
     changed = False
 
     try:
-        candidates = school_tasks.carryover_candidates()
+        candidates = agenda.carryover_candidates()
     except Exception as e:
-        print(f"[proactive] school carryover check failed: {e}")
+        print(f"[proactive] agenda carryover check failed: {e}")
         return
 
     today = datetime.now().strftime(_DATE_FMT)
@@ -451,11 +451,11 @@ def check_school_carryover(on_school_ask=None):
         notified[key] = True
         changed = True
 
-        if on_school_ask is not None:
+        if on_agenda_ask is not None:
             try:
-                on_school_ask(["update_school_item"])
+                on_agenda_ask(["update_agenda_item"])
             except Exception as e:
-                print(f"[proactive] on_school_ask callback failed: {e}")
+                print(f"[proactive] on_agenda_ask callback failed: {e}")
 
     if changed:
         _save_state(state)
@@ -574,11 +574,11 @@ def check_day_rollover(llm=None):
 # WIRING
 # =========================================================
 
-def register(scheduler, llm=None, on_school_ask=None):
+def register(scheduler, llm=None, on_agenda_ask=None):
     """
     Call once at orchestrator startup — see orchestrator.py's __init__.
 
-    on_school_ask: called with a tool-name list right after a school
+    on_agenda_ask: called with a tool-name list right after an agenda
     check SPEAKS a question expecting an answer (upcoming event,
     carryover) — see FREDOrchestrator._prime_carry. None (the CLI, or
     any caller that doesn't need the follow-up primed) just means those
@@ -601,16 +601,16 @@ def register(scheduler, llm=None, on_school_ask=None):
         check_task_deadlines, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_task_deadlines"
     )
     scheduler.add_periodic(
-        check_school_deadlines, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_school_deadlines"
+        check_agenda_deadlines, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_agenda_deadlines"
     )
     scheduler.add_periodic(
-        check_school_event_prep, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_school_event_prep"
+        check_agenda_event_prep, PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_agenda_event_prep"
     )
     scheduler.add_periodic(
-        lambda: check_school_events_upcoming(on_school_ask),
-        PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_school_events_upcoming",
+        lambda: check_agenda_events_upcoming(on_agenda_ask),
+        PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_agenda_events_upcoming",
     )
     scheduler.add_periodic(
-        lambda: check_school_carryover(on_school_ask),
-        PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_school_carryover",
+        lambda: check_agenda_carryover(on_agenda_ask),
+        PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_agenda_carryover",
     )

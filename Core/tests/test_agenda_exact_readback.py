@@ -1,4 +1,4 @@
-# Core/tests/test_school_exact_readback.py
+# Core/tests/test_agenda_exact_readback.py
 #
 # EXACT_READBACK_TOOLS (orchestrator.py), built for "3 questions in
 # Geography and 1 in physics, due in 3 days": on a compound turn, the
@@ -37,7 +37,7 @@ class _FakeTools:
         return []
 
     def list_tools(self):
-        return ["add_school_item", "list_scheduled", "schedule_reminder"]
+        return ["add_agenda_item", "list_scheduled", "schedule_reminder"]
 
 
 def _bare_orchestrator(llm, results_by_tool):
@@ -59,9 +59,9 @@ def _messages(text):
     return [{"role": "user", "content": text}]
 
 
-def test_compound_school_add_returns_the_raw_confirmations_not_a_paraphrase(monkeypatch):
+def test_compound_agenda_add_returns_the_raw_confirmations_not_a_paraphrase(monkeypatch):
     monkeypatch.setattr(
-        intent, "classify", lambda text, llm, router: (True, ["school"], "test")
+        intent, "classify", lambda text, llm, router: (True, ["agenda"], "test")
     )
     monkeypatch.setattr(intent, "close_candidates", lambda *a, **k: None)
     monkeypatch.setattr(intent, "looks_compound", lambda text: True)
@@ -71,13 +71,13 @@ def test_compound_school_add_returns_the_raw_confirmations_not_a_paraphrase(monk
     phys_result = "Logged, sir — Physics, 1 question, due Wednesday the 12th."
 
     llm = _FakeLLM([
-        {"content": None, "tool_calls": [_tool_call("1", "add_school_item")]},
-        {"content": None, "tool_calls": [_tool_call("2", "add_school_item")]},
+        {"content": None, "tool_calls": [_tool_call("1", "add_agenda_item")]},
+        {"content": None, "tool_calls": [_tool_call("2", "add_agenda_item")]},
         # Round 3: the model stops calling tools and tries to summarise
         # in its own words — this must NOT be what gets spoken.
         {"content": "Got both of those logged for you, sir, due soon.", "tool_calls": None},
     ])
-    orch = _bare_orchestrator(llm, {"add_school_item": None})
+    orch = _bare_orchestrator(llm, {"add_agenda_item": None})
     # _execute_tool_call needs to return per-call results, not a fixed
     # dict lookup — override with a small stateful stub instead.
     calls = iter([geo_result, phys_result])
@@ -121,20 +121,20 @@ def test_reminder_and_check_compound_still_uses_the_models_own_synthesis(monkeyp
     assert reply == "Set for 6pm. You already had one other reminder."
 
 
-def test_mixed_school_and_other_tool_uses_model_synthesis_not_raw_join(monkeypatch):
-    """add_school_item is in EXACT_READBACK_TOOLS, list_scheduled is
+def test_mixed_agenda_and_other_tool_uses_model_synthesis_not_raw_join(monkeypatch):
+    """add_agenda_item is in EXACT_READBACK_TOOLS, list_scheduled is
     not — the moment ANY non-exact-readback tool is called this turn,
     the whole turn falls back to the model's own words, same as
     SELF_NARRATING_TOOLS' existing all-or-nothing membership check."""
     monkeypatch.setattr(
-        intent, "classify", lambda text, llm, router: (True, ["school", "schedule"], "test")
+        intent, "classify", lambda text, llm, router: (True, ["agenda", "schedule"], "test")
     )
     monkeypatch.setattr(intent, "close_candidates", lambda *a, **k: None)
     monkeypatch.setattr(intent, "looks_compound", lambda text: True)
     monkeypatch.setattr("orchestrator.orchestrator.TOOLS_ENABLED", True)
 
     llm = _FakeLLM([
-        {"content": None, "tool_calls": [_tool_call("1", "add_school_item")]},
+        {"content": None, "tool_calls": [_tool_call("1", "add_agenda_item")]},
         {"content": None, "tool_calls": [_tool_call("2", "list_scheduled")]},
         {"content": "Logged the homework and you've no reminders pending.", "tool_calls": None},
     ])
@@ -149,19 +149,19 @@ def test_mixed_school_and_other_tool_uses_model_synthesis_not_raw_join(monkeypat
     assert reply == "Logged the homework and you've no reminders pending."
 
 
-def test_single_school_add_still_takes_the_fast_self_narrating_path(monkeypatch):
+def test_single_agenda_add_still_takes_the_fast_self_narrating_path(monkeypatch):
     """Non-compound single item: the existing SELF_NARRATING_TOOLS
     shortcut fires on round 1, no second LLM call at all — confirms
     EXACT_READBACK_TOOLS didn't change the common case's cost."""
     monkeypatch.setattr(
-        intent, "classify", lambda text, llm, router: (True, ["school"], "test")
+        intent, "classify", lambda text, llm, router: (True, ["agenda"], "test")
     )
     monkeypatch.setattr(intent, "close_candidates", lambda *a, **k: None)
     monkeypatch.setattr(intent, "looks_compound", lambda text: False)
     monkeypatch.setattr("orchestrator.orchestrator.TOOLS_ENABLED", True)
 
     result = "Logged, sir — Geography, 3 questions, due tomorrow."
-    llm = _FakeLLM([{"content": None, "tool_calls": [_tool_call("1", "add_school_item")]}])
+    llm = _FakeLLM([{"content": None, "tool_calls": [_tool_call("1", "add_agenda_item")]}])
     orch = _bare_orchestrator(llm, {})
     orch._execute_tool_call = lambda call: result
 

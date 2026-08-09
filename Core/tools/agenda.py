@@ -1,16 +1,21 @@
-# Core/tools/school_tasks.py
+# Core/tools/agenda.py
 #
-# School homework, projects and events — one persistent file
-# (VAULT_DIR/school/work.md), not sharded by day like daily_tasks.py.
-# A school item's whole point is that it needs to be found again days
-# later by SUBJECT, not by which day it happened to be logged.
+# Homework, projects and events — one persistent file (VAULT_DIR/
+# agenda.md), not sharded by day like daily_tasks.py. The whole point
+# of an item here is that it needs to be found again days later by
+# SUBJECT, not by which day it happened to be logged.
 #
-# Built 2026-08-09: Vatsal named unreliable school-deadline tracking as
-# the one thing that would make him use FRED daily, done properly —
-# capture "3 questions in Geography, due in 3 days" precisely, answer
-# "what's left for tomorrow" from the file (never from conversation
-# memory), track progress, and carry a still-open item into a proactive
-# "did you finish it, or find a workaround" the day it's due.
+# Built 2026-08-09: Vatsal named unreliable deadline tracking as the
+# one thing that would make him use FRED daily, done properly — capture
+# "3 questions in Geography, due in 3 days" precisely, answer "what's
+# left for tomorrow" from the file (never from conversation memory),
+# track progress, and carry a still-open item into a proactive "did you
+# finish it, or find a workaround" the day it's due. Originally named
+# school_tasks.py/"school" everywhere — renamed the same day, before it
+# even shipped to a second real item, when a movie got logged through a
+# tool called add_school_item. The "event" kind was always meant to
+# cover personal plans (a movie, meeting friends) alongside homework and
+# projects; only the naming had quietly narrowed to school-only.
 #
 # The LLM's job is entity extraction via the tool call's own arguments
 # (subject/count/due/kind) — that's what tool-calling already is, and
@@ -61,7 +66,7 @@ _WEEKDAY_RE = re.compile(
 
 # A school notice reads dates as "13 August 2026", not ISO — confirmed
 # gap: parse_due_date("13 August 2026") returned None the first time a
-# real one was logged (2026-08-09). Day-month is the primary order
+# real item was logged (2026-08-09). Day-month is the primary order
 # (matches how Vatsal actually writes it, CBSE/Indian convention);
 # month-day is included too since a transcribed or copy-pasted date
 # could plausibly arrive that way as well. Year is optional in either
@@ -221,14 +226,14 @@ def _describe(item: dict, now: datetime = None) -> str:
 # =========================================================
 
 def _path() -> Path:
-    return VAULT_DIR / "school" / "work.md"
+    return VAULT_DIR / "agenda.md"
 
 
 def _ensure_file(path: Path):
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("---\ntype: log\nstatus: active\n---\n\n# School\n", encoding="utf-8")
+    path.write_text("---\ntype: log\nstatus: active\n---\n\n# Agenda\n", encoding="utf-8")
 
 
 def _read_lines(path: Path):
@@ -562,7 +567,7 @@ def open_items() -> list:
 
 def due_within(days: int, kind_filter: str = None) -> list:
     """Open homework/project items due within `days` (overdue included),
-    soonest first — the school equivalent of daily_tasks.open_due_tasks.
+    soonest first — the agenda equivalent of daily_tasks.open_due_tasks.
     Events are excluded; they have their own prep/upcoming checks."""
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     items = [i for i in open_items() if i["kind"] != "event"]
@@ -596,7 +601,7 @@ def events_upcoming(within_hours: float = 24) -> list:
 
 def carryover_candidates(today: datetime = None) -> list:
     """Homework/project items due today or earlier, still open — the
-    raw material for proactive_checks.check_school_carryover."""
+    raw material for proactive_checks.check_agenda_carryover."""
     today = (today or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
     return [
         i for i in open_items()

@@ -97,9 +97,9 @@ TOOL_CATEGORIES = {
     "recap": ("summarise_today", "save_today_summary"),
     "vision": ("whats_on_screen",),
     "tasks": ("add_task", "list_tasks", "complete_task"),
-    "school": (
-        "add_school_item", "list_school_items", "update_school_item",
-        "delete_school_item",
+    "agenda": (
+        "add_agenda_item", "list_agenda_items", "update_agenda_item",
+        "delete_agenda_item",
     ),
 }
 
@@ -246,19 +246,39 @@ CATEGORY_CUES = {
         "checklist", "today's tasks", "my tasks", "mark as done",
         "mark as complete", "mark complete", "mark incomplete", "mark done",
     ),
+    # Homework/project/event tracking (add_agenda_item etc.) — school
+    # words AND general-plan words both belong here, since "event" was
+    # always meant to cover a movie or meeting friends alongside
+    # homework, not homework alone (the whole subsystem was briefly
+    # named/cued as if it were school-only; fixed 2026-08-09 the same
+    # day a movie got logged through a tool called add_school_item).
+    #
     # Not bare "questions" — "I have a question" / "any questions" is
-    # common non-school phrasing and would widen the menu on nearly
-    # every turn, same reasoning as "tasks" above excluding bare "to
-    # do". "questions in" is specific to the actual shape ("3 questions
-    # in Geography") without that cost.
-    "school": (
+    # common phrasing unrelated to homework, and would widen the menu on
+    # nearly every turn, same reasoning as "tasks" above excluding bare
+    # "to do". "questions in" is specific to the actual shape ("3
+    # questions in Geography") without that cost.
+    "agenda": (
         "homework", "assignment", "assignments", "school", "due",
         "deadline", "deadlines", "project", "projects", "prep", "prepped",
         "exam", "exams", "test", "quiz", "submit", "submission",
         "questions in", "journal", "remaining", "left to do", "left for",
         "what's due", "progress on",
+        # General-plan words — not school-specific. Kept modest: no
+        # named activities like "movie"/"turf" (that's overfitting to
+        # one example), just the structural words a plan/event is
+        # actually described with.
+        "event", "events", "plan", "plans", "appointment", "trip",
+        "getting ready",
+        # "today" specifically (not "tomorrow"/"tonight" — those are
+        # already "schedule" cues): confirmed gap 2026-08-09, "I have a
+        # movie today at 2:45pm" matched no category at all cold, and
+        # only reached add_school_item live because of carry-forward
+        # left over from an unrelated earlier turn — a coincidence, not
+        # a route. "schedule"'s own cues don't cover bare "today" either.
+        "today",
         # Already "files" cues too — repeated here so a cold "delete my
-        # geography homework" (no prior turn to carry delete_school_item
+        # geography homework" (no prior turn to carry delete_agenda_item
         # forward from) offers it alongside delete_file rather than
         # only the file-deletion tool. Confirmed necessary 2026-08-09:
         # a merged item needed splitting and there was no tool at all
