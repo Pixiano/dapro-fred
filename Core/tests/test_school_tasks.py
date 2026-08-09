@@ -223,6 +223,23 @@ def test_a_garbage_line_is_skipped_not_fatal(tmp_path, monkeypatch):
     assert items[0]["subject"] == "Chemistry"
 
 
+def test_repeated_saves_do_not_accumulate_blank_lines(tmp_path, monkeypatch):
+    """The 2026-08-09 bug: header spacing must be stable across any
+    number of saves, not grow by one blank line each time — caught only
+    by checking the RAW file text, which list_items()'s output can't
+    reveal."""
+    monkeypatch.setattr(st, "VAULT_DIR", tmp_path)
+
+    st.add_item("homework", "Geography", due="tomorrow")
+    st.add_item("homework", "Physics", due="tomorrow")
+    st.delete_item("physics")
+    st.update_item("geography", note="still stable")
+
+    text = (tmp_path / "school" / "work.md").read_text(encoding="utf-8")
+    assert "# School\n\n## Items" in text
+    assert "# School\n\n\n## Items" not in text
+
+
 def test_adding_preserves_content_outside_items_section(tmp_path, monkeypatch):
     monkeypatch.setattr(st, "VAULT_DIR", tmp_path)
     path = tmp_path / "school" / "work.md"
@@ -415,6 +432,45 @@ def test_update_with_no_fields_given_reports_it(tmp_path, monkeypatch):
     st.add_item("homework", "Geography", due="tomorrow")
     result = st.update_item("geography")
     assert "nothing to update" in result.lower()
+
+
+def test_delete_removes_the_matching_item(tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "VAULT_DIR", tmp_path)
+    st.add_item("homework", "Geography", due="tomorrow")
+    st.add_item("homework", "Physics", due="tomorrow")
+
+    result = st.delete_item("geography")
+
+    assert "geography" in result.lower()
+    remaining = [i["subject"] for i in st._load_items()]
+    assert remaining == ["Physics"]
+
+
+def test_delete_no_match_reports_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "VAULT_DIR", tmp_path)
+    result = st.delete_item("nonexistent")
+    assert "nothing matching" in result.lower()
+
+
+def test_delete_refuses_an_ambiguous_match_rather_than_guessing(tmp_path, monkeypatch):
+    """Unlike update_item, a wrong pick here is not a harmless no-op —
+    the item is gone. More than one match must refuse, not guess."""
+    monkeypatch.setattr(st, "VAULT_DIR", tmp_path)
+    st.add_item("homework", "Geography", detail="map work", due="tomorrow")
+    st.add_item("homework", "Geography", detail="questions", due="in 5 days")
+
+    result = st.delete_item("geography")
+
+    assert "more than one" in result.lower()
+    assert len(st._load_items()) == 2  # nothing deleted
+
+
+def test_delete_empty_match_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "VAULT_DIR", tmp_path)
+    st.add_item("homework", "Geography", due="tomorrow")
+    result = st.delete_item("")
+    assert "need something to match" in result.lower()
+    assert len(st._load_items()) == 1
 
 
 def test_update_picks_the_soonest_due_among_multiple_matches(tmp_path, monkeypatch):

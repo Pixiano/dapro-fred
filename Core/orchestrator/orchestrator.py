@@ -100,6 +100,7 @@ TOOL_LABELS = {
     "add_school_item": "Logging",
     "list_school_items": "Checking school",
     "update_school_item": "Updating",
+    "delete_school_item": "Removing",
     "cancel_scheduled": "Cancelling",
     "restart_fred": "Restarting",
     "schedule_recurring": "Setting recurring reminder",
@@ -1654,6 +1655,28 @@ class FREDOrchestrator:
                 },
                 "required": ["match"],
             },
+        )
+
+        self.tools.register(
+            name="delete_school_item",
+            function=school_tasks.delete_item,
+            description=(
+                "Remove a school item outright — for something logged "
+                "wrong (two things merged into one, the wrong kind, a "
+                "duplicate). Not for marking something done — use "
+                "update_school_item's done for that."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "match": {
+                        "type": "string",
+                        "description": "Text that identifies the item — its subject or part of it.",
+                    },
+                },
+                "required": ["match"],
+            },
+            destructive=True,
         )
 
         self.tools.register(

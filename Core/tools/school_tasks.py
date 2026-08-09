@@ -240,7 +240,18 @@ def _split_items(lines):
     daily_tasks._split_tasks_section's contract exactly: `before`/
     `after` are everything outside the Items section, heading stripped
     out of `before` either way, so the caller never has to care whether
-    the heading existed yet."""
+    the heading existed yet.
+
+    `before` also has any trailing blank lines trimmed — _write() always
+    inserts its own blank line ahead of the heading, so without this a
+    blank line already sitting at the end of `before` (put there by a
+    PREVIOUS _write call) survives into the next one too, and the file
+    gains one more blank line above "## Items" every single save.
+    Confirmed 2026-08-09: three saves, three blank lines. daily_tasks.py
+    has this identical gap (same shape, never caught because its own
+    tests check list_tasks()'s output, not the raw file text) — left
+    alone there; this only fixes the copy in this module.
+    """
     if _ITEMS_HEADING not in lines:
         return lines, [], []
     i = lines.index(_ITEMS_HEADING)
@@ -248,7 +259,10 @@ def _split_items(lines):
     while j < len(lines) and not lines[j].startswith("## "):
         j += 1
     items = [ln for ln in lines[i + 1:j] if ln.strip()]
-    return lines[:i], items, lines[j:]
+    before = lines[:i]
+    while before and not before[-1].strip():
+        before.pop()
+    return before, items, lines[j:]
 
 
 def _write(path: Path, before, items, after):
@@ -497,6 +511,42 @@ def update_item(match: str, done: bool = None, add_progress: int = None,
 
     _save_items(items)
     return "Updated, sir — " + _describe(item)
+
+
+def delete_item(match: str) -> str:
+    """
+    Remove an item outright — for something logged wrong (two things
+    merged into one, the wrong kind, a duplicate), not for marking
+    something done. Confirmed necessary the first time a real item was
+    logged (2026-08-09): a two-part school notice had been captured as
+    one merged item, and there was no way to remove the wrong entry
+    before replacing it with two correct ones short of hand-editing the
+    vault file.
+
+    Unlike update_item, a mismatch here is not a harmless no-op — it's
+    gone — so more than one match refuses rather than guessing which
+    one was meant.
+    """
+    match = (match or "").strip().lower()
+    if not match:
+        return "I need something to match the item by, sir."
+
+    items = _load_items()
+    candidates = [
+        i for i in items
+        if match in i["subject"].lower() or match in i.get("detail", "").lower()
+    ]
+
+    if not candidates:
+        return f"Nothing matching \"{match}\", sir."
+    if len(candidates) > 1:
+        names = "; ".join(_describe(i) for i in candidates)
+        return f"That matches more than one item, sir — {names} Say more to pick one."
+
+    item = candidates[0]
+    items.remove(item)
+    _save_items(items)
+    return f"Removed, sir — {item['subject']}."
 
 
 # =========================================================

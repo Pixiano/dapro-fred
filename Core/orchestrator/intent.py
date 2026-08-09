@@ -97,7 +97,10 @@ TOOL_CATEGORIES = {
     "recap": ("summarise_today", "save_today_summary"),
     "vision": ("whats_on_screen",),
     "tasks": ("add_task", "list_tasks", "complete_task"),
-    "school": ("add_school_item", "list_school_items", "update_school_item"),
+    "school": (
+        "add_school_item", "list_school_items", "update_school_item",
+        "delete_school_item",
+    ),
 }
 
 # Cue words per category. Over-inclusive on purpose: a spurious category
@@ -254,6 +257,13 @@ CATEGORY_CUES = {
         "exam", "exams", "test", "quiz", "submit", "submission",
         "questions in", "journal", "remaining", "left to do", "left for",
         "what's due", "progress on",
+        # Already "files" cues too — repeated here so a cold "delete my
+        # geography homework" (no prior turn to carry delete_school_item
+        # forward from) offers it alongside delete_file rather than
+        # only the file-deletion tool. Confirmed necessary 2026-08-09:
+        # a merged item needed splitting and there was no tool at all
+        # for "remove this one", let alone a route to it.
+        "delete", "remove",
     ),
 }
 

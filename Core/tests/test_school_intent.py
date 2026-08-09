@@ -23,6 +23,16 @@ def test_school_phrasing_reaches_the_school_tools():
         assert "list_school_items" in tools or "add_school_item" in tools or "update_school_item" in tools
 
 
+def test_delete_school_item_is_reachable_cold():
+    """A cold "delete my geography homework" with no prior turn to carry
+    from must still offer delete_school_item alongside delete_file, not
+    just the file tool. Confirmed necessary 2026-08-09."""
+    categories = intent.match_categories("delete my geography homework")
+    assert "school" in categories
+    tools = intent.tools_for_categories(categories)
+    assert "delete_school_item" in tools
+
+
 def test_bare_questions_word_does_not_widen_to_school():
     """"I have a question" / "any questions" is ordinary conversation,
     not homework — same reasoning test_intent_cues.py already applies to
