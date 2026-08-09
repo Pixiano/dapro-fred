@@ -302,6 +302,35 @@ def looks_social(text: str) -> bool:
     return bool(_SOCIAL.match(stripped))
 
 
+# Matched against the RAW text, not normalise()'s output: _PREFIX strips a
+# leading "ok"/"okay", so a bare "okay" normalises to "" and would never
+# reach a pattern applied afterwards.
+#
+# Negatives are deliberately absent. "yes" and "no" are both listed in
+# _SOCIAL above, and for a lone utterance out of the blue that is right
+# for both — but in context they are not symmetric: an affirmative
+# answering FRED's own question needs the tools back to act on, while a
+# "no" needs nothing but an acknowledgement, and handing a model tools on
+# the turn the user just declined something is how a refusal turns into
+# an action.
+_AFFIRMATIVE = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|correct|right|affirmative|"
+    r"do it|go ahead|go on|proceed|confirm(?:ed)?|please do|"
+    r"yes\s+please|that's\s+right|sounds\s+good)\b[\s,.!]*$",
+    re.IGNORECASE,
+)
+
+
+def is_affirmative(text: str) -> bool:
+    """
+    True for a turn that is nothing but agreement.
+
+    Such a turn is social in isolation and an ANSWER in context; only the
+    caller knows which, so this reports the shape and decides nothing.
+    """
+    return bool(_AFFIRMATIVE.match((text or "").strip()))
+
+
 # Signals a turn is asking for more than one thing, e.g. "what's the
 # time and what are my goals for today". This matters for the
 # SELF_NARRATING_TOOLS shortcut in orchestrator.py: that shortcut skips

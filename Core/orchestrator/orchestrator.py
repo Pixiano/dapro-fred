@@ -1592,9 +1592,37 @@ class FREDOrchestrator:
         result = intent.classify(text, llm=self.llm, router=self._tool_router())
         needs_tools, tool_names, reason = result
 
+        carry_live = bool(self._carry_left and self._carry_tools)
+
         if needs_tools:
+            # A follow-up that classify lands on a DIFFERENT category than
+            # the turn before is usually a correction to the same request,
+            # not a new one — and replacing the menu wholesale is how the
+            # right tool goes missing. On 2026-08-06, "I meant identity.md"
+            # matched the vault-open cues, delete_file dropped out of the
+            # menu, and the model described the deletion instead of
+            # performing it because it had no way to perform it.
+            #
+            # So offer both. An empty tool_names is left alone: it is
+            # classify's "no category matched, offer everything" and is
+            # already maximal — narrowing it to a union would REMOVE
+            # options.
+            if carry_live and tool_names and set(tool_names) != set(self._carry_tools):
+                tool_names = list(dict.fromkeys([*tool_names, *self._carry_tools]))
+                result = (
+                    True, tool_names,
+                    f"{reason}; plus last turn's tools (possible correction)",
+                )
             self._carry_tools, self._carry_left = tool_names, self.CARRY_TOOLS_TURNS
-        elif self._carry_left and self._carry_tools and not intent.looks_social(text):
+
+        # is_affirmative before looks_social, because _SOCIAL matches a
+        # bare "yes" and that is the single most important turn to keep
+        # the tools for: it is the user answering a question FRED asked.
+        # When FRED asks via _request_confirmation this never matters —
+        # pending_action catches it upstream — but when the MODEL asks in
+        # prose ("Shall I delete it, sir?") nothing is pending, and the
+        # "yes" fell through to chat and got a fabricated confirmation.
+        elif carry_live and (intent.is_affirmative(text) or not intent.looks_social(text)):
             self._carry_left -= 1
             result = (
                 True, self._carry_tools,
