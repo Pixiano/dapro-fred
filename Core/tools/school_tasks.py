@@ -59,6 +59,48 @@ _WEEKDAY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A school notice reads dates as "13 August 2026", not ISO — confirmed
+# gap: parse_due_date("13 August 2026") returned None the first time a
+# real one was logged (2026-08-09). Day-month is the primary order
+# (matches how Vatsal actually writes it, CBSE/Indian convention);
+# month-day is included too since a transcribed or copy-pasted date
+# could plausibly arrive that way as well. Year is optional in either
+# order — inferred the same way the weekday branch below already
+# infers a year-less date: if it would be in the past, it isn't what
+# was meant, so roll forward.
+_MONTH_INDEX = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+    "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+_MONTH_NAMES_RE = "|".join(sorted(_MONTH_INDEX, key=len, reverse=True))
+_DAY_MONTH_RE = re.compile(
+    rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({_MONTH_NAMES_RE})\.?(?:\s+(\d{{4}}))?\b",
+    re.IGNORECASE,
+)
+_MONTH_DAY_RE = re.compile(
+    rf"\b({_MONTH_NAMES_RE})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?(?:\s+(\d{{4}}))?\b",
+    re.IGNORECASE,
+)
+
+
+def _named_month_date(text: str, now: datetime):
+    for rx, day_first in ((_DAY_MONTH_RE, True), (_MONTH_DAY_RE, False)):
+        m = rx.search(text)
+        if not m:
+            continue
+        day, month_name, year = (m.group(1), m.group(2), m.group(3)) if day_first \
+            else (m.group(2), m.group(1), m.group(3))
+        try:
+            candidate = datetime(int(year) if year else now.year, _MONTH_INDEX[month_name.lower()], int(day))
+        except ValueError:
+            continue
+        if not year and candidate.date() < now.date():
+            candidate = candidate.replace(year=candidate.year + 1)
+        return candidate
+    return None
+
 
 def parse_due_date(text: str, now: datetime = None):
     """
@@ -94,6 +136,10 @@ def parse_due_date(text: str, now: datetime = None):
             return datetime(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
         except ValueError:
             return None
+
+    named_month = _named_month_date(text, now)
+    if named_month is not None:
+        return named_month
 
     weekday = _WEEKDAY_RE.search(text)
     if weekday:

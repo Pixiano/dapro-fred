@@ -48,6 +48,35 @@ def test_parse_due_date_iso():
     assert st.parse_due_date("2026-09-01").date() == datetime(2026, 9, 1).date()
 
 
+def test_parse_due_date_named_month_day_first_with_year():
+    """The real gap: "13 August 2026" returned None the first time a
+    real item was logged (2026-08-09)."""
+    assert st.parse_due_date("13 August 2026").date() == datetime(2026, 8, 13).date()
+    assert st.parse_due_date("on 13 August 2026").date() == datetime(2026, 8, 13).date()
+    assert st.parse_due_date("13th August 2026").date() == datetime(2026, 8, 13).date()
+    assert st.parse_due_date("3 Aug 2026").date() == datetime(2026, 8, 3).date()
+
+
+def test_parse_due_date_named_month_day_first_no_year_infers_forward():
+    now = datetime(2026, 8, 9)
+    # In the future this year: stays this year.
+    assert st.parse_due_date("13 August", now=now).date() == datetime(2026, 8, 13).date()
+    # Already passed this year: rolls to next year, not into the past.
+    assert st.parse_due_date("1 January", now=now).date() == datetime(2027, 1, 1).date()
+
+
+def test_parse_due_date_named_month_month_first():
+    assert st.parse_due_date("August 13, 2026").date() == datetime(2026, 8, 13).date()
+    assert st.parse_due_date("Aug 13 2026").date() == datetime(2026, 8, 13).date()
+
+
+def test_parse_due_date_full_month_names_not_truncated_by_abbreviation_match():
+    """Alternation order/backtracking must resolve "september" fully,
+    not stop at the "sep" prefix and leave "tember" dangling."""
+    assert st.parse_due_date("5 September 2026").date() == datetime(2026, 9, 5).date()
+    assert st.parse_due_date("5 June 2026").date() == datetime(2026, 6, 5).date()
+
+
 def test_parse_due_date_garbage_is_none():
     assert st.parse_due_date("") is None
     assert st.parse_due_date("whenever") is None
