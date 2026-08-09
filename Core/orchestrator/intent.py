@@ -97,6 +97,7 @@ TOOL_CATEGORIES = {
     "recap": ("summarise_today", "save_today_summary"),
     "vision": ("whats_on_screen",),
     "tasks": ("add_task", "list_tasks", "complete_task"),
+    "school": ("add_school_item", "list_school_items", "update_school_item"),
 }
 
 # Cue words per category. Over-inclusive on purpose: a spurious category
@@ -242,6 +243,18 @@ CATEGORY_CUES = {
         "checklist", "today's tasks", "my tasks", "mark as done",
         "mark as complete", "mark complete", "mark incomplete", "mark done",
     ),
+    # Not bare "questions" — "I have a question" / "any questions" is
+    # common non-school phrasing and would widen the menu on nearly
+    # every turn, same reasoning as "tasks" above excluding bare "to
+    # do". "questions in" is specific to the actual shape ("3 questions
+    # in Geography") without that cost.
+    "school": (
+        "homework", "assignment", "assignments", "school", "due",
+        "deadline", "deadlines", "project", "projects", "prep", "prepped",
+        "exam", "exams", "test", "quiz", "submit", "submission",
+        "questions in", "journal", "remaining", "left to do", "left for",
+        "what's due", "progress on",
+    ),
 }
 
 
@@ -370,6 +383,21 @@ _MULTI_COUNT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A fourth tell, for "3 questions in Geography and 1 in physics": two
+# counts either side of "and", with no plural noun required after the
+# second one (it's carried over from the first clause — "1 in physics"
+# means "1 question", the word itself is never repeated). _MULTI_COUNT_RE
+# above needs that noun explicitly and misses this shape entirely, which
+# is exactly how one school subject silently dropped out of a two-item
+# turn without this. A number on each side of "and" is a weaker, more
+# general version of the same "asking for more than one" signal; false
+# positives cost one extra confirmation round (see the compound-turn
+# nudge in orchestrator._generate_with_tools), never a wrong answer.
+_NUMBER_WORD = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
+_MULTI_ITEM_RE = re.compile(
+    rf"\b{_NUMBER_WORD}\b.*?\band\b.*?\b{_NUMBER_WORD}\b", re.IGNORECASE
+)
+
 
 # The third tell: a conjunction followed by a second ACTION verb.
 # _COMPOUND_RE above only catches a second QUESTION ("...and what are
@@ -405,6 +433,7 @@ def looks_compound(text: str) -> bool:
         or _COMPOUND_ACTION_RE.search(text)
         or _MULTI_DAY_RE.search(text)
         or _MULTI_COUNT_RE.search(text)
+        or _MULTI_ITEM_RE.search(text)
     )
 
 

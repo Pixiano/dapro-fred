@@ -125,3 +125,59 @@ def test_an_affirmative_out_of_the_blue_is_still_chat():
     o = _bare()
     needs, _, _ = o._classify_turn("sure")
     assert not needs
+
+
+# --- proactive priming (2026-08-09) --------------------------------------
+#
+# A carryover/upcoming-event question is FRED speaking first, not the
+# user — there is no prior user turn for the ordinary carry-forward to
+# key off. _prime_carry is the thing that plants the tools anyway, right
+# when proactive_checks.py speaks the question, so whatever comes back
+# ("yeah I did it", a bare "no", a full sentence) still reaches the
+# right tool instead of falling to conversation memory or chat.
+
+
+def test_primed_carry_survives_into_the_next_turn():
+    o = _bare()
+    o._prime_carry(["update_school_item"])
+
+    needs, names, reason = o._classify_turn("yeah I finished it")
+    assert needs
+    assert "update_school_item" in names
+    assert "follow-up" in reason
+
+
+def test_primed_carry_reaches_a_no_that_carries_a_reason():
+    """Vatsal's own example: "no, teacher extended it to Friday" — not
+    an affirmative, but not bare social "no" either (looks_social's "no"
+    alternative is end-anchored and doesn't match once more follows it),
+    so `not looks_social(...)` is what carries this one."""
+    o = _bare()
+    o._prime_carry(["update_school_item"])
+
+    needs, names, _ = o._classify_turn("no, teacher extended it to friday")
+    assert needs
+    assert "update_school_item" in names
+
+
+def test_primed_carry_lets_a_bare_no_stay_conversation():
+    """A carryover question's bare "no" means the item is unchanged —
+    still open, nothing to update — so there is genuinely nothing for
+    update_school_item to do here; matches the deletion-confirmation
+    precedent (test_a_bare_no_stays_conversation above) that a lone "no"
+    must not re-arm the menu."""
+    o = _bare()
+    o._prime_carry(["update_school_item"])
+
+    needs, _, _ = o._classify_turn("no")
+    assert not needs
+
+
+def test_primed_carry_is_bounded_the_same_as_an_ordinary_carry():
+    o = _bare()
+    o._prime_carry(["update_school_item"])
+    o._classify_turn("no")
+    o._classify_turn("teacher extended it")
+
+    needs, _, _ = o._classify_turn("mm alright I see")
+    assert not needs

@@ -18,6 +18,7 @@ from tools import smart_search
 from tools import session_summary
 from tools import vision_tools
 from tools import daily_tasks
+from tools import school_tasks
 from tools import vault_files
 from tools import workout_plan
 from audio import device_info
@@ -96,6 +97,9 @@ TOOL_LABELS = {
     "add_task": "Adding task",
     "list_tasks": "Checking tasks",
     "complete_task": "Updating task",
+    "add_school_item": "Logging",
+    "list_school_items": "Checking school",
+    "update_school_item": "Updating",
     "cancel_scheduled": "Cancelling",
     "restart_fred": "Restarting",
     "schedule_recurring": "Setting recurring reminder",
@@ -151,6 +155,41 @@ SELF_NARRATING_TOOLS = {
     "workout_split",
     "todays_workout",
     "schedule_workouts",
+    "add_school_item",
+    "list_school_items",
+    "update_school_item",
+}
+
+# Stricter than SELF_NARRATING_TOOLS above: for these, the raw tool
+# result is preferred over the model's own words even on a COMPOUND
+# turn (see the exact_readback_only tracking in _generate_with_tools).
+#
+# Built for "3 questions in Geography and 1 in physics, due in 3
+# days" — the canonical example this feature was built to answer. Two
+# add_school_item calls across two rounds is exactly the compound
+# shape SELF_NARRATING_TOOLS' own compound check exists to catch, but
+# THAT check exists to give a local model a second round to call the
+# tool it forgot, not to improve phrasing — once both calls have
+# happened, the turn ends with the model paraphrasing its own two
+# tool results in one sentence. The tool results are right there in
+# its context, so that paraphrase is usually fine, but "usually fine"
+# on a due DATE is exactly the failure mode this whole feature exists
+# to close. The read-back confirmation is the thing that makes the
+# 99%-accuracy promise real; it has to be the literal string a
+# deterministic function produced, not a second LLM pass restating it
+# from memory a few tokens later.
+#
+# Deliberately a separate set from SELF_NARRATING_TOOLS, not a flag on
+# it: schedule_reminder+list_scheduled is ALSO all-self-narrating on a
+# compound turn, and test_compound_tool_calls.py already pins that
+# case to the model's OWN synthesis ("Set for 6pm. You already had one
+# other reminder.") — a natural sentence combining a check with an
+# action, which raw concatenation would make worse, not better. That
+# case stays on the existing path; only the tools below skip it.
+EXACT_READBACK_TOOLS = {
+    "add_school_item",
+    "list_school_items",
+    "update_school_item",
 }
 
 # Tools whose RESULT contains vault content marked sensitive — today
@@ -233,7 +272,9 @@ class FREDOrchestrator:
         self.llm = LLMClient()
 
         self.scheduler = ReminderScheduler()
-        proactive_checks.register(self.scheduler, llm=self.llm)
+        proactive_checks.register(
+            self.scheduler, llm=self.llm, on_school_ask=self._prime_carry
+        )
 
         self.tools = ToolRegistry()
         self._register_tools()
@@ -1474,6 +1515,148 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="add_school_item",
+            function=school_tasks.add_item,
+            description=(
+                "Log one piece of school work: homework, a project, or "
+                "an event that needs getting-ready lead time (a class "
+                "trip, a movie, meeting friends). Call this the moment "
+                "one is mentioned, even offhand — the same reasoning as "
+                "add_task, but for anything that has its own due date "
+                "or progress. Call it ONCE PER ITEM: 'geography and "
+                "physics homework, due in 3 days' is two separate "
+                "calls, not one."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["homework", "project", "event"],
+                        "description": (
+                            "homework: a one-off assignment or questions. "
+                            "project: multi-step work with its own "
+                            "progress and a next step. event: something "
+                            "at a specific time that may need getting-"
+                            "ready lead time."
+                        ),
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "The subject or title, e.g. 'Geography', 'Physics model', 'Movie', 'Turf session'.",
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "What it actually is, e.g. '3 questions', 'build a working model', '7 people at Inorbit'. Leave blank if there's nothing more to say.",
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "Number of items to complete, e.g. 3 questions. Omit if there's no meaningful count — never use this for a headcount of people.",
+                    },
+                    "due": {
+                        "type": "string",
+                        "description": "When it's due (homework/project) or starts (event) — 'today', 'tomorrow', 'in 3 days', a weekday name, or an exact date.",
+                    },
+                    "time": {
+                        "type": "string",
+                        "description": "Clock time, e.g. '2:45pm'. Give this for an event. Only give it for homework/project if a specific time was actually stated.",
+                    },
+                    "prep_minutes": {
+                        "type": "integer",
+                        "description": "Event only: minutes of lead time to start getting ready before it starts.",
+                    },
+                    "next_step": {
+                        "type": "string",
+                        "description": "Project only: the very next actionable step, e.g. 'buy card sheet'.",
+                    },
+                },
+                "required": ["kind", "subject"],
+            },
+        )
+
+        self.tools.register(
+            name="list_school_items",
+            function=school_tasks.list_items,
+            description=(
+                "Answer any question about school homework, projects or "
+                "events — what's due, what's left, progress on "
+                "something, what's happening tomorrow. Always reads the "
+                "current record; never answer this from memory."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "when": {
+                        "type": "string",
+                        "enum": ["today", "tomorrow", "week", "overdue", "all"],
+                        "description": "Which items to include. Default 'all' — every still-open item.",
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["homework", "project", "event"],
+                        "description": "Restrict to one kind. Omit for all kinds.",
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Restrict to items whose subject contains this text, e.g. 'geography'.",
+                    },
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="update_school_item",
+            function=school_tasks.update_item,
+            description=(
+                "Update an existing school item: progress, done state, "
+                "reschedule, or a note. This is where the ANSWER to a "
+                "question FRED asked about something overdue or "
+                "upcoming actually gets recorded — 'did you finish the "
+                "geography questions' followed by 'yeah, two of them' "
+                "must call this, never just get acknowledged in speech."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "match": {
+                        "type": "string",
+                        "description": "Text that identifies the item — its subject or part of it, e.g. 'geography'.",
+                    },
+                    "done": {
+                        "type": "boolean",
+                        "description": "Mark fully done (homework/project) or prep complete (event).",
+                    },
+                    "add_progress": {
+                        "type": "integer",
+                        "description": "Add this many completed items to the count so far, e.g. 2 if two more questions got done.",
+                    },
+                    "set_progress": {
+                        "type": "integer",
+                        "description": "Set the completed count directly, instead of adding to it.",
+                    },
+                    "new_due": {
+                        "type": "string",
+                        "description": "Reschedule to this new date — use when it was postponed or extended.",
+                    },
+                    "new_time": {
+                        "type": "string",
+                        "description": "New clock time to go with new_due, if one was given.",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "A short free-text note to attach, e.g. why it's late, or a plan for a project.",
+                    },
+                    "next_step": {
+                        "type": "string",
+                        "description": "Update a project's next actionable step.",
+                    },
+                },
+                "required": ["match"],
+            },
+        )
+
+        self.tools.register(
             name="open_last_found",
             function=assist_tools.open_last_found,
             description=(
@@ -1572,6 +1755,38 @@ class FREDOrchestrator:
     # ponytail: fixed count, not a decay or topic check. Two turns of a
     # stale 3-tool menu is cheap; widen only if follow-ups get dropped.
     CARRY_TOOLS_TURNS = 2
+
+    def _prime_carry(self, tool_names: list):
+        """
+        Called by proactive_checks.py right after it SPEAKS a question
+        whose answer should update a school item — "you had Geography
+        due today, did you finish it, or find a workaround?" — so the
+        next user reply reaches update_school_item instead of landing
+        wherever _classify_turn's cues happen to fall, or the chat path
+        on a bare "yeah I did it".
+
+        This is the exact deletion-confirmation failure from
+        2026-08-06 (a reply with no tool to answer with, that talked
+        instead of acting) recurring on a DIFFERENT trigger: there the
+        missing tool was reachable once the fabrication guard widened
+        the menu after the fact; here there is no such retry, because
+        an unrecorded answer to "did you finish it" isn't a false
+        claim FRED makes — it is Vatsal's own true answer, correctly
+        spoken back, just never saved. Nothing downstream would ever
+        catch that, so this has to be primed before the question is
+        even answered, not repaired after.
+
+        Runs on the scheduler's own background thread, not the turn
+        thread — a real user turn arriving in the same instant can
+        overwrite this a moment later. That's fine: last-write-wins is
+        already how every other piece of this same scratch state
+        behaves (see _classify_turn's carry-forward), and the race
+        window is a live turn already in flight versus a proactive
+        check that just fired, not two proactive checks against each
+        other.
+        """
+        self._carry_tools = list(tool_names)
+        self._carry_left = self.CARRY_TOOLS_TURNS
 
     def _classify_turn(self, text: str) -> tuple:
         """
@@ -1701,6 +1916,11 @@ class FREDOrchestrator:
 
         message = self.llm.generate_with_tools(messages, tools=tool_definitions, local_only=self._turn_local_only)
         all_results = []
+        # AND-narrowed every round below; stays True only if EVERY tool
+        # called this whole turn is in EXACT_READBACK_TOOLS. See that
+        # set's own comment for why this needs to survive a compound
+        # turn's extra rounds rather than resetting each round.
+        exact_readback_only = True
 
         for round_num in range(MAX_TOOL_ROUNDS):
             tool_calls = message.get("tool_calls")
@@ -1767,6 +1987,14 @@ class FREDOrchestrator:
                         "Say it again and name the file, and I'll run it."
                     )
 
+                # See EXACT_READBACK_TOOLS: for these, the deterministic
+                # tool result IS the answer, even after a compound turn's
+                # extra round — the model's own paraphrase of a date it
+                # already stated correctly one message ago is a second,
+                # unnecessary chance to get that date wrong.
+                if all_results and exact_readback_only:
+                    return " ".join(all_results)
+
                 return content or (
                     " ".join(all_results) if all_results else self.llm.generate(messages, local_only=self._turn_local_only)
                 )
@@ -1819,6 +2047,8 @@ class FREDOrchestrator:
             # at requesting it now that the first result is in context,
             # rather than that half of the request silently vanishing.
             called_names = {c.get("function", {}).get("name") for c in tool_calls}
+            exact_readback_only = exact_readback_only and called_names <= EXACT_READBACK_TOOLS
+
             if (
                 called_names
                 and called_names <= SELF_NARRATING_TOOLS
@@ -1859,6 +2089,8 @@ class FREDOrchestrator:
         # looping forever.
         content = message.get("content") or ""
         if self._looks_like_leaked_tool_syntax(content):
+            return " ".join(all_results)
+        if all_results and exact_readback_only:
             return " ".join(all_results)
         return LLMClient._strip_tool_call_debris(content).strip() or " ".join(all_results)
 
