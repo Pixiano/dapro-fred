@@ -400,6 +400,25 @@ CLOUD_PROVIDERS = [
     },
 ]
 
+# Cloud vision, 2026-08-09 — images only, describe_image()'s sole
+# caller. Separate from CLOUD_PROVIDERS above (that cascade is text/
+# tool-calling only): same account, same no-retention terms already
+# checked above, but a different, larger, vision-capable model
+# (gemma-4-31b vs. the text cascade's gpt-oss-120b). Added specifically
+# to get off local Vision-tier inference — the local GGUF competes with
+# the main conversation model for the same 16GB card (see
+# vision/watcher_manager.py's whole cross-process coordination dance),
+# and was laggy on top of that even when it got a clear run. A single
+# dict, not a cascade — no second vision provider configured, so
+# describe_image() falls straight to local on any failure, same
+# fall-through shape as the text cascade uses.
+CLOUD_VISION_PROVIDER = {
+    "name": "cerebras",
+    "base_url": "https://api.cerebras.ai/v1/chat/completions",
+    "api_key": CEREBRAS_API_KEY,
+    "model": "gemma-4-31b",
+}
+
 # Whether retrieved personal/ or people/ content pins a turn to the
 # local model (utils/sensitive.py + the orchestrator's per-turn latch).
 #

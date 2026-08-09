@@ -127,7 +127,7 @@ def run_once():
     """
     from llm.llm_client import LLMClient
 
-    llm = LLMClient()
+    llm = LLMClient(report_status=False)
     try:
         _run_one_cycle(llm)
     except Exception as e:
@@ -154,7 +154,7 @@ def run():
     # module to hand it to multiprocessing.Process.
     from llm.llm_client import LLMClient
 
-    llm = LLMClient()
+    llm = LLMClient(report_status=False)
 
     while True:
         try:

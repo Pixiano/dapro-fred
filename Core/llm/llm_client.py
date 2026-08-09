@@ -29,6 +29,7 @@ from config.settings import (
     MAX_TOKENS,
     LLM_STATUS_PATH,
     CLOUD_PROVIDERS,
+    CLOUD_VISION_PROVIDER,
 )
 
 
@@ -137,7 +138,7 @@ class LLMClient:
     - Unified generation interface
     """
 
-    def __init__(self):
+    def __init__(self, report_status: bool = True):
 
         self.tiers = MODEL_TIERS
         self.default_tier = DEFAULT_TIER
@@ -149,6 +150,17 @@ class LLMClient:
         # Loaded model instances, keyed by tier. Loaded lazily so
         # FRED doesn't pay the load cost for tiers it never needs.
         self._loaded = {}
+
+        # False for vision/screen_watcher.py's own LLMClient: that one
+        # runs in a separate process this file is shared with only to
+        # let IT read the MAIN process's status (see
+        # _main_process_has_a_model_loaded() there). If it also wrote
+        # its own "Vision" entry to the same file, a hard terminate()
+        # (no chance to clean up) leaves that entry stuck forever —
+        # confirmed live 2026-08-09: a 6-hour-old ghost "Vision" entry
+        # from one such kill silently blocked every capture since,
+        # background and on-demand alike.
+        self._report_status = report_status
 
     # =========================================================
     # PUBLIC INTERFACE
@@ -553,19 +565,25 @@ class LLMClient:
 
     def describe_image(self, image_b64_data_uri: str, prompt: str, max_tokens: int = 200) -> str:
         """
-        One-shot image description via the Vision tier. Takes a
-        data-URI-encoded image (base64, with the "data:image/..." prefix
-        llama-cpp-python's multimodal message format expects) rather than
-        raw bytes, since that's the shape create_chat_completion actually
-        wants for an image_url content part.
+        One-shot image description. Takes a data-URI-encoded image
+        (base64, with the "data:image/..." prefix), the same
+        OpenAI-compatible image_url content-part shape either the cloud
+        API or llama-cpp-python's multimodal handler expects.
+
+        Cloud (CLOUD_VISION_PROVIDER, gemma-4-31b) tried first — the
+        local Vision tier shares this process's one GPU with whatever
+        else FRED is doing (see vision/watcher_manager.py's whole
+        cross-process dance to avoid a collision) and was laggy even
+        when it got a clean run. Falls back to local only if no cloud
+        key is configured or the request fails, same shape as
+        generate()'s cloud-then-local cascade.
 
         Separate from generate()/generate_with_tools() because the
         message shape is genuinely different (image content parts, no
-        tool-calling), and because this always forces tier="Vision" —
-        callers never get to pick a different model for an image.
+        tool-calling), and because the local fallback always forces
+        tier="Vision" — callers never get to pick a different model for
+        an image.
         """
-        model = self._get_model("Vision")
-
         messages = [
             {
                 "role": "user",
@@ -575,6 +593,20 @@ class LLMClient:
                 ],
             }
         ]
+
+        if CLOUD_VISION_PROVIDER.get("api_key"):
+            try:
+                response = _cloud_request(
+                    CLOUD_VISION_PROVIDER, messages,
+                    temperature=self.temperature, top_p=self.top_p, max_tokens=max_tokens,
+                )
+                content = response["choices"][0]["message"]["content"] or ""
+                return self._strip_thinking(content) or content
+            except Exception as e:
+                print(f"[LLM] cloud vision failed, falling back to local: {e}")
+                event_log.log_error("cloud_vision", e)
+
+        model = self._get_model("Vision")
 
         response = model.create_chat_completion(
             messages=messages,
@@ -635,7 +667,8 @@ class LLMClient:
             gc.collect()
             print(f"[LLM] unloaded {dropped} model(s) — VRAM released")
 
-        _write_llm_status(self._loaded.keys())
+        if self._report_status:
+            _write_llm_status(self._loaded.keys())
         return dropped
 
     def _get_model(self, tier: str) -> Llama:
@@ -713,7 +746,8 @@ class LLMClient:
             )
 
         self._loaded[tier] = model
-        _write_llm_status(self._loaded.keys())
+        if self._report_status:
+            _write_llm_status(self._loaded.keys())
 
         return model
 
