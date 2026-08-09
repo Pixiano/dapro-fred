@@ -44,6 +44,18 @@ def test_append_writes_to_the_real_note_not_a_phantom(tmp_path, monkeypatch):
     assert not (docs / "daily").exists(), "wrote a phantom copy under Documents/FRED"
 
 
+def test_the_default_root_is_the_vault():
+    """One root, not two: a bare name and an empty listing must land in
+    the same place a vault-relative path does."""
+    from config.settings import VAULT_DIR
+
+    assert assist_tools.DEFAULT_DOCS == VAULT_DIR
+    assert resolve_user_path("").resolve() == VAULT_DIR.resolve()
+    assert resolve_user_path("notes.txt").parent.resolve() == VAULT_DIR.resolve()
+    # "FRED/daily" must not nest the vault inside itself.
+    assert resolve_user_path("FRED/daily").resolve() == (VAULT_DIR / "daily").resolve()
+
+
 def test_a_new_file_still_goes_to_documents(tmp_path, monkeypatch):
     """The vault check must not capture files that don't exist there —
     a fresh shopping list is not a vault file."""

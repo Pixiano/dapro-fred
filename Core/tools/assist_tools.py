@@ -24,7 +24,18 @@ from config.settings import VAULT_DIR
 # Where loose files go when no directory is given. Anything else lands
 # wherever the process happened to start, which for a background app is
 # effectively random.
-DEFAULT_DOCS = Path(os.path.expanduser("~")) / "Documents" / "FRED"
+#
+# This IS the vault as of 2026-08-06. It used to be ~/Documents/FRED,
+# which meant a single turn saw two different roots: list_directory("")
+# answered from Documents/FRED while list_directory("daily") hit the
+# exists() check below and answered from the vault — both in
+# session_2026-08-06.jsonl at 15:51:22 and 15:51:23. One root, and it's
+# the one that actually holds the notes.
+#
+# VAULT_DIR.name is "FRED", so the "already starts with FRED's own
+# folder name" branch in resolve_user_path still lands inside the vault
+# rather than nesting it in itself.
+DEFAULT_DOCS = VAULT_DIR
 
 
 def _ensure_docs() -> Path:
