@@ -3,6 +3,7 @@
 import gc
 import json
 import re
+import time
 
 import requests
 
@@ -53,9 +54,24 @@ def _cloud_request(provider: dict, messages: list, tools=None, tool_choice=None,
 
     headers = {"Authorization": f"Bearer {provider['api_key']}"}
 
-    response = requests.post(
-        provider["base_url"], headers=headers, json=payload, timeout=30, stream=stream
-    )
+    for attempt in (0, 1):
+        response = requests.post(
+            provider["base_url"], headers=headers, json=payload, timeout=30, stream=stream
+        )
+        # A 429 here is a per-minute throttle, not an outage: Cerebras'
+        # free tier allows 5 req/min and a single tool-calling turn can
+        # fire four requests in two seconds. Since Groq was dropped
+        # (settings.py) this provider is the whole cascade, so one
+        # throttled request used to end the turn with "cognitive
+        # malfunction" — confirmed in session_2026-08-06.jsonl at
+        # 15:50:52 and 15:51:24. Wait out the window once, then give up
+        # and let the caller fall through to local as before.
+        if response.status_code == 429 and attempt == 0:
+            wait = float(response.headers.get("retry-after") or 0)
+            time.sleep(min(wait, 15.0) if wait else 12.0)
+            continue
+        break
+
     response.raise_for_status()
 
     if not stream:
