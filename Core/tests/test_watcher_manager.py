@@ -49,6 +49,25 @@ def test_touch_resets_the_idle_clock():
     assert mgr._last_hotkey_activity > before
 
 
+def test_capture_now_skips_if_a_watcher_is_already_running():
+    """capture_now() must never spawn a second capture process racing
+    the one already running — see the module docstring's touch() note
+    on why two competing captures can't share the GPU."""
+    import multiprocessing
+
+    mgr = ScreenWatcherManager()
+    proc = multiprocessing.Process(target=_idle_child, daemon=True)
+    proc.start()
+    mgr._process = proc
+
+    try:
+        assert mgr.capture_now(timeout=1) is False
+        assert mgr._process is proc  # untouched, no duplicate spawned
+    finally:
+        proc.terminate()
+        proc.join(timeout=5)
+
+
 def test_stop_kills_any_running_watcher_on_shutdown():
     import multiprocessing
 

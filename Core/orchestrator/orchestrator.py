@@ -159,6 +159,12 @@ SELF_NARRATING_TOOLS = {
     "add_agenda_item",
     "list_agenda_items",
     "update_agenda_item",
+    # whats_on_screen's own staleness hedge ("...which is probably
+    # stale: <description>") must reach the user verbatim — the
+    # rephrase pass was dropping the hedge and presenting a 6-hour-old
+    # cached description as a confident current answer (caught
+    # 2026-08-09).
+    "whats_on_screen",
 }
 
 # Stricter than SELF_NARRATING_TOOLS above: for these, the raw tool

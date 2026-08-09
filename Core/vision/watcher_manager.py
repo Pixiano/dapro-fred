@@ -69,6 +69,44 @@ class ScreenWatcherManager:
         with self._lock:
             self._kill_locked()
 
+    def capture_now(self, timeout: float = 12.0) -> bool:
+        """
+        On-demand capture for whats_on_screen() when its cache is
+        stale — spawns a one-shot capture (screen_watcher.run_once)
+        and waits for a fresh write to land, up to timeout seconds.
+
+        Tracked in self._process exactly like the idle-loop watcher,
+        so a hotkey press mid-wait kills this the same way touch()
+        already kills the background loop — a real conversation turn
+        always wins the GPU over an on-demand screen check.
+
+        Returns whether a fresh capture landed in time. False also
+        covers "skipped, something's already running" and "run_once's
+        own safety check found a model loaded and silently skipped its
+        cycle" — either way the caller just falls back to whatever's
+        already cached.
+        """
+        from vision import screen_context, screen_watcher
+
+        with self._lock:
+            if self._process is not None and self._process.is_alive():
+                return False
+            proc = multiprocessing.Process(target=screen_watcher.run_once, daemon=True)
+            proc.start()
+            self._process = proc
+
+        start_wall = time.time()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self._process is not proc:
+                    return False  # killed by a hotkey press mid-wait
+            _, age = screen_context.read()
+            if age is not None and (time.time() - age) >= start_wall:
+                return True
+            time.sleep(0.3)
+        return False
+
     # =========================================================
     # INTERNAL
     # =========================================================

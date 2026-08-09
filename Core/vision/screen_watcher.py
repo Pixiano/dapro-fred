@@ -34,12 +34,13 @@ from config.settings import (
 )
 
 _DESCRIBE_PROMPT = (
-    "Describe what's on this screen in one or two short sentences. "
-    "Name the application and the general activity — e.g. 'VS Code, "
-    "editing a Python file' or 'Chrome, watching a YouTube video'. "
-    "Do not transcribe visible text verbatim, do not speculate about "
-    "anything not clearly visible, and do not comment on personal or "
-    "sensitive content beyond naming the app and activity."
+    "Describe what's on this screen. Name the application and the "
+    "general activity — e.g. 'VS Code, editing a Python file' or "
+    "'Chrome, watching a YouTube video'. If there's an error message, "
+    "code, a specific number, or any other text that looks like what "
+    "the user is actually looking at, quote it exactly rather than "
+    "summarizing it — that's usually the point of asking. Don't "
+    "speculate about anything not clearly visible."
 )
 
 
@@ -102,11 +103,35 @@ def _run_one_cycle(llm) -> bool:
         return False
 
     image_uri = _capture_screenshot_data_uri()
-    description = llm.describe_image(image_uri, _DESCRIBE_PROMPT)
+    # 200 (describe_image's default) is enough for a one-line summary
+    # but not a quoted error/traceback, which the prompt above now asks
+    # for verbatim — bumped so a real quote doesn't get cut mid-message.
+    description = llm.describe_image(image_uri, _DESCRIBE_PROMPT, max_tokens=500)
 
     from vision import screen_context
     screen_context.write(description)
     return True
+
+
+def run_once():
+    """
+    One-shot variant of run() for on-demand capture (see
+    watcher_manager.capture_now(), called by whats_on_screen() when its
+    cache is stale) — loads the model, does exactly one cycle, exits.
+    No sleep loop, and the model isn't kept resident afterward.
+
+    Reuses _run_one_cycle's own _main_process_has_a_model_loaded()
+    check, so an on-demand capture is exactly as fail-safe against a
+    VRAM collision as the idle-triggered loop is — it silently skips
+    (writes nothing) rather than racing the main process's model.
+    """
+    from llm.llm_client import LLMClient
+
+    llm = LLMClient()
+    try:
+        _run_one_cycle(llm)
+    except Exception as e:
+        print(f"[screen_watcher] on-demand capture failed: {e}")
 
 
 def run():
