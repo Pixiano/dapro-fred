@@ -46,6 +46,7 @@ the other:
 import argparse
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -66,6 +67,11 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 BUS_DIR = Path.home() / "voice-line"
+# The scheduler's own jobstore (Core/config/settings.py SCHEDULER_DB_PATH).
+# Read directly rather than through the bus: set_timer already persists
+# the deadline here, so there is nothing to publish and nothing to keep
+# in sync — if FRED restarts mid-timer the HUD still finds it.
+SCHEDULER_DB = HERE.parent / "Core" / "data" / "reminders.sqlite"
 
 DEFAULT_PORT = 8777
 MOCK_PORT = 8778
@@ -176,6 +182,38 @@ def submit_command(text):
 
 _GPU_FIELDS = ("utilization.gpu", "memory.used", "memory.total",
                "temperature.gpu", "power.draw", "power.limit")
+
+
+def read_timer():
+    """
+    Seconds left on the soonest running timer, or None.
+
+    Opened mode=ro so this can never lock or write the DB APScheduler is
+    actively using — the HUD is a spectator here. next_run_time is a
+    plain epoch float column; the job's own state is a pickle in the
+    adjacent BLOB and is deliberately NOT touched, since unpickling it
+    would need every scheduled callable importable in this process.
+    That costs the timer's label, which a countdown doesn't need.
+    """
+    if not SCHEDULER_DB.is_file():
+        return None
+    try:
+        con = sqlite3.connect(f"file:{SCHEDULER_DB}?mode=ro", uri=True, timeout=0.5)
+        try:
+            row = con.execute(
+                "SELECT MIN(next_run_time) FROM apscheduler_jobs "
+                "WHERE id LIKE 'timer%' AND next_run_time IS NOT NULL"
+            ).fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+
+    if not row or row[0] is None:
+        return None
+    # A fired job lingers for a moment before APScheduler deletes it;
+    # a negative remainder would render as a count-up.
+    return max(0.0, row[0] - time.time())
 
 
 def read_gpu():
@@ -518,6 +556,7 @@ class Handler(BaseHTTPRequestHandler):
                     "harmonic drift corrected", "shield lattice re-knit",
                     "tool get_current_time", "gyro re-trim +0.05 deg",
                 ]
+                payload["timer_s"] = 300 - (time.time() - self.mock_t0) % 300
             else:
                 state, level = read_bus()
                 payload = self.telemetry.snapshot()
@@ -525,6 +564,7 @@ class Handler(BaseHTTPRequestHandler):
                 events = _session_events()
                 payload["turns"] = read_turns(events)
                 payload["diagnostics"] = read_diagnostics(events)
+                payload["timer_s"] = read_timer()
             payload["state"] = state
             payload["level"] = round(level, 4)
             payload["ts"] = round(time.time(), 3)

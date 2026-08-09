@@ -25,6 +25,22 @@ html,body{margin:0;padding:0;background:#02060a;overflow:hidden;height:100%}
 @keyframes scan{0%{transform:translateY(-200px)}100%{transform:translateY(1000px)}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* The ring detaching from the reactor. width/height/border-radius are
+   animated rather than transform:scale because a uniform scale would
+   squash a circle into an ellipse, never a pill — the shape change IS
+   the effect. One-shot on a single absolutely-positioned element, so
+   the layout cost it does carry stays off the steady-state frame
+   budget; nothing here runs while the countdown is just ticking. */
+@keyframes timerEmerge{
+  0%   {width:428px;height:428px;border-radius:50%;transform:translateY(0) rotate(-14deg);opacity:0}
+  22%  {opacity:.85}
+  100% {width:136px;height:30px;border-radius:15px;transform:translateY(-289px) rotate(0deg);opacity:1}
+}
+@keyframes timerRetract{
+  0%   {width:136px;height:30px;border-radius:15px;transform:translateY(-289px);opacity:1}
+  100% {width:428px;height:428px;border-radius:50%;transform:translateY(0);opacity:0}
+}
+@keyframes timerTextIn{0%,58%{opacity:0}100%{opacity:1}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 #stage{position:absolute;left:50%;top:50%;width:1600px;height:900px;
@@ -162,6 +178,22 @@ body.still *{animation:none!important;transition:none!important}
 
     <div id="coreLabel" class="mono" style="position:absolute;bottom:-6px;text-align:center;font-size:11px;font-weight:500;letter-spacing:.34em;color:rgba(180,245,255,.75)">ARC CORE · BOOTING</div>
     <div id="output" class="mono" style="position:absolute;top:-4px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.3em;color:rgba(255,196,102,.85)">— PTS</div>
+
+    <!-- The timer is a ring of the reactor that detaches: it starts life
+         at r=214, the same radius as the outermost spinning ring above,
+         and the emerge keyframes shrink it into a pill while lifting it
+         clear of the core to sit above the PTS readout. Sized in the
+         same 520px coordinate space as every other layer here, so the
+         --hud-scale fit() applies to it for free. -->
+    <div id="timerPod" class="mono" style="display:none;position:absolute;box-sizing:border-box;
+         align-items:center;justify-content:center;
+         border:1.5px solid rgba(127,233,255,.55);
+         background:rgba(8,28,40,.55);
+         box-shadow:0 0 22px rgba(80,220,255,.25);
+         font-size:12px;font-weight:600;letter-spacing:.22em;white-space:nowrap;
+         color:var(--good);pointer-events:none">
+      <span id="timerText" style="opacity:0">⏱ --:--</span>
+    </div>
   </div>
 
   <!-- ================= TOP LEFT ================= -->
@@ -288,6 +320,8 @@ const SYSROWS = ["LLM","WHISPER","KOKORO","DISK","POWER","PAGEFILE"];
 
 let state = "idle", level = 0, shownState = null;
 let latency = 0, levels = new Array(12).fill(0);
+let timerEnd = 0;      // local-clock ms deadline, 0 = no timer running
+let timerShown = false;  // drives the emerge/retract edge, not per-frame state
 
 // ---------- build the repeated bits once ----------
 (function build(){
@@ -466,7 +500,61 @@ function apply(d){
   levels.push(level); if (levels.length > 12) levels.shift();
   paintSpectrum();
 
+  // The server sends seconds REMAINING, not a wall-clock deadline: the
+  // page runs in a browser whose clock need not agree with the server's,
+  // and only the delta is trustworthy. Anchor it to the local clock once
+  // per poll and let tick() count down between polls.
+  timerEnd = (d.timer_s == null) ? 0 : Date.now() + d.timer_s * 1000;
+
   $("link").textContent = "● LINK " + Math.round(latency) + "ms";
+}
+
+// The emerge animation is a moment, and a moment that plays while the
+// window is still assembling itself is just noise on top of the panels'
+// own rise animation. Hold it until the HUD has visibly settled: a timer
+// already running when the page opens still gets its entrance, just
+// after the reactor is up rather than through it.
+const TIMER_READY_MS = 1600;
+const opened = performance.now();
+
+function setPod(anim, display){
+  const pod = $("timerPod");
+  pod.style.display = display;
+  // Restart rather than resume: assigning the same animation name to an
+  // element that already carries it is a no-op in every engine, and a
+  // timer cancelled and re-set inside one animation would never replay.
+  pod.style.animation = "none";
+  void pod.offsetWidth;
+  pod.style.animation = anim;
+}
+
+function paintTimer(){
+  const left = timerEnd ? (timerEnd - Date.now()) / 1000 : 0;
+  const on = left > 0 && (performance.now() - opened) > TIMER_READY_MS;
+
+  if (on !== timerShown){
+    timerShown = on;
+    if (on){
+      setPod("timerEmerge 1.15s cubic-bezier(.22,.9,.25,1) both", "flex");
+      $("timerText").style.animation = "timerTextIn 1.15s ease-out both";
+    } else {
+      setPod("timerRetract .75s cubic-bezier(.55,0,.75,.3) both", "flex");
+      $("timerText").style.animation = "timerTextIn .3s ease-in reverse both";
+      // Leave nothing behind once it has collapsed back into the core.
+      setTimeout(function(){ if (!timerShown) $("timerPod").style.display = "none"; }, 800);
+    }
+  }
+  if (!on) return;
+
+  const p = function(n){ return String(n).padStart(2,"0"); };
+  const s = Math.ceil(left);
+  // Hours only once there are hours — a 5-minute timer reading 00:05:00
+  // wastes the two most-glanced-at characters on zeroes.
+  const body = s >= 3600
+    ? Math.floor(s/3600) + ":" + p(Math.floor(s/60) % 60) + ":" + p(s % 60)
+    : p(Math.floor(s/60)) + ":" + p(s % 60);
+  $("timerText").textContent = "⏱ " + body;
+  $("timerPod").style.color = s <= 10 ? "var(--amber)" : "var(--good)";
 }
 
 function offline(){
@@ -497,6 +585,7 @@ function tick(now){
   const d = new Date(), p = function(n){ return String(n).padStart(2,"0"); };
   $("clock").textContent = p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
   $("output").textContent = ageReadout() + " PTS";
+  paintTimer();
 
   // Ease the displayed level so the core swells and settles rather than
   // snapping between poll samples.
