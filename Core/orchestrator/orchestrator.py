@@ -1627,19 +1627,39 @@ class FREDOrchestrator:
             "",
         )
         needs_tools, tool_names, reason = self._classify_turn(last_user)
+        widened = False    # the full-menu retry fires at most once per turn
+
         if not needs_tools:
             print(f"[intent] chat ({reason})")
-            return self.llm.generate(messages, local_only=self._turn_local_only)
+            reply = self.llm.generate(messages, local_only=self._turn_local_only)
 
-        print(f"[intent] tools ({reason})")
+            # The chat path runs no tools by construction, so a reply
+            # claiming something is done is false every time — there is
+            # no case where it could be true.
+            #
+            # Observed 2026-08-06 19:09:06: "Deleted personal/identity.md,
+            # sir." in answer to a bare "Yes", with no tool_call anywhere
+            # in the turn and the file still on disk. A lone affirmative
+            # carries no verb, so the router sends it to chat; the model
+            # then read its own "Shall I delete ...?" from one turn back
+            # and reported the deletion as done. The earlier guard lived
+            # only in the tool loop below and never saw this.
+            if not self._claims_completed_action(reply):
+                return reply
 
-        # The pill disambiguation chip: FRED still picks and acts on the
-        # top candidate below (never blocks on this), but if the top two
-        # were a genuine near-tie, show both so a wrong pick is visible
-        # and correctable next turn instead of silent.
-        close = intent.close_candidates(last_user, tool_names, self._tool_router())
-        if close:
-            self._announce_ambiguity(*close)
+            print("[intent] chat reply claimed an action - rerunning with tools")
+            tool_names = self.tools.list_tools()
+            widened = True
+        else:
+            print(f"[intent] tools ({reason})")
+
+            # The pill disambiguation chip: FRED still picks and acts on
+            # the top candidate below (never blocks on this), but if the
+            # top two were a genuine near-tie, show both so a wrong pick
+            # is visible and correctable next turn instead of silent.
+            close = intent.close_candidates(last_user, tool_names, self._tool_router())
+            if close:
+                self._announce_ambiguity(*close)
 
         # Read by _execute_tool_call so the log records what the model was
         # actually offered, not just what it picked.
@@ -1683,6 +1703,41 @@ class FREDOrchestrator:
                 # debris=False note) happens here instead — after the
                 # parser and the leak check have had the raw text.
                 content = LLMClient._strip_tool_call_debris(content).strip()
+
+                # The model just said it did something, and nothing ran.
+                #
+                # Observed 2026-08-06 18:52:29: "File personal/identity.md
+                # has been deleted, sir" with no tool_call anywhere in the
+                # turn — the file was still there. The cause is upstream:
+                # _classify_turn routes each utterance in isolation, so a
+                # bare correction ("I meant identity.md") matched the
+                # vault-open category and delete_file was never in the
+                # menu. Handed no way to act, the model narrated the act
+                # instead.
+                #
+                # Widening the menu once is the fix for both halves: it
+                # gives the model the tool the router missed, and it is
+                # the only branch that ever shows all ~40 definitions, so
+                # the small-model misfire problem that motivated the
+                # filtering stays contained to a path that has already
+                # produced a falsehood.
+                if not all_results and self._claims_completed_action(content):
+                    if not widened:
+                        widened = True
+                        print("[intent] completion claim with no tool run — widening the menu")
+                        tool_definitions = self.tools.get_tool_definitions()
+                        message = self.llm.generate_with_tools(
+                            messages, tools=tool_definitions,
+                            local_only=self._turn_local_only,
+                        )
+                        continue
+                    # Widened and it still only talks. Say the true thing:
+                    # silence would be better than this reply, and this is
+                    # better than silence.
+                    return (
+                        "I haven't actually done that, sir — nothing ran. "
+                        "Say it again and name the file, and I'll run it."
+                    )
 
                 return content or (
                     " ".join(all_results) if all_results else self.llm.generate(messages, local_only=self._turn_local_only)
@@ -1996,6 +2051,41 @@ class FREDOrchestrator:
             # it.
             or re.search(r'\{\s*"name"\s*:\s*"[\w_]+"', text)
         )
+
+    # Past-tense claims that an action is finished. Deliberately only the
+    # verbs that correspond to something a tool DOES — "checked", "looked"
+    # and friends are excluded, because a turn can honestly report having
+    # consulted context without having acted on the machine.
+    _ACTION_DONE = re.compile(
+        r"\b(?:deleted|removed|erased|created|moved|renamed|updated|added|"
+        r"saved|written|wrote|scheduled|cancell?ed|muted|unmuted|"
+        r"launched|installed|uninstalled)\b",
+        re.IGNORECASE,
+    )
+
+    def _claims_completed_action(self, content: str) -> bool:
+        """
+        True when a reply asserts it finished something. Only ever
+        consulted on a turn the router said needs tools and where no tool
+        actually ran, so the bar for a false positive is already high —
+        an ordinary conversational turn never reaches this branch.
+
+        A question is not a claim: "Shall I delete it?" and "Proposed
+        deletion" are the model asking, which is fine, and the confirm
+        path answers them properly on the next turn.
+        """
+
+        text = (content or "").strip()
+
+        if not text or text.endswith("?"):
+            return False
+
+        # "I will not delete the file" and "I can't delete it" are honest
+        # refusals, not claims — check the negation before the verb.
+        if re.search(r"\b(?:not|never|won't|will not|can't|cannot|unable)\b", text, re.I):
+            return False
+
+        return bool(self._ACTION_DONE.search(text))
 
     # Set by the UI controller to show what FRED just did. Left as None
     # for the CLI, which prints tool results anyway. Phase 16 asked for
