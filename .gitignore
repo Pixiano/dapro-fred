@@ -58,6 +58,13 @@ Core/config/overlay_settings.json
 # Core/config/settings.py to re-fetch.
 Core/models/kokoro/
 
+# Wake-word training workspace (piper-sample-generator clone, DEMAND
+# noise zips, synthetic clips, feature caches) and the trained model
+# output - all regeneratable via Core/input/wakeword_train.py, not
+# source. See that script's docstring to retrain.
+Core/data/wakeword_training/
+Core/models/wakeword/
+
 # faster-whisper models live in the HuggingFace cache, not the repo,
 # and are fetched on first run.
 

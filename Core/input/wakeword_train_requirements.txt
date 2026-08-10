@@ -1,0 +1,26 @@
+# Training-only deps for retraining the "Hey FRED" wake model (see
+# wakeword_train.py). NOT needed to run FRED - only openwakeword
+# itself (runtime requirements.txt) is needed for that. Installed into
+# FRED's main venv directly: none of these pin numpy<2 or conflict with
+# anything else already there (verified 2026-08-09) - only
+# piper-sample-generator's OWN requirements.txt does, which is why it's
+# not used (see wakeword_train.py's module docstring for the real
+# reason: no Windows wheel for piper-phonemize at all).
+torchinfo
+torchmetrics
+audiomentations
+pronouncing
+torch_audiomentations
+speechbrain
+mutagen
+acoustics
+onnxscript
+
+# NOT needed despite what train.py's own imports suggest, thanks to
+# wakeword_train.py's shims (see that file for why each one is safe
+# to skip rather than actually install):
+#   torchcodec   - torchaudio.load() shimmed to use soundfile instead
+#                  (torchcodec needs FFmpeg's native libs, not installed)
+#   onnx_tf      - only needed for the TFLite export step, which this
+#                  pipeline doesn't use (runtime loads ONNX directly);
+#                  needs TensorFlow, multi-GB, for a format nothing reads

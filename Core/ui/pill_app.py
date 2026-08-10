@@ -1,13 +1,20 @@
 # Core/ui/pill_app.py
 #
 # GUI-mode controller: hold left Ctrl+Alt, speak, release, FRED answers.
+# ALSO: say "Hey FRED" — see Core/input/wakeword.py, added 2026-08-09
+# alongside hold-to-talk, not replacing it (hands-busy moments, and it
+# just feels more like talking to an assistant than reaching for a
+# keybind). The original reasoning below for why hold-to-talk replaced
+# the old always-on loop still holds for THAT design — trained a real
+# acoustic "Hey FRED" model this time instead of the old Vosk text-
+# matcher, so the false-trigger/no-endpoint problems it names are
+# addressed rather than reintroduced; see wakeword.py's own docstring.
 #
-# Replaces the atticked always-on wake-word loop. Press-to-talk is a
-# better fit than a wake word on every axis that mattered: nothing
-# listens at rest (so idle cost is the pill's render loop and nothing
-# else), there are no false triggers, there's no "Yes?" round trip before
-# you can speak, and key-release gives Whisper a precisely bounded
-# utterance instead of a VAD silence guess.
+# Press-to-talk is a better fit than a wake word on every axis that
+# mattered: nothing listens at rest (so idle cost is the pill's render
+# loop and nothing else), there are no false triggers, there's no
+# "Yes?" round trip before you can speak, and key-release gives Whisper
+# a precisely bounded utterance instead of a VAD silence guess.
 #
 # Threading contract:
 #   - main thread          creates the window, installs the keyboard hook,
@@ -31,6 +38,7 @@ from config.settings import TTS_ENABLED, STT_ENABLED
 from orchestrator import canned_replies
 from orchestrator.orchestrator import TOOL_LABELS, FREDOrchestrator
 from input.hotkey import HoldHotkey
+from input.wakeword import WakewordListener, watch_for_silence
 from tools import machine_tools
 from ui.pill.indicators import random_indicator
 from ui.pill.window import PillWindow
@@ -114,6 +122,12 @@ class PillApp:
             on_press=self._on_hold_start,
             on_release=self._on_hold_end,
         )
+        self.wakeword = WakewordListener(on_wake=self._on_wake_detected)
+        # Set fresh each time a wake-triggered turn starts recording;
+        # .set() cancels an in-flight silence watch early (a hotkey
+        # press/release interrupting or superseding it) — see
+        # _on_hold_start/_on_hold_end and watch_for_silence's docstring.
+        self._silence_watch_stop = threading.Event()
 
         from vision.watcher_manager import ScreenWatcherManager
         self.screen_watcher = ScreenWatcherManager()
@@ -251,6 +265,8 @@ class PillApp:
 
     def _on_ready(self):
         self.hotkey.install()
+        if self.stt:
+            self.wakeword.resume()
         self._start_tray()
         self.lifecycle.start()
         self.screen_watcher.start()
@@ -260,7 +276,7 @@ class PillApp:
         if self.tts:
             threading.Thread(target=self._warm_phrase_cache, daemon=True).start()
         print(
-            "[PillApp] Ready — hold LEFT Ctrl+Alt to talk. "
+            "[PillApp] Ready — hold LEFT Ctrl+Alt or say 'Hey FRED' to talk. "
             "Quit from the tray icon."
         )
 
@@ -359,6 +375,8 @@ class PillApp:
         self._cancel.set()
         self.lifecycle.stop()
         self.screen_watcher.stop()
+        self.wakeword.pause()
+        self._silence_watch_stop.set()
         self.hud.stop()
         # Leave the bus reading idle. Without this the HUD would sit on
         # FRED's last live state for the full staleness window after a
@@ -395,6 +413,17 @@ class PillApp:
         # watcher (if it happens to be mid-analysis right now) must never
         # be competing for the GPU when that happens.
         self.screen_watcher.touch()
+
+        # Same reasoning: a real turn is starting (whether from the
+        # hotkey or from _on_wake_detected calling this directly), so
+        # the wake listener must release the mic device before STT's own
+        # stream opens on it — see wakeword.py's module docstring.
+        # Cancel any earlier wake-triggered silence watch too (a hotkey
+        # press mid-wake-turn is an ordinary interrupt, same as the
+        # cancel below) and hand this turn a fresh Event to watch.
+        self.wakeword.pause()
+        self._silence_watch_stop.set()
+        self._silence_watch_stop = threading.Event()
 
         if not self.stt:
             return
@@ -440,6 +469,10 @@ class PillApp:
         # stopped talking to FRED, not when he started.
         self.screen_watcher.touch()
 
+        # A real key release always ends whatever silence watch might
+        # still be running from a wake-triggered turn this superseded.
+        self._silence_watch_stop.set()
+
         if not self._recording:
             return
         self._recording = False
@@ -458,6 +491,23 @@ class PillApp:
             target=self._run_turn, args=(my_seq,), daemon=True
         )
         self._turn_thread.start()
+
+    def _on_wake_detected(self):
+        """
+        "Hey FRED" fired — runs on its own thread (see wakeword.py's
+        _fire_wake), not the audio callback, so it's free to do real
+        work. Starts a turn exactly like a hotkey press does, then
+        watches for the silence a keyup would normally signal instead.
+        """
+        self._on_hold_start()
+        if not self.stt:
+            return
+        stop_flag = self._silence_watch_stop  # the fresh one _on_hold_start just made
+        threading.Thread(
+            target=watch_for_silence,
+            args=(self.stt, self._on_hold_end, stop_flag),
+            daemon=True,
+        ).start()
 
     # =========================================================
     # ONE TURN
@@ -722,10 +772,13 @@ class PillApp:
         self.window.set_state("idle")
         time.sleep(IDLE_LINGER)
         # A new activation during the linger must not hide the pill out
-        # from under itself.
+        # from under itself — same reasoning covers resuming the wake
+        # listener: a new turn already in progress must keep it paused.
         if not self._recording:
             self.window.hide()
             self.window.clear_transcript()
+            if self.stt:
+                self.wakeword.resume()
 
     # =========================================================
     # BUTTONS

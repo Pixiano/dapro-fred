@@ -801,6 +801,28 @@ WAKE_PHRASES = [
     "yo fredie",
 ]
 
+# GUI mode's wake word (Core/input/wakeword.py) — an actual trained
+# acoustic model, not text-matching. The comment above this block was
+# accurate when written (openWakeWord ships no "Hey FRED" pretrained
+# model); it's since been trained from scratch, see
+# Core/input/wakeword_train.py to retrain. Runs ALONGSIDE hold-to-talk
+# (input/hotkey.py), never replacing it — decided 2026-08-09.
+WAKEWORD_MODEL_PATH = BASE_DIR / "models" / "wakeword" / "hey_fred.onnx"
+
+# openwakeword scores are 0..1. Lowered from the original 0.6 after
+# live under-triggering at ~2m distance (2026-08-10) — every training
+# clip was studio-clean Kokoro TTS at full volume, so real-room reverb
+# was never represented. Measured directly: a synthetic room-echo test
+# showed scores hold near 0.999 through moderate reverb, then fall off
+# a cliff past ~0.5s decay (0.92 -> ~0). Meanwhile measured false-
+# positive scores (ambient noise, unrelated speech) sit at 0.001-0.02 —
+# far below even this lowered value — so there's real headroom before
+# false triggers become a practical risk. A real fix (room-impulse-
+# response augmentation, and real recorded voice instead of only
+# synthetic TTS — see wakeword_train.py) is the actual plan, not a
+# permanent substitute for this number.
+WAKEWORD_THRESHOLD = 0.4
+
 # =========================================================
 # TOOL SETTINGS
 # =========================================================

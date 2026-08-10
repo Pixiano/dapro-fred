@@ -20,6 +20,12 @@ sounddevice>=0.4.5
 # prints at startup.
 faster-whisper>=1.2.0
 
+# "Hey FRED" wake word (Core/input/wakeword.py), running alongside
+# hold-to-talk. Runtime only needs the ONNX inference path - training
+# a new model (Core/data/wakeword_training/) needs a much heavier,
+# separate dependency set not listed here; see that folder's own notes.
+openwakeword>=0.6.0
+
 # Kokoro TTS. Chosen over SAPI for quality, but the decisive reason is
 # that it returns raw float32 PCM: pyttsx3/SAPI exposes only word
 # boundaries, so the popup's speaking waveform could never react to
