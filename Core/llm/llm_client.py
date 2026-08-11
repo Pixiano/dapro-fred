@@ -563,7 +563,8 @@ class LLMClient:
                 "tool_calls": None,
             }
 
-    def describe_image(self, image_b64_data_uri: str, prompt: str, max_tokens: int = 200) -> str:
+    def describe_image(self, image_b64_data_uri: str, prompt: str, max_tokens: int = 200,
+                        allow_local_fallback: bool = True) -> str:
         """
         One-shot image description. Takes a data-URI-encoded image
         (base64, with the "data:image/..." prefix), the same
@@ -577,6 +578,16 @@ class LLMClient:
         when it got a clean run. Falls back to local only if no cloud
         key is configured or the request fails, same shape as
         generate()'s cloud-then-local cascade.
+
+        allow_local_fallback=False lets a caller that already knows
+        local isn't VRAM-safe right now (screen_watcher.py's on-demand
+        capture, when the main process has a model resident) still get
+        a real shot at the cloud path instead of being blocked from
+        even trying. Confirmed live 2026-08-10: whats_on_screen()'s
+        cache sat 19+ hours stale because the watcher's old safety gate
+        skipped the ENTIRE cycle — cloud attempt included — any time a
+        local tier happened to be loaded, even though cloud needs no
+        local VRAM at all and was always safe to attempt.
 
         Separate from generate()/generate_with_tools() because the
         message shape is genuinely different (image content parts, no
@@ -603,8 +614,13 @@ class LLMClient:
                 content = response["choices"][0]["message"]["content"] or ""
                 return self._strip_thinking(content) or content
             except Exception as e:
-                print(f"[LLM] cloud vision failed, falling back to local: {e}")
+                print(f"[LLM] cloud vision failed: {e}")
                 event_log.log_error("cloud_vision", e)
+                if not allow_local_fallback:
+                    raise
+
+        if not allow_local_fallback:
+            raise RuntimeError("cloud vision unavailable (no API key) and local fallback not allowed")
 
         model = self._get_model("Vision")
 

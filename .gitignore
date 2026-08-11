@@ -49,6 +49,9 @@ Core/data/reminders.sqlite
 # results). See Core/orchestrator/tool_call_log.py.
 Core/data/tool_call_log.jsonl
 
+# Wake-word detection log (runtime data — see Core/input/wakeword_log.py)
+Core/data/wakeword_log.jsonl
+
 # Overlay window position/palette (runtime-mutable user state, written
 # by the tray settings UI - regenerates from defaults if missing)
 Core/config/overlay_settings.json

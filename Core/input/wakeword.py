@@ -30,7 +30,7 @@ import numpy as np
 import sounddevice as sd
 
 from config.settings import WAKEWORD_MODEL_PATH, WAKEWORD_THRESHOLD
-from utils import event_log
+from input import wakeword_log
 
 CHUNK = 1280  # 80ms @ 16kHz — openwakeword's required frame size
 SR = 16000
@@ -48,6 +48,27 @@ SPEECH_RMS_FLOOR = 0.02
 # re-scores every 80ms, and a single utterance of "hey fred" spans
 # several chunks, any of which could independently cross the threshold.
 _REFIRE_COOLDOWN_SECONDS = 2.0
+
+# Adaptive gain — added 2026-08-10 after Vatsal measured Windows' own
+# mic level meter directly: ~80% peak close to the mic, ~20% at normal
+# speaking distance. Deliberately NOT a fixed/maximum multiplier applied
+# regardless of level — a blind boost is actively dangerous, not just
+# unhelpful: tested the same day, pushed far enough to clip, score
+# collapsed from 0.998 to 0.013. The request was for maximum boost in
+# any condition; the way to actually get that without it destroying the
+# signal on a loud moment is to target a safe peak level and let the
+# ceiling below be generous, not to apply a fixed gain irrespective of
+# how loud the input already is. At Vatsal's own measured range (80%
+# down to 20%) the needed gain is only 0.87x-3.5x either way — this
+# ceiling only starts mattering for moments quieter than what he
+# measured. Smoothed across chunks (see _agc_gain below) rather than
+# jumping per 80ms block — openwakeword's own feature window spans
+# ~760ms (76 stacked ~10ms frames), and an abrupt level jump inside
+# that window would look like an artifact, not natural speech.
+_AGC_TARGET_PEAK = 0.7          # fraction of full scale, leaves clipping headroom
+_AGC_MAX_GAIN = 100.0            # ~40dB ceiling — generous for even faint moments
+_AGC_MIN_PEAK_TO_BOOST = 0.01   # near-silence: hold gain rather than amplifying noise
+_AGC_SMOOTHING = 0.3             # per-chunk convergence toward the target gain
 
 
 class WakewordListener:
@@ -67,6 +88,7 @@ class WakewordListener:
         self._stream = None
         self._stream_lock = threading.Lock()
         self._last_fire = 0.0
+        self._agc_gain = 1.0  # persists across callbacks — see _AGC_SMOOTHING
 
     def _ensure_model(self):
         if self._oww is not None:
@@ -75,24 +97,86 @@ class WakewordListener:
         self._oww = Model(wakeword_models=[self._model_path], inference_framework="onnx")
 
     def _callback(self, indata, frames, time_info, status):
+        try:
+            self._process_chunk(indata, status)
+        except Exception as e:
+            # Last-resort catch-all around the whole callback. Before
+            # this, only predict() and log_score() were individually
+            # guarded — an exception in the AGC math above them (or
+            # anywhere else in _process_chunk) was completely
+            # unprotected. Confirmed live 2026-08-10 both failure shapes
+            # actually happen: an unguarded TypeError surfaced as a
+            # visible error dialog (the json numpy-bool bug), and
+            # separately a live attempt produced ZERO log output at
+            # all — no score, no error, nothing — consistent with an
+            # exception hitting exactly this unprotected AGC path and
+            # dying with no trace. Neither is acceptable for something
+            # being actively debugged; this must be the one thing that
+            # can never itself go dark.
+            try:
+                wakeword_log.log_event("callback_error", message=str(e))
+            except Exception:
+                pass
+            print(f"[wakeword] callback error: {e}")
+
+    def _process_chunk(self, indata, status):
         if status:
-            event_log.log("wakeword", note=f"input status: {status}")
+            wakeword_log.log_event("input_status", note=str(status))
 
         block = indata[:, 0]
+
+        peak = float(np.max(np.abs(block)))
+        if peak > _AGC_MIN_PEAK_TO_BOOST:
+            desired_gain = min(_AGC_TARGET_PEAK / peak, _AGC_MAX_GAIN)
+            if desired_gain < self._agc_gain:
+                # Snap down immediately, don't smooth: this chunk is
+                # louder than the running gain expects (e.g. the actual
+                # "hey fred" syllable arriving right after a quiet
+                # stretch had ramped gain up). Smoothing the decrease
+                # too, like the increase below, let leftover high gain
+                # overshoot onto a genuinely loud chunk — confirmed by
+                # test 2026-08-10: measured post-gain peaks hitting the
+                # clip ceiling despite the cap, because gain caught up
+                # one chunk too late. Gain reduction has to be instant;
+                # only gain increase (quiet -> louder-but-still-safe)
+                # is safe to ramp slowly.
+                self._agc_gain = desired_gain
+            else:
+                self._agc_gain += (desired_gain - self._agc_gain) * _AGC_SMOOTHING
+        # else: near-silence, hold the current gain rather than reacting to it
+        block = np.clip(block * self._agc_gain, -1.0, 1.0)
+
         int16_block = np.clip(block * 32767, -32768, 32767).astype(np.int16)
 
         try:
             scores = self._oww.predict(int16_block)
         except Exception as e:
-            event_log.log_error("wakeword:predict", e)
+            wakeword_log.log_event("predict_error", message=str(e))
             return
 
         score = next(iter(scores.values()), 0.0) if scores else 0.0
         now = time.monotonic()
-        if score > self._threshold and now - self._last_fire > _REFIRE_COOLDOWN_SECONDS:
+        # bool(...) is load-bearing: openwakeword's scores are numpy
+        # floats, so `score > threshold` is a numpy.bool_, not a native
+        # bool — and json can't serialize that. Confirmed live
+        # 2026-08-10: this crashed INSIDE the PortAudio callback thread
+        # (visible error dialog, "TypeError: Object of type bool is not
+        # JSON serializable") on every near-miss score specifically —
+        # exactly the case the logger exists to capture, and exactly
+        # the case that hits this code path most (a real detection is
+        # rare; a near-miss below threshold is common once someone's
+        # actually testing it).
+        fired = bool(score > self._threshold and now - self._last_fire > _REFIRE_COOLDOWN_SECONDS)
+        try:
+            wakeword_log.log_score(score, self._agc_gain, self._threshold, fired)
+        except Exception as e:
+            # Logging must never be able to take down the actual
+            # detection path — same reasoning as the predict() guard
+            # above, belt-and-suspenders on top of the bool() fix.
+            print(f"[wakeword] log_score failed: {e}")
+        if fired:
             self._last_fire = now
             self._oww.reset()
-            event_log.log("wakeword", note="fired", score=round(float(score), 3))
             if self.on_wake:
                 # Dispatched, not called directly: on_wake is expected to
                 # call pause() on THIS listener (to free the mic for a
@@ -106,7 +190,7 @@ class WakewordListener:
         try:
             self.on_wake()
         except Exception as e:
-            event_log.log_error("wakeword:on_wake", e)
+            wakeword_log.log_event("on_wake_error", message=str(e))
 
     def resume(self):
         """Start (or restart) continuous listening. Safe to call repeatedly —
@@ -133,10 +217,10 @@ class WakewordListener:
                 # permanently after one transient failure, with nothing
                 # visibly wrong. self._stream stays None here so the
                 # next resume() call gets a real retry instead.
-                event_log.log_error("wakeword:resume", e)
+                wakeword_log.log_event("resume_failed", message=str(e))
                 return
             self._stream = stream
-            event_log.log("wakeword", note="resumed")
+            wakeword_log.log_event("resumed")
 
     def pause(self):
         """Release the mic device — call before a real turn's own STT
@@ -148,9 +232,9 @@ class WakewordListener:
             try:
                 stream.stop()
                 stream.close()
-                event_log.log("wakeword", note="paused")
+                wakeword_log.log_event("paused")
             except Exception as e:
-                event_log.log_error("wakeword:pause", e)
+                wakeword_log.log_event("pause_failed", message=str(e))
 
 
 def watch_for_silence(stt, on_timeout, stop_flag):

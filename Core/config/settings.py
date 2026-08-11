@@ -809,19 +809,25 @@ WAKE_PHRASES = [
 # (input/hotkey.py), never replacing it — decided 2026-08-09.
 WAKEWORD_MODEL_PATH = BASE_DIR / "models" / "wakeword" / "hey_fred.onnx"
 
-# openwakeword scores are 0..1. Lowered from the original 0.6 after
-# live under-triggering at ~2m distance (2026-08-10) — every training
-# clip was studio-clean Kokoro TTS at full volume, so real-room reverb
-# was never represented. Measured directly: a synthetic room-echo test
-# showed scores hold near 0.999 through moderate reverb, then fall off
-# a cliff past ~0.5s decay (0.92 -> ~0). Meanwhile measured false-
-# positive scores (ambient noise, unrelated speech) sit at 0.001-0.02 —
-# far below even this lowered value — so there's real headroom before
-# false triggers become a practical risk. A real fix (room-impulse-
-# response augmentation, and real recorded voice instead of only
-# synthetic TTS — see wakeword_train.py) is the actual plan, not a
-# permanent substitute for this number.
-WAKEWORD_THRESHOLD = 0.4
+# openwakeword scores are 0..1. History, all same-day (2026-08-10),
+# each move backed by a real live measurement, not another guess:
+#   0.6  -> 0.4   under-triggering at ~2m — every training clip was
+#                 studio-clean Kokoro TTS, no real-room reverb.
+#   0.4  -> 0.25  wakeword_log.jsonl caught a real near-miss peaking at
+#                 0.278, just under 0.4.
+#   0.25 -> 0.35  0.25 over-corrected: caught a genuine FALSE trigger
+#                 at 0.701 (opened the mic, heard nothing, gave up
+#                 ~2.8s later — confirmed against the session log, no
+#                 transcription followed), alongside a real trigger at
+#                 0.978 moments later that worked correctly end to end.
+#                 0.35 splits the difference between the two measured
+#                 failure directions; not a clean optimum, just the
+#                 best call available from two data points in each
+#                 direction. A real fix (room-impulse-response
+#                 augmentation, real recorded voice instead of only
+#                 synthetic TTS — see wakeword_train.py) is the actual
+#                 plan, not a permanent substitute for tuning this.
+WAKEWORD_THRESHOLD = 0.35
 
 # =========================================================
 # TOOL SETTINGS

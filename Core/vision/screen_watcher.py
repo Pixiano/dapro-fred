@@ -98,15 +98,33 @@ def _capture_screenshot_data_uri() -> str:
 
 
 def _run_one_cycle(llm) -> bool:
-    """One screenshot + describe + write. Returns True if it ran."""
-    if _main_process_has_a_model_loaded():
-        return False
+    """
+    One screenshot + describe + write. Returns True if it ran.
+
+    _main_process_has_a_model_loaded() used to gate the WHOLE cycle,
+    screenshot included — but that check exists only to protect the
+    LOCAL Vision-tier fallback from a VRAM collision; the cloud attempt
+    describe_image() tries first needs no local VRAM at all and was
+    being blocked right along with it for no reason. Confirmed live
+    2026-08-10 this left whats_on_screen()'s cache 19+ hours stale,
+    since the main process very often has a tier resident during
+    normal use. Now only the local fallback is conditional.
+    """
+    local_ok = not _main_process_has_a_model_loaded()
 
     image_uri = _capture_screenshot_data_uri()
     # 200 (describe_image's default) is enough for a one-line summary
     # but not a quoted error/traceback, which the prompt above now asks
     # for verbatim — bumped so a real quote doesn't get cut mid-message.
-    description = llm.describe_image(image_uri, _DESCRIBE_PROMPT, max_tokens=500)
+    try:
+        description = llm.describe_image(
+            image_uri, _DESCRIBE_PROMPT, max_tokens=500, allow_local_fallback=local_ok,
+        )
+    except Exception as e:
+        if local_ok:
+            raise  # a real failure, not just "local wasn't safe to try"
+        print(f"[screen_watcher] cloud vision failed and local wasn't VRAM-safe, skipping cycle: {e}")
+        return False
 
     from vision import screen_context
     screen_context.write(description)

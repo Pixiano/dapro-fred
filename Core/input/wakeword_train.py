@@ -309,6 +309,18 @@ HELD_OUT_ENV = "DLIVING_16k.wav"
 
 ROOM_RECORDING_DIR = os.path.join(WORKSPACE, "room_recording")  # 2026-08-10, not yet present
 
+# Real recorded "Hey Fred" utterances — the positive-side counterpart
+# to ROOM_RECORDING_DIR above. Added 2026-08-11: every positive clip
+# generate_positive_clips() makes is synthetic Kokoro TTS, so the model
+# has never actually heard Vatsal's voice/mic/room — which is exactly
+# what the near-miss scores in wakeword_log.jsonl point back to (real
+# attempts landing at 0.14-0.28, well under threshold, while synthetic-
+# trained positives fire at 0.5-0.98). Drop WAV/MP3 recordings of
+# "Hey Fred" in here and rerun; ingest_real_positive_clips() picks them
+# up regardless of whether POS_TRAIN already has Kokoro clips in it.
+REAL_POSITIVE_DIR = os.path.join(WORKSPACE, "real_positive")
+REAL_POSITIVE_TEST_FRACTION = 0.15
+
 TARGET_SR = 16000
 POSITIVE_PHRASINGS = ["Hey FRED.", "Hey, Fred.", "Hey Fred!"]
 POSITIVE_SPEEDS = [0.9, 1.0, 1.1]
@@ -457,6 +469,36 @@ def generate_positive_clips():
                 samples, sr = tts.kokoro.create(phrase, voice=voice, speed=speed, lang="en-us")
                 name = f"{voice}_{phrase.strip('.!,').replace(' ', '_')}_{speed}.wav"
                 sf.write(os.path.join(POS_TRAIN, name), _resample(samples, sr), TARGET_SR)
+
+
+def ingest_real_positive_clips():
+    """
+    Mixes real recorded "Hey Fred" utterances (REAL_POSITIVE_DIR) into
+    POS_TRAIN/POS_TEST. Runs unconditionally, not gated behind
+    generate_positive_clips()'s own "already populated" skip — dropping
+    new recordings in and re-running should always pick them up.
+    Per-file idempotent (skip if the destination already exists) like
+    _segment_audio_file, so a re-run only adds what's new.
+    """
+    if not os.path.isdir(REAL_POSITIVE_DIR):
+        return
+    names = sorted(f for f in os.listdir(REAL_POSITIVE_DIR) if not f.startswith("."))
+    if not names:
+        return
+    os.makedirs(POS_TRAIN, exist_ok=True)
+    os.makedirs(POS_TEST, exist_ok=True)
+
+    rng = np.random.default_rng(2)
+    rng.shuffle(names)
+    n_test = max(1, int(len(names) * REAL_POSITIVE_TEST_FRACTION))
+
+    for i, name in enumerate(names):
+        dst_dir = POS_TEST if i < n_test else POS_TRAIN
+        dst = os.path.join(dst_dir, f"real_{os.path.splitext(name)[0]}.wav")
+        if os.path.exists(dst):
+            continue
+        audio = _load_mono_16k_int16(os.path.join(REAL_POSITIVE_DIR, name))
+        sf.write(dst, audio, TARGET_SR)
 
 
 # =========================================================
@@ -725,6 +767,8 @@ def main(overwrite_features=False):
     generate_synthetic_noise()
     print("[wakeword_train] generating positive clips via Kokoro...")
     generate_positive_clips()
+    print("[wakeword_train] ingesting real recorded positive clips (if any)...")
+    ingest_real_positive_clips()
     print("[wakeword_train] generating negative speech clips via Kokoro...")
     generate_negative_speech_clips()
     print("[wakeword_train] assembling negative_train/negative_test...")

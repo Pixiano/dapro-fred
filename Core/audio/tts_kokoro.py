@@ -108,19 +108,38 @@ def split_for_speech(text: str, first_chunk_max: int = 90, min_chunk: int = 45):
     Abbreviations fall out for free: splitting requires whitespace after
     the period, so "3.5" never splits, and "Dr. Smith" splits into a
     3-character fragment that the merge pass below immediately reattaches.
+
+    Splits the text as given — cleaning happens at synthesis time
+    (emit() below), not here. It used to happen here, and that silently
+    ate long replies: the streaming producer locates the chunk it just
+    flushed inside its raw buffer, and a chunk stripped of markdown is
+    not findable in text that still has it, so the whole remaining
+    buffer was dropped. Any reply containing a bullet, a link or a bold
+    span was cut off at its first sentence boundary.
     """
-    text = clean_for_speech(text)
+    text = re.sub(r"[ \t]+", " ", text).strip()
     if not text:
         return []
 
-    raw = [s for s in _SENTENCE_SPLIT.split(text) if s.strip()]
+    # Chunks are exact slices of `text` (the merge below extends a span
+    # rather than re-joining strings), so the streaming producer can
+    # locate the chunk it flushed and keep the remainder of its buffer.
+    bounds = [0]
+    for m in _SENTENCE_SPLIT.finditer(text):
+        bounds.append(m.end())
+    bounds.append(len(text))
 
     merged = []
-    for part in raw:
-        if merged and len(merged[-1]) < min_chunk:
-            merged[-1] = f"{merged[-1]} {part}".strip()
+    spans = []
+    for i in range(len(bounds) - 1):
+        start, end = bounds[i], bounds[i + 1]
+        if not text[start:end].strip():
+            continue
+        if spans and (spans[-1][1] - spans[-1][0]) < min_chunk:
+            spans[-1] = (spans[-1][0], end)
         else:
-            merged.append(part.strip())
+            spans.append((start, end))
+    merged = [text[a:b].strip() for a, b in spans]
 
     if not merged:
         return []
@@ -322,14 +341,17 @@ class KokoroTTS:
             magnitude cheaper than re-running Kokoro on the same "On
             it." for the thousandth time, and a full cache hit means
             self.kokoro never has to be loaded at all this turn."""
-            cached = phrase_cache.get(chunk)
+            speakable = clean_for_speech(chunk)
+            if not speakable:
+                return
+            cached = phrase_cache.get(speakable)
             if cached is not None:
                 samples, sr = cached
             else:
                 try:
-                    samples, sr = self.synth(chunk)
+                    samples, sr = self.synth(speakable)
                 except Exception as e:
-                    print(f"[KokoroTTS] synth failed for {chunk!r}: {e}")
+                    print(f"[KokoroTTS] synth failed for {speakable!r}: {e}")
                     return
             while not stopping():
                 try:
@@ -349,7 +371,9 @@ class KokoroTTS:
             for piece in source:
                 if stopping():
                     break
-                buffer += piece or ""
+                # Same whitespace normalisation split_for_speech applies,
+                # so the chunks it returns are findable slices of this.
+                buffer = re.sub(r"[ \t]+", " ", buffer + (piece or "")).lstrip()
 
                 while not stopping():
                     ready = split_for_speech(
@@ -366,7 +390,13 @@ class KokoroTTS:
                     emit(head)
                     first = False
                     index = buffer.find(head)
-                    buffer = buffer[index + len(head):] if index >= 0 else ""
+                    if index < 0:
+                        # Shouldn't happen now that chunks are exact
+                        # slices — but dropping the buffer here is how
+                        # long replies used to go unspoken, so bail out
+                        # of the flush loop and keep the text instead.
+                        break
+                    buffer = buffer[index + len(head):]
 
             # Whatever is left is the tail of the reply — speak it even
             # without terminal punctuation, or the last words are lost.
