@@ -547,6 +547,22 @@ GENERIC_NEGATIVE_SENTENCES = [
     "I can't remember where I put my keys.",
 ]
 
+# Words that rhyme with or sound close to "Fred" — generate_adversarial_texts
+# above targets the whole phrase "hey fred" phonetically, but bare
+# single-syllable near-rhymes (which is what a mis-hearing actually
+# sounds like) are a narrower, tighter negative than anything in that
+# set or GENERIC_NEGATIVE_SENTENCES. Added 2026-08-11 after a live
+# false positive (score 0.76) on unrelated speech the model had never
+# been trained against. Spoken bare, same as a single-word utterance
+# would be, not embedded in a sentence — matches "hey fred"'s own
+# clip length better than a full sentence would.
+PHONETIC_NEIGHBOR_WORDS = [
+    "Red", "Bread", "Bred", "Bled", "Dead", "Dread", "Fed", "Fled", "Led",
+    "Sled", "Sped", "Spread", "Shed", "Shred", "Tread", "Wed", "Ted", "Ned",
+    "Head", "Said", "Friend", "Fresh", "Front", "Frank", "Fright", "Fret",
+    "Free", "French", "Freddy", "Fridge", "Friday", "Thread", "Instead",
+]
+
 
 def generate_negative_speech_clips():
     if os.path.isdir(NEGATIVE_SPEECH_DIR) and len(os.listdir(NEGATIVE_SPEECH_DIR)) > 0:
@@ -562,7 +578,7 @@ def generate_negative_speech_clips():
     adversarial_phrases = generate_adversarial_texts(
         input_text="hey fred", N=N_ADVERSARIAL_PHRASES, include_partial_phrase=0.2, include_input_words=0.1,
     )
-    all_phrases = list(adversarial_phrases) + GENERIC_NEGATIVE_SENTENCES
+    all_phrases = list(adversarial_phrases) + GENERIC_NEGATIVE_SENTENCES + PHONETIC_NEIGHBOR_WORDS
 
     for phrase in all_phrases:
         for voice in NEGATIVE_SPEECH_VOICES:
@@ -738,6 +754,24 @@ def run_training(config_path, overwrite_features=False):
             raise
 
 
+def _replace_file(src, dst):
+    """
+    Copy-then-atomic-rename instead of shutil.copy straight onto dst.
+    Confirmed live 2026-08-11: FRED running at the same time keeps
+    hey_fred.onnx.data memory-mapped for its whole process lifetime, so
+    shutil.copy's open(dst, 'wb') hit OSError [Errno 22] trying to
+    truncate a file another process has mapped — leaving a NEW .onnx
+    graph paired with the OLD .onnx.data on disk (only the graph copy
+    had run first), a silently broken runtime pair. os.replace() only
+    swaps the directory entry rather than truncating the live file, so
+    it isn't blocked by the mmap the same way, and it's atomic — a
+    reader never sees a half-written file either.
+    """
+    tmp = dst + ".tmp"
+    shutil.copy(src, tmp)
+    os.replace(tmp, dst)
+
+
 def install_runtime_model():
     """Copy the trained .onnx to the runtime location, matching the
     Kokoro/Vosk convention of keeping installed models separate from
@@ -751,11 +785,16 @@ def install_runtime_model():
 
     src = os.path.join(OUTPUT_DIR, MODEL_NAME + ".onnx")
     dst = os.path.join(runtime_dir, MODEL_NAME + ".onnx")
-    shutil.copy(src, dst)
 
     src_data = src + ".data"
     if os.path.exists(src_data):
-        shutil.copy(src_data, dst + ".data")
+        # Data before graph: if FRED is running and blocks one of these,
+        # leaving the OLD graph paired with the NEW data is safe (same
+        # architecture every run, only the learned weights differ) —
+        # the reverse order risks a NEW graph over OLD data instead,
+        # which is what actually broke this run.
+        _replace_file(src_data, dst + ".data")
+    _replace_file(src, dst)
 
     return dst
 

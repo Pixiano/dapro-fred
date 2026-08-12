@@ -38,6 +38,7 @@ from config.settings import (
     KOKORO_VOICE_BLEND,
     KOKORO_SPEED,
     TTS_PREROLL_SEC,
+    TTS_POSTROLL_SEC,
 )
 
 # Blocks are the cancellation granularity: a write returns only once the
@@ -419,6 +420,8 @@ class KokoroTTS:
 
             stream = None
             started = False
+            natural_end = False
+            sr = None
             try:
                 while not cancel.is_set():
                     try:
@@ -426,6 +429,7 @@ class KokoroTTS:
                     except queue.Empty:
                         continue
                     if item is None:
+                        natural_end = True
                         break
 
                     chunk, samples, sr = item
@@ -481,6 +485,18 @@ class KokoroTTS:
                     try:
                         if cancel.is_set():
                             stream.abort()
+                        elif natural_end and sr and TTS_POSTROLL_SEC > 0:
+                            # See TTS_POSTROLL_SEC: stop() only waits for
+                            # PortAudio's own buffer, not a Bluetooth
+                            # link's downstream latency — give the device
+                            # inaudible tail to still be playing so the
+                            # real last words are already out by the time
+                            # stop()+close() tear the stream down. Skipped
+                            # on an interrupt — that should still cut off
+                            # promptly, not linger.
+                            stream.write(
+                                np.zeros(int(sr * TTS_POSTROLL_SEC), dtype=np.float32)
+                            )
                         stream.stop()
                         stream.close()
                     except Exception as e:

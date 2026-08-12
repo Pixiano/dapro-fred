@@ -749,6 +749,22 @@ KOKORO_SPEED = 1.2
 # wired output, where none of this applies.
 TTS_PREROLL_SEC = 1.5
 
+# The tail-side twin of TTS_PREROLL_SEC. Reported live 2026-08-12:
+# playback cuts off the last ~1s of the reply. sounddevice's
+# Stream.stop() only blocks until PortAudio's OWN host buffer has
+# drained (see its docstring) — it has no visibility into a Bluetooth
+# link's own downstream buffering/transmission latency past that
+# point, so stop()+close() right after the last real write can tear
+# the stream down while the device is still catching up on genuinely
+# spoken audio. Fix is symmetric to the preroll: give the device
+# something inaudible to still be playing when stop() is called, so
+# the real final words are already out by then. Starting at the
+# reported cutoff length, same as TTS_PREROLL_SEC started at its
+# documented estimate before being tuned against real hardware — a
+# floor, not a hard limit; raise it if the tail is still getting
+# clipped. Set to 0 on a wired output, where none of this applies.
+TTS_POSTROLL_SEC = 1.0
+
 # =========================================================
 # FASTER-WHISPER STT — GUI mode's ears (audio/stt_whisper.py)
 # =========================================================

@@ -37,6 +37,18 @@ from config.settings import (
 
 BLOCK_FRAMES = 1024
 
+# Reported live 2026-08-12: a wake-triggered turn that heard nothing
+# still "stays listening" for several seconds after the mic goes
+# quiet. Most of that isn't the silence-timeout wait (1.2s, wakeword.py's
+# SILENCE_TIMEOUT_SECONDS, already deliberately generous so a real
+# trailing word doesn't get cut) — it's stop_and_transcribe() below
+# running a full Whisper pass over audio that never had anything in it.
+# Same floor as wakeword.py's SPEECH_RMS_FLOOR, checked against the
+# whole recorded buffer's peak (not mean RMS — a short loud word in an
+# otherwise quiet buffer must still pass, which an averaged RMS over
+# the whole clip could wash out).
+_SILENCE_PEAK_FLOOR = 0.02
+
 
 class WhisperSTT:
     """
@@ -264,6 +276,12 @@ class WhisperSTT:
         # transcription — Whisper will happily hallucinate a phrase out
         # of a few milliseconds of room noise.
         if len(audio) < min_seconds * self.samplerate:
+            return ""
+
+        # No point paying a full Whisper pass (real seconds, not free)
+        # on a buffer that never had any sound in it at all — a false
+        # wake-word trigger followed by true silence is exactly this.
+        if np.max(np.abs(audio)) < _SILENCE_PEAK_FLOOR:
             return ""
 
         # Load now if the watchdog unloaded us. Normally already done by

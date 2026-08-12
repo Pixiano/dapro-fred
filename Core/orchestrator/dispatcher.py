@@ -456,20 +456,54 @@ class Dispatcher:
 
         return {"tool": "calculate", "arguments": {"expression": match.group(0).strip()}}
 
-    @staticmethod
-    def _route_create_folder(match: re.Match) -> dict:
+    # Confirmed bug 2026-08-12: "create a file called daily logs dash
+    # today's date and then in it you can write three tasks which is
+    # CHEMMAS, second one is ENGMAS and then third one is SSMAPS."
+    # matched this route and captured the ENTIRE rest of the sentence
+    # as the literal filename — location ("on the desktop"), date
+    # substitution ("today's date"), and the actual content ("write
+    # three tasks...") all swallowed verbatim into one garbage .txt
+    # name, none of them applied. Neither route below ever sends a
+    # `content` argument or resolves a date — they can only respond to
+    # "create a file/folder called X", nothing more — so anything
+    # that reads as asking for content, a resolved date, or a compound
+    # instruction needs the LLM tool path instead, same reasoning as
+    # _route_web_search's decline above (the LLM can actually fill in
+    # create_text_file's `content` argument and a real date, and has
+    # the full sentence to parse rather than one greedy regex group).
+    _FILE_COMPLEXITY_CUES = re.compile(
+        r"\b(write|contains?|containing|with the following|saying|"
+        r"note that|add(?:ing)?|today'?s date|"
+        r"current date|tomorrow'?s date|and (?:in it|then|write|add|put))\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _decline_if_complex(cls, target: str) -> bool:
+        return bool(cls._FILE_COMPLEXITY_CUES.search(target)) or len(target.split()) > 8
+
+    @classmethod
+    def _route_create_folder(cls, match: re.Match) -> dict | None:
+
+        target = match.group("target").strip()
+        if cls._decline_if_complex(target):
+            return None
 
         return {
             "tool": "create_folder",
-            "arguments": {"folder_name": match.group("target").strip()},
+            "arguments": {"folder_name": target},
         }
 
-    @staticmethod
-    def _route_create_text_file(match: re.Match) -> dict:
+    @classmethod
+    def _route_create_text_file(cls, match: re.Match) -> dict | None:
+
+        target = match.group("target").strip()
+        if cls._decline_if_complex(target):
+            return None
 
         return {
             "tool": "create_text_file",
-            "arguments": {"filename": match.group("target").strip()},
+            "arguments": {"filename": target},
         }
 
     @staticmethod
