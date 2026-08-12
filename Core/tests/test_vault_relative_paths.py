@@ -70,10 +70,23 @@ def test_a_new_file_still_goes_to_documents(tmp_path, monkeypatch):
     assert not (vault / "shopping-list.txt").exists()
 
 
-def test_vatsaldapro_resolves_under_home():
+def test_vatsaldapro_resolves_under_home(tmp_path, monkeypatch):
     """"VatsalDaPro/x" is a home subfolder like Downloads or Documents,
-    not anchored under the vault/Documents/FRED default."""
-    home = Path(os.path.expanduser("~"))
-    assert resolve_user_path("VatsalDaPro/Projects").resolve() == (home / "VatsalDaPro" / "Projects").resolve()
+    not anchored under the vault/Documents/FRED default.
+
+    Uses a fake home under tmp_path rather than the real one — the
+    original version of this test resolved against os.path.expanduser("~")
+    directly and only passed because THIS machine happens to have a
+    VatsalDaPro/Projects folder there; every other test in this file
+    fakes its filesystem instead of depending on what's really on disk.
+    """
+    fake_home = tmp_path / "home"
+    (fake_home / "VatsalDaPro" / "Projects").mkdir(parents=True)
+    monkeypatch.setattr(
+        os.path, "expanduser",
+        lambda p: str(fake_home) if p == "~" else p,
+    )
+
+    assert resolve_user_path("VatsalDaPro/Projects").resolve() == (fake_home / "VatsalDaPro" / "Projects").resolve()
     # case-insensitive match, real on-disk casing preserved in the result
-    assert resolve_user_path("vatsaldapro/Projects").resolve() == (home / "VatsalDaPro" / "Projects").resolve()
+    assert resolve_user_path("vatsaldapro/Projects").resolve() == (fake_home / "VatsalDaPro" / "Projects").resolve()
