@@ -40,7 +40,9 @@ from orchestrator.orchestrator import TOOL_LABELS, FREDOrchestrator
 from input.hotkey import HoldHotkey
 from input.wakeword import WakewordListener, watch_for_silence
 from tools import machine_tools
+from ui.pill import render as R
 from ui.pill.indicators import random_indicator
+from ui.pill.input_popup import POPUP_H, POPUP_W, TypeInputPopup
 from ui.pill.window import PillWindow
 from utils import event_log
 from utils.model_lifecycle import ModelLifecycle
@@ -117,7 +119,13 @@ class PillApp:
             random_indicator(),
             on_cancel=self._on_cancel_button,
             on_accept=self._on_accept_button,
+            on_type=self._on_type_button,
         )
+        self.type_popup = TypeInputPopup(on_submit=self._on_type_submit)
+        # What to show above the type box as "the last exchange" — reuses
+        # the same text already produced at each reply site below rather
+        # than tracking a separate history.
+        self._last_exchange = ""
         self.hotkey = HoldHotkey(
             on_press=self._on_hold_start,
             on_release=self._on_hold_end,
@@ -400,6 +408,7 @@ class PillApp:
             self.orchestrator.shutdown()
         except Exception:
             pass
+        self.type_popup.destroy()
         self.window.destroy()
 
     # =========================================================
@@ -513,7 +522,7 @@ class PillApp:
     # ONE TURN
     # =========================================================
 
-    def _run_turn(self, my_seq: int):
+    def _run_turn(self, my_seq: int, text: str = None):
         # Serialised: a new activation interrupts the old turn (via
         # _cancel) and then waits here for its lock turn, so two turns
         # can never both be driving the pill at once.
@@ -532,7 +541,7 @@ class PillApp:
 
             self._cancel.clear()
             try:
-                self._turn_body()
+                self._turn_body(text)
             except Exception as e:
                 print(f"[PillApp] turn failed: {e}")
                 event_log.log_error("turn", e)
@@ -549,15 +558,20 @@ class PillApp:
                     pass
                 self._to_idle_and_hide()
 
-    def _turn_body(self):
-        text = self.stt.stop_and_transcribe()
+    def _turn_body(self, text: str = None):
+        # Typed submissions (the type button) already have their text and
+        # skip STT entirely; a mic turn (the only other caller) passes
+        # nothing and transcribes here exactly as before.
+        typed = text is not None
+        if not typed:
+            text = self.stt.stop_and_transcribe()
 
         if not text:
             self._to_idle_and_hide()
             return
 
         print(f"You: {text}")
-        event_log.log("user_speech", text=text)
+        event_log.log("user_speech", text=text, source="typed" if typed else "voice")
 
         # Shown immediately and left up for a couple of seconds while the
         # model works. Deliberately NOT a confirmation gate — inserting a
@@ -576,6 +590,7 @@ class PillApp:
                 reply = self.orchestrator.process(text)
                 print(f"F.R.E.D.: {reply}")
                 event_log.log("fred_speech", text=reply, spoken=False)
+                self._last_exchange = f"{text} → {reply}"
             except Exception as e:
                 print(f"[PillApp] {e}")
                 event_log.log_error("process", e)
@@ -723,6 +738,7 @@ class PillApp:
                 event_log.log("error", source="turn", message="producer join timed out")
 
         reply = "".join(collected).strip()
+        self._last_exchange = f"{text} → {reply}" if reply else text
 
         # `spoken` is everything that came out of the speaker this turn,
         # in order: filler, then any tool captions, then the real reply —
@@ -966,6 +982,7 @@ class PillApp:
                 return
 
             event_log.log("fred_speech", text=reply, spoken=bool(self.tts), source="hud")
+            self._last_exchange = f"{text} → {reply}"
             on_reply(reply)
 
             if self.tts and reply:
@@ -992,6 +1009,32 @@ class PillApp:
     def _on_accept_button(self):
         # Mid-answer: stop talking but keep the exchange.
         self._cancel.set()
+
+    def _on_type_button(self):
+        """Type button on the pill — pop the EDIT-control box just above
+        the capsule, pre-filled with nothing, showing the last exchange
+        for context."""
+        gap = 10
+        x = self.window.x + (R.CANVAS_W - POPUP_W) // 2
+        y = max(0, self.window.y - POPUP_H - gap)
+        self.type_popup.show(x, y, reply_text=self._last_exchange)
+
+    def _on_type_submit(self, text):
+        """Enter in the type box — runs the exact same turn pipeline a
+        mic release does (_run_turn -> _turn_body), just pre-loaded with
+        typed text instead of a transcription, so filler/streaming/TTS/
+        locking all behave identically to a spoken turn."""
+        self._cancel.set()  # interrupt any turn still in flight, same as a fresh hotkey press
+        self.window.clear_transcript()
+        self.window.set_state("thinking")
+        self.window.show()
+
+        self._turn_seq += 1
+        my_seq = self._turn_seq
+        self._turn_thread = threading.Thread(
+            target=self._run_turn, args=(my_seq, text), daemon=True
+        )
+        self._turn_thread.start()
 
 
 def main(greet_now: bool = False):

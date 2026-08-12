@@ -14,9 +14,14 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 # --- capsule geometry (matches the Typeless reference's proportions:
 #     a wide, short capsule with circular buttons inset at each end) ---
-PILL_W, PILL_H = 208, 46
+PILL_H = 46
 BTN_D = 32
 BTN_INSET = 7
+BTN_GAP = 8  # spacing between adjacent buttons (matches indicator_box's gap)
+
+# Base two-button width, widened by one more button + its gap to fit the
+# type-a-message button next to accept, on the same right-hand end.
+PILL_W = 208 + BTN_D + BTN_GAP
 
 # Room around the capsule for its drop shadow and the ribbon's bloom.
 PAD = 20
@@ -74,16 +79,25 @@ _FONT = _load_font(15)
 def button_centres():
     """Screen-independent button centres within the canvas, shared with
     the window's hit testing so the clickable area always matches what
-    was actually drawn."""
+    was actually drawn.
+
+    Three buttons, left to right: cancel, accept, type. `type` takes the
+    pill's far-right slot (where accept used to sit before the pill was
+    widened) and accept shifts one button-width + gap to the left of it,
+    so the cancel/indicator/accept layout other code already expects is
+    unchanged — only the new button is appended past the old right edge.
+    """
     cy = PILL_Y + PILL_H / 2.0
     left = (PILL_X + BTN_INSET + BTN_D / 2.0, cy)
-    right = (PILL_X + PILL_W - BTN_INSET - BTN_D / 2.0, cy)
-    return left, right
+    type_btn = (PILL_X + PILL_W - BTN_INSET - BTN_D / 2.0, cy)
+    right = (type_btn[0] - BTN_D - BTN_GAP, cy)
+    return left, right, type_btn
 
 
 def indicator_box():
-    """(x, y, w, h) of the region between the two buttons."""
-    (lx, _), (rx, _) = button_centres()
+    """(x, y, w, h) of the region between the cancel and accept buttons
+    (not the type button, which lives further right of accept)."""
+    (lx, _), (rx, _), _ = button_centres()
     x0 = lx + BTN_D / 2.0 + 8
     x1 = rx - BTN_D / 2.0 - 8
     return int(x0), int(PILL_Y + 6), int(x1 - x0), int(PILL_H - 12)
@@ -107,6 +121,17 @@ def _draw_glyph_check(draw, cx, cy, r):
         ],
         fill=GLYPH_DARK, width=3, joint="curve",
     )
+
+
+def _draw_glyph_type(draw, cx, cy, r):
+    """Text-cursor (I-beam) glyph for the type-a-message button — same
+    line-drawing approach as the X and check glyphs above, not a
+    separate rendering technique."""
+    h = r * 0.5
+    w = r * 0.22
+    draw.line([(cx, cy - h), (cx, cy + h)], fill=GLYPH_LIGHT, width=2)
+    draw.line([(cx - w, cy - h), (cx + w, cy - h)], fill=GLYPH_LIGHT, width=2)
+    draw.line([(cx - w, cy + h), (cx + w, cy + h)], fill=GLYPH_LIGHT, width=2)
 
 
 def _truncate(draw, text, font, max_w):
@@ -174,12 +199,14 @@ def render_pill(
 
     # --- buttons
     if show_buttons:
-        (lcx, lcy), (rcx, rcy) = button_centres()
+        (lcx, lcy), (rcx, rcy), (tcx, tcy) = button_centres()
         r = BTN_D / 2.0
         draw.ellipse([lcx - r, lcy - r, lcx + r, lcy + r], fill=BTN_CANCEL_BG)
         _draw_glyph_x(draw, lcx, lcy, r)
         draw.ellipse([rcx - r, rcy - r, rcx + r, rcy + r], fill=BTN_ACCEPT_BG)
         _draw_glyph_check(draw, rcx, rcy, r)
+        draw.ellipse([tcx - r, tcy - r, tcx + r, tcy + r], fill=BTN_CANCEL_BG)
+        _draw_glyph_type(draw, tcx, tcy, r)
 
     # --- transcript
     if transcript:

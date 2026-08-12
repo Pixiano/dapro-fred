@@ -60,10 +60,11 @@ class PillWindow:
     speaking, so there's no persistent element sitting on the desktop.
     """
 
-    def __init__(self, indicator, on_cancel=None, on_accept=None, margin=18):
+    def __init__(self, indicator, on_cancel=None, on_accept=None, on_type=None, margin=18):
         self.indicator = indicator
         self.on_cancel = on_cancel
         self.on_accept = on_accept
+        self.on_type = on_type
         self.margin = margin
 
         self.hwnd = None
@@ -98,9 +99,9 @@ class PillWindow:
         return HTCLIENT if self._hit_button(cx, cy) else HTTRANSPARENT
 
     def _hit_button(self, cx, cy):
-        (lx, ly), (rx, ry) = R.button_centres()
+        (lx, ly), (rx, ry), (tx, ty) = R.button_centres()
         r = R.BTN_D / 2.0
-        for bx, by, which in ((lx, ly, "cancel"), (rx, ry, "accept")):
+        for bx, by, which in ((lx, ly, "cancel"), (rx, ry, "accept"), (tx, ty, "type")):
             if (cx - bx) ** 2 + (cy - by) ** 2 <= r * r:
                 return which
         return None
@@ -112,6 +113,8 @@ class PillWindow:
             self.on_cancel()
         elif which == "accept" and self.on_accept:
             self.on_accept()
+        elif which == "type" and self.on_type:
+            self.on_type()
         return 0
 
     def _on_destroy(self, hwnd, msg, wparam, lparam):

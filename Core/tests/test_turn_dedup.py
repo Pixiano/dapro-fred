@@ -20,7 +20,7 @@ def _bare_app():
     app._cancel = threading.Event()
     app._turn_seq = 0
     app._ran = []  # records which sequence numbers actually executed
-    app._turn_body = lambda: app._ran.append("body-ran")
+    app._turn_body = lambda text=None: app._ran.append("body-ran")
     return app
 
 
@@ -70,7 +70,7 @@ def test_the_winning_turn_does_clear_cancel_state():
 def test_exception_in_turn_body_is_caught_and_logged_not_raised():
     app = _bare_app()
     app._turn_seq = 1
-    app._turn_body = lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+    app._turn_body = lambda text=None: (_ for _ in ()).throw(RuntimeError("boom"))
     app._to_idle_and_hide = lambda: app._ran.append("recovered")
 
     app._run_turn(1)  # must not raise
