@@ -978,7 +978,14 @@ class FREDOrchestrator:
         self.tools.register(
             name="take_screenshot",
             function=machine_tools.take_screenshot,
-            description="Capture the screen and save it as a PNG.",
+            description=(
+                "Save a screenshot to disk as a PNG file. For when the user "
+                "wants a screenshot FILE (to keep, share, or attach) — this "
+                "tool cannot see or describe what's in the image. For any "
+                "question about what's currently on screen (what's on it, "
+                "what does this say, explain/answer/summarize/check my "
+                "screen), use whats_on_screen instead."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -1360,9 +1367,13 @@ class FREDOrchestrator:
             name="whats_on_screen",
             function=vision_tools.whats_on_screen,
             description=(
-                "What was on screen last time the background watcher looked — "
-                "for 'what am I looking at' / 'what's on my screen'. Instant, "
-                "reads a cache rather than taking a new screenshot."
+                "Look at the screen right now and describe or answer questions "
+                "about it — use this for ANY question involving what's "
+                "currently displayed: 'what's on my screen', 'explain/answer "
+                "this question on my screen', 'what does this error say', "
+                "'summarize/check my screen'. Always takes a fresh look; "
+                "falls back to the last thing seen only if a fresh capture "
+                "genuinely isn't possible right now."
             ),
             parameters={"type": "object", "properties": {}},
         )

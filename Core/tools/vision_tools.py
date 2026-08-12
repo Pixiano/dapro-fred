@@ -1,16 +1,19 @@
 # Core/tools/vision_tools.py
 #
 # The on-demand half of the screen watcher (see vision/screen_watcher.py
-# for the background half). Usually just a read of whatever the watcher
-# last cached — but a cache older than _FORCE_CAPTURE_AGE_SECONDS
-# triggers a real on-demand capture (watcher_manager.capture_now())
-# rather than handing back something that might be stale by hours, as
-# the passive background watcher's own gating can leave it (see the
-# Fine-Tune MVP Plan, Phase 17: LLM_IDLE_UNLOAD_SECONDS is a full hour,
-# so under normal use the watcher rarely gets a window to run at all).
+# for the background half). Every call tries a real on-demand capture
+# first (watcher_manager.capture_now()) — this tool is explicitly "look
+# now", not "read whatever the passive watcher happened to last see" (see
+# the Fine-Tune MVP Plan, Phase 17: LLM_IDLE_UNLOAD_SECONDS is a full
+# hour, so under normal use the passive watcher rarely gets a window to
+# run at all, and its cache can otherwise sit stale for a very long time).
 # That capture attempt is still fail-safe: if the main process has a
-# model loaded (the common case, mid-turn), it's skipped and this falls
-# back to the existing cache + honest staleness hedge, same as before.
+# model loaded (the common case, mid-turn) and cloud vision is also
+# unavailable (rate-limited, offline), capture_now() reports it couldn't
+# get a fresh one and this falls back to the existing cache with an
+# honest "just tried and couldn't" hedge, distinct from an ordinary
+# staleness hedge — a failed attempt right now reads differently to the
+# user than "I haven't looked in a while."
 #
 # On-demand rather than injected into every turn's context on purpose:
 # unlike vault knowledge (which the orchestrator does inject every turn,
@@ -20,23 +23,21 @@
 
 from vision import screen_context
 
-_FORCE_CAPTURE_AGE_SECONDS = 10
-
 
 def whats_on_screen() -> str:
-    """What the background screen watcher last saw. If that's more than
-    _FORCE_CAPTURE_AGE_SECONDS old, tries a real on-demand capture
-    first (see module docstring) — falls back to an honest 'don't
-    know' / 'stale' if nothing's been captured yet, or a capture can't
-    run safely right now."""
-    description, age = screen_context.read()
+    """Always takes a fresh look at the screen first (see module
+    docstring) — falls back to whatever's cached, with an honest hedge,
+    only if nothing's ever been captured or a fresh capture genuinely
+    couldn't run right now (no app, no safe local fallback, cloud
+    unavailable)."""
+    from ui.pill_app import get_current_app
 
-    if age is None or age > _FORCE_CAPTURE_AGE_SECONDS:
-        from ui.pill_app import get_current_app
-        app = get_current_app()
-        if app is not None:
-            app.screen_watcher.capture_now()
-            description, age = screen_context.read()
+    app = get_current_app()
+    captured_fresh = False
+    if app is not None:
+        captured_fresh = app.screen_watcher.capture_now()
+
+    description, age = screen_context.read()
 
     if description is None:
         return (
@@ -44,10 +45,11 @@ def whats_on_screen() -> str:
             "only runs after a few minutes away from the hotkey."
         )
 
-    if not screen_context.is_fresh(age):
+    if not captured_fresh and not screen_context.is_fresh(age):
         return (
-            f"The last thing I saw was {int(age // 60)} minute(s) ago, "
-            f"which is probably stale: {description}"
+            f"I tried to look just now but couldn't (vision's unavailable "
+            f"right now). The last thing I saw was {int(age // 60)} "
+            f"minute(s) ago, which is probably stale: {description}"
         )
 
     return description
