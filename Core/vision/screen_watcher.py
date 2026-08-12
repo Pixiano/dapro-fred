@@ -97,7 +97,7 @@ def _capture_screenshot_data_uri() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
-def _run_one_cycle(llm) -> bool:
+def _run_one_cycle(llm, force_local: bool = False) -> bool:
     """
     One screenshot + describe + write. Returns True if it ran.
 
@@ -109,8 +109,17 @@ def _run_one_cycle(llm) -> bool:
     2026-08-10 this left whats_on_screen()'s cache 19+ hours stale,
     since the main process very often has a tier resident during
     normal use. Now only the local fallback is conditional.
+
+    force_local=True is whats_on_screen()'s forced-local retry: the
+    caller has already unloaded the main process's model specifically
+    to make this safe, so the VRAM check is skipped (nothing to check —
+    it's genuinely clear) and cloud isn't retried (it just failed a
+    moment ago in the same call).
     """
-    local_ok = not _main_process_has_a_model_loaded()
+    if force_local:
+        local_ok = True
+    else:
+        local_ok = not _main_process_has_a_model_loaded()
 
     image_uri = _capture_screenshot_data_uri()
     # 200 (describe_image's default) is enough for a one-line summary
@@ -118,7 +127,8 @@ def _run_one_cycle(llm) -> bool:
     # for verbatim — bumped so a real quote doesn't get cut mid-message.
     try:
         description = llm.describe_image(
-            image_uri, _DESCRIBE_PROMPT, max_tokens=500, allow_local_fallback=local_ok,
+            image_uri, _DESCRIBE_PROMPT, max_tokens=500,
+            allow_local_fallback=local_ok, skip_cloud=force_local,
         )
     except Exception as e:
         if local_ok:
@@ -131,23 +141,24 @@ def _run_one_cycle(llm) -> bool:
     return True
 
 
-def run_once():
+def run_once(force_local: bool = False):
     """
     One-shot variant of run() for on-demand capture (see
-    watcher_manager.capture_now(), called by whats_on_screen() when its
-    cache is stale) — loads the model, does exactly one cycle, exits.
-    No sleep loop, and the model isn't kept resident afterward.
+    watcher_manager.capture_now(), called by whats_on_screen()) — loads
+    the model, does exactly one cycle, exits. No sleep loop, and the
+    model isn't kept resident afterward.
 
     Reuses _run_one_cycle's own _main_process_has_a_model_loaded()
     check, so an on-demand capture is exactly as fail-safe against a
     VRAM collision as the idle-triggered loop is — it silently skips
-    (writes nothing) rather than racing the main process's model.
+    (writes nothing) rather than racing the main process's model. See
+    _run_one_cycle's docstring for what force_local does instead.
     """
     from llm.llm_client import LLMClient
 
     llm = LLMClient(report_status=False)
     try:
-        _run_one_cycle(llm)
+        _run_one_cycle(llm, force_local=force_local)
     except Exception as e:
         print(f"[screen_watcher] on-demand capture failed: {e}")
 

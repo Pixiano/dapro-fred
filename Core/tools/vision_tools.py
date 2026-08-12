@@ -10,10 +10,17 @@
 # That capture attempt is still fail-safe: if the main process has a
 # model loaded (the common case, mid-turn) and cloud vision is also
 # unavailable (rate-limited, offline), capture_now() reports it couldn't
-# get a fresh one and this falls back to the existing cache with an
-# honest "just tried and couldn't" hedge, distinct from an ordinary
-# staleness hedge — a failed attempt right now reads differently to the
-# user than "I haven't looked in a while."
+# get a fresh one — at which point this tool takes the one deliberate
+# extra step of unloading the main model itself and forcing a
+# local-only retry (2026-08-12, Vatsal's explicit call: cloud was
+# 429-ing essentially all day, and the existing local Vision fallback
+# was structurally unreachable during any real conversation because
+# the main model is always resident then). The main model isn't
+# manually reloaded afterward — the orchestrator's next generate() call
+# does that transparently via _get_model's normal lazy load, same as
+# any other tier switch. Only if THAT also fails does this fall back to
+# the cache with an honest "just tried and couldn't" hedge, distinct
+# from an ordinary staleness hedge.
 #
 # On-demand rather than injected into every turn's context on purpose:
 # unlike vault knowledge (which the orchestrator does inject every turn,
@@ -36,6 +43,16 @@ def whats_on_screen() -> str:
     captured_fresh = False
     if app is not None:
         captured_fresh = app.screen_watcher.capture_now()
+
+        if not captured_fresh:
+            # Cloud failed (or was rate-limited) and the main model was
+            # resident, so the passive local-fallback check inside that
+            # first attempt skipped local entirely — the exact gap this
+            # forces past. Only worth retrying if something was actually
+            # loaded to free; if unload() drops nothing, local was
+            # already tried on the first pass and already failed too.
+            if app.orchestrator.llm.unload():
+                captured_fresh = app.screen_watcher.capture_now(force_local=True)
 
     description, age = screen_context.read()
 

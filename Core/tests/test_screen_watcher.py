@@ -83,19 +83,37 @@ def test_stale_capture_is_flagged_not_presented_as_current(tmp_path, monkeypatch
 # _FORCE_CAPTURE_AGE_SECONDS gate only fired past a 10s-old cache.
 # ---------------------------------------------------------------
 
-class _FakeWatcher:
-    def __init__(self, capture_result):
-        self.capture_result = capture_result
-        self.calls = 0
+class _FakeLLM:
+    """Stands in for orchestrator.llm — only unload() matters here."""
+    def __init__(self, dropped=1):
+        self.dropped = dropped
+        self.unload_calls = 0
 
-    def capture_now(self):
-        self.calls += 1
-        return self.capture_result
+    def unload(self):
+        self.unload_calls += 1
+        return self.dropped
+
+
+class _FakeOrchestrator:
+    def __init__(self, llm):
+        self.llm = llm
+
+
+class _FakeWatcher:
+    def __init__(self, capture_result, force_local_result=None):
+        self.capture_result = capture_result
+        self.force_local_result = force_local_result
+        self.calls = []  # force_local value passed on each call, in order
+
+    def capture_now(self, force_local=False):
+        self.calls.append(force_local)
+        return self.force_local_result if force_local else self.capture_result
 
 
 class _FakeApp:
-    def __init__(self, capture_result):
-        self.screen_watcher = _FakeWatcher(capture_result)
+    def __init__(self, capture_result, dropped=1, force_local_result=None):
+        self.screen_watcher = _FakeWatcher(capture_result, force_local_result)
+        self.orchestrator = _FakeOrchestrator(_FakeLLM(dropped))
 
 
 def test_capture_is_attempted_even_when_cache_is_already_fresh(tmp_path, monkeypatch):
@@ -106,19 +124,20 @@ def test_capture_is_attempted_even_when_cache_is_already_fresh(tmp_path, monkeyp
     monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_MAX_AGE_SECONDS", 300)
     screen_context.write("Chrome, watching a video")
 
-    fake_app = _FakeApp(capture_result=False)
+    fake_app = _FakeApp(capture_result=True)
     monkeypatch.setattr("ui.pill_app.get_current_app", lambda: fake_app)
 
     vision_tools.whats_on_screen()
 
-    assert fake_app.screen_watcher.calls == 1
+    assert fake_app.screen_watcher.calls == [False]
 
 
 def test_failed_fresh_attempt_is_distinguished_from_plain_staleness(tmp_path, monkeypatch):
     """capture_now() returning False (cloud rate-limited, local unsafe
     mid-turn — the exact shape of session_2026-08-12's repeated 429s)
     must read as 'I just tried and couldn't', not a generic old-cache
-    hedge that looks identical to never having tried at all."""
+    hedge that looks identical to never having tried at all. Covers the
+    case where the forced-local retry (below) also comes up empty."""
     import time
 
     monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_PATH", tmp_path / "sc.json")
@@ -126,13 +145,62 @@ def test_failed_fresh_attempt_is_distinguished_from_plain_staleness(tmp_path, mo
     screen_context.write("VS Code, editing a file")
     time.sleep(1.1)
 
-    fake_app = _FakeApp(capture_result=False)
+    fake_app = _FakeApp(capture_result=False, dropped=1, force_local_result=False)
     monkeypatch.setattr("ui.pill_app.get_current_app", lambda: fake_app)
 
     result = vision_tools.whats_on_screen()
 
     assert "tried to look just now" in result
     assert "VS Code" in result
+
+
+def test_forced_local_retry_after_unloading_the_main_model(tmp_path, monkeypatch):
+    """The actual 2026-08-12 fix: when the first attempt fails (cloud
+    down, local blocked because the main model was resident), unload
+    the main model and force one local-only retry rather than accepting
+    the failure — this is what makes the already-configured local
+    Vision fallback (QAT Gemma) reachable during a real conversation at
+    all, instead of being permanently gated out by VRAM safety."""
+    monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_PATH", tmp_path / "sc.json")
+    monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_MAX_AGE_SECONDS", 300)
+    screen_context.write("stale placeholder")
+
+    fake_app = _FakeApp(capture_result=False, dropped=1, force_local_result=True)
+    fake_app.screen_watcher.capture_result = False
+
+    def fake_capture_now(force_local=False):
+        fake_app.screen_watcher.calls.append(force_local)
+        if force_local:
+            screen_context.write("Chrome, watching a video")
+            return True
+        return False
+
+    fake_app.screen_watcher.capture_now = fake_capture_now
+    monkeypatch.setattr("ui.pill_app.get_current_app", lambda: fake_app)
+
+    result = vision_tools.whats_on_screen()
+
+    assert fake_app.screen_watcher.calls == [False, True]
+    assert fake_app.orchestrator.llm.unload_calls == 1
+    assert result == "Chrome, watching a video"
+
+
+def test_no_retry_when_nothing_was_loaded_to_free(tmp_path, monkeypatch):
+    """If unload() drops nothing, the main model wasn't what blocked
+    local fallback on the first attempt — local was already tried and
+    already failed too, so retrying would just repeat the same failure
+    for no benefit."""
+    monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_PATH", tmp_path / "sc.json")
+    monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_MAX_AGE_SECONDS", 1)
+    screen_context.write("VS Code, editing a file")
+
+    fake_app = _FakeApp(capture_result=False, dropped=0)
+    monkeypatch.setattr("ui.pill_app.get_current_app", lambda: fake_app)
+
+    vision_tools.whats_on_screen()
+
+    assert fake_app.screen_watcher.calls == [False]
+    assert fake_app.orchestrator.llm.unload_calls == 1
 
 
 def test_successful_fresh_capture_is_returned_without_the_stale_hedge(tmp_path, monkeypatch):

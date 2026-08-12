@@ -564,7 +564,7 @@ class LLMClient:
             }
 
     def describe_image(self, image_b64_data_uri: str, prompt: str, max_tokens: int = 200,
-                        allow_local_fallback: bool = True) -> str:
+                        allow_local_fallback: bool = True, skip_cloud: bool = False) -> str:
         """
         One-shot image description. Takes a data-URI-encoded image
         (base64, with the "data:image/..." prefix), the same
@@ -589,6 +589,14 @@ class LLMClient:
         local tier happened to be loaded, even though cloud needs no
         local VRAM at all and was always safe to attempt.
 
+        skip_cloud=True is the mirror case: a caller that already knows
+        cloud just failed a moment ago (whats_on_screen()'s forced-local
+        retry, after unloading the main model specifically to make local
+        safe) and doesn't want to pay a second cloud round-trip — cloud's
+        2026-08-12 failure mode included 30s read timeouts, so retrying
+        it here would double a real, already-observed delay for no
+        benefit.
+
         Separate from generate()/generate_with_tools() because the
         message shape is genuinely different (image content parts, no
         tool-calling), and because the local fallback always forces
@@ -605,7 +613,7 @@ class LLMClient:
             }
         ]
 
-        if CLOUD_VISION_PROVIDER.get("api_key"):
+        if CLOUD_VISION_PROVIDER.get("api_key") and not skip_cloud:
             try:
                 response = _cloud_request(
                     CLOUD_VISION_PROVIDER, messages,
