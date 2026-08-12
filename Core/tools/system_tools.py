@@ -326,6 +326,77 @@ def create_folder(folder_name: str) -> str:
     return f"Created folder: {path}"
 
 
+def convert_file(source_path: str, target_format: str) -> str:
+    """
+    Convert a file to another format by shelling out to ffmpeg (audio,
+    video, image — whatever ffmpeg itself handles). Output is written
+    next to the source with the new extension.
+
+    Assumes ffmpeg is on PATH (confirmed present on this machine at
+    C:\\ffmpeg\\bin\\ffmpeg.exe) — checked with shutil.which rather than
+    hardcoding that location, so a missing/moved ffmpeg fails with a
+    clear spoken message instead of a raw WinError.
+    """
+
+    source = resolve_user_path(source_path)
+    if not source.exists():
+        return f"Couldn't find {source.name}."
+    if source.is_dir():
+        return f"{source.name} is a folder — nothing to convert."
+
+    fmt = str(target_format or "").strip().lstrip(".").lower()
+    if not fmt:
+        return "Give me a target format, like mp3 or png."
+
+    if shutil.which("ffmpeg") is None:
+        return "ffmpeg isn't installed or isn't on PATH — can't convert."
+
+    dest = source.with_suffix(f".{fmt}")
+    if dest.exists():
+        return f"{dest.name} already exists there — not overwriting it."
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-i", str(source), str(dest)],
+            capture_output=True, text=True, timeout=300,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        return f"Converting {source.name} took too long and was stopped."
+    except OSError as e:
+        return f"Couldn't run ffmpeg: {e}"
+
+    # ffmpeg's own stderr is a wall of codec/build info even on success —
+    # never read aloud (see test_speech_safety.py); a failure gets a
+    # short spoken reason instead of that raw dump.
+    if result.returncode != 0 or not dest.exists():
+        return f"Couldn't convert {source.name} to {fmt} — ffmpeg couldn't produce that format from this file."
+
+    return f"Converted {source.name} to {dest.name}."
+
+
+def print_file(path: str) -> str:
+    """
+    Print a file via its default app's print handler — os.startfile's
+    "print" verb, the same thing Explorer's right-click > Print does.
+    No new dependency (no win32print): this is a native Windows shell
+    verb, just like open_path already uses the plain "open" verb.
+    """
+
+    target = resolve_user_path(path)
+    if not target.exists():
+        return f"Couldn't find {target.name}."
+    if target.is_dir():
+        return f"{target.name} is a folder — nothing to print."
+
+    try:
+        os.startfile(str(target), "print")
+    except OSError as e:
+        return f"Couldn't print {target.name}: {e}"
+
+    return f"Sent {target.name} to the printer."
+
+
 # =========================================================
 # SYSTEM INFO TOOLS
 # =========================================================
@@ -345,3 +416,27 @@ def get_current_time() -> str:
     clock = now.strftime("%I:%M %p").lstrip("0")
 
     return f"It's {clock} on {now.strftime('%A, %d %B %Y')}."
+
+
+def describe_self(tool_names: list) -> str:
+    """
+    "What tools do you have" / "what model are you running", answered
+    from the actually-running state rather than a doc that can drift
+    from it: `tool_names` comes straight from the live ToolRegistry
+    (see orchestrator._register_tools, which wires this one as a
+    closure over self.tools.list_tools()), and the tier comes straight
+    from config/settings.py's DEFAULT_TIER/MODEL_TIERS.
+    """
+
+    from config.settings import DEFAULT_TIER, MODEL_TIERS
+
+    model_path = MODEL_TIERS.get(DEFAULT_TIER)
+    model_name = model_path.stem if model_path else DEFAULT_TIER
+
+    count = len(tool_names)
+    sample = ", ".join(sorted(tool_names)[:6])
+
+    return (
+        f"I've got {count} tools wired up right now — things like {sample}, "
+        f"and more. I'm running on the {DEFAULT_TIER} tier, model {model_name}."
+    )

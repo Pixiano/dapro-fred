@@ -21,6 +21,7 @@ from tools import daily_tasks
 from tools import agenda
 from tools import vault_files
 from tools import workout_plan
+from tools import file_index
 from audio import device_info
 from utils import confidence, sensitive
 from orchestrator import canned_replies
@@ -1767,6 +1768,93 @@ class FREDOrchestrator:
                 },
                 "required": ["minutes"],
             },
+        )
+
+        self.tools.register(
+            name="convert_file",
+            function=system_tools.convert_file,
+            description=(
+                "Convert a file to another format via ffmpeg (audio, video, "
+                "or image formats it supports), e.g. converting song.wav to mp3."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "source_path": {
+                        "type": "string",
+                        "description": "Path to the file to convert, e.g. song.wav",
+                    },
+                    "target_format": {
+                        "type": "string",
+                        "description": "Target format/extension, e.g. mp3",
+                    },
+                },
+                "required": ["source_path", "target_format"],
+            },
+        )
+
+        self.tools.register(
+            name="print_file",
+            function=system_tools.print_file,
+            description="Print a file with its default app's print handler, e.g. print report.pdf.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file to print, e.g. report.pdf",
+                    }
+                },
+                "required": ["path"],
+            },
+        )
+
+        self.tools.register(
+            name="reindex_drive",
+            function=file_index.reindex_drive,
+            description=(
+                "Rebuild the maintained file index by walking a folder — slow, "
+                "so only run it when explicitly asked, e.g. 'reindex my drive'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "directory": {
+                        "type": "string",
+                        "description": "Folder to index, e.g. Documents. Leave blank for the whole home folder.",
+                    }
+                },
+            },
+        )
+
+        self.tools.register(
+            name="search_index",
+            function=file_index.search_index,
+            description=(
+                "Search the maintained file index by filename — fast, but "
+                "only as fresh as the last reindex_drive call."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Filename substring to search for, e.g. resume",
+                    }
+                },
+                "required": ["query"],
+            },
+        )
+
+        self.tools.register(
+            name="describe_self",
+            function=lambda: system_tools.describe_self(self.tools.list_tools()),
+            description=(
+                "Describe FRED's own currently registered tools and which model "
+                "tier is active — use for 'what tools do you have' or "
+                "'what model are you running'."
+            ),
+            parameters={"type": "object", "properties": {}},
         )
 
     def shutdown(self):
