@@ -46,9 +46,12 @@ def _ensure_docs() -> Path:
 # Folder names that belong to the user's home, not to FRED's own folder.
 # Without this, the model saying "Documents/FRED" got it anchored under
 # Documents/FRED again, producing Documents\FRED\Documents\FRED.
+#
+# "vatsaldapro" resolves "VatsalDaPro/x" to ~/VatsalDaPro/x — Vatsal's
+# projects folder, a home subfolder like the others above.
 _HOME_FOLDERS = {
     "documents", "downloads", "desktop", "pictures", "music", "videos",
-    "onedrive", "appdata",
+    "onedrive", "appdata", "vatsaldapro",
 }
 
 

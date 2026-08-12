@@ -6,6 +6,9 @@
 # a file that existed, and append_to_file created a phantom copy and
 # reported success.
 
+import os
+from pathlib import Path
+
 import tools.assist_tools as assist_tools
 from tools.assist_tools import append_to_file, resolve_user_path
 from tools.machine_tools import read_file
@@ -65,3 +68,12 @@ def test_a_new_file_still_goes_to_documents(tmp_path, monkeypatch):
 
     assert (docs / "shopping-list.txt").exists()
     assert not (vault / "shopping-list.txt").exists()
+
+
+def test_vatsaldapro_resolves_under_home():
+    """"VatsalDaPro/x" is a home subfolder like Downloads or Documents,
+    not anchored under the vault/Documents/FRED default."""
+    home = Path(os.path.expanduser("~"))
+    assert resolve_user_path("VatsalDaPro/Projects").resolve() == (home / "VatsalDaPro" / "Projects").resolve()
+    # case-insensitive match, real on-disk casing preserved in the result
+    assert resolve_user_path("vatsaldapro/Projects").resolve() == (home / "VatsalDaPro" / "Projects").resolve()
