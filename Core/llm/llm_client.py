@@ -511,8 +511,8 @@ class LLMClient:
                 )
                 message = response["choices"][0]["message"]
                 if message.get("content"):
-                    message["content"] = self._strip_thinking(
-                        message["content"], debris=False
+                    message["content"] = self._strip_thinking_for_tools(
+                        message["content"], has_tool_calls=bool(message.get("tool_calls"))
                     )
                 return message
             except Exception as cloud_error:
@@ -547,8 +547,8 @@ class LLMClient:
             message = response["choices"][0]["message"]
 
             if message.get("content"):
-                message["content"] = self._strip_thinking(
-                    message["content"], debris=False
+                message["content"] = self._strip_thinking_for_tools(
+                    message["content"], has_tool_calls=bool(message.get("tool_calls"))
                 )
 
             return message
@@ -973,6 +973,33 @@ class LLMClient:
             cleaned = once
         # Collapse the gaps the removals leave mid-sentence.
         return re.sub(r"[ \t]{2,}", " ", cleaned)
+
+    @classmethod
+    def _strip_thinking_for_tools(cls, content: str, has_tool_calls: bool) -> str:
+        """
+        Same stripping as generate()'s own call, plus generate()'s honest
+        fallback for the "opened a reasoning block, never closed it" case
+        — see that method's comment (session_2026-08-01_18-41-50.jsonl:
+        three turns logged `"text": ""` with `spoken: true`, dead silence
+        reaching the user). generate_with_tools() ran the strip but never
+        got the fallback, so the identical failure was reachable again
+        here — reproduced in shape 2026-08-12 14:13-14:14 (turf-search
+        turn, two failed find_file_smart calls, then an empty spoken
+        reply): a stuck model with nothing left to try can open a
+        reasoning block explaining the dead end and run out of max_tokens
+        before closing it, same as the plain-chat path always could.
+        Only substituted when there are no tool_calls this round —
+        content is allowed to be empty when a tool call carries the turn,
+        and inventing a spoken line there would be pure noise the
+        orchestrator ignores anyway.
+        """
+        stripped = cls._strip_thinking(content, debris=False)
+        if not stripped and not has_tool_calls:
+            return (
+                "I ran out of room thinking that one through, sir. "
+                "Ask me again, or narrow it down a little."
+            )
+        return stripped
 
     @staticmethod
     def _strip_thinking(content: str, debris: bool = True) -> str:

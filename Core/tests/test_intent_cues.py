@@ -120,3 +120,30 @@ def test_find_offers_file_tools_not_just_apps():
     assert "files" in categories
     tools = intent.tools_for_categories(categories)
     assert "search_files" in tools or "find_file_smart" in tools
+
+
+def test_find_near_a_place_also_offers_web_search():
+    """
+    Real transcript: session_2026-08-12.jsonl, 14:13:19-14:14:38.
+    "Find turfs to play football near Malaad West." matched only the
+    "files" category (bare "find" was already a files cue, added for
+    the spotify.exe bug above), so web_search was never in the offered
+    menu at all. The model, offered only file/app tools, called
+    find_file_smart twice against a location query with no matching
+    file on disk — both failed ("Couldn't find a file matching 'turfs
+    near Malaad West'...", "...'Malaad West'...") — and the turn ended
+    with nothing useful said. "search" now also matches bare "find", so
+    web_search is at least offered alongside the file tools; the model
+    picks from the full set instead of never seeing the right option.
+    """
+    categories = intent.match_categories(
+        "Find turfs to play football near Malaad West."
+    )
+    assert "search" in categories
+    tools = intent.tools_for_categories(categories)
+    assert "web_search" in tools
+
+    # The original fix must still hold: this cue is additive, not a
+    # replacement, so "find spotify.exe" still offers the file tools too.
+    tools = intent.tools_for_categories(intent.match_categories("find spotify.exe"))
+    assert "find_file_smart" in tools or "search_files" in tools

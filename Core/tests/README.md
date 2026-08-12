@@ -19,7 +19,8 @@ another: if you can't point at the failure, it doesn't belong here.
 | File | Pins |
 |---|---|
 | `test_dispatcher_web_search.py` | Web searches that were really local file searches, and pronoun-led queries that lost their topic |
-| `test_intent_cues.py` | Cue-word collisions: "project **copy**" reading the clipboard, "on **track**" changing the volume, "**find** spotify.exe" never offering file tools |
+| `test_intent_cues.py` | Cue-word collisions: "project **copy**" reading the clipboard, "on **track**" changing the volume, "**find** spotify.exe" never offering file tools, "**find** turfs near Malaad West" never offering web_search |
+| `test_tool_call_empty_reply.py` | An unclosed `<think>` block on the tool-calling path (`generate_with_tools`) stripping to `""` with no honest fallback, reaching TTS as silence |
 | `test_open_routing.py` | "Open dossier.pdf" opening a browser at `https://dossier.pdf` |
 | `test_open_last_found.py` | "Open it" after a search having no referent |
 | `test_relative_controls.py` | "Turn it up a bit" doing nothing |

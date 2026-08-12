@@ -122,9 +122,21 @@ CATEGORY_CUES = {
         "divided", "percent of", "% of", "square root", "sqrt",
         "sum of", "add up", "work out", "times",
     ),
+    # Bare "find" added after a confirmed misroute (session_2026-08-12.jsonl,
+    # 14:13-14:14): "Find turfs to play football near Malaad West." matched
+    # only the "files" category (bare "find" was already a files cue, added
+    # for "find spotify.exe"), so web_search was never in the offered menu
+    # at all — the model had only find_file_smart/search_files to work
+    # with, called find_file_smart twice against a location query with no
+    # matching file, both failed, and the turn ended with no useful answer.
+    # Same "over-inclusive is cheap, missing is fatal" reasoning as every
+    # other cue here: this unions with "files" rather than replacing it, so
+    # "find spotify.exe" now offers web_search too alongside the file/app
+    # tools, and the model picks correctly from the full set instead of
+    # never seeing the right one.
     "search": (
         "search", "look up", "google", "who is", "what happened",
-        "news", "find out", "search for", "on the web",
+        "news", "find out", "search for", "on the web", "find",
     ),
     "sysinfo": (
         "battery", "charge", "cpu", "ram", "memory", "disk", "storage",
