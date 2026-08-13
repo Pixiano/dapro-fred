@@ -1,8 +1,10 @@
-# FRED — Session log (2026-08-11 → 2026-08-12)
+# FRED — Session log (2026-08-11 → 2026-08-13)
 
-Record of what was tried, what broke, what got fixed, and where things stand. Started as a wake-word retraining session (Parts 1-6); grew into a wider bug-fix pass once live testing surfaced unrelated issues (Parts 7-10). Companion reading: `Core/input/wakeword_train.py` (the pipeline itself, heavily commented inline) and `Core/config/settings.py`'s `WAKEWORD_THRESHOLD`/`TTS_PREROLL_SEC`/`TTS_POSTROLL_SEC` history comments.
+Record of what was tried, what broke, what got fixed, and where things stand. Started as a wake-word retraining session (Parts 1-6); grew into a wider bug-fix pass once live testing surfaced unrelated issues (Parts 7-10, 2026-08-12); continued into a vision/LLM-reliability pass the next day (Parts 11-14, 2026-08-13). Companion reading: `Core/input/wakeword_train.py` (the pipeline itself, heavily commented inline) and `Core/config/settings.py`'s `WAKEWORD_THRESHOLD`/`TTS_PREROLL_SEC`/`TTS_POSTROLL_SEC` history comments.
 
-**Git commits this session:** `c72ca54` (wake-word AGC/crash-guard/real-voice pipeline), `aa2c8ff` (TTS postroll, dispatcher fix, STT silence-skip), `44d98aa` (VatsalDaPro path alias). Trained model files, recordings, and this doc itself are local-only (gitignored / untracked by convention).
+**Git commits from this conversation:** `c72ca54`, `aa2c8ff`, `44d98aa`, `9aae32b` (2026-08-12); `4bd36da`, `91d779c`, `480ac25`, `cac12c8`, `da75118` (2026-08-13). Trained model files, recordings, and this doc itself are local-only (gitignored / untracked by convention).
+
+**Not covered here:** between this conversation's 2026-08-12 and 2026-08-13 work, a separate, independent stream of commits landed on `main` from other work on this repo (a fine-tune plan draft, a typed-input popup, ffmpeg/print/drive-index tools, tool-calling fixes, `23e2531`/`1d96070`'s vision reliability work) — real, already on `main`, and Part 11 below builds directly on `23e2531`/`1d96070`, but their own detail lives in their own commit messages, not here.
 
 ---
 
@@ -127,11 +129,50 @@ Also reported live. Not actually the wake-word silence-timeout itself (`SILENCE_
 
 Requested directly, delegated to a subagent. Investigated every hardcoded folder-name/alias table in the codebase (`_HOME_FOLDERS` in `assist_tools.py`'s `resolve_user_path`, app-launch aliases in `system_tools.py`, the vault's hardcoded-filenames list) and found `_HOME_FOLDERS` was the only genuine fit — the others are unrelated lookup tables that happen to share the word "alias". Added `"vatsaldapro"`; `"VatsalDaPro/x"` now resolves to `~/VatsalDaPro/x` case-insensitively with real on-disk casing preserved, same as `Downloads`/`Documents`/etc. already did. Verified it doesn't collide with `DEFAULT_DOCS` (the vault, a separate location entirely). Tests: extended `Core/tests/test_vault_relative_paths.py`.
 
+## Part 11 — Vision still bad after 2026-08-12's fixes: two cue-coverage misses (2026-08-13)
+
+Reported live, next day: vision was still "very bad" despite Part 9's session and the independent `23e2531`/`1d96070` work (wrong-tool-picked fix, and unloading the main model to force a local fallback when cloud 429s). Root cause was a third, different bug: `Core/orchestrator/intent.py`'s cue-based tool-menu filter runs *before* the LLM ever sees a tool list — if a turn's cues don't match "vision," `whats_on_screen` is never offered, and the model can't call a tool it was never given.
+
+Two real, confirmed misses in a row:
+1. "Can you look **at** my screen..." matched only "display" (bare "screen") — every "vision" cue required the literal phrase "on my screen". Fixed by adding bare "screen" to the vision cues too (over-inclusive on purpose, matching this file's own stated philosophy — the two tools' descriptions, not a keyword pre-filter, are what should tell the model save-a-file vs. describe-it apart).
+2. "tell me what exactly I'm looking at" — no "screen" at all, and not the exact phrase "what am i looking at" (word order/contraction differ). Fixed by cueing on the stable "looking at" core instead of one exact sentence.
+
+Both confirmed directly against `orchestrator.intent.classify()`, not just inferred from logs. Tests: `Core/tests/test_intent_cues.py`. Commits `4bd36da`, `480ac25`.
+
+## Part 12 — Vision answered the wrong question (2026-08-13)
+
+Even with the tool correctly offered, `whats_on_screen()` took **zero arguments** — `parameters={"type": "object", "properties": {}}` in its registration. A real question ("is my English correct here", "what did they reply") never reached the vision model; it always got the same generic "describe the app and activity" prompt, and a separate text-only turn had to answer the user from that generic blurb alone.
+
+**Fix:** threaded a `question` string parameter all the way through `whats_on_screen(question) -> capture_now(question) -> run_once(question) -> _run_one_cycle(question) -> _prompt_for(question)`, which builds a prompt asking the vision model to answer that question directly, grounded in the screenshot, instead of the generic description. Falls back to the original generic prompt when no question is given. Verified live afterward: `whats_on_screen({"question": "What am I looking at right now?"})` → a direct, specific answer, confirmed genuine (not a hallucination) by cross-referencing session logs — no cloud fallback/error in that window, and the answer contained an oddly specific real detail a blind guess wouldn't invent. Tests: `Core/tests/test_screen_watcher.py`. Commit `91d779c`.
+
+Explicitly *not* built: a "describe top-to-bottom in 5-10 sections, then a second gatekeeper pass" restructure, floated as an alternative. Rejected as solving the wrong layer — a longer generic description still doesn't know what's being asked; passing the real question through does, in one call instead of two.
+
+## Part 13 — Silent empty turn and invisible cold-load latency (2026-08-13)
+
+Traced from a real transcript where a follow-up question failed two different ways in a row: one attempt ended in total silence (`fred_speech` logged with `"text": ""`), the next succeeded but took **106 seconds** after the tool calls already had their data in hand.
+
+- **Silence:** `LLMClient.generate_stream`'s leftover-buffer handling could silently yield nothing when a `<think>`/`<|channel>` block opened but never closed (ran out of `max_tokens` mid-thought). `generate()` (the non-streaming sibling) already had a documented fix for this *exact* shape — a fallback message instead of empty text reaching TTS as silence — but `generate_stream` never got the same guard. Now it does.
+- **Latency:** traced to a cold `Llama(...)` load from disk in `_get_model()` after a cloud 429 — real GGUF-from-disk cost (not the 15s-capped retry from an earlier fix, `422e090`), and completely invisible: only a bare `print()`, which goes nowhere in this headless (`pythonw`) process. `_get_model` now logs load duration to the event log, so a future slow turn is diagnosable instead of a silent multi-minute gap. The load time itself wasn't optimized — this only makes it visible.
+
+Tests: `Core/tests/test_llm_client_silent_turn_fixes.py` (note: had to defensively restore `lc.time`/`event_log.log` after use — `test_cloud_429_retry.py` mutates `llm_client`'s module globals directly with no pytest fixture to revert them, so collection order matters; documented in the new test file's comments rather than touching the existing one). Commit `cac12c8`.
+
+## Part 14 — Passive live wake-word dataset (2026-08-13)
+
+Requested directly: log every real wake-word activation as training data, tagged with whether it actually fired and whether real speech followed — collected for free from ordinary use instead of another dedicated recording session (Parts 3-6 already showed how much friction that has).
+
+- `wakeword.py`: a rolling 2.5s pre-trigger buffer (raw, pre-AGC, matching every other real recording this pipeline uses) so the actual "hey fred" utterance is captured, not just its numeric score — previously nothing retained audio from before a chunk crossed threshold.
+- `stt_whisper.py`: both exit paths of a recording — natural completion (`stop_and_transcribe`) and an explicit cancel (`cancel_recording`) — now expose the raw audio via `self.last_audio`. This mattered: `cancel_recording()` used to just discard `self._blocks`, and per direct report, cancelling via the FRED button is how *most* real attempts actually end ("even if I did say something... I've mostly cancelled the thread"). `spoke_after` is computed from that raw audio's peak, not from whether a transcript exists — so a cancelled turn with real speech in it still logs correctly.
+- New `Core/input/wakeword_capture.py`: combines trigger + followup audio into one clip, writes it to `Core/data/wakeword_training/live_captures/`, and appends a `manifest.jsonl` record (`spoke_after`, `cancelled`, transcript, wake score/gain, durations).
+
+Tests: `Core/tests/test_wakeword_capture.py`. Commit `da75118`.
+
 ## What's still open
 
 - **Wake-word model is a live experiment** (Part 6) — the 20-clip real-positive model looked fine in ~36 minutes of observation but isn't fully validated. Keep half an eye on `Core/data/wakeword_log.jsonl` for a false-positive climb; the Part 4/5 negatives-only revert procedure is the known-good fallback if it's needed again.
 - Two of the three real-voice attempts (46 clips, then 20) showed worse *offline eval* numbers than the negatives-only baseline; only the 20-clip version has been tried live, and it held up better than the eval predicted. That gap between eval and live behavior (also seen once before, Part 4's AGC caveat) means the synthetic eval script is a useful sanity check but not a reliable predictor of real-room false-positive rate — worth remembering before trusting it alone on any future retrain.
+- **New, from Part 14: `live_captures/` will start accumulating real data from ordinary use.** Nothing yet consumes it — `wakeword_train.py` still only reads `real_positive/`/`real_positive_disabled/`. Once there's enough, wiring `live_captures/` (split by `spoke_after`) into the training pipeline as an additional/alternative real-data source is the natural next step, and is a much larger and more naturally-varied sample than the one 171.5s recording session Parts 3-6 worked from.
 - The persistent "hafer fredell"/"heyward fred" adversarial false positives have survived every retrain this session unchanged — a genuine weak spot in the auto-generated adversarial-phrase negative set, not urgent but worth addressing eventually (upweight `N_ADVERSARIAL_PHRASES` or hand-curate against these specific patterns).
-- If real-voice training is revisited again: probably needs a much larger sample (the original 105-line script, done in full, one take per file as originally asked, rather than 54 clips salvaged from a merged continuous recording), consistent volume/distance rather than deliberately varied, and holding out entire takes for test rather than random individual clips so near-duplicate-condition leakage doesn't inflate apparent quality. None of that has been tried yet.
+- If real-voice training is revisited again: probably needs a much larger sample (the original 105-line script, done in full, one take per file as originally asked, rather than 54 clips salvaged from a merged continuous recording), consistent volume/distance rather than deliberately varied, and holding out entire takes for test rather than random individual clips so near-duplicate-condition leakage doesn't inflate apparent quality. Part 14's passive collection may make this moot before it's ever tried.
 - `TTS_POSTROLL_SEC = 1.0` and the STT silence-peak floor are both first-pass estimates from a single live report each, same as `TTS_PREROLL_SEC` was before it got tuned up to 1.5s against real hardware feedback — treat both as floors, not final numbers, if the symptoms (tail-clipping / still-transcribing-silence) recur.
 - The 54 segmented real-voice recordings (all of them, not just the 20 or 46 used) remain preserved in `Core/data/wakeword_training/real_positive_disabled/` for any future attempt.
+- Cerebras 429s are frequent enough (Part 13, and the whole Part 6-9 arc) that they're clearly not a rare edge case for this API tier — every reliability fix so far has been about surviving that gracefully (retry, local fallback, visibility), not reducing how often it happens. Worth a look at what's actually driving call volume, if it keeps being the root trigger behind new incidents.
