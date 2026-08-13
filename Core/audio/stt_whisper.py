@@ -66,6 +66,11 @@ class WhisperSTT:
         self._blocks = []
         self._stream = None
         self._lock = threading.Lock()
+        # Raw concatenated audio from the most recently ENDED recording
+        # (either exit path — see stop_and_transcribe/cancel_recording),
+        # for wakeword_capture.py to save alongside the trigger clip.
+        # None if that recording had nothing in it.
+        self.last_audio = None
         # Separate lock for the PortAudio stream's lifetime. The stream is
         # opened on the recording thread but closed from the turn thread
         # (and possibly the cancel button's thread too), and letting an
@@ -249,11 +254,18 @@ class WhisperSTT:
             self._close_stream_locked()
 
     def cancel_recording(self):
-        """Abandon the current recording without transcribing."""
+        """Abandon the current recording without transcribing. Still
+        exposes whatever was captured via last_audio — see its
+        docstring in __init__ — since this is the FRED-button-cancel
+        exit path a wake-triggered turn most often actually takes,
+        confirmed live 2026-08-13, and that audio was being thrown
+        away before it could ever be logged."""
         with self._lock:
             self._recording = False
-            self._blocks = []
+            blocks, self._blocks = self._blocks, []
         self._close_stream()
+        self.last_audio = np.concatenate(blocks).astype(np.float32) if blocks else None
+        return self.last_audio
 
     # =========================================================
     # TRANSCRIPTION
@@ -268,9 +280,13 @@ class WhisperSTT:
         self._close_stream()
 
         if not blocks:
+            self.last_audio = None
             return ""
 
         audio = np.concatenate(blocks).astype(np.float32)
+        self.last_audio = audio  # see __init__ — set before the guards
+        # below so wakeword_capture.py still sees real audio even when
+        # it's too short/silent to bother transcribing.
 
         # Guards against an accidental tap producing a spurious
         # transcription — Whisper will happily hallucinate a phrase out

@@ -23,6 +23,7 @@
 # Core/input/wakeword_train.py — see that script for how, and to
 # retrain with better negative data.
 
+import collections
 import threading
 import time
 
@@ -70,6 +71,19 @@ _AGC_MAX_GAIN = 100.0            # ~40dB ceiling — generous for even faint mom
 _AGC_MIN_PEAK_TO_BOOST = 0.01   # near-silence: hold gain rather than amplifying noise
 _AGC_SMOOTHING = 0.3             # per-chunk convergence toward the target gain
 
+# Rolling pre-trigger buffer for wakeword_capture.py's live dataset —
+# the "hey fred" utterance itself already happened by the time a chunk
+# crosses threshold, and nothing kept it anywhere; this is what lets a
+# fire (or a cancelled/silent one) be saved as actual audio instead of
+# just the numeric score already in wakeword_log.jsonl. 2.5s comfortably
+# covers a spoken "hey fred" at any reasonable pace. Raw (pre-AGC) on
+# purpose: AGC gain swings per-chunk and applying it here would bake an
+# inconsistent, runtime-only artifact into training data — every other
+# real recording this pipeline uses (room_recording/, real_positive/)
+# is raw mic capture too.
+_PRETRIGGER_SECONDS = 2.5
+_PRETRIGGER_CHUNKS = int(_PRETRIGGER_SECONDS * SR / CHUNK)
+
 
 class WakewordListener:
     """
@@ -89,6 +103,16 @@ class WakewordListener:
         self._stream_lock = threading.Lock()
         self._last_fire = 0.0
         self._agc_gain = 1.0  # persists across callbacks — see _AGC_SMOOTHING
+
+        # See _PRETRIGGER_SECONDS. last_trigger_audio/last_fired_score
+        # are snapshotted at fire time for wakeword_capture.py — read
+        # by the caller (pill_app.py's _on_wake_detected) right after
+        # on_wake() is dispatched, before the next fire can overwrite
+        # them.
+        self._pretrigger = collections.deque(maxlen=_PRETRIGGER_CHUNKS)
+        self.last_trigger_audio = None
+        self.last_fired_score = 0.0
+        self.last_fired_gain = 1.0
 
     def _ensure_model(self):
         if self._oww is not None:
@@ -124,6 +148,7 @@ class WakewordListener:
             wakeword_log.log_event("input_status", note=str(status))
 
         block = indata[:, 0]
+        self._pretrigger.append(block.copy())  # raw, pre-AGC — see _PRETRIGGER_SECONDS
 
         peak = float(np.max(np.abs(block)))
         if peak > _AGC_MIN_PEAK_TO_BOOST:
@@ -177,6 +202,9 @@ class WakewordListener:
         if fired:
             self._last_fire = now
             self._oww.reset()
+            self.last_trigger_audio = np.concatenate(list(self._pretrigger)).astype(np.float32)
+            self.last_fired_score = float(score)
+            self.last_fired_gain = float(self._agc_gain)
             if self.on_wake:
                 # Dispatched, not called directly: on_wake is expected to
                 # call pause() on THIS listener (to free the mic for a

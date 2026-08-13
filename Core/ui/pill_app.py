@@ -136,6 +136,13 @@ class PillApp:
         # press/release interrupting or superseding it) — see
         # _on_hold_start/_on_hold_end and watch_for_silence's docstring.
         self._silence_watch_stop = threading.Event()
+        # Whether the CURRENT turn was wake-triggered (vs. hotkey) — see
+        # _on_hold_start (resets to False on every activation) and
+        # _on_wake_detected (sets True right after). Read by
+        # _save_wake_capture's two call sites (_turn_body,
+        # _on_cancel_button) to know whether to log this turn at all.
+        self._wake_triggered = False
+        self._wake_trigger_audio = None
 
         from vision.watcher_manager import ScreenWatcherManager
         self.screen_watcher = ScreenWatcherManager()
@@ -423,6 +430,11 @@ class PillApp:
         # be competing for the GPU when that happens.
         self.screen_watcher.touch()
 
+        # Default for every activation; _on_wake_detected overrides this
+        # to True right after calling this method, so a hotkey press
+        # (which calls this directly) is never mistaken for a wake one.
+        self._wake_triggered = False
+
         # Same reasoning: a real turn is starting (whether from the
         # hotkey or from _on_wake_detected calling this directly), so
         # the wake listener must release the mic device before STT's own
@@ -509,6 +521,12 @@ class PillApp:
         watches for the silence a keyup would normally signal instead.
         """
         self._on_hold_start()
+        self._wake_triggered = True
+        # Snapshotted now, right after the fire — wakeword.py overwrites
+        # last_trigger_audio on its NEXT fire, which _on_hold_start's own
+        # pause() above makes impossible before this turn ends, but a
+        # local copy is cheap and makes that invariant not load-bearing.
+        self._wake_trigger_audio = self.wakeword.last_trigger_audio
         if not self.stt:
             return
         stop_flag = self._silence_watch_stop  # the fresh one _on_hold_start just made
@@ -558,6 +576,26 @@ class PillApp:
                     pass
                 self._to_idle_and_hide()
 
+    def _save_wake_capture(self, cancelled: bool, transcript: str):
+        """Logs one entry to the live wake-word dataset (see
+        wakeword_capture.py) — only ever called when self._wake_triggered.
+        A logging side-effect, never allowed to affect the actual turn;
+        wakeword_capture.save() already guards itself, this is belt and
+        suspenders on top, same reasoning as wakeword_log's own layered
+        guards."""
+        try:
+            from input import wakeword_capture
+            wakeword_capture.save(
+                trigger_audio=self._wake_trigger_audio,
+                followup_audio=self.stt.last_audio if self.stt else None,
+                cancelled=cancelled,
+                transcript=transcript or "",
+                wake_score=self.wakeword.last_fired_score,
+                wake_gain=self.wakeword.last_fired_gain,
+            )
+        except Exception as e:
+            print(f"[PillApp] wake capture failed: {e}")
+
     def _turn_body(self, text: str = None):
         # Typed submissions (the type button) already have their text and
         # skip STT entirely; a mic turn (the only other caller) passes
@@ -565,6 +603,9 @@ class PillApp:
         typed = text is not None
         if not typed:
             text = self.stt.stop_and_transcribe()
+            if self._wake_triggered:
+                self._save_wake_capture(cancelled=False, transcript=text)
+                self._wake_triggered = False
 
         if not text:
             self._to_idle_and_hide()
@@ -1001,7 +1042,16 @@ class PillApp:
         self._cancel.set()
         self._recording = False
         if self.stt:
+            # cancel_recording() now returns whatever was captured (see
+            # stt_whisper.py) — this is the exit path a wake-triggered
+            # turn most often actually takes in practice (confirmed
+            # live 2026-08-13: "I have mostly cancelled the thread
+            # using the FRED button"), and that audio used to just be
+            # thrown away here before it could ever be logged.
             self.stt.cancel_recording()
+            if self._wake_triggered:
+                self._save_wake_capture(cancelled=True, transcript="")
+                self._wake_triggered = False
         self.window.clear_transcript()
         self.window.set_state("idle")
         self.window.hide()
