@@ -476,10 +476,19 @@ class LLMClient:
 
         # Anything still buffered never resolved into a reasoning block —
         # strip defensively and emit, so a reply is never silently lost.
+        # _strip_thinking returns "" for a thinking block that opened but
+        # never closed (ran out of max_tokens mid-thought) — generate()
+        # already guards this exact case with a fallback message rather
+        # than empty text reaching TTS as total silence (see its own
+        # comment); this path had the same failure shape without the
+        # same guard. Confirmed live 2026-08-13: a plain chat turn ended
+        # with `"text": ""` and FRED said nothing at all.
         if buffer.strip():
             leftover = self._strip_thinking(buffer)
-            if leftover:
-                yield leftover
+            yield leftover or (
+                "I ran out of room thinking that one through, sir. "
+                "Ask me again, or narrow it down a little."
+            )
 
     def generate_with_tools(
         self,
@@ -727,6 +736,15 @@ class LLMClient:
                 f"Model file not found for tier '{tier}': {model_path}"
             )
 
+        # Confirmed live 2026-08-13: a cloud 429 mid-conversation fell
+        # through to a cold load here that took the user-visible reply
+        # from "instant" to ~100s, with nothing in the logs to show that
+        # was the cause — only a print(), invisible in this headless
+        # (pythonw) process. Not fixing the load time itself (that's
+        # real GGUF-from-disk cost), just making it visible so a future
+        # slow turn is diagnosable instead of a silent mystery gap.
+        load_start = time.monotonic()
+
         n_ctx = CONTEXT_WINDOW_BY_TIER.get(tier, CONTEXT_WINDOW)
 
         # Most local GGUFs' own embedded chat templates have no provision
@@ -768,6 +786,10 @@ class LLMClient:
                 verbose=False,
                 chat_format=chat_format,
             )
+
+        load_seconds = time.monotonic() - load_start
+        print(f"[LLM] loaded '{tier}' in {load_seconds:.1f}s")
+        event_log.log("llm_model_load", tier=tier, seconds=round(load_seconds, 1))
 
         self._loaded[tier] = model
         if self._report_status:
