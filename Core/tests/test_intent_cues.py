@@ -163,6 +163,22 @@ def test_look_at_my_screen_offers_whats_on_screen():
     tools = intent.tools_for_categories(categories)
     assert "whats_on_screen" in tools
 
+
+def test_looking_at_variant_offers_whats_on_screen():
+    """
+    Real transcript, same day, still failing after the fix above:
+    "tell me what exactly I'm looking at" has no "screen" at all, and
+    isn't the exact phrase "what am i looking at" (word order/
+    contraction differ), so it matched nothing. Cued on the stable
+    "looking at" core instead of one exact sentence.
+    """
+    categories = intent.match_categories(
+        "Please, you need to tell me what exactly I'm looking at."
+    )
+    assert "vision" in categories
+    tools = intent.tools_for_categories(categories)
+    assert "whats_on_screen" in tools
+
     # The original fix must still hold: this cue is additive, not a
     # replacement, so "find spotify.exe" still offers the file tools too.
     tools = intent.tools_for_categories(intent.match_categories("find spotify.exe"))

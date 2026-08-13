@@ -261,9 +261,18 @@ CATEGORY_CUES = {
     # are what should disambiguate save-a-file vs. describe-what's-on-it
     # from here, not a keyword pre-filter deciding it before the model
     # ever sees the option.
+    # Second confirmed miss, same day: "tell me what exactly I'm looking
+    # at" has no "screen" at all and doesn't contain the exact phrase
+    # "what am i looking at" (word order/contraction differ), so it
+    # matched nothing — not even the bare-"screen" fix above helps when
+    # the utterance never says "screen". Cued on the stable 2-word core
+    # ("looking at") instead of the one full sentence it was wrapped in,
+    # same reasoning as dropping "what am i looking at" would suggest:
+    # a whole-phrase cue only ever covers itself.
     "vision": (
-        "what's on my screen", "what am i looking at", "on my screen",
+        "what's on my screen", "on my screen",
         "what's on screen", "screen say", "what does my screen", "screen",
+        "looking at",
     ),
     "tasks": (
         # Bare "to do" is deliberately left out — "things to do", "what
