@@ -104,9 +104,11 @@ class _FakeWatcher:
         self.capture_result = capture_result
         self.force_local_result = force_local_result
         self.calls = []  # force_local value passed on each call, in order
+        self.last_question = None
 
-    def capture_now(self, force_local=False):
+    def capture_now(self, force_local=False, question=""):
         self.calls.append(force_local)
+        self.last_question = question
         return self.force_local_result if force_local else self.capture_result
 
 
@@ -168,7 +170,7 @@ def test_forced_local_retry_after_unloading_the_main_model(tmp_path, monkeypatch
     fake_app = _FakeApp(capture_result=False, dropped=1, force_local_result=True)
     fake_app.screen_watcher.capture_result = False
 
-    def fake_capture_now(force_local=False):
+    def fake_capture_now(force_local=False, question=""):
         fake_app.screen_watcher.calls.append(force_local)
         if force_local:
             screen_context.write("Chrome, watching a video")
@@ -214,7 +216,7 @@ def test_successful_fresh_capture_is_returned_without_the_stale_hedge(tmp_path, 
     screen_context.write("VS Code, editing a file")
     time.sleep(1.1)
 
-    def fake_capture_now():
+    def fake_capture_now(force_local=False, question=""):
         screen_context.write("Chrome, watching a video")
         return True
 
@@ -225,3 +227,31 @@ def test_successful_fresh_capture_is_returned_without_the_stale_hedge(tmp_path, 
     result = vision_tools.whats_on_screen()
 
     assert result == "Chrome, watching a video"
+
+
+def test_question_reaches_capture_now(tmp_path, monkeypatch):
+    """Confirmed live 2026-08-13: whats_on_screen() took no arguments,
+    so a real question ("is my English correct") never reached the
+    vision model — it always got the generic describe-the-app prompt,
+    and the text-only turn answering the user had nothing else to work
+    with. This is the actual fix: the question has to make it all the
+    way to capture_now()."""
+    monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_PATH", tmp_path / "sc.json")
+    monkeypatch.setattr(screen_context, "SCREEN_CONTEXT_MAX_AGE_SECONDS", 300)
+    screen_context.write("placeholder")
+
+    fake_app = _FakeApp(capture_result=True)
+    monkeypatch.setattr("ui.pill_app.get_current_app", lambda: fake_app)
+
+    vision_tools.whats_on_screen(question="is my English correct here")
+
+    assert fake_app.screen_watcher.last_question == "is my English correct here"
+
+
+def test_prompt_for_no_question_is_unchanged_generic_prompt():
+    assert screen_watcher._prompt_for("") == screen_watcher._DESCRIBE_PROMPT
+
+
+def test_prompt_for_question_asks_the_model_to_answer_it():
+    prompt = screen_watcher._prompt_for("is my English correct here")
+    assert "is my English correct here" in prompt

@@ -44,6 +44,27 @@ _DESCRIBE_PROMPT = (
 )
 
 
+def _prompt_for(question: str) -> str:
+    """
+    Confirmed live 2026-08-13: whats_on_screen() took no arguments, so
+    a real question ("tell me if I've used correct English") never
+    reached the vision model — it always got the generic prompt above,
+    and the separate text-only turn answering the user had nothing but
+    that generic blurb to work with. If it didn't happen to mention the
+    relevant detail, the answer was a guess.
+    """
+    if not question:
+        return _DESCRIBE_PROMPT
+    return (
+        f"Looking at this screenshot, answer this question as directly "
+        f"and specifically as possible: {question}\n\n"
+        "Quote exact text, code, or numbers relevant to the answer "
+        "rather than paraphrasing them — that's usually the point of "
+        "asking. If the screenshot genuinely doesn't contain what's "
+        "needed to answer, say so plainly instead of guessing."
+    )
+
+
 def _main_process_has_a_model_loaded() -> bool:
     """
     Cross-process VRAM coordination — see settings.py's SCREEN WATCHER
@@ -97,7 +118,7 @@ def _capture_screenshot_data_uri() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
-def _run_one_cycle(llm, force_local: bool = False) -> bool:
+def _run_one_cycle(llm, force_local: bool = False, question: str = "") -> bool:
     """
     One screenshot + describe + write. Returns True if it ran.
 
@@ -127,7 +148,7 @@ def _run_one_cycle(llm, force_local: bool = False) -> bool:
     # for verbatim — bumped so a real quote doesn't get cut mid-message.
     try:
         description = llm.describe_image(
-            image_uri, _DESCRIBE_PROMPT, max_tokens=500,
+            image_uri, _prompt_for(question), max_tokens=500,
             allow_local_fallback=local_ok, skip_cloud=force_local,
         )
     except Exception as e:
@@ -141,7 +162,7 @@ def _run_one_cycle(llm, force_local: bool = False) -> bool:
     return True
 
 
-def run_once(force_local: bool = False):
+def run_once(force_local: bool = False, question: str = ""):
     """
     One-shot variant of run() for on-demand capture (see
     watcher_manager.capture_now(), called by whats_on_screen()) — loads
@@ -153,12 +174,17 @@ def run_once(force_local: bool = False):
     VRAM collision as the idle-triggered loop is — it silently skips
     (writes nothing) rather than racing the main process's model. See
     _run_one_cycle's docstring for what force_local does instead.
+
+    question, if given, is what the user actually asked — see
+    _prompt_for. Passed as a positional multiprocessing.Process arg by
+    watcher_manager.capture_now(), so it has to survive pickling: a
+    plain str does.
     """
     from llm.llm_client import LLMClient
 
     llm = LLMClient(report_status=False)
     try:
-        _run_one_cycle(llm, force_local=force_local)
+        _run_one_cycle(llm, force_local=force_local, question=question)
     except Exception as e:
         print(f"[screen_watcher] on-demand capture failed: {e}")
 

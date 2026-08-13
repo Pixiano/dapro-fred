@@ -69,7 +69,7 @@ class ScreenWatcherManager:
         with self._lock:
             self._kill_locked()
 
-    def capture_now(self, timeout: float = 12.0, force_local: bool = False) -> bool:
+    def capture_now(self, timeout: float = 12.0, force_local: bool = False, question: str = "") -> bool:
         """
         On-demand capture for whats_on_screen() — spawns a one-shot
         capture (screen_watcher.run_once) and waits for a fresh write
@@ -80,9 +80,8 @@ class ScreenWatcherManager:
         already kills the background loop — a real conversation turn
         always wins the GPU over an on-demand screen check.
 
-        force_local is passed straight through to run_once() — see its
-        docstring. Only meaningful when the caller (whats_on_screen())
-        has already freed the main process's VRAM itself.
+        force_local and question are passed straight through to
+        run_once() — see its docstring for both.
 
         Returns whether a fresh capture landed in time. False also
         covers "skipped, something's already running" and "run_once's
@@ -96,7 +95,7 @@ class ScreenWatcherManager:
             if self._process is not None and self._process.is_alive():
                 return False
             proc = multiprocessing.Process(
-                target=screen_watcher.run_once, args=(force_local,), daemon=True,
+                target=screen_watcher.run_once, args=(force_local, question), daemon=True,
             )
             proc.start()
             self._process = proc

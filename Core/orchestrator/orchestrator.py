@@ -1373,9 +1373,26 @@ class FREDOrchestrator:
                 "this question on my screen', 'what does this error say', "
                 "'summarize/check my screen'. Always takes a fresh look; "
                 "falls back to the last thing seen only if a fresh capture "
-                "genuinely isn't possible right now."
+                "genuinely isn't possible right now. Pass `question` as "
+                "close to the user's actual words as possible (e.g. 'is the "
+                "English in this correct', 'what did the other person "
+                "reply') — it goes straight to the model looking at the "
+                "screen, so a vague or missing question gets back only a "
+                "generic description instead of an answer."
             ),
-            parameters={"type": "object", "properties": {}},
+            parameters={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": (
+                            "What to actually find out or answer about the "
+                            "screen. Leave empty only for a bare 'what's on "
+                            "my screen' with nothing more specific asked."
+                        ),
+                    },
+                },
+            },
         )
 
         self.tools.register(

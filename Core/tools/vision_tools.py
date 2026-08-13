@@ -31,18 +31,28 @@
 from vision import screen_context
 
 
-def whats_on_screen() -> str:
+def whats_on_screen(question: str = "") -> str:
     """Always takes a fresh look at the screen first (see module
     docstring) — falls back to whatever's cached, with an honest hedge,
     only if nothing's ever been captured or a fresh capture genuinely
     couldn't run right now (no app, no safe local fallback, cloud
-    unavailable)."""
+    unavailable).
+
+    question: what the user actually wants to know about the screen —
+    e.g. "is my English correct in this paragraph", "what does this
+    error say". Confirmed live 2026-08-13: with no way to pass this
+    through, the vision model only ever got a generic "describe the
+    app and activity" prompt, and the separate text-only turn had to
+    answer the user's real question from that generic blurb alone —
+    which is why it so often didn't actually answer what was asked.
+    Optional, not required: omitted, this behaves exactly as before
+    (screen_watcher._prompt_for falls back to the generic prompt)."""
     from ui.pill_app import get_current_app
 
     app = get_current_app()
     captured_fresh = False
     if app is not None:
-        captured_fresh = app.screen_watcher.capture_now()
+        captured_fresh = app.screen_watcher.capture_now(question=question)
 
         if not captured_fresh:
             # Cloud failed (or was rate-limited) and the main model was
@@ -52,7 +62,7 @@ def whats_on_screen() -> str:
             # loaded to free; if unload() drops nothing, local was
             # already tried on the first pass and already failed too.
             if app.orchestrator.llm.unload():
-                captured_fresh = app.screen_watcher.capture_now(force_local=True)
+                captured_fresh = app.screen_watcher.capture_now(force_local=True, question=question)
 
     description, age = screen_context.read()
 
