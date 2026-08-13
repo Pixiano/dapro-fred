@@ -246,9 +246,24 @@ CATEGORY_CUES = {
         "summarize today", "today's summary", "wrap up", "sum up today",
         "log today", "save today",
     ),
+    # Confirmed miss, live 2026-08-13: "Can you look AT my screen..."
+    # matched only "display" (bare "screen") — none of the specific
+    # phrases below require "on", not "at"/"check"/"see"/"view", so
+    # whats_on_screen was never offered, only take_screenshot (saves a
+    # file, can't describe anything). Model correctly said it couldn't
+    # see the screen, given the only tool it had access to genuinely
+    # can't. Same shape as the "windows"/"find" cue-coverage misses
+    # elsewhere in this file — added bare "screen" here too rather than
+    # trying to enumerate every preposition, so vision is reachable any
+    # time display is (over-inclusive on purpose, per this file's own
+    # stated philosophy above): the two tools' good descriptions (see
+    # orchestrator.py's take_screenshot/whats_on_screen registration)
+    # are what should disambiguate save-a-file vs. describe-what's-on-it
+    # from here, not a keyword pre-filter deciding it before the model
+    # ever sees the option.
     "vision": (
         "what's on my screen", "what am i looking at", "on my screen",
-        "what's on screen", "screen say", "what does my screen",
+        "what's on screen", "screen say", "what does my screen", "screen",
     ),
     "tasks": (
         # Bare "to do" is deliberately left out — "things to do", "what

@@ -471,8 +471,12 @@ class Dispatcher:
     # _route_web_search's decline above (the LLM can actually fill in
     # create_text_file's `content` argument and a real date, and has
     # the full sentence to parse rather than one greedy regex group).
+    # "says"/"that says" added alongside "saying" — a plain "create a
+    # file called notes.txt that says hello" is short enough (under the
+    # 8-word fallback below) to slip through with only "saying" listed,
+    # reproducing the same swallowed-content bug on a shorter sentence.
     _FILE_COMPLEXITY_CUES = re.compile(
-        r"\b(write|contains?|containing|with the following|saying|"
+        r"\b(write|contains?|containing|with the following|saying|says|"
         r"note that|add(?:ing)?|today'?s date|"
         r"current date|tomorrow'?s date|and (?:in it|then|write|add|put))\b",
         re.IGNORECASE,

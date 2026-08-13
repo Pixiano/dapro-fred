@@ -143,6 +143,26 @@ def test_find_near_a_place_also_offers_web_search():
     tools = intent.tools_for_categories(categories)
     assert "web_search" in tools
 
+
+def test_look_at_my_screen_offers_whats_on_screen():
+    """
+    Real transcript, 2026-08-13: "Can you look at my screen ... tell me
+    if I have used the correct English or not" matched only "display"
+    (bare "screen") — every "vision" cue required the exact phrase "on
+    my screen", which "at my screen" isn't. whats_on_screen was never
+    offered; the model, given only take_screenshot (saves a file, can't
+    describe anything), correctly said it couldn't see the screen. Bare
+    "screen" now also in the vision cues, so vision is reachable
+    whenever display is, same shape as the find/web_search fix above.
+    """
+    categories = intent.match_categories(
+        "Can you look at my screen on the first to give preview feedback "
+        "and tell me if I have used the correct English or not"
+    )
+    assert "vision" in categories
+    tools = intent.tools_for_categories(categories)
+    assert "whats_on_screen" in tools
+
     # The original fix must still hold: this cue is additive, not a
     # replacement, so "find spotify.exe" still offers the file tools too.
     tools = intent.tools_for_categories(intent.match_categories("find spotify.exe"))

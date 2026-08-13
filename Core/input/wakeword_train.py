@@ -494,8 +494,21 @@ def ingest_real_positive_clips():
 
     for i, name in enumerate(names):
         dst_dir = POS_TEST if i < n_test else POS_TRAIN
-        dst = os.path.join(dst_dir, f"real_{os.path.splitext(name)[0]}.wav")
-        if os.path.exists(dst):
+        dst_name = f"real_{os.path.splitext(name)[0]}.wav"
+        dst = os.path.join(dst_dir, dst_name)
+
+        # Check BOTH splits, not just the one this run's shuffle picked.
+        # names is re-shuffled from scratch every call with a fixed seed,
+        # but numpy's permutation for a given seed depends on the list's
+        # length — so adding or removing files in REAL_POSITIVE_DIR
+        # between runs can flip which split an ALREADY-ingested file
+        # lands in this time. Checking only `dst` would then write a
+        # second copy into the other split instead of recognizing the
+        # file as already ingested, silently putting the same clip in
+        # both train and test (inflated eval numbers, no error). Whatever
+        # split it went into the first time is authoritative.
+        if os.path.exists(dst) or os.path.exists(os.path.join(POS_TRAIN, dst_name)) \
+                or os.path.exists(os.path.join(POS_TEST, dst_name)):
             continue
         audio = _load_mono_16k_int16(os.path.join(REAL_POSITIVE_DIR, name))
         sf.write(dst, audio, TARGET_SR)
