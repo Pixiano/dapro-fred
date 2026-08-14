@@ -86,6 +86,7 @@ TOOL_LABELS = {
     "whats_on_screen": "Checking the screen",
     "summarise_today": "Reviewing today",
     "save_today_summary": "Saving to vault",
+    "recall_recent_conversation": "Checking what we just said",
     "git_status": "Checking git status",
     "git_log": "Checking git history",
     "git_diff_summary": "Checking git changes",
@@ -1441,6 +1442,23 @@ class FREDOrchestrator:
                 "call after the user has explicitly confirmed saving."
             ),
             parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="recall_recent_conversation",
+            function=session_summary.recall_recent_conversation,
+            description=(
+                "What was actually said recently in this session, verbatim — "
+                "for 'what did we just talk about' / 'what did I just say' / "
+                "'what did you say a minute ago' style questions. Survives a "
+                "FRED restart, unlike relying on memory of the current process."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "count": {"type": "integer", "description": "How many recent lines to pull back. Default 20."}
+                },
+            },
         )
 
         self.tools.register(

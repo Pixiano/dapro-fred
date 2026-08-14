@@ -129,6 +129,52 @@ def transcript(day: str = None, limit: int = 200) -> str:
     return "\n".join(lines[-limit:])
 
 
+def recall_recent_conversation(count: int = 20) -> str:
+    """
+    What was actually said recently, verbatim — not a theme-grouped
+    summary like summarise_today, and not semantic memory search (which
+    handles a vague query like "what did we just talk about" poorly,
+    since it has no strong content of its own to match against).
+
+    Reads from today's session log via transcript(), not in-memory turn
+    history — this is what makes it survive FRED being restarted mid-
+    conversation, which the orchestrator's own short-term
+    ConversationState (reset to empty on every launch) does not.
+    """
+    text = transcript(limit=count)
+    return text or "Nothing logged in today's session yet, sir."
+
+
+if __name__ == "__main__":
+    # Self-check, not Core/tests/ (regression-only per its README — this
+    # is new logic, not a pinned bug). Same SESSIONS_DIR-swap approach
+    # test_session_summary_logs.py already uses for this module.
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        today = datetime.now().strftime("%Y-%m-%d")
+        (Path(tmp) / f"session_{today}.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in [
+                {"type": "user_speech", "text": "what's the weather tomorrow"},
+                {"type": "fred_speech", "text": "Sunny, high of 30.", "filler": False},
+                {"type": "fred_speech", "text": "thinking...", "filler": True},
+            ]),
+            encoding="utf-8",
+        )
+
+        globals()["SESSIONS_DIR"] = Path(tmp)
+        out = recall_recent_conversation(count=20)
+        assert "Vatsal: what's the weather tomorrow" in out, out
+        assert "FRED: Sunny, high of 30." in out, out
+        assert "thinking..." not in out, out  # fillers dropped
+
+        globals()["SESSIONS_DIR"] = Path(tmp) / "empty_dir_that_does_not_exist"
+        assert recall_recent_conversation() == "Nothing logged in today's session yet, sir."
+
+    print("session_summary.recall_recent_conversation self-check: all passed")
+
+
 def summarise_today(day: str = None, llm=None) -> str:
     """
     A spoken-length recap of the day. With an `llm` handle it writes

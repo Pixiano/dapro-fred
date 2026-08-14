@@ -96,6 +96,7 @@ TOOL_CATEGORIES = {
     "workout": ("workout_split", "todays_workout", "schedule_workouts"),
     "git": ("git_status", "git_log", "git_diff_summary"),
     "recap": ("summarise_today", "save_today_summary"),
+    "recall_recent": ("recall_recent_conversation",),
     "vision": ("whats_on_screen",),
     "tasks": ("add_task", "list_tasks", "complete_task"),
     "agenda": (
@@ -250,6 +251,12 @@ CATEGORY_CUES = {
         "what did we do", "what have we done", "recap", "summarise today",
         "summarize today", "today's summary", "wrap up", "sum up today",
         "log today", "save today",
+    ),
+    "recall_recent": (
+        "what did we just talk about", "what did i just say",
+        "what did you just say", "what did i say", "what did you say",
+        "a minute ago", "just now", "just said", "repeat what we said",
+        "our conversation", "what were we talking about",
     ),
     # Confirmed miss, live 2026-08-13: "Can you look AT my screen..."
     # matched only "display" (bare "screen") — none of the specific
