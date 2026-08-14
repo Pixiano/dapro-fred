@@ -89,6 +89,13 @@ html,body{margin:0;padding:0;background:#02060a;overflow:hidden;height:100%}
 #muteBtn.muted{color:rgba(255,140,140,.9);border-color:rgba(255,120,120,.45);background:rgba(80,20,20,.25)}
 #muteBtn.muted:hover{box-shadow:0 0 10px rgba(255,120,120,.35)}
 
+#lockIcon{width:20px;height:20px;flex:0 0 auto;display:grid;place-items:center;
+  border:1px solid rgba(127,233,255,.3);border-radius:50%;background:rgba(20,60,80,.22);
+  color:rgba(127,233,255,.35);transition:border-color .2s,box-shadow .2s,color .2s,background-color .2s}
+#lockIcon svg{width:12px;height:12px}
+#lockIcon.locked{color:rgba(255,190,90,.95);border-color:rgba(255,190,90,.5);background:rgba(90,60,10,.28);
+  box-shadow:0 0 10px rgba(255,190,90,.35)}
+
 #audioMenu{position:relative}
 #deviceDropdown{position:absolute;top:calc(100% + 8px);right:0;width:220px;z-index:20;
   background:rgba(8,28,40,.92);border:1px solid rgba(127,233,255,.3);box-shadow:0 8px 24px rgba(0,0,0,.5);
@@ -228,6 +235,12 @@ body.still *{animation:none!important;transition:none!important}
     <div id="spectrum"></div>
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:7px">
       <span class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.45)">VOICE LEVEL · LAST 12 SAMPLES</span>
+      <div id="lockIcon" title="Lockdown" aria-label="Lockdown status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="11" width="14" height="9" rx="1.5"></rect>
+          <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+        </svg>
+      </div>
       <div id="audioMenu">
         <button id="muteBtn" type="button" title="Mute" aria-label="Mute">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -412,6 +425,7 @@ function paintSystems(d){
   // click handler doesn't flicker back to the old state on the next poll
   // landing before FRED has actually applied the change.
   if (!muteBusy && typeof sub.muted === "boolean") paintMuteIcon(sub.muted);
+  if (typeof sub.locked === "boolean") $("lockIcon").classList.toggle("locked", sub.locked);
   const vram = (d.vram_used_mb && d.vram_total_mb) ? d.vram_used_mb/d.vram_total_mb*100 : null;
   const power = (d.power_w && d.power_limit_w) ? d.power_w/d.power_limit_w*100 : null;
   // For the three FRED rows the percentage is readiness, not utilisation:

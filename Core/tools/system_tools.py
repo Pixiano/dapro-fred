@@ -12,7 +12,7 @@ from datetime import datetime
 
 from tools.assist_tools import resolve_user_path
 from config.settings import DATA_DIR
-from state import lockdown_state
+from state import lockdown_log, lockdown_state
 
 
 # =========================================================
@@ -423,16 +423,87 @@ def get_current_time() -> str:
 # SYSTEM STATE
 # =========================================================
 
-def lockdown(should_lock: bool = True) -> str:
+# Spoken together with the DISENGAGE phrase only ("unlock fred 1111")
+# — engaging stays a bare trigger, the friction is reserved for getting
+# out. No popup, no storage, just a fixed shared PIN checked in code.
+# ponytail: plain demo-grade constant, not a real secret; swap for
+# something less trivial (and less trackable in git) before this
+# protects anything that actually matters.
+_LOCKDOWN_PIN = "1111"
+
+
+def lockdown_engage() -> str:
     """
-    Engage or lift FRED's lockdown mode. While locked, every other
-    tool call is refused (see ToolRegistry.execute) — conversation
-    still works, FRED just can't act on anything.
+    Engage FRED's lockdown mode — bare trigger, no PIN needed (only
+    lifting it does). Every other tool call gets refused while locked
+    (see ToolRegistry.execute) — conversation still works.
     """
 
-    lockdown_state.set_locked(should_lock)
+    if lockdown_state.is_locked():
+        # A fast/small model has been observed emitting the same tool
+        # call more than once for one utterance — without this, a
+        # double-fire here would just be two identical no-op engages.
+        return "Already locked down, sir."
 
-    return "Lockdown engaged, sir." if should_lock else "Lockdown lifted, sir."
+    lockdown_state.set_locked(True)
+    lockdown_log.log_event("engaged")
+
+    from ui.pill_app import get_current_app
+    app = get_current_app()
+    if app is not None:
+        _stand_down_models(app)
+
+    return "Lockdown engaged, sir."
+
+
+def lockdown_disengage(pin: str = "") -> str:
+    """Lift FRED's lockdown mode — must be said together with the PIN
+    ("unlock fred 1111")."""
+
+    if not lockdown_state.is_locked():
+        return "Not locked — nothing to lift."
+
+    if pin.strip() != _LOCKDOWN_PIN:
+        return "Still locked — wrong PIN."
+
+    lockdown_state.set_locked(False)
+    lockdown_log.log_event("disengaged")
+
+    from ui.pill_app import get_current_app
+    app = get_current_app()
+    if app is not None:
+        app.lifecycle.preload()  # same "bring back whatever was unloaded" call hotkey/wake already use
+
+    return "Lockdown lifted, sir."
+
+
+def _stand_down_models(app) -> None:
+    """
+    Unloads LLM/Whisper/Kokoro once the current turn is done with them —
+    not synchronously here, since this function runs mid-turn (the
+    finalize step right after this still needs the LLM to phrase the
+    spoken reply, and TTS to speak it). Wake-word detection is untouched
+    and keeps listening — that's what "unlock fred" arrives through.
+
+    Self-healing on the way back: wake-triggered turns already call
+    lifecycle.preload() on activation (see pill_app._on_hold_start), so
+    even without lockdown_disengage()'s explicit preload() call above,
+    the next "hey FRED" would reload things anyway.
+    """
+    import threading
+    import time
+
+    def run():
+        for _ in range(100):  # ~10s max wait — ponytail: fixed, raise if turns run longer
+            if not app.lifecycle.busy():
+                break
+            time.sleep(0.1)
+        for model in (app.lifecycle.llm, app.lifecycle.stt, app.lifecycle.tts):
+            if model is not None and model.is_loaded():
+                model.unload()
+        lockdown_log.log_event("standby")
+
+    threading.Thread(target=run, daemon=True).start()
 
 
 def describe_self(tool_names: list) -> str:

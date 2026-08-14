@@ -105,3 +105,22 @@ def _build_system_prompt() -> str:
 # on the next FRED restart, not mid-session — these three files are
 # expected to change rarely, so this trades hot-reload for simplicity.
 SYSTEM_PROMPT = _build_system_prompt()
+
+# Appended, not swapped in — lockdown mode is still FRED, just missing
+# most of what it can do. Keeping the base identity means the voice and
+# personality don't shift, only the willingness to act.
+_LOCKDOWN_ADDENDUM = """
+Lockdown mode is active.
+
+Every tool and action is switched off right now — the only thing you
+can still do is talk. If what's being asked needs a tool call, a
+lookup, or any action at all, don't attempt it and don't explain the
+whole situation. Just give a short, calm acknowledgment that it's not
+available while locked, then stop. Ordinary conversation is fine and
+doesn't need any of this — answer normally.
+""".strip()
+
+LOCKDOWN_SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n---\n\n" + _LOCKDOWN_ADDENDUM
+
+assert SYSTEM_PROMPT in LOCKDOWN_SYSTEM_PROMPT
+assert len(LOCKDOWN_SYSTEM_PROMPT) > len(SYSTEM_PROMPT)

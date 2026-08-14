@@ -159,11 +159,18 @@ class Dispatcher:
                 self._route_unmute,
             ),
             (
-                re.compile(r"^lockdown$", re.IGNORECASE),
+                # Bare trigger, no PIN — engaging stays easy, the
+                # friction is reserved for getting back out.
+                re.compile(r"^(?:lockdown(?: protocol)?|engage lockdown)$", re.IGNORECASE),
                 self._route_lockdown_on,
             ),
             (
-                re.compile(r"^(?:unlock|stand down)$", re.IGNORECASE),
+                # No popup — a native popup was tried and repeatedly
+                # failed on Windows' foreground-focus rules, not worth
+                # the fragility for a demo. PIN is said together with
+                # the phrase instead ("unlock fred 1111") and checked in
+                # system_tools.lockdown_disengage() itself.
+                re.compile(r"^(?:unlock fred|lift lockdown|stand down)\s+(?P<pin>\d+)$", re.IGNORECASE),
                 self._route_lockdown_off,
             ),
             (
@@ -584,12 +591,12 @@ class Dispatcher:
     @staticmethod
     def _route_lockdown_on(match: re.Match) -> dict:
 
-        return {"tool": "lockdown", "arguments": {"should_lock": True}}
+        return {"tool": "lockdown_engage", "arguments": {}}
 
     @staticmethod
     def _route_lockdown_off(match: re.Match) -> dict:
 
-        return {"tool": "lockdown", "arguments": {"should_lock": False}}
+        return {"tool": "lockdown_disengage", "arguments": {"pin": match.group("pin")}}
 
     @staticmethod
     def _route_restart_fred(match: re.Match) -> dict:

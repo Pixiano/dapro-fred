@@ -106,13 +106,40 @@ Operating modes (2026-08-14) — not designed yet, just logged so it's
 not lost:
 
   1. General mode — what FRED runs as today, no change needed.
-  2. Lockdown mode — BUILT 2026-08-14. Say "lockdown" to engage,
-     "unlock" or "stand down" to lift (exact-match, no LLM in the
-     loop). While locked, every tool call is refused (gated once
-     in ToolRegistry.execute — Core/tools/registry.py — not
-     duplicated per tool); conversation still works, FRED just
-     can't act on anything. State: Core/state/lockdown_state.py.
+  2. Lockdown mode — BUILT 2026-08-14. Engage with "lockdown",
+     "lockdown protocol", or "engage lockdown" — bare trigger, no
+     PIN (exact-match, no LLM in the loop). Lift with "unlock fred
+     1111", "lift lockdown 1111", or "stand down 1111" — the PIN
+     is only required to get OUT, checked in
+     system_tools.lockdown_disengage() (_LOCKDOWN_PIN constant,
+     currently "1111" — a demo-grade placeholder, not a real
+     secret). Works spoken or typed into the HUD textbox, since
+     both route through the same dispatcher.
+
+     While locked: every other tool call is refused (gated once in
+     ToolRegistry.execute — Core/tools/registry.py — not
+     duplicated per tool); conversation still works via a second,
+     appended system prompt (personality/system_prompt.py's
+     LOCKDOWN_SYSTEM_PROMPT) that tells the LLM to acknowledge
+     rather than attempt anything needing a tool. A few seconds
+     after engaging, LLM/Whisper/Kokoro unload to standby
+     (wake-word detection keeps listening — that's what "unlock
+     fred" arrives through); disengaging calls the same preload()
+     hotkey/wake-word already use to bring them back.
+
+     State persists across restarts (Core/state/lockdown_state.py,
+     Core/data/lockdown_state.json). HUD shows a lock indicator
+     (hud/index.html). Events logged to
+     Core/data/lockdown_log.jsonl (Core/state/lockdown_log.py).
      Test: Core/tests/test_lockdown.py.
+
+     Abandoned along the way: a native PIN-entry popup with DPAPI-
+     encrypted credential storage — built, but SetForegroundWindow/
+     SetFocus can't reliably be called from a background thread on
+     Windows (foreground-lock restriction), and even after fixing
+     that with AttachThreadInput, the voice-triggered activation
+     stayed unreliable. Not worth the fragility for a demo; ripped
+     out in favor of the plain spoken/typed PIN above.
   3. Friend mode — a general "talking to a friend, not Vatsal"
      mode, possibly with per-friend variants later. Undecided:
      how it's triggered, what changes (persona? memory/vault

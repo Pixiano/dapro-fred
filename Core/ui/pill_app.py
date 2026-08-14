@@ -39,6 +39,7 @@ from orchestrator import canned_replies
 from orchestrator.orchestrator import TOOL_LABELS, FREDOrchestrator
 from input.hotkey import HoldHotkey
 from input.wakeword import WakewordListener, watch_for_silence
+from state import lockdown_state
 from tools import machine_tools
 from ui.pill import render as R
 from ui.pill.indicators import random_indicator
@@ -225,17 +226,22 @@ class PillApp:
         """
         lifecycle = getattr(self, "lifecycle", None)
         if lifecycle is None:
-            return {"llm": False, "whisper": False, "kokoro": False, "muted": False}
+            return {"llm": False, "whisper": False, "kokoro": False, "muted": False, "locked": False}
         loaded = lambda m: bool(m is not None and m.is_loaded())
         try:
             muted = machine_tools.is_muted()
         except Exception:
             muted = False
+        try:
+            locked = lockdown_state.is_locked()
+        except Exception:
+            locked = False
         return {
             "llm": loaded(lifecycle.llm),
             "whisper": loaded(lifecycle.stt),
             "kokoro": loaded(lifecycle.tts),
             "muted": muted,
+            "locked": locked,
         }
 
     def _mirror_window_to_bus(self):
@@ -325,7 +331,13 @@ class PillApp:
             if self._recording or self._turn_lock.locked():
                 print("[PillApp] greeting skipped — already in conversation")
                 return
-            self._speak_proactive(pick_greeting())
+            greeting = pick_greeting()
+            try:
+                if lockdown_state.is_locked():
+                    greeting += " All systems nominal, sir. Lockdown mode on."
+            except Exception:
+                pass
+            self._speak_proactive(greeting)
 
         threading.Thread(target=run, daemon=True).start()
         print(f"[PillApp] greeting in {delay:.0f}s")

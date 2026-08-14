@@ -5,9 +5,10 @@ import re
 from datetime import datetime
 
 from state.conversation_state import ConversationState
+from state import lockdown_state
 from memory.memory_manager import MemoryManager
 from llm.llm_client import LLMClient
-from personality.system_prompt import SYSTEM_PROMPT
+from personality.system_prompt import SYSTEM_PROMPT, LOCKDOWN_SYSTEM_PROMPT
 from tools.registry import ToolRegistry
 from tools import system_tools
 from tools import web_tools
@@ -867,13 +868,23 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
-            name="lockdown",
-            function=system_tools.lockdown,
-            description="Engage or lift FRED's lockdown mode, which refuses every other tool call until lifted. Conversation still works while locked.",
+            name="lockdown_engage",
+            function=system_tools.lockdown_engage,
+            description=(
+                "Engage FRED's lockdown mode, which refuses every other tool call "
+                "until lifted (conversation still works). No PIN needed to engage."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="lockdown_disengage",
+            function=system_tools.lockdown_disengage,
+            description="Lift FRED's lockdown mode. Must be said together with the PIN, e.g. 'unlock fred 1111'.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "should_lock": {"type": "boolean", "description": "True to engage lockdown, false to lift it."}
+                    "pin": {"type": "string", "description": "The PIN spoken along with the trigger phrase."}
                 },
             },
         )
@@ -2732,7 +2743,7 @@ class FREDOrchestrator:
         # catches the exception and returns that fallback rather than
         # propagating it. Concatenating into one message is also just
         # more correct prompt construction regardless of model.
-        system_sections = [SYSTEM_PROMPT]
+        system_sections = [LOCKDOWN_SYSTEM_PROMPT if lockdown_state.is_locked() else SYSTEM_PROMPT]
 
         # Today's date, rebuilt every turn. Nothing in SYSTEM_PROMPT, the
         # vault, or the tool menu carried it, so the model dated things

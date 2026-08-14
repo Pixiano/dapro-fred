@@ -1,6 +1,7 @@
 # Core/tools/registry.py
 
 from state import lockdown_state
+from state import lockdown_log
 
 
 class ToolRegistry:
@@ -65,10 +66,11 @@ class ToolRegistry:
 
         # Single choke point every tool call passes through — this is
         # where lockdown mode actually refuses things, rather than a
-        # guard duplicated in every tool. "lockdown" itself is always
-        # exempt, or there'd be no way to ever say "unlock" again.
-        if tool_name != "lockdown" and lockdown_state.is_locked():
-            return "FRED is in lockdown mode, sir — say 'unlock' to restore access."
+        # guard duplicated in every tool. The lockdown tools themselves
+        # are always exempt, or there'd be no way to ever unlock again.
+        if tool_name not in ("lockdown_engage", "lockdown_disengage") and lockdown_state.is_locked():
+            lockdown_log.log_event("blocked", detail=tool_name)
+            return "FRED is in lockdown mode, sir — say 'unlock fred' to restore access."
 
         tool = self.tools[tool_name]
 

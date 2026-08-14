@@ -115,6 +115,13 @@ Core/data/proactive_state.json
 # SCREEN WATCHER section) — pure runtime state, regenerates on launch.
 Core/data/llm_status.json
 
+# Lockdown mode: persisted lock/unlock flag and event log (see
+# Core/state/lockdown_state.py, Core/state/lockdown_log.py) — runtime
+# state, not the PIN itself (that's DPAPI-encrypted outside the repo
+# entirely, see Core/state/lockdown_credentials.py).
+Core/data/lockdown_state.json
+Core/data/lockdown_log.jsonl
+
 # Screen-watcher's cached description of the screen. Never the
 # screenshot image itself (that never touches disk at all — see
 # Core/vision/screen_watcher.py) but the text description is still a
