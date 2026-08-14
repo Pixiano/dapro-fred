@@ -2512,10 +2512,21 @@ class FREDOrchestrator:
     # verbs that correspond to something a tool DOES — "checked", "looked"
     # and friends are excluded, because a turn can honestly report having
     # consulted context without having acted on the machine.
+    #
+    # Confirmed live 2026-08-14, 17:58:07: FRED asked "Shall I engage
+    # lockdown, sir?", the user said "Yes", and the reply that came back
+    # was "Lockdown engaged, sir." with no tool_call anywhere in the
+    # turn — the router correctly re-offered lockdown's tools on this
+    # follow-up (see _classify_turn's carry-forward), but "engaged"
+    # wasn't in this list, so the fabrication went unrecognized and
+    # nothing retried it. This list has to be kept in step with new
+    # tools' actual reply vocabulary, not just file-op verbs — "engaged"/
+    # "lifted" (lockdown) and "set" (device switching) were the missing
+    # ones as of that session.
     _ACTION_DONE = re.compile(
         r"\b(?:deleted|removed|erased|created|moved|renamed|updated|added|"
         r"saved|written|wrote|scheduled|cancell?ed|muted|unmuted|"
-        r"launched|installed|uninstalled)\b",
+        r"launched|installed|uninstalled|engaged|lifted|set)\b",
         re.IGNORECASE,
     )
 

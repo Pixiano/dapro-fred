@@ -159,3 +159,65 @@ def test_an_ordinary_reply_is_left_alone():
     fred, seen = _fred([{"content": "There are three notes in that folder, sir."}])
     assert fred._generate_with_tools(_messages()) == "There are three notes in that folder, sir."
     assert len(seen["menus"]) == 1
+
+
+# Live 2026-08-14, 17:58:07: FRED asked "Shall I engage lockdown, sir?",
+# the user said "Yes", and the reply was "Lockdown engaged, sir." with
+# no tool_call anywhere in the turn — proven fabricated 20 seconds
+# later when the user said "Engage Lockdown" again and it genuinely
+# engaged that time (a real dispatcher-routed tool_call this time).
+# _classify_turn's carry-forward correctly re-offered lockdown's tools
+# on the "Yes" follow-up (that part worked) — the gap was purely
+# _ACTION_DONE not recognizing "engaged" as a completion claim, so
+# nothing ever retried it.
+
+def test_the_predicate_recognizes_non_file_op_verbs_too():
+    claims = FREDOrchestrator.__new__(FREDOrchestrator)._claims_completed_action
+    assert claims("Lockdown engaged, sir.")
+    assert claims("Lockdown lifted, sir.")
+    assert claims("Speaker set to Speakers (Realtek(R) Audio)")
+    # Still not a claim: a question, or an explicit refusal.
+    assert not claims("Shall I engage lockdown, sir?")
+    assert not claims("I can't engage lockdown right now.")
+
+
+def test_a_fabricated_lockdown_engage_retries_with_lockdown_tools():
+    """The exact 17:58:07 shape: needs_tools=True, lockdown's tools
+    offered, model claims completion with no tool_call. Must retry with
+    lockdown_engage available and actually run it, rather than let the
+    claim stand. lockdown_engage isn't destructive (unlike delete_file
+    in the tests above), so — same as test_a_real_tool_run_may_report_
+    completion — the retry's real tool_call still needs a third LLM
+    call afterward to phrase the finalize reply."""
+    call = {"id": "1", "function": {"name": "lockdown_engage", "arguments": "{}"}}
+    fred, seen = _fred(
+        [
+            {"content": "Lockdown engaged, sir."},
+            {"content": None, "tool_calls": [call]},
+            {"content": "Lockdown engaged, sir."},
+        ],
+        offered=("lockdown_engage", "lockdown_disengage"),
+    )
+
+    # close_candidates() (called via _announce_ambiguity's caller) needs
+    # a real .rank() — the other tests in this file never offer 2+
+    # tools at once, so {} never gets touched. This is offering exactly
+    # what lockdown really offers together.
+    fred._tool_router = lambda: types.SimpleNamespace(rank=lambda text: [])
+
+    # The widening retry calls get_tool_definitions() with no `only` —
+    # _fred()'s default stub then falls back to its own hardcoded
+    # read_vault_file/delete_file pair, which is why the other tests'
+    # widening finds delete_file. Here it needs to find lockdown_engage
+    # the same way.
+    fred.tools.get_tool_definitions = lambda only=None: [
+        {"function": {"name": n}}
+        for n in (only if only else ["lockdown_engage", "lockdown_disengage"])
+    ]
+
+    reply = fred._generate_with_tools([{"role": "user", "content": "Yes"}])
+
+    assert seen["menus"][0] == ["lockdown_engage", "lockdown_disengage"]
+    assert "lockdown_engage" in seen["menus"][1], "retry did not widen/keep the real tool"
+    assert reply == "Lockdown engaged, sir."
+    assert len(seen["menus"]) == 3, "a real tool_call must still finalize through the LLM"
