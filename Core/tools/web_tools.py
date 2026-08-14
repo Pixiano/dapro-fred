@@ -72,10 +72,27 @@ def web_search(query: str, max_results: int = 5) -> str:
 # WEATHER
 # =========================================================
 
-def get_weather(location: str = "") -> str:
+# "" / "now" / "today" -> 0 (current conditions, unchanged path below).
+# Anything else recognized -> a wttr.in forecast day offset. wttr.in's
+# free tier only returns 3 days (today/+1/+2), so that's the entire
+# map — no historical weather, no further-out forecast, on purpose.
+_FORECAST_DAYS = {
+    "": 0, "now": 0, "today": 0,
+    "tomorrow": 1,
+    "day after tomorrow": 2, "overmorrow": 2,
+}
+
+
+def get_weather(location: str = "", when: str = "") -> str:
     """
-    Get current weather for a location (or the caller's
-    auto-detected location if left blank), via wttr.in.
+    Get weather for a location (or the caller's auto-detected location
+    if left blank), via wttr.in.
+
+    `when` blank/"now"/"today" -> current conditions (below, unchanged).
+    "tomorrow" / "day after tomorrow" -> a short forecast via wttr.in's
+    JSON endpoint. Anything else (further out, or any past reference)
+    gets a plain "can't do that" reply instead of a guess — wttr.in's
+    free tier has no historical data and only forecasts 3 days out.
 
     Requests condition, temperature and resolved location as three
     separate fields (%C|%t|%l) rather than wttr.in's default one-line
@@ -85,6 +102,15 @@ def get_weather(location: str = "") -> str:
     TTS can't reliably render never appears, and phrasing three fields is
     still zero LLM calls.
     """
+
+    offset = _FORECAST_DAYS.get((when or "").strip().lower())
+    if offset is None:
+        return (
+            "I can only forecast about 3 days ahead, and I don't have "
+            "historical weather data."
+        )
+    if offset != 0:
+        return _get_forecast(location, offset)
 
     url = f"https://wttr.in/{location}" if location else "https://wttr.in/"
 
@@ -120,3 +146,84 @@ def get_weather(location: str = "") -> str:
 
     # Lowercased for "with light rain showers" — mid-sentence, not a label.
     return f"It's {temp} in {resolved} right now, with {condition[0].lower()}{condition[1:]}."
+
+
+def _get_forecast(location: str, offset: int) -> str:
+    """
+    offset 1 or 2 -> wttr.in's JSON endpoint, day index `offset` into
+    its 3-day (today/+1/+2) forecast array. Midday (hourly block 4 of
+    the ~8 three-hour blocks) stands in for "the day's condition" —
+    good enough for a spoken one-liner, not a full breakdown.
+    """
+
+    url = f"https://wttr.in/{location}" if location else "https://wttr.in/"
+
+    try:
+        response = requests.get(
+            url,
+            params={"format": "j1"},
+            headers={"User-Agent": "curl"},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        body = (e.response.text or "").strip().lower() if e.response is not None else ""
+        if "not found" in body or "invalid" in body:
+            return f"Couldn't find weather for '{location}'." if location else "Couldn't fetch weather."
+        return f"Couldn't fetch weather: {e}"
+    except requests.RequestException as e:
+        return f"Couldn't fetch weather: {e}"
+
+    try:
+        data = response.json()
+        day = data["weather"][offset]
+        max_t, min_t = day["maxtempC"], day["mintempC"]
+        condition = day["hourly"][4]["weatherDesc"][0]["value"]
+        place = data["nearest_area"][0]["areaName"][0]["value"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return "Couldn't get the forecast — wttr.in didn't return what I expected."
+
+    when_word = "Tomorrow" if offset == 1 else "The day after tomorrow"
+    return (
+        f"{when_word} in {place} looks like {condition[0].lower()}{condition[1:]}, "
+        f"with a high of {max_t}°C and a low of {min_t}°C."
+    )
+
+
+if __name__ == "__main__":
+    # Self-check for the forecast branch logic — not in Core/tests/
+    # because that folder's own README restricts it to regression
+    # tests pinning a bug that actually happened; this is new-feature
+    # logic, not a pinned bug. Offline: mocks requests.get.
+    from unittest.mock import patch
+
+    _FAKE_J1 = {
+        "nearest_area": [{"areaName": [{"value": "Mumbai"}]}],
+        "weather": [
+            {"maxtempC": "30", "mintempC": "25", "hourly": [{}] * 4 + [{"weatherDesc": [{"value": "Sunny"}]}]},
+            {"maxtempC": "31", "mintempC": "26", "hourly": [{}] * 4 + [{"weatherDesc": [{"value": "Cloudy"}]}]},
+            {"maxtempC": "29", "mintempC": "24", "hourly": [{}] * 4 + [{"weatherDesc": [{"value": "Rainy"}]}]},
+        ],
+    }
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return _FAKE_J1
+
+    with patch("requests.get", return_value=_FakeResponse()):
+        tomorrow = get_weather("Mumbai", "tomorrow")
+        assert "Mumbai" in tomorrow and "cloudy" in tomorrow and "31" in tomorrow, tomorrow
+
+        overmorrow = get_weather("Mumbai", "day after tomorrow")
+        assert "rainy" in overmorrow and "29" in overmorrow, overmorrow
+
+    out_of_range = get_weather("Mumbai", "next week")
+    assert "3 days" in out_of_range and "historical" in out_of_range, out_of_range
+
+    past = get_weather("Mumbai", "yesterday")
+    assert "3 days" in past and "historical" in past, past
+
+    print("web_tools weather forecast self-check: all passed")

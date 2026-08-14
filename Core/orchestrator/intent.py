@@ -74,6 +74,7 @@ TOOL_CATEGORIES = {
     "sysinfo": ("get_system_status", "get_network_status"),
     "apps": ("launch_application", "open_website", "open_path", "open_vault_file"),
     "audio": ("get_volume", "set_volume", "adjust_volume", "mute", "media_control"),
+    "lockdown": ("lockdown",),
     "display": ("get_brightness", "set_brightness", "adjust_brightness", "take_screenshot"),
     "clipboard": ("get_clipboard", "set_clipboard"),
     "windows": (
@@ -159,6 +160,7 @@ CATEGORY_CUES = {
         # the bare form was pure liability with no coverage it alone
         # provided.
     ),
+    "lockdown": ("lockdown", "lock down", "unlock", "stand down"),
     "display": (
         "brightness", "brighter", "dimmer", "dim", "screen",
         "screenshot", "screen shot", "capture", "grab the screen",

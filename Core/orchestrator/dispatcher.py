@@ -159,6 +159,14 @@ class Dispatcher:
                 self._route_unmute,
             ),
             (
+                re.compile(r"^lockdown$", re.IGNORECASE),
+                self._route_lockdown_on,
+            ),
+            (
+                re.compile(r"^(?:unlock|stand down)$", re.IGNORECASE),
+                self._route_lockdown_off,
+            ),
+            (
                 re.compile(
                     r"^set volume(?: to)? (?P<level>\d+)%?$", re.IGNORECASE
                 ),
@@ -572,6 +580,16 @@ class Dispatcher:
     def _route_unmute(match: re.Match) -> dict:
 
         return {"tool": "mute", "arguments": {"should_mute": False}}
+
+    @staticmethod
+    def _route_lockdown_on(match: re.Match) -> dict:
+
+        return {"tool": "lockdown", "arguments": {"should_lock": True}}
+
+    @staticmethod
+    def _route_lockdown_off(match: re.Match) -> dict:
+
+        return {"tool": "lockdown", "arguments": {"should_lock": False}}
 
     @staticmethod
     def _route_restart_fred(match: re.Match) -> dict:

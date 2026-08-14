@@ -1,5 +1,8 @@
 # Core/tools/registry.py
 
+from state import lockdown_state
+
+
 class ToolRegistry:
     """
     Central registry for all executable tools in F.R.E.D.
@@ -59,6 +62,13 @@ class ToolRegistry:
             raise ValueError(
                 f"Tool '{tool_name}' not found."
             )
+
+        # Single choke point every tool call passes through — this is
+        # where lockdown mode actually refuses things, rather than a
+        # guard duplicated in every tool. "lockdown" itself is always
+        # exempt, or there'd be no way to ever say "unlock" again.
+        if tool_name != "lockdown" and lockdown_state.is_locked():
+            return "FRED is in lockdown mode, sir — say 'unlock' to restore access."
 
         tool = self.tools[tool_name]
 

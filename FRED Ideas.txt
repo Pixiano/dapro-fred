@@ -101,3 +101,174 @@ STT accuracy — Vosk mishearing simple commands:
   specifically) — homed in Phase 20 of the JARVIS roadmap now, since
   it's exactly the "make voice reliable for daily use" work that
   phase is already about. See that file for the actual task writeup.
+
+Operating modes (2026-08-14) — not designed yet, just logged so it's
+not lost:
+
+  1. General mode — what FRED runs as today, no change needed.
+  2. Lockdown mode — BUILT 2026-08-14. Say "lockdown" to engage,
+     "unlock" or "stand down" to lift (exact-match, no LLM in the
+     loop). While locked, every tool call is refused (gated once
+     in ToolRegistry.execute — Core/tools/registry.py — not
+     duplicated per tool); conversation still works, FRED just
+     can't act on anything. State: Core/state/lockdown_state.py.
+     Test: Core/tests/test_lockdown.py.
+  3. Friend mode — a general "talking to a friend, not Vatsal"
+     mode, possibly with per-friend variants later. Undecided:
+     how it's triggered, what changes (persona? memory/vault
+     access? tool access?), how per-friend customization works.
+     Not started.
+
+Speaker recognition (voice ID) (2026-08-14):
+
+  FRED currently has no way to tell WHO is talking, only that the
+  wake word was said. A speaker-embedding model (SpeechBrain
+  ECAPA-TDNN or Resemblyzer — both fine on CPU, no GPU needed)
+  could enroll Vatsal's voice once, then score every utterance
+  against it via cosine similarity.
+
+  Ties directly into the operating modes above:
+  - Friend mode trigger: an unrecognized voice auto-switches mode
+    instead of needing a manual command.
+  - Lockdown mode gate: sensitive commands (vault, PC control)
+    could require a voice match, refusing unrecognized speakers
+    automatically.
+
+  Ceiling: a voice-embedding check can be defeated by a good voice
+  clone — Vatsal literally builds that tool (Project Copy), so this
+  is not a real security boundary on its own. Fine as a UX gate for
+  mode-switching; pair with something else (PIN phrase, explicit
+  confirmation) before trusting it for anything that actually
+  matters.
+
+  Not started — revisit once Friend/Lockdown modes get designed,
+  since this is the natural trigger for both.
+
+Voice-cloning-adjacent ideas (2026-08-14):
+
+  Separate from Project Copy itself, but same tech family:
+  - Paralinguistic/emotion detection from voice (stressed, tired,
+    joking) using similar embedding-style models with a different
+    head — could let FRED shift tone. Low priority, not urgent.
+  - The real intersection point is the anti-spoofing note above —
+    Vatsal's own clone-building expertise is exactly the threat
+    model any voice-based auth in FRED needs to account for.
+
+Camera / visual feed (2026-08-14):
+
+  Vatsal is open to this — flagged as GPU-taxing but "a very
+  interesting and viable idea." Core/vision/ today only handles
+  screen capture (screen_watcher.py: separate process, interval-
+  gated, skips its cycle if the main process has a model loaded to
+  avoid VRAM collision). A camera watcher is the same pattern with
+  the frame source swapped, not a new subsystem.
+
+  To keep it cheap:
+  - Trigger capture on-demand (wake word / "look at me") rather
+    than continuous streaming.
+  - For any ambient/always-on version later: gate the expensive
+    VLM call behind a near-free classical check first (OpenCV
+    face/motion detection, CPU-only), only escalate to the VLM
+    when that check finds something.
+  - If face recognition is ever needed, reuse the pipeline from
+    dapro-drive-face-recognition-plan.md (Drive project) instead
+    of standing up a second model.
+
+  Not started — revisit when Vatsal wants to spend the GPU budget
+  on it.
+
+  Concrete setup sketch (2026-08-14), reusing the screen-watcher
+  scaffolding rather than building a new subsystem:
+  - Capture: swap the screenshot grab in screen_watcher.py for
+    cv2.VideoCapture(0) grabbing one frame. Same file shape, same
+    VLM call on the frame.
+  - Keep it a separate OS process, same reason as screen (shared-
+    process VLM calls already crashed this codebase once).
+  - Reuse the existing GPU-arbitration check (LLM_STATUS_PATH) —
+    skip the cycle if the main model is loaded. This is the actual
+    mitigation for the GPU-cost concern, already built for screen.
+  - Expose as an on-demand tool (whats_around_me(), mirroring
+    whats_on_screen()) via capture_now() — triggered by "look at
+    me," not a continuous stream or idle-loop watcher, unless
+    ambient awareness is wanted later.
+  - Needs real hardware: a webcam pointed at Vatsal. Undecided
+    whether that's dedicated or an existing one.
+
+  Facial recognition (2026-08-14) — layers on top of the camera,
+  requested so FRED can tell Vatsal apart from parents/family/
+  friends and let that trigger protocols proactively:
+  - Cheap gate before any VLM call: OpenCV/dlib face detection
+    (near-free, CPU) decides "is there a face" before spending a
+    VLM call on it.
+  - Recognition: face-embedding model, enroll faces, cosine-
+    similarity match — same shape as the speaker-ID idea above.
+    Reuse the pipeline from dapro-drive-face-recognition-plan.md
+    (Drive project) instead of standing up a second model.
+  - Pairs with speaker ID (voice) as the visual counterpart — face
+    match + voice match together feed the same Friend-mode/
+    Lockdown-mode trigger and let FRED recognize a specific person,
+    not just "someone," for proactive JARVIS-style protocols.
+  - Not started, depends on the camera setup above existing first.
+
+Phone integration (2026-08-14):
+
+  Two tiers, deliberately scoped down by Vatsal himself given
+  FRED's current track record — only the first is considered
+  viable right now:
+
+  1. Remote-control app sending commands to FRED's API — Android
+     only ("Apple is a shit ton of work"). Lets Vatsal trigger
+     FRED actions (starting with phone calls) from his phone
+     instead of only from the PC mic. Needs: an API endpoint on
+     FRED's side to receive commands, and an Android app (or
+     Tasker/HTTP-shortcut style approach before a custom app) to
+     send them.
+  2. Full phone control (FRED reads/acts on the whole phone, not
+     just placing calls) — explicitly deferred by Vatsal as too
+     advanced for where FRED's reliability is right now. Revisit
+     only after the simpler call-only version is solid.
+
+  Not started.
+
+Weather forecasts (2026-08-14) — FUTURE half BUILT, past still not
+started:
+
+  get_weather(location="", when="") in Core/tools/web_tools.py.
+  `when` blank/"now"/"today" is the original current-conditions
+  path, untouched. "tomorrow" / "day after tomorrow" pulls a real
+  forecast from wttr.in's JSON endpoint (?format=j1) — high/low +
+  midday condition. Anything else (further out, or any past
+  reference) gets an honest "can't see that far, no historical
+  data" reply instead of a guess.
+
+  Past/historical: still not started — wttr.in has no historical
+  data, would need a separate free/no-key source, e.g. Open-Meteo's
+  historical archive API. Revisit if it's actually wanted later.
+
+  Known limitation, not fixed (pre-existing, out of scope for
+  today): the deterministic dispatcher's weather regex greedily
+  captures everything after "in/for/at" as the location, so
+  "what's the weather in Mumbai tomorrow" (location + day in one
+  sentence) is parsed as location="Mumbai tomorrow" and fails
+  gracefully ("couldn't find weather for 'Mumbai tomorrow'")
+  instead of returning tomorrow's Mumbai forecast. Ask for the two
+  separately ("what's the weather in Mumbai" / "what's tomorrow's
+  weather") until this is worth a real fix.
+
+  Self-check: __main__ block in web_tools.py itself (not
+  Core/tests/ — that folder's README restricts it to regression
+  tests pinning a bug that actually happened, and this is new
+  logic, not a pinned bug).
+
+Next in the pipeline (as of 2026-08-14, in priority order):
+
+  1. Camera watcher (whats_around_me) — highest-value remaining
+     item, mechanical reuse of screen_watcher.py's pattern.
+  2. Speaker ID (voice recognition) — backend only for now, don't
+     wire it as Friend mode's live trigger until it's been tested
+     outside a demo setting.
+  3. Facial recognition — depends on #1 existing first.
+  4. Friend mode itself — needs #2 and/or manual-trigger design
+     decided.
+  5. Phone integration (calling) — multi-day, needs a real Android
+     app + new API surface. Not a quick add.

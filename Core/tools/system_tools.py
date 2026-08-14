@@ -12,6 +12,7 @@ from datetime import datetime
 
 from tools.assist_tools import resolve_user_path
 from config.settings import DATA_DIR
+from state import lockdown_state
 
 
 # =========================================================
@@ -416,6 +417,22 @@ def get_current_time() -> str:
     clock = now.strftime("%I:%M %p").lstrip("0")
 
     return f"It's {clock} on {now.strftime('%A, %d %B %Y')}."
+
+
+# =========================================================
+# SYSTEM STATE
+# =========================================================
+
+def lockdown(should_lock: bool = True) -> str:
+    """
+    Engage or lift FRED's lockdown mode. While locked, every other
+    tool call is refused (see ToolRegistry.execute) — conversation
+    still works, FRED just can't act on anything.
+    """
+
+    lockdown_state.set_locked(should_lock)
+
+    return "Lockdown engaged, sir." if should_lock else "Lockdown lifted, sir."
 
 
 def describe_self(tool_names: list) -> str:

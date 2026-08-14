@@ -754,14 +754,18 @@ class FREDOrchestrator:
         self.tools.register(
             name="get_weather",
             function=web_tools.get_weather,
-            description="Get the current weather for a location.",
+            description="Get the current weather or a short forecast for a location.",
             parameters={
                 "type": "object",
                 "properties": {
                     "location": {
                         "type": "string",
                         "description": "City name, e.g. 'Mumbai'. Leave blank for current location.",
-                    }
+                    },
+                    "when": {
+                        "type": "string",
+                        "description": "'tomorrow' or 'day after tomorrow' for a forecast; leave blank for right now. No historical/past data available.",
+                    },
                 },
             },
         )
@@ -858,6 +862,18 @@ class FREDOrchestrator:
                 "type": "object",
                 "properties": {
                     "should_mute": {"type": "boolean", "description": "True to mute, false to unmute."}
+                },
+            },
+        )
+
+        self.tools.register(
+            name="lockdown",
+            function=system_tools.lockdown,
+            description="Engage or lift FRED's lockdown mode, which refuses every other tool call until lifted. Conversation still works while locked.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "should_lock": {"type": "boolean", "description": "True to engage lockdown, false to lift it."}
                 },
             },
         )
