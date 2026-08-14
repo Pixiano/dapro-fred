@@ -117,10 +117,14 @@ Core/data/llm_status.json
 
 # Lockdown mode: persisted lock/unlock flag and event log (see
 # Core/state/lockdown_state.py, Core/state/lockdown_log.py) — runtime
-# state, not the PIN itself (that's DPAPI-encrypted outside the repo
-# entirely, see Core/state/lockdown_credentials.py).
+# state. The PIN itself is a plain constant in system_tools.py, not a
+# file — nothing to gitignore for it.
 Core/data/lockdown_state.json
 Core/data/lockdown_log.jsonl
+
+# Remembered mic/speaker choice, by name (see Core/audio/device_info.py)
+# — which physical devices are plugged into this machine, runtime state.
+Core/data/audio_device_prefs.json
 
 # Screen-watcher's cached description of the screen. Never the
 # screenshot image itself (that never touches disk at all — see

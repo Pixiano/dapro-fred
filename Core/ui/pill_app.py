@@ -107,6 +107,9 @@ class PillApp:
         self.greet_now = greet_now
         self.orchestrator = FREDOrchestrator()
 
+        from audio.device_info import apply_saved_devices
+        apply_saved_devices()
+
         self.stt = None
         self.tts = None
         if STT_ENABLED:

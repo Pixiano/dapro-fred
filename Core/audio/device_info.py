@@ -5,6 +5,8 @@ from pathlib import Path
 
 import sounddevice as sd
 
+from config.settings import DATA_DIR
+
 # The HUD server runs as its own OS process (see hud/server.py), so its
 # own sd.default.device is independent of FRED's — it can't just query
 # sd.default.device to know what FRED currently has selected. This file
@@ -13,6 +15,28 @@ import sounddevice as sd
 # actual current selection instead of its own process's OS default.
 _BUS_DIR = Path.home() / "voice-line"
 _SELECTION_PATH = _BUS_DIR / "audio_devices.json"
+
+# Remembered choice, by NAME not index — PortAudio indices shift between
+# runs as devices connect/disconnect (a Bluetooth headset reappearing
+# doesn't get the same number twice), so an index saved today is not a
+# reliable pointer to the same device tomorrow. Same atomic write-then-
+# replace shape as lockdown_state.py's persisted state.
+_PREF_PATH = DATA_DIR / "audio_device_prefs.json"
+
+
+def _save_preference():
+    try:
+        input_idx, output_idx = sd.default.device
+        pref = {
+            "input_name": sd.query_devices(input_idx)["name"] if input_idx is not None else None,
+            "output_name": sd.query_devices(output_idx)["name"] if output_idx is not None else None,
+        }
+        _PREF_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _PREF_PATH.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(pref), encoding="utf-8")
+        tmp.replace(_PREF_PATH)
+    except Exception:
+        pass
 
 
 def _publish_selection():
@@ -108,6 +132,7 @@ def set_input_device(index: int) -> str:
     name = sd.query_devices(int(index))["name"]
     sd.default.device = (int(index), output)
     _publish_selection()
+    _save_preference()
     return f"Microphone set to {name}"
 
 
@@ -117,7 +142,80 @@ def set_output_device(index: int) -> str:
     name = sd.query_devices(int(index))["name"]
     sd.default.device = (input_, int(index))
     _publish_selection()
+    _save_preference()
     return f"Speaker set to {name}"
+
+
+def apply_saved_devices() -> None:
+    """
+    Call once at startup, before anything opens an audio stream. Looks
+    up last session's remembered mic/speaker by name among devices
+    present right now; a device that's gone (unplugged, a Bluetooth
+    headset not yet reconnected) is silently skipped rather than
+    forced, which leaves sd.default.device on PortAudio's own resolved
+    default for that side — exactly "switch to whatever's there."
+    """
+    try:
+        pref = json.loads(_PREF_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+
+    by_name = {"input": {}, "output": {}}
+    for d in _devices_for("max_input_channels"):
+        by_name["input"][d["name"]] = d["index"]
+    for d in _devices_for("max_output_channels"):
+        by_name["output"][d["name"]] = d["index"]
+
+    input_idx, output_idx = sd.default.device
+    input_name = pref.get("input_name")
+    output_name = pref.get("output_name")
+    if input_name in by_name["input"]:
+        input_idx = by_name["input"][input_name]
+    if output_name in by_name["output"]:
+        output_idx = by_name["output"][output_name]
+
+    sd.default.device = (input_idx, output_idx)
+    _publish_selection()
+
+
+if __name__ == "__main__":
+    # Self-check, not Core/tests/ (regression-only, see its README).
+    # Mocks sounddevice entirely — never touches real hardware.
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    _FAKE_DEVICES = [
+        {"name": "USB Mic", "hostapi": 0, "max_input_channels": 1, "max_output_channels": 0},
+        {"name": "Built-in Speakers", "hostapi": 0, "max_input_channels": 0, "max_output_channels": 2},
+    ]
+    _FAKE_HOSTAPIS = [{"name": "Windows WASAPI"}]
+
+    with tempfile.TemporaryDirectory() as tmp, \
+         patch.object(sd, "query_devices", lambda i=None: _FAKE_DEVICES[i] if i is not None else _FAKE_DEVICES), \
+         patch.object(sd, "query_hostapis", lambda: _FAKE_HOSTAPIS):
+
+        _PREF_PATH = Path(tmp) / "audio_device_prefs.json"
+
+        # Device present -> gets picked up.
+        sd.default.device = (None, None)
+        _PREF_PATH.write_text(json.dumps({"input_name": "USB Mic", "output_name": "Built-in Speakers"}))
+        apply_saved_devices()
+        assert list(sd.default.device) == [0, 1], sd.default.device
+
+        # Saved name no longer present -> that side left alone (falls
+        # back to whatever was already the default), not forced to None.
+        sd.default.device = (5, 5)
+        _PREF_PATH.write_text(json.dumps({"input_name": "Gone Mic", "output_name": "Built-in Speakers"}))
+        apply_saved_devices()
+        assert list(sd.default.device) == [5, 1], sd.default.device
+
+        # set_input_device/set_output_device round-trip through the save.
+        set_input_device(0)
+        saved = json.loads(_PREF_PATH.read_text())
+        assert saved["input_name"] == "USB Mic", saved
+
+    print("device_info self-check: all passed")
 
 
 def list_audio_devices() -> str:
