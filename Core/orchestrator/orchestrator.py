@@ -24,6 +24,7 @@ from tools import agenda
 from tools import vault_files
 from tools import workout_plan
 from tools import file_index
+from tools import self_docs
 from audio import device_info
 from utils import confidence, sensitive
 from orchestrator import canned_replies
@@ -88,6 +89,7 @@ TOOL_LABELS = {
     "summarise_today": "Reviewing today",
     "save_today_summary": "Saving to vault",
     "recall_recent_conversation": "Checking what we just said",
+    "ask_about_myself": "Checking my own docs",
     "git_status": "Checking git status",
     "git_log": "Checking git history",
     "git_diff_summary": "Checking git changes",
@@ -1999,6 +2001,33 @@ class FREDOrchestrator:
             parameters={"type": "object", "properties": {}},
         )
 
+        # Backlog #13. describe_self above answers "how many tools /
+        # which model" from live state; this answers "what is any of it
+        # for / why is it built that way" from the project docs
+        # themselves (README, SETUP, PHONE, the MVP plan, the roadmap).
+        self.tools.register(
+            name="ask_about_myself",
+            function=self._ask_about_myself,
+            description=(
+                "Look up FRED's own documentation (README, setup guide, "
+                "PHONE.md, the MVP plan and the phase roadmap) to answer "
+                "questions about what FRED can do, how one of his features "
+                "works, or why something was built the way it was. Use this "
+                "instead of guessing from memory whenever the question is "
+                "about FRED himself."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The question about FRED, in the user's own words.",
+                    }
+                },
+                "required": ["question"],
+            },
+        )
+
     def shutdown(self):
         """
         Stops the background scheduler. Call on process exit so
@@ -2687,6 +2716,18 @@ class FREDOrchestrator:
         tools that need orchestrator-level state.
         """
         return smart_search.find_file_smart(description, directory, llm=self.llm)
+
+    def _ask_about_myself(self, question: str) -> str:
+        """
+        Bound wrapper so ask_about_myself (tools/self_docs.py) gets the
+        embedder without importing the memory manager itself — same
+        shape as _find_file_smart above, and the same embedder the vault
+        and tool routers already use, so the docs index costs no extra
+        VRAM.
+        """
+        return self_docs.ask_about_myself(
+            question, embed_fn=self.memory._generate_embedding
+        )
 
     def _execute_tool_call(self, call: dict) -> str:
 

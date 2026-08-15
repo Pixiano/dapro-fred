@@ -183,6 +183,51 @@ VAULT_RETRIEVAL_FLOOR = -1.0
 VAULT_CHUNK_INJECT_CHARS = 1200
 
 # =========================================================
+# SELF-DOCUMENTATION — FRED's own project docs (backlog #13)
+# =========================================================
+#
+# A SECOND document set, deliberately separate from the vault above.
+# The vault is Vatsal's personal memory (people, health, priorities) and
+# is injected into every turn's prompt; these are FRED's own project
+# docs, checked into this repo, and are only read when he's actually
+# asked about himself ("do you have a calculator tool", "how does the
+# phone thing work"). Mixing them would mean either paying README's
+# context cost on every personal question or losing per-set top-K —
+# and the vault's chunks.json lives outside the repo (see
+# VAULT_INDEX_DIR) while this one is generated from files inside it.
+# Same retriever class either way (orchestrator/vault_router.py takes
+# the file list and cache path as arguments); only the corpus differs.
+#
+# Explicit list, not a glob of the project root: the root also holds
+# handoffs, incident reports and session notes that name real people
+# and would drag personal content into an index whose whole purpose is
+# "what is FRED and why". Add a file here when it's documentation FRED
+# should be able to answer from; nothing is picked up automatically.
+# PHONE.md and README.md carry the 2026-08-15 phone work (calling,
+# contacts sync, the token-gated LAN endpoint).
+DOCS_DIR = BASE_DIR.parent
+DOCS_FILES = (
+    "README.md",
+    "SETUP.md",
+    "PHONE.md",
+    "MVP Plan (v1.0 - v1.1).txt",
+    "Phases 11 - 20 (JARVIS Roadmap).txt",
+)
+
+# Lives under Core/data/indexes/ (gitignored) rather than next to the
+# docs: it's a generated artifact of this checkout, and the vault's
+# equivalent sits with the vault for the same "index travels with what
+# it describes" reason.
+DOCS_INDEX_PATH = INDEX_DIR / "docs_chunks.json"
+
+# Lower than VAULT_RETRIEVAL_TOP_K (6) because these chunks are only
+# fetched on an explicit question about FRED himself, and they are
+# returned as a tool result the model must read in full rather than
+# ambient prompt context — four sections of docs is already a lot of
+# text for a 4B to summarise into one spoken answer.
+DOCS_RETRIEVAL_TOP_K = 4
+
+# =========================================================
 # PROACTIVE CHECKS — Observation B, 2026-08-01 feedback session
 # =========================================================
 #

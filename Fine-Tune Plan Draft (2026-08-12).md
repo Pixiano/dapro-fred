@@ -223,3 +223,67 @@ they still gate when data collection can be trusted).
 - **Scope beyond Standard** — whether this ever extends to Deep/Vision
   tiers, or stays a Standard-only effort. Nothing here assumes beyond
   Standard.
+
+---
+
+## 7. FREEZE DECLARED — 2026-08-15
+
+**The tool surface is frozen at 80 registered tools.** This is the explicit
+decision section 4 said had to be made rather than implied, and section 5's
+step 2. Everything below is settled, not proposed.
+
+**Both hard blockers from section 1 are cleared:**
+
+- `Core/scripts/tool_call_report.py` exists and runs. It has since gained
+  `--since YYYY-MM-DD` and a dated `EXCLUSIONS` list, both of which exist
+  specifically to serve this freeze — see below.
+- Tool-calling robustness: the all-time error table read as a broken
+  file/path subsystem (`open_path` 4/4, `find_file_smart` 12/12) and is
+  not one. Date-split, 66 total errors are 15 since 2026-08-13 and 0 on
+  2026-08-15, with the high-rate rows dominated by bugs already fixed —
+  `%VARS%` expansion (`smart_search.py:121`) and the abandoned v1 lockdown
+  popup. What remains is the "genuinely ambiguous / one-off STT mishear"
+  category this plan already anticipated, not a workstream.
+
+**Inside the baseline** (Vatsal's call, 2026-08-15): `call_phone`,
+`hang_up`, `sync_contacts`, and `ask_about_myself`. The phone tools were
+built after this draft and are admitted deliberately rather than by
+default; the self-doc tool is backlog #13 and was always the last item
+before the freeze.
+
+**Eval data counts from 2026-08-15 forward.** Rows before it are suspect
+per section 5 step 3 — pass `--since 2026-08-15` when building the set.
+
+**Known-bug rows are excluded by default and the exclusions are dated**,
+so a row logged after a fix stays eligible and the filter cannot outlive
+the bug it describes. Currently excluded:
+
+- `"Cancelled by user"` up to 2026-08-15 — `_handle_pending_confirmation`
+  compared against a set of bare words, so a spoken "Yes." (the form
+  Whisper produces) cancelled the action instead of running it. Every
+  such row is a confirmation Vatsal GAVE, recorded as a refusal. Training
+  on them teaches exactly backwards.
+- `lockdown_engage` foreground-window errors up to 2026-08-14 — a code
+  path that no longer exists.
+
+**Whisper fine-tuning is cancelled** (2026-08-15). It was raised while
+looking at far-field transcription accuracy and is now explicitly out of
+scope, not deferred. Reasons on record: the only transcripts available as
+labels came from Whisper itself, so training on them is self-distillation
+that amplifies its errors; the clips actually worth learning from are the
+~99 captures where Whisper produced nothing, which are unlabelled by
+definition and would need hand-transcription. The far-field accuracy work
+stays where it landed instead — decode settings (beam 5, an
+`initial_prompt` biased toward command vocabulary, no cross-utterance
+conditioning) and, separately, wake-word retraining.
+
+**Wake-word retraining is NOT part of this freeze** and never was — it is
+a separate audio model, not a tool. It continues on its own track against
+the live capture set (493 clips as of 2026-08-15, 75 clear positives /
+312 clear negatives / 99 ambiguous). Mic and placement are staying as they
+are, so that data stays valid and keeps accumulating against a fixed
+acoustic condition.
+
+**Next**, per section 5: build the eval set from post-freeze rows, then
+spike the LoRA/QLoRA mechanics and the train -> merge -> GGUF ->
+llama.cpp round trip before committing to a real run.

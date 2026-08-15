@@ -177,10 +177,69 @@ def _chunk_pdf(rel_path: str, path: Path):
     return chunks
 
 
+def _chunk_plain_text(rel_path: str, path: Path, max_chars: int = 2000):
+    """
+    (label, embed_text, display_text) per blank-line-separated block for
+    a file with no markdown headings, accumulated up to max_chars.
+
+    Added 2026-08-15 for the self-documentation set (see DOCS_FILES):
+    "MVP Plan (v1.0 - v1.1).txt" and "Phases 11 - 20 (JARVIS Roadmap).txt"
+    contain 0 "#" and 0 "##" lines, so split_sections() returns them as a
+    single "(whole file)" chunk each — 318 and 153 lines respectively.
+    That is one vector for an entire document covering twenty unrelated
+    phases, which is the exact blur this module's header rejects
+    whole-file embedding for, and it also runs past the embedder's
+    n_ctx=4096 so the tail would be silently truncated anyway.
+
+    Paragraph blocks are the only structure these files reliably have
+    (both use blank lines between phases/backlog items). max_chars is a
+    ceiling, not a target — a block boundary is never split mid-way, so
+    one long block simply becomes one long chunk.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    chunks = []
+    buffer = []
+    size = 0
+
+    def flush():
+        if not buffer:
+            return
+        body = "\n\n".join(buffer).strip()
+        if body:
+            # First line WITH LETTERS as the label, so a hit says which
+            # phase/item it came from rather than naming the file five
+            # times. Skipping letterless lines matters: both plain-text
+            # docs in DOCS_FILES separate sections with "======" banner
+            # rules, which would otherwise become the label.
+            head = next(
+                (l.strip()[:60] for l in body.splitlines() if any(c.isalpha() for c in l)),
+                "",
+            )
+            label = f"{rel_path} — {head}" if head else rel_path
+            chunks.append((label, f"{rel_path}\n{body}", body))
+
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        if size and size + len(block) > max_chars:
+            flush()
+            buffer.clear()
+            size = 0
+        buffer.append(block)
+        size += len(block)
+
+    flush()
+    return chunks
+
+
 def _chunk_file(rel_path: str, path: Path):
     """(section_label, embed_text, display_text) for every chunk in one file."""
     if path.suffix.lower() == ".pdf":
         return _chunk_pdf(rel_path, path)
+    if path.suffix.lower() != ".md":
+        return _chunk_plain_text(rel_path, path)
 
     raw = path.read_text(encoding="utf-8")
     body = strip_frontmatter(raw)
@@ -204,8 +263,17 @@ class VaultRouter:
     turn" rather than breaking the conversation.
     """
 
-    def __init__(self, embed_fn):
+    def __init__(self, embed_fn, files_fn=None, cache_path=None):
+        # files_fn/cache_path default to the vault, so every existing
+        # caller is unchanged. They exist because tools/self_docs.py
+        # (2026-08-15) needs the identical machinery — section chunking,
+        # content-hash cache invalidation, centering, top-K — over a
+        # different corpus (FRED's own project docs). A second retriever
+        # class would have been a copy of this one with two constants
+        # swapped.
         self.embed = embed_fn
+        self._files_fn = files_fn or _iter_vault_files
+        self._cache_path = cache_path or CACHE_PATH
         self._entries = []  # [(label, display_text, CENTERED vector)]
         self._mean = None   # corpus mean, subtracted from every query too
         self._ready = False
@@ -228,7 +296,7 @@ class VaultRouter:
             changed = 0
             seen_files = set()
 
-            for rel_path, path in _iter_vault_files():
+            for rel_path, path in self._files_fn():
                 seen_files.add(rel_path)
                 file_hash = _file_hash(path)
                 cached = cache.get(rel_path)
@@ -277,19 +345,19 @@ class VaultRouter:
             return False
 
     def _load_cache(self) -> dict:
-        if not CACHE_PATH.exists():
+        if not self._cache_path.exists():
             return {}
         try:
-            return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+            return json.loads(self._cache_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
             print(f"[vault_router] cache unreadable ({e}) — rebuilding from scratch")
             return {}
 
     def _save_cache(self, cache: dict):
-        VAULT_INDEX_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = CACHE_PATH.with_suffix(".json.tmp")
+        self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._cache_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(cache), encoding="utf-8")
-        tmp.replace(CACHE_PATH)
+        tmp.replace(self._cache_path)
 
     # =========================================================
     # RETRIEVE

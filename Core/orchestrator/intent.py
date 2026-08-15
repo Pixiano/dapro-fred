@@ -96,6 +96,13 @@ TOOL_CATEGORIES = {
     "workout": ("workout_split", "todays_workout", "schedule_workouts"),
     "git": ("git_status", "git_log", "git_diff_summary"),
     "phone": ("call_phone", "hang_up", "sync_contacts"),
+    # Questions about FRED himself. describe_self is listed here too:
+    # it was registered with no category at all, so until now it was
+    # only ever reachable by the embedder's rescue path. The two answer
+    # different halves of "what are you" — live state vs. the docs — and
+    # a question about FRED can want either, so both are offered and the
+    # model picks from their descriptions.
+    "selfdoc": ("ask_about_myself", "describe_self"),
     "recap": ("summarise_today", "save_today_summary"),
     "recall_recent": ("recall_recent_conversation",),
     "vision": ("whats_on_screen",),
@@ -253,6 +260,32 @@ CATEGORY_CUES = {
     "phone": (
         "call", "dial", "phone", "ring", "hang up", "end the call",
         "hangup", "cut the call", "contact", "contacts",
+    ),
+    # Deliberately NOT "who are you" / "what's your name" / "how are
+    # you": those are persona questions, answered from persona.md in the
+    # system prompt, and pulling docs in would make a greeting cost a
+    # retrieval. What belongs here is the shape "does FRED have X / how
+    # does FRED's X work / why is FRED built that way" — the questions
+    # backlog #13 exists for, where the failure mode is the model
+    # inventing an answer from conversation context.
+    "selfdoc": (
+        "what can you do", "what else can you do", "your capabilities",
+        "capable of", "your tools", "do you have a", "do you have any",
+        "can you actually", "your features", "your documentation",
+        "your docs", "readme", "your roadmap", "your setup",
+        "how do you work", "how were you built", "how are you built",
+        "why were you", "why are you built", "why was that built",
+        "about yourself", "your own code", "your source code",
+        "your phases", "your plan", "what are you made of",
+        # "how does the phone thing work" is one of backlog #13's own
+        # example questions and says nothing self-referential at all —
+        # "phone" alone routes it to call_phone, which dials someone
+        # instead of explaining anything. Cued on the generic "how does
+        # the ..." shape rather than enumerating features, accepting
+        # that it also fires on things like "how does the weather look":
+        # a spurious match only adds two read-only tools to that turn's
+        # menu, which is this file's stated tradeoff everywhere else.
+        "how does the", "how does your", "how do your",
     ),
     "recap": (
         "what did we do", "what have we done", "recap", "summarise today",
@@ -586,10 +619,17 @@ def classify(text: str, llm=None, router=None) -> tuple:
     if not (text or "").strip():
         return False, [], "empty"
 
-    if looks_social(text):
-        return False, [], "social/meta phrasing"
-
     categories = match_categories(text)
+
+    # The social short-circuit runs first EXCEPT for self-documentation
+    # questions. _SOCIAL matches "what can you do" and "tell me about
+    # yourself" outright, so before this the one tool built to answer
+    # them (ask_about_myself, backlog #13) could never be offered on the
+    # exact phrasing the backlog item quotes as its example. Only this
+    # one category overrides it — every other social utterance still
+    # short-circuits to chat exactly as before.
+    if looks_social(text) and "selfdoc" not in categories:
+        return False, [], "social/meta phrasing"
 
     if categories:
         names = tools_for_categories(categories)
