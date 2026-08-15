@@ -802,11 +802,16 @@ WHISPER_LANGUAGE = "en"
 # first phoneme. A beam keeps competing hypotheses alive long enough for
 # the rest of the utterance to settle it.
 #
-# Costs latency roughly linearly in beam width on the decode step —
-# expect a few hundred ms on a short utterance, on top of an already
-# non-free Whisper pass. 1 to go back to greedy; 5 is the usual default
-# where accuracy matters more than milliseconds. Left as a knob because
-# only Vatsal can judge that trade in daily use.
+# Costs latency roughly linearly in beam width on the decode step, on
+# top of an already non-free Whisper pass. Judged in live use on
+# 2026-08-15 at beam 5: no perceptible slowdown, which fits — turbo on
+# this card decodes a few-second utterance fast enough that 5x a small
+# number is still a small number, and the wake-to-reply path is
+# dominated by the LLM turn, not the transcribe.
+#
+# So 5 stays. Kept as a knob rather than inlined because the finding is
+# hardware-specific: on a slower card, or if utterances get much longer,
+# this is the first thing to drop back to 1 (greedy, the old behaviour).
 WHISPER_BEAM_SIZE = 5
 
 # Whisper can be primed with text that biases decoding toward expected
