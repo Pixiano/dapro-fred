@@ -2,6 +2,8 @@
 *.env
 .env
 KEYS!.txt
+# Per-device shared secrets for Core/web/phone_api.py's LAN endpoint.
+Core/data/phone_tokens.json
 
 # Python
 __pycache__/

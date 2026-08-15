@@ -31,6 +31,9 @@ from config.settings import (
     WHISPER_COMPUTE_TYPE,
     WHISPER_LANGUAGE,
     WHISPER_WARMUP_ON_RELOAD,
+    WHISPER_BEAM_SIZE,
+    WHISPER_PROMPT_BASE,
+    WHISPER_CONDITION_ON_PREVIOUS,
     MAX_UTTERANCE_SECONDS,
     STT_SAMPLE_RATE,
 )
@@ -48,6 +51,45 @@ BLOCK_FRAMES = 1024
 # otherwise quiet buffer must still pass, which an averaged RMS over
 # the whole clip could wash out).
 _SILENCE_PEAK_FLOOR = 0.02
+
+# Whisper's initial_prompt only has room to matter for a short list, and
+# the tail of the contact file is the rarely-called half — the names most
+# worth biasing toward are the most-called ones, which sync_contacts
+# already writes in rank order.
+_PROMPT_CONTACT_LIMIT = 25
+
+# Rebuilt at most this often. Reading and joining a 50-line file per
+# utterance would be harmless, but the prompt only changes when contacts
+# are synced, so caching it keeps the transcribe path doing nothing it
+# doesn't have to.
+_PROMPT_TTL_SECONDS = 300
+_prompt_cache = {"text": None, "at": 0.0}
+
+
+def _build_prompt() -> str:
+    """
+    WHISPER_PROMPT_BASE plus the most-called contact names.
+
+    Names are read from the vault at runtime and never written anywhere
+    this process persists — they exist only in the string handed to the
+    decoder. A missing or unreadable contacts file just means the base
+    prompt, since biasing toward command words alone is still worth it.
+    """
+    now = time.time()
+    if _prompt_cache["text"] is not None and now - _prompt_cache["at"] < _PROMPT_TTL_SECONDS:
+        return _prompt_cache["text"]
+
+    text = WHISPER_PROMPT_BASE
+    try:
+        from tools.phone_tools import _read_contacts
+        names = list(_read_contacts())[:_PROMPT_CONTACT_LIMIT]
+        if names:
+            text = f"{text} {', '.join(names)}."
+    except Exception:
+        pass
+
+    _prompt_cache.update(text=text, at=now)
+    return text
 
 
 class WhisperSTT:
@@ -309,8 +351,10 @@ class WhisperSTT:
             segments, _info = self.model.transcribe(
                 audio,
                 language=self.language,
-                beam_size=1,          # greedy: this is a latency path
+                beam_size=WHISPER_BEAM_SIZE,
                 vad_filter=True,      # drops leading/trailing silence
+                initial_prompt=_build_prompt(),
+                condition_on_previous_text=WHISPER_CONDITION_ON_PREVIOUS,
             )
             return " ".join(seg.text.strip() for seg in segments).strip()
         except Exception as e:

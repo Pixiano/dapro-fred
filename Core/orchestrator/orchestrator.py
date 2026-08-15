@@ -15,6 +15,7 @@ from tools import web_tools
 from tools import machine_tools
 from tools import assist_tools
 from tools import git_tools
+from tools import phone_tools
 from tools import smart_search
 from tools import session_summary
 from tools import vision_tools
@@ -514,6 +515,20 @@ class FREDOrchestrator:
                 f"{names}. Confirm? (yes/no)"
             )
 
+        # Same reasoning as kill_process, one step worse: call_phone takes
+        # a contact NAME as well as a number, so "about to run call_phone
+        # (number=mom)" asks Vatsal to confirm a lookup he can't see the
+        # result of. Resolving here means the number in the question is
+        # the number that gets dialled — and a name that doesn't resolve
+        # dies at the prompt instead of after a "yes".
+        if tool_name == "call_phone":
+            target, message = phone_tools.resolve_target(arguments.get("number", ""))
+            if not target:
+                self.pending_action = None
+                return message
+            label, _ = target
+            return f"Calling {label} — confirm? (yes/no)"
+
         description = ", ".join(f"{k}={v}" for k, v in arguments.items())
 
         return (
@@ -584,8 +599,6 @@ class FREDOrchestrator:
         action = self.pending_action
         self.pending_action = None
 
-        affirmative = {"yes", "y", "yeah", "yep", "yup", "confirm", "do it", "go ahead", "sure", "ok", "okay"}
-
         # "no" declines one step and moves on; only an abort word ends
         # the whole wind-down. Without this an unwanted window keeps its
         # answer from cancelling everything queued behind it.
@@ -593,7 +606,23 @@ class FREDOrchestrator:
             self.pending_chain = []
             return "Stopped. Leaving the rest as it is."
 
-        if user_input.strip().lower() in affirmative:
+        # intent.is_affirmative rather than a local set of bare words:
+        # this used to be `user_input.strip().lower() in {"yes", ...}`,
+        # an exact match that a spoken confirmation almost never
+        # survives. Whisper punctuates, so "Yes." reached here as
+        # "yes." — not in the set, fell through to the cancel branch,
+        # and FRED answered a clear yes with "Cancelled — didn't run
+        # it." Confirmed live 2026-08-15 on a call_phone confirmation;
+        # it applied to every destructive tool, delete_file and
+        # power_action included.
+        #
+        # is_affirmative already tolerates trailing punctuation and the
+        # longer forms ("go ahead", "sounds good"), and is already the
+        # thing _classify_turn trusts for the same judgement one layer
+        # up. Bare "y" is kept alongside it: nobody says it aloud, but
+        # it is natural typed into the HUD console.
+        answer = user_input.strip().lower().strip(" ,.!?")
+        if intent.is_affirmative(user_input) or answer == "y":
             try:
                 result = str(self.tools.execute(action["tool"], **action["arguments"]))
             except Exception as error:
@@ -1121,6 +1150,46 @@ class FREDOrchestrator:
                 "type": "object",
                 "properties": {
                     "repo_path": {"type": "string", "description": "Repo folder. Optional, defaults to the FRED project."},
+                },
+                "required": [],
+            },
+        )
+
+        # ---------------------------------------------------
+        # Phone — dial from the PC, the phone places the call.
+        # destructive=True so the existing confirmation path asks
+        # before dialling; a wrong number is a real call to a stranger.
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="call_phone",
+            function=phone_tools.call_phone,
+            description="Place a phone call on the paired Android phone, by number or by contact name.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "number": {"type": "string", "description": "A phone number, or the name of a saved contact."},
+                },
+                "required": ["number"],
+            },
+            destructive=True,
+        )
+
+        self.tools.register(
+            name="hang_up",
+            function=phone_tools.hang_up,
+            description="End the phone call currently in progress.",
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+        self.tools.register(
+            name="sync_contacts",
+            function=phone_tools.sync_contacts,
+            description="Update the saved contact list from the phone, ranked by how often they're called.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "How many contacts to keep. Optional, defaults to 50."},
                 },
                 "required": [],
             },

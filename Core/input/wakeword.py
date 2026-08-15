@@ -246,6 +246,24 @@ class WakewordListener:
                 # visibly wrong. self._stream stays None here so the
                 # next resume() call gets a real retry instead.
                 wakeword_log.log_event("resume_failed", message=str(e))
+                # Re-resolve the mic by NAME before the next retry.
+                # PortAudio indices are per-process, so a device
+                # appearing or vanishing (a phone plugged in over USB,
+                # a Bluetooth headset connecting) shifts them underneath
+                # a long-running FRED and sd.default.device can end up
+                # pointing at an index that no longer opens. Confirmed
+                # 2026-08-15: a USB plug/unplug left every retry failing
+                # on the same dead index with PaErrorCode -9999, and
+                # FRED sat deaf for an hour with only a log line to say
+                # so. apply_saved_devices() looks the remembered name up
+                # among the devices present RIGHT NOW, which is exactly
+                # what a retry after a topology change needs.
+                try:
+                    device_info.apply_saved_devices()
+                except Exception as reselect_error:
+                    wakeword_log.log_event(
+                        "reselect_failed", message=str(reselect_error)
+                    )
                 return
             self._stream = stream
             wakeword_log.log_event("resumed")

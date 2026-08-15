@@ -85,9 +85,18 @@ VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md", "active-priorit
 # question, so they crowd out the file that actually answers it. Delete
 # this set to index them anyway; the cost is the ranking above.
 #
-# NOTE: read-only. Nothing here grants FRED the ability to WRITE to the
-# vault, and nothing should.
-VAULT_EXCLUDED_FILES = {"_TEMPLATE.md"}
+# NOTE: read-only, with exactly one exception as of 2026-08-15 —
+# tools/phone_tools.py writes people/contacts.md, and nothing else. That
+# exception was Vatsal's explicit call; see the CONTACTS_PATH comment
+# there for the append-only rules it holds itself to. Nothing else here
+# grants FRED write access to the vault, and nothing else should.
+#
+# contacts.md is excluded rather than indexed because retrieval injects
+# vault chunks into every turn, and those turns reach the cloud APIs
+# (the sensitive-local-only flag is off). 50 real phone numbers must not
+# ride along in a prompt. Dialing reads the file directly by path, so it
+# never needs the index.
+VAULT_EXCLUDED_FILES = {"_TEMPLATE.md", "contacts.md"}
 
 # File types the vault indexer reads. PDFs were added 2026-08-04: two
 # had been sitting in personal/ (workout_split_June.pdf,
@@ -784,6 +793,41 @@ WHISPER_MODEL = "large-v3-turbo"
 WHISPER_DEVICE = "auto"
 WHISPER_COMPUTE_TYPE = "auto"
 WHISPER_LANGUAGE = "en"
+
+# Beam width for the decode. 1 is greedy — fastest, and what this ran on
+# until 2026-08-15, but greedy commits to the top token at every step and
+# cannot back out of a bad start. That is precisely the far-field failure
+# mode: "Call Mom" came back as "God, Mom" (session_2026-08-15.jsonl,
+# 18:41), a voicing confusion that reverb makes near-coin-flip at the
+# first phoneme. A beam keeps competing hypotheses alive long enough for
+# the rest of the utterance to settle it.
+#
+# Costs latency roughly linearly in beam width on the decode step —
+# expect a few hundred ms on a short utterance, on top of an already
+# non-free Whisper pass. 1 to go back to greedy; 5 is the usual default
+# where accuracy matters more than milliseconds. Left as a knob because
+# only Vatsal can judge that trade in daily use.
+WHISPER_BEAM_SIZE = 5
+
+# Whisper can be primed with text that biases decoding toward expected
+# vocabulary. Command words are the whole reason: "call", "Fred" and
+# contact names are exactly what a far-field decode mangles, and they
+# are a tiny, closed set worth putting a thumb on the scale for.
+#
+# Contact names are appended at runtime from the vault contacts file
+# (see audio/stt_whisper.py:_build_prompt) rather than written here —
+# real names belong in the vault, never in this repo.
+WHISPER_PROMPT_BASE = (
+    "Fred. Call Mom. Hang up. Sync contacts. What's on my agenda? "
+    "Open the file. Set a timer. Search the web."
+)
+
+# faster-whisper defaults this to True, feeding the previous segment's
+# text in as context for the next. Good for continuous dictation, wrong
+# here: FRED's utterances are independent commands seconds apart, so the
+# only thing carried over is a chance for one bad transcript to bias the
+# next — the documented mechanism behind Whisper's repetition loops.
+WHISPER_CONDITION_ON_PREVIOUS = False
 
 # Hard ceiling on one held utterance, so a stuck key can't grow the
 # recording buffer without bound.

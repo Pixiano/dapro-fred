@@ -95,6 +95,7 @@ TOOL_CATEGORIES = {
     ),
     "workout": ("workout_split", "todays_workout", "schedule_workouts"),
     "git": ("git_status", "git_log", "git_diff_summary"),
+    "phone": ("call_phone", "hang_up", "sync_contacts"),
     "recap": ("summarise_today", "save_today_summary"),
     "recall_recent": ("recall_recent_conversation",),
     "vision": ("whats_on_screen",),
@@ -246,6 +247,12 @@ CATEGORY_CUES = {
     "git": (
         "git", "commit", "commits", "branch", "repo", "repository",
         "uncommitted", "pushed", "pull request",
+    ),
+    # "call" alone is ambiguous ("call it a day", "recall") but the cue
+    # only widens the menu, and a miss means FRED can't dial at all.
+    "phone": (
+        "call", "dial", "phone", "ring", "hang up", "end the call",
+        "hangup", "cut the call", "contact", "contacts",
     ),
     "recap": (
         "what did we do", "what have we done", "recap", "summarise today",

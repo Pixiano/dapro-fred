@@ -295,6 +295,7 @@ class PillApp:
         self.lifecycle.start()
         self.screen_watcher.start()
         self.hud.start_server()
+        self._start_phone_api()
         threading.Thread(target=self._hud_command_loop, daemon=True).start()
         self._schedule_greeting()
         if self.tts:
@@ -943,6 +944,52 @@ class PillApp:
                 self._to_idle_and_hide()
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _start_phone_api(self):
+        """
+        Bring up the LAN endpoint the phone posts commands to.
+
+        Its own process, like the HUD server, for the same reason: a
+        crash there must not take FRED down with it. Both ends of the
+        command bus (_hud_command_loop below) are already running by the
+        time anything can arrive, so no ordering care is needed here.
+        """
+        import os
+        import socket
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        script = Path(__file__).resolve().parent.parent / "web" / "phone_api.py"
+        if not script.is_file():
+            print(f"[phone_api] not found at {script}")
+            return
+
+        # Adopt an already-running endpoint instead of fighting for the
+        # port — same rule as HudManager.start_server, and it matters more
+        # here: HTTPServer sets SO_REUSEADDR, which on Windows lets a
+        # second process bind a port that is already bound instead of
+        # failing cleanly. Two live servers then split incoming requests
+        # nondeterministically, and only one of them is on FRED's bus.
+        with socket.socket() as probe:
+            probe.settimeout(0.3)
+            if probe.connect_ex(("127.0.0.1", 8779)) == 0:
+                print("[phone_api] already up on :8779 - reusing it")
+                return
+
+        try:
+            self._phone_api = subprocess.Popen(
+                [sys.executable, str(script)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if os.name == "nt" else 0,
+            )
+            print(f"[phone_api] started (pid {self._phone_api.pid})")
+        except OSError as e:
+            # A busy port (a previous FRED that didn't exit cleanly) lands
+            # here. The phone loses its front door; the voice path is
+            # untouched, so this is a warning, not a failure.
+            print(f"[phone_api] failed to start: {e}")
 
     def _hud_command_loop(self):
         """

@@ -56,8 +56,9 @@ A router classifies each turn first. Conversation never sees tool definitions at
 | Processes | list, kill |
 | Power | lock, sleep, restart, shutdown |
 | Schedule | reminders (clock times or offsets), timers, file watches, list, cancel |
+| Phone | call by name or number, hang up, sync contacts — see `PHONE.md` |
 
-**Four tools ask before acting** — `close_window`, `kill_process`, `delete_file`, `power_action`. FRED halts the whole batch when it sees one, so a confirmation can't smuggle another action alongside it.
+**Five tools ask before acting** — `close_window`, `kill_process`, `delete_file`, `power_action`, `call_phone`. FRED halts the whole batch when it sees one, so a confirmation can't smuggle another action alongside it. `call_phone` resolves the contact name before asking, so the number in the question is the number that gets dialled.
 
 Reminders accept real clock times: *"remind me to call mum at 7pm"*, *"tomorrow at 8:30am"*, *"tonight at 10"*. A time already past rolls to the next day, and FRED reads the resolved time back so a misparse is audible immediately.
 
@@ -72,6 +73,8 @@ Reminders accept real clock times: *"remind me to call mum at 7pm"*, *"tomorrow 
 **It sees what you're doing.** One line of context per turn names the active window, so "what's this" has something to resolve against. Title only — no screenshot, no vision model yet.
 
 **Nothing leaves the machine** except `web_search` and `get_weather`, which by definition need the internet. No API keys, no cloud inference.
+
+**Your phone can drive it.** A token-gated LAN endpoint on `:8779` accepts a command and returns FRED's reply, sharing the same file bus as the HUD console — so every registered tool works from the phone with no per-command code. FRED can also dial contacts on a paired Android phone. Both in `PHONE.md`.
 
 ---
 
@@ -94,6 +97,7 @@ Core/
   audio/               Whisper STT, Kokoro TTS, legacy Vosk/SAPI for CLI
   memory/              FAISS + local embeddings
   tools/               the 40 tools
+  web/phone_api.py     token-gated LAN endpoint for the phone (see PHONE.md)
   utils/               notifier, model lifecycle, CUDA bootstrap
   data/memory/         conversation memory (gitignored)
 Attic/                 superseded implementations, kept readable
