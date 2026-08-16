@@ -38,7 +38,7 @@ import re
 import time
 
 from config.settings import DATA_DIR, VAULT_DIR
-from tools.phone_tools import _adb, _resolve, device_status
+from tools.phone_tools import _adb, _resolve, _serial_of, device_status
 
 # One file per phone, in the vault — these are real names and real
 # message senders. Same reasoning as contacts.md, and like that file
@@ -95,7 +95,17 @@ _REPLY_MARKER = re.compile(r"you got a reply", re.IGNORECASE)
 
 
 def _tier_path(serial: str):
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", serial or "unknown")
+    """
+    Tier file for a phone, keyed on its STABLE serial.
+
+    Callers pass whatever `_resolve()` returned, which over a wireless
+    link is an ip:port whose port changes every time the service
+    restarts. Keying on that produced `whatsapp-tiers-192.168.0.105_40017.md`
+    — a file orphaned on the next reconnect, leaving FRED silently
+    reading no tiers and treating a VIP as useless. _serial_of() maps
+    back to the identity that doesn't move.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", _serial_of(serial) or "unknown")
     return TIER_DIR / f"whatsapp-tiers-{safe}.md"
 
 

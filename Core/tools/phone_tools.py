@@ -117,6 +117,39 @@ _ADDR = os.environ.get("FRED_PHONE_ADB", "")
 _active_phone = ""      # name; empty means "the default"
 
 
+# Wireless is built and tested but deliberately NOT enabled yet
+# (Vatsal, 2026-08-16): messaging drives the phone's UI, and a link that
+# drops when the screen sleeps is a worse failure mid-send than mid-read.
+# Wired only until that is worth revisiting. Flip to False to restore
+# mDNS discovery — the code path is intact and exercised.
+WIRED_ONLY = True
+
+_WIRELESS = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}:\d+$")
+
+
+def _is_wireless(target: str) -> bool:
+    return bool(_WIRELESS.match(target or ""))
+
+
+def _serial_of(target: str) -> str:
+    """
+    The phone's own stable serial, whatever it is currently attached as.
+
+    A wireless session is keyed by ip:port, and that port changes every
+    time wireless debugging restarts. Anything that PERSISTS per phone —
+    tier files above all — must key on this, not on the target. Confirmed
+    2026-08-16: VIP settings were written to a file named after the port
+    and would have been orphaned on the next reconnect, leaving FRED
+    silently seeing no tiers at all.
+    """
+    if not target:
+        return ""
+    if not _is_wireless(target):
+        return target
+    return _adb("shell", "getprop", "ro.serialno",
+                target=target, timeout=10).stdout.strip() or target
+
+
 def _phones() -> dict:
     """{name: serial} in declaration order. Empty when unconfigured."""
     phones = {}
@@ -193,6 +226,12 @@ def _discover(serial: str) -> str:
     if attached.get(serial) == "device":
         return serial
 
+    # Wired only: a USB device is attached under its own serial, so the
+    # check above is the whole story. No serial probing over a wireless
+    # link, no mDNS, no legacy address.
+    if WIRED_ONLY:
+        return ""
+
     # A live WIRELESS session is keyed by ip:port, not by serial, so the
     # check above misses it entirely. Ask each attached device who it is.
     #
@@ -250,22 +289,33 @@ def _resolve() -> str:
     device", which is the pre-2026-08-16 behaviour and correct for a
     one-phone setup.
     """
+    attached = _attached()
+    if WIRED_ONLY:
+        # Ignore any wireless session that happens to be open, so "which
+        # phone am I talking to" always means "the one on the cable".
+        attached = {k: v for k, v in attached.items() if not _is_wireless(k)}
+
+    ready = [k for k, v in attached.items() if v == "device"]
     phones = _phones()
+
+    # One phone plugged in is unambiguous — use it, whatever it is, and
+    # whatever use_phone() last selected. "Wired to A or B, whatever" is
+    # the actual working style; making it depend on a remembered selection
+    # would just be a way to act on the wrong phone.
+    if len(ready) == 1:
+        return ready[0]
 
     if phones:
         name = _active_phone or next(iter(phones))
         serial = phones.get(name)
         return _discover(serial) if serial else ""
 
-    ready = [k for k, v in _attached().items() if v == "device"]
-    if len(ready) == 1:
-        return ready[0]
-    if not ready and _ADDR:
+    if not ready and _ADDR and not WIRED_ONLY:
         _adb("connect", _ADDR, target="", timeout=10)
         return _ADDR if _attached().get(_ADDR) == "device" else ""
 
-    # Two devices and no configuration: refuse rather than guess which
-    # phone to dial from.
+    # Several attached and nothing to disambiguate them: refuse rather
+    # than guess which phone to message from.
     return ""
 
 
@@ -311,10 +361,18 @@ def device_status() -> str:
     if unauthorised:
         return "The phone is attached but not authorised - accept the USB debugging prompt on its screen."
 
-    ready = [k for k, v in attached.items() if v == "device"]
-    if len(ready) > 1 and not _phones():
-        return (f"{len(ready)} phones are attached and I don't know which to use. "
-                "Set FRED_PHONES, or unplug one.")
+    wired = [k for k, v in attached.items() if v == "device" and not _is_wireless(k)]
+    if len(wired) > 1 and not _phones():
+        return (f"{len(wired)} phones are plugged in and I don't know which to use. "
+                "Unplug one, or set FRED_PHONES.")
+
+    if WIRED_ONLY:
+        # Say WHY an open wireless session isn't being used, or this reads
+        # as a bug: adb devices shows a phone, FRED says there isn't one.
+        if any(_is_wireless(k) for k, v in attached.items() if v == "device"):
+            return ("A phone is connected wirelessly, but I'm set to wired only "
+                    "right now - plug it in over USB.")
+        return "No phone is plugged in. Connect one over USB."
 
     return ("No phone is reachable. Check Wireless debugging is still on - "
             "Android turns it off on every reboot - or plug in over USB.")
