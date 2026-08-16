@@ -76,6 +76,8 @@ Reminders accept real clock times: *"remind me to call mum at 7pm"*, *"tomorrow 
 
 **Your phone can drive it.** A token-gated LAN endpoint on `:8779` accepts a command and returns FRED's reply, sharing the same file bus as the HUD console — so every registered tool works from the phone with no per-command code. FRED can also dial contacts on a paired Android phone. Both in `PHONE.md`.
 
+**The HUD holds the screen awake.** While it's open the display won't sleep or blank — it's meant to be looked at. Uses the browser's Screen Wake Lock, so the lock lives exactly as long as the HUD page does and nothing touches your power plan; close the HUD and normal sleep behaviour returns immediately.
+
 ---
 
 ## Layout

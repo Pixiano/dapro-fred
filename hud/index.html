@@ -722,6 +722,40 @@ function loadDevices(){
 
 audioMenu.addEventListener("mouseenter", loadDevices);
 
+// ---- keep the display awake while the HUD is up ----
+//
+// The Screen Wake Lock API rather than anything on the Python side: the
+// lock's lifetime is exactly the page's, so closing the HUD releases it
+// with no teardown code to forget, and nothing here touches the power
+// plan or the registry. A Win32 SetThreadExecutionState call in
+// hud/server.py would have kept the screen on forever instead, since the
+// server runs whether or not the HUD window is open.
+//
+// Secure-context only, which 127.0.0.1 satisfies (see server.py's
+// loopback bind). Chrome drops the lock whenever the tab is hidden or
+// the machine suspends, so it is re-acquired on visibilitychange rather
+// than requested once at load.
+let wakeLock = null;
+
+function keepScreenAwake(){
+  if (!("wakeLock" in navigator)) return;          // older Chrome, or non-secure origin
+  if (document.visibilityState !== "visible") return;
+  if (wakeLock) return;
+  navigator.wakeLock.request("screen").then(function(lock){
+    wakeLock = lock;
+    // Fires on tab hide and on system sleep as well as on release().
+    lock.addEventListener("release", function(){ wakeLock = null; });
+  }).catch(function(){
+    // Denied (battery saver, policy) — the HUD is still perfectly
+    // usable, the screen just sleeps as it did before. Not worth an
+    // error state on screen.
+    wakeLock = null;
+  });
+}
+
+document.addEventListener("visibilitychange", keepScreenAwake);
+keepScreenAwake();
+
 applyState("idle");
 poll();
 requestAnimationFrame(tick);
