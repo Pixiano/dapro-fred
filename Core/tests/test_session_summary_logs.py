@@ -44,3 +44,37 @@ def test_legacy_per_launch_files_still_count(tmp_path, monkeypatch):
 def test_a_genuinely_empty_day_still_says_so(tmp_path, monkeypatch):
     monkeypatch.setattr(session_summary, "SESSIONS_DIR", tmp_path)
     assert session_summary.summarise_today("2026-08-04") == "Nothing logged today yet, sir."
+
+
+def test_start_daily_session_is_once_per_day_not_per_launch(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_summary, "VAULT_DIR", tmp_path)
+
+    first = session_summary.start_daily_session("2026-08-16")
+    assert first  # something to announce on the first launch of the day
+    note = session_summary._daily_note_path("2026-08-16").read_text(encoding="utf-8")
+    assert note.count(session_summary._auto_session_marker("2026-08-16")) == 1
+    assert note.count(session_summary._AUTO_SESSION_HEADING) == 1
+
+    # A relaunch later the same day should resume, not fork a new block.
+    second = session_summary.start_daily_session("2026-08-16")
+    assert second == ""
+    note_after = session_summary._daily_note_path("2026-08-16").read_text(encoding="utf-8")
+    assert note_after.count(session_summary._AUTO_SESSION_HEADING) == 1
+
+
+def test_save_session_summary_logs_into_the_days_session_block(tmp_path, monkeypatch):
+    monkeypatch.setattr(session_summary, "VAULT_DIR", tmp_path)
+
+    session_summary.start_daily_session("2026-08-16")
+    result = session_summary.save_session_summary("2026-08-16", summary="did a thing")
+
+    note = session_summary._daily_note_path("2026-08-16").read_text(encoding="utf-8")
+    assert "did a thing" in note
+    # Logged inside the existing session block, not as a second top-level heading.
+    assert note.count(session_summary._AUTO_SESSION_HEADING) == 1
+    assert "session block" in result.lower()
+
+    # The recap must land after the block's heading, not before it.
+    heading_pos = note.find(session_summary._AUTO_SESSION_HEADING)
+    recap_pos = note.find("did a thing")
+    assert heading_pos < recap_pos

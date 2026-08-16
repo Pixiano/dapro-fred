@@ -222,6 +222,63 @@ def _daily_note_path(day: str = None) -> Path:
     return VAULT_DIR / "daily" / month / f"{day}.md"
 
 
+_AUTO_SESSION_HEADING = "## FRED session — "
+
+
+def _auto_session_marker(day: str) -> str:
+    return f"<!-- fred-session:{day} -->"
+
+
+def start_daily_session(day: str = None) -> str:
+    """
+    Auto-create today's vault session block, once per calendar day.
+
+    Called from fred_popup.py right after event_log.start_session() —
+    same one-per-day-not-per-launch shape as that module's own session
+    file (see event_log.py's docstring on why: a relaunch later the same
+    day should resume, not fork a new record). The marker comment is
+    what makes this idempotent without a separate state file: a second
+    launch the same day finds it already in the note and does nothing.
+
+    Returns a short line to fold into the startup greeting (empty string
+    if today's session already existed — nothing new to announce).
+    """
+    day = day or datetime.now().strftime("%Y-%m-%d")
+    path = _daily_note_path(day)
+    marker = _auto_session_marker(day)
+
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if marker in existing:
+        return ""
+
+    stamp = datetime.now().strftime("%H:%M")
+    block = (
+        f"\n{marker}\n"
+        f"{_AUTO_SESSION_HEADING}{stamp}\n\n"
+        f"### What Got Done\n-\n\n"
+        f"### What's Still In Progress\n-\n\n"
+        f"### Decisions Made\n-\n\n"
+        f"### Notes Touched\n-\n\n"
+        f"### Profile Updates\n-\n"
+    )
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if existing:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(block)
+        else:
+            header = (
+                f"---\ntype: log\nstatus: active\nupdated: {day}\n---\n\n"
+                f"# {datetime.strptime(day, '%Y-%m-%d').strftime('%A, %B %d, %Y')}\n"
+            )
+            path.write_text(header + block, encoding="utf-8")
+        return "Today's vault session is up, sir."
+    except OSError as e:
+        print(f"[session_summary] couldn't start today's vault session: {e}")
+        return ""
+
+
 def preview_session_summary(day: str = None, llm=None) -> str:
     """
     Build the summary and say exactly where it WOULD be written,
@@ -240,28 +297,41 @@ def preview_session_summary(day: str = None, llm=None) -> str:
 
 def save_session_summary(day: str = None, llm=None, summary: str = "") -> str:
     """
-    Append the summary to the vault's daily note. Only ever called after
-    an explicit confirmation — see preview_session_summary.
+    Log the summary into *today's* auto-created vault session block
+    (start_daily_session) rather than appending a separate top-level
+    block — one place per day for everything FRED logs, not a scattered
+    "## FRED session recap" per save. Only ever called after an explicit
+    confirmation — see preview_session_summary.
+
+    If today's session block doesn't exist yet for some reason (e.g.
+    this is called from a context that skipped fred_popup.py's startup
+    path), start_daily_session() creates it first so this never fails
+    open into a stray top-level block.
     """
     day = day or datetime.now().strftime("%Y-%m-%d")
     path = _daily_note_path(day)
     text = summary or summarise_today(day, llm=llm)
-
     stamp = datetime.now().strftime("%H:%M")
-    block = f"\n\n## FRED session recap — {stamp}\n\n{text}\n"
+    recap = f"\n**Recap — {stamp}:** {text}\n"
+    marker = _auto_session_marker(day)
 
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists():
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(block)
-            return f"Appended today's recap to {path.name}."
+        if marker not in (path.read_text(encoding="utf-8") if path.exists() else ""):
+            start_daily_session(day)
 
-        header = (
-            f"---\ntype: log\nstatus: active\nupdated: {day}\n---\n\n"
-            f"# {datetime.strptime(day, '%Y-%m-%d').strftime('%A, %B %d, %Y')}\n"
-        )
-        path.write_text(header + block, encoding="utf-8")
-        return f"Created {path.name} with today's recap."
+        content = path.read_text(encoding="utf-8")
+        marker_start = content.find(marker)
+        if marker_start == -1:
+            # start_daily_session() just ensured it — shouldn't happen —
+            # but fail open rather than lose the recap.
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(recap)
+            return f"Appended today's recap to {path.name} (session block not found)."
+
+        marker_line_end = content.find("\n", marker_start) + 1
+        heading_line_end = content.find("\n", marker_line_end) + 1
+        new_content = content[:heading_line_end] + recap + content[heading_line_end:]
+        path.write_text(new_content, encoding="utf-8")
+        return f"Logged today's recap into the session block in {path.name}."
     except OSError as e:
         return f"Couldn't write the daily note: {e}"

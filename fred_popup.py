@@ -124,6 +124,13 @@ def main():
     print(f"[fred_popup] session log -> {session_log}")
     event_log.log("system", note="crash log path", path=str(crash_log))
 
+    # Vault session block: one per calendar day, auto-created here so
+    # logging doesn't wait on an explicit "recap" request. Empty string
+    # if today's already exists (a relaunch, not a new day) — nothing
+    # new to announce in that case.
+    from tools.session_summary import start_daily_session
+    session_announce = start_daily_session()
+
     # Assert the expensive-to-be-wrong-about assumptions before the UI
     # comes up — see utils/health_check.py for the two failures that
     # went unnoticed for weeks because nothing checked them. Runs in
@@ -136,7 +143,7 @@ def main():
         print(f"[fred_popup] HEALTH FAILURE — {failure}")
 
     from ui.pill_app import main as app_main
-    app_main(greet_now=args.greet_now)
+    app_main(greet_now=args.greet_now, session_announce=session_announce)
 
 
 if __name__ == "__main__":

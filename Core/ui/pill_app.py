@@ -102,9 +102,10 @@ def get_current_app():
 
 class PillApp:
 
-    def __init__(self, greet_now: bool = False):
+    def __init__(self, greet_now: bool = False, session_announce: str = ""):
         global _current_app
         self.greet_now = greet_now
+        self._session_announce = session_announce
         self.orchestrator = FREDOrchestrator()
 
         from audio.device_info import apply_saved_devices
@@ -341,6 +342,8 @@ class PillApp:
                     greeting += " All systems nominal, sir. Lockdown mode on."
             except Exception:
                 pass
+            if self._session_announce:
+                greeting += " " + self._session_announce
             self._speak_proactive(greeting)
 
         threading.Thread(target=run, daemon=True).start()
@@ -1149,8 +1152,8 @@ class PillApp:
         self._turn_thread.start()
 
 
-def main(greet_now: bool = False):
-    app = PillApp(greet_now=greet_now)
+def main(greet_now: bool = False, session_announce: str = ""):
+    app = PillApp(greet_now=greet_now, session_announce=session_announce)
     try:
         app.run()
     except KeyboardInterrupt:
