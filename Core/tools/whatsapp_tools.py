@@ -433,9 +433,21 @@ def send_message(contact: str = "", text: str = "") -> str:
     _adb("shell", "input", "tap", str(send[0]), str(send[1]), timeout=20)
     time.sleep(3)
 
+    # Confirm the MESSAGE arrived, not merely that the chat has messages
+    # in it. The first version checked for any com.whatsapp:id/message_text
+    # node, which is true of every non-empty conversation — so a failed
+    # send would still have reported success. Two independent signals:
+    # a bubble carrying this text, and a compose box that has emptied.
     after = _dump_ui(target)
-    if 'resource-id="com.whatsapp:id/message_text"' in after:
+    probe = text[:40].replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
+    landed = probe in after
+    entry = re.search(r'resource-id="com\.whatsapp:id/entry"[^>]*text="([^"]*)"', after)
+    cleared = entry is None or not entry.group(1).strip() or entry.group(1) == "Message"
+
+    if landed and cleared:
         return f"Sent to {contact}."
+    if landed:
+        return f"Sent to {contact} - though the compose box didn't clear, so check it went once."
     return "Tapped send but couldn't confirm it went - check the phone."
 
 
