@@ -287,3 +287,28 @@ acoustic condition.
 **Next**, per section 5: build the eval set from post-freeze rows, then
 spike the LoRA/QLoRA mechanics and the train -> merge -> GGUF ->
 llama.cpp round trip before committing to a real run.
+
+---
+
+## 8. FREEZE LIFTED — 2026-08-16
+
+Vatsal's call, one day after section 7 declared it. Reason: WhatsApp
+messaging (send to trusted contacts, read from anyone) is going ahead,
+and it adds tools.
+
+**Consequence, stated so it isn't discovered later:** section 7's "eval
+data counts from 2026-08-15 forward" is void. The counting date moves to
+whenever the NEXT freeze is declared. Rows collected between 2026-08-15
+and that date are collected against a moving tool surface and should be
+treated the same way as the pre-freeze rows — suspect, not fatal, but not
+the clean baseline the plan asks for.
+
+**The exclusions in `tool_call_report.py` are unaffected.** They are dated
+against the bugs they describe, not against the freeze.
+
+**What the next freeze should wait for:** the messaging tools landing
+(send, read, and trust-granting), and nothing else queued behind them. A
+freeze that gets lifted twice is not a freeze, so the next one should be
+declared only when there is no known, already-decided addition pending —
+which is the same rule section 4 already stated and which lifting this
+one does not change.
