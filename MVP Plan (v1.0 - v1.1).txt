@@ -300,6 +300,10 @@ Everything already identified as its own frontier, separate from
         "shut down device Y" as a fixed command set per device, not
         arbitrary command execution — same reasoning as the
         destructive-tool gate elsewhere in this doc.
+      - START WITH WAKE-ON-LAN, NOT RESTART/SHUTDOWN. "Wake my desktop,
+        I'm heading home" is pure upside — worst case is nothing
+        happens, it can't break anything running. Build and trust this
+        actuator first, before anything that can take a device down.
       - SHUTDOWN/RESTART MUST BE DETACHED. Don't let an actuator call
         block or race FRED's own response — fire it async after FRED
         finishes replying. If the target is FRED's own host, that's an
@@ -316,6 +320,27 @@ Everything already identified as its own frontier, separate from
         a service instead of Vatsal SSHing in). All things Vatsal
         already does manually — FRED saves the context-switch, doesn't
         do anything new in kind.
+      - NEW-DEVICE ALERT. Read-only, defensive: FRED flags when an
+        unrecognized device joins the network in real time ("someone
+        new just connected to WiFi"), instead of it being noticed a
+        week later browsing router logs.
+      - UPDATE/EXPIRY NAGGING, EXTENDED TO PER-DEVICE SOFTWARE. Not just
+        network-level (router firmware, Tailscale, Nextcloud version,
+        cert expiry) but basic software update status on each device on
+        the network too — FRED tells Vatsal what's overdue across the
+        whole home network instead of him checking each machine and
+        each admin panel separately.
+      - REUSE THE HEALTHCHECK SCRIPT'S LOG, DON'T DUPLICATE IT. For
+        DaPro Drive specifically, FRED should read
+        D:\DaPro_Drive\healthcheck.ps1's existing log rather than
+        building its own live Docker/Tailscale introspection — cheaper
+        and lower-risk, and the script already does the checking.
+      - PRESENCE INFERENCE IS ITS OWN DECISION, NOT BUNDLED IN. Inferring
+        who's home from whose phone is on the network is genuinely
+        useful for automations ("do X when I'm back") but is a step up
+        in sensitivity from "what devices exist" — flag it as a
+        separate explicit call when this is picked up, not something
+        that ships silently as a side effect of device inventory.
   - FRED holding the call himself — short, single-purpose calls placed
     and spoken by FRED instead of Vatsal ("is my order ready", "table
     for four at eight"). Filed here 2026-08-16, deliberately, after
