@@ -464,6 +464,23 @@ def _merge(existing: dict, incoming: list, removed: dict = None) -> tuple:
     # 34 entries he had just curated away, silently.
     gone = {_match_key(num) for num in (removed or {}).values()}
 
+    # A name that arrives with SEVERAL different numbers is ambiguous, not
+    # a correction. Confirmed 2026-08-16: phone B had two contacts both
+    # named "Mom", and syncing it silently replaced the real Mom's number
+    # — the one FRED had dialled successfully hours earlier — with a
+    # different person's. "Call Mom" would then have rung a stranger.
+    #
+    # The phone is authority on a contact's number only while the name
+    # identifies exactly one contact. Where it doesn't, keep what is on
+    # file and leave it to a human.
+    ambiguous = set()
+    numbers_per_name = {}
+    for name, number in incoming:
+        keys = numbers_per_name.setdefault(name, set())
+        keys.add(_match_key(number))
+        if len(keys) > 1:
+            ambiguous.add(name)
+
     for name, number in incoming:
         if name in seen:
             continue
@@ -478,7 +495,7 @@ def _merge(existing: dict, incoming: list, removed: dict = None) -> tuple:
         if name not in merged:
             merged[name] = number
             added.append(name)
-        elif merged[name] != number:
+        elif merged[name] != number and name not in ambiguous:
             corrected.append((name, merged[name], number))
             merged[name] = number
 
@@ -734,5 +751,22 @@ if __name__ == "__main__":
         {"Deleted Person": "+919000000012"},
     )
     assert added == [], "tombstone must match on number, not name"
+
+    # Two different contacts sharing one display name must NOT overwrite
+    # the number already on file. The real failure: a second phone had two
+    # entries both called "Mom", and the sync replaced the real one.
+    merged, added, corrected = _merge(
+        {"Shared Name": "+919000000020"},
+        [("Shared Name", "+919000000021"), ("Shared Name", "+919000000022")],
+    )
+    assert merged["Shared Name"] == "+919000000020", merged
+    assert corrected == [], corrected
+
+    # A genuine correction still works when the name is unambiguous.
+    merged, added, corrected = _merge(
+        {"Solo": "+919000000030"}, [("Solo", "+919000000031")]
+    )
+    assert merged["Solo"] == "+919000000031"
+    assert [c[0] for c in corrected] == ["Solo"]
 
     print("ok")
