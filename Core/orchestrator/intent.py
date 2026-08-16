@@ -276,14 +276,24 @@ CATEGORY_CUES = {
     # comment on messages_read/messages_send above. If both fire they
     # union into one menu and the isolation is gone, so read is written
     # question-shaped and plural, send verb-led and singular.
+    # PLURAL only. "any message" was here and had to go: bare "message"
+    # is the natural way to ASK for a send ("message Mom saying hello"),
+    # and a phrase matching both categories unions them into one menu,
+    # which is exactly the isolation this pair exists to keep.
     "messages_read": (
-        "messages", "any message", "new messages", "unread",
+        "messages", "new messages", "unread",
         "who messaged", "who texted", "check whatsapp", "read whatsapp",
         "my whatsapp", "what did", "anything from",
     ),
+    # SINGULAR "message" as a verb. Its absence is why "Message Mom saying
+    # hello" reached the model with no messaging tool offered at all, and
+    # FRED narrated sending instead of sending (2026-08-16, 23:41).
+    # "whatsapp" stays out deliberately - it appears in the read cues, and
+    # adding it here would make "check whatsapp" match both.
     "messages_send": (
-        "send a message", "send message", "message to", "text to",
-        "reply to", "tell him", "tell her", "tell them",
+        "message", "msg", "send a message", "send message",
+        "message to", "text to", "text him", "text her", "text them",
+        "reply to", "reply saying", "tell him", "tell her", "tell them",
         "whatsapp him", "whatsapp her", "whatsapp them",
         "trust", "untrust", "vip", "mark as",
     ),

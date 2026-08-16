@@ -35,7 +35,9 @@ def test_reading_and_sending_never_share_a_menu():
         "who messaged me",
         "check whatsapp",
         "read my messages",
+        "any messages from alex",
         "send a message to alex",
+        "message alex saying hello",
         "reply to alex",
         "tell him I'm coming",
         "trust jordan",
@@ -53,7 +55,12 @@ def test_reading_phrases_reach_the_reader():
 
 
 def test_sending_phrases_reach_the_sender():
-    for text in ("send a message to alex", "reply to alex", "tell him I'm late"):
+    # "message <name> ..." is the phrasing that actually gets used, and it
+    # matched nothing on 2026-08-16 — the router offered no messaging tool
+    # and FRED described sending a message instead of sending one.
+    for text in ("send a message to alex", "message alex saying hello",
+                 "message alex", "reply to alex", "tell him I'm late",
+                 "text her I'll be late"):
         assert "send_message" in _tools_for(text), text
 
 
