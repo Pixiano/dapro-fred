@@ -330,6 +330,41 @@ Everything already identified as its own frontier, separate from
     weekend experiment first — it answers "is the latency tolerable"
     before a rupee goes to Twilio.
 
+    SCOPE OF SOLUTION IS DELIBERATELY OPEN (added 2026-08-16, Vatsal's
+    call). Radical and extremely creative approaches are explicitly
+    welcome here, including going fully custom and building the calling
+    pipeline itself rather than renting Twilio's. This is the one v2+
+    item where "buy the boring option" is NOT the assumed answer —
+    partly because owning the audio path is the whole point, and partly
+    because a third-party API holding FRED's call audio sits badly with
+    the rest of this project.
+    Shapes that are worth taking seriously if this is picked up:
+      - SELF-HOSTED PBX + SIP TRUNK. "Building your own Twilio" in
+        practice means Asterisk/FreeSWITCH/Kamailio running locally,
+        with only the PSTN interconnect bought in from a trunk
+        provider — you cannot originate calls to real phone numbers
+        without an interconnect, that part is not buildable. But
+        everything above it is: FRED owns the media stream on his own
+        machine, no third party touches the audio, and it is far
+        cheaper at any volume. This is the strongest "full custom"
+        option and it resolves the privacy objection to Twilio
+        outright. CHECK FIRST: Indian regulation on VoIP-to-PSTN
+        interconnection for individuals has historically been
+        restrictive — verify current DoT rules before building, do not
+        assume.
+      - A CELLULAR MODEM FRED OWNS. A 4G dongle or Pi HAT with voice
+        support and its own SIM: a real cellular call where FRED has
+        raw audio in and out, no Android restrictions, no VoIP
+        regulation question, no acoustic hack. Pairs naturally with the
+        Raspberry Pi satellite idea elsewhere in this list.
+      - A DEDICATED HANDSET AS AN APPLIANCE. A second Android phone,
+        rooted or on a custom ROM, where call audio genuinely is
+        accessible. Ugly, but it is the only path that keeps a normal
+        handset in the loop.
+    None of this changes the four blockers above — latency,
+    turn-taking, and disclosure survive every one of these options.
+    What it changes is that the audio wall stops being a wall.
+
   - Genuine self-awareness — explicitly NOT an engineering target for
     this or any current system; this stays out of every version, not
     just deferred. Discuss with Vatsal after 50% of v1.1 is complete.
