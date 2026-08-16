@@ -283,6 +283,53 @@ Everything already identified as its own frontier, separate from
   - In-house manufacturing / physical equipment control (too quick for,
     maybe years later)
   - Scientific simulation tooling (interesting to see)
+  - FRED holding the call himself — short, single-purpose calls placed
+    and spoken by FRED instead of Vatsal ("is my order ready", "table
+    for four at eight"). Filed here 2026-08-16, deliberately, after
+    scoping it: it is the most technically demanding thing discussed so
+    far and the least aligned with daily use. Four blockers, recorded so
+    this doesn't get re-derived from scratch later:
+      - AUDIO IS THE WALL. Call audio lives on the phone; FRED's ears
+        and mouth are on the PC. Bluetooth HFP is out (Windows only
+        takes the hands-free role inside Phone Link, and it hijacks the
+        default mic to 8kHz — the mic the wake word uses). An Android
+        app can't do it either: since Android 10 the VOICE_CALL source
+        is system/carrier only, and injecting audio into the uplink
+        isn't exposed at all. That leaves acoustic coupling (phone on
+        speakerphone beside the PC — free, crude, needs strict
+        half-duplex or FRED hears itself) or VoIP/SIP via something
+        like Twilio (clean, FRED owns the audio stream, costs per
+        minute and routes calls through a third party).
+      - LATENCY. Measured time-to-first-text is 2.12s streamed, plus a
+        1.2s silence timeout to decide the caller stopped. ~3s of dead
+        air per turn reads as a dropped line, and people talk over it,
+        which breaks endpointing and compounds. A usable version needs
+        a dedicated call path: thinking off, cloud tier only, hard
+        short-reply instruction, tighter endpointing, own system prompt.
+      - TURN-TAKING. No hold-to-talk and no wake word on a call. FRED
+        must decide from VAD alone, over a compressed line, when the
+        other person finished. Second-hardest part after audio and
+        routinely underestimated.
+      - THE OTHER PERSON DIDN'T AGREE. FRED must identify itself in the
+        first sentence ("this is Vatsal's assistant") — the ethical
+        answer and also the practical one, since it makes short replies
+        and processing pauses read as normal. Treat bot disclosure as
+        mandatory rather than checking jurisdictions. Transcribing the
+        call is recording it; India is generally one-party consent for
+        personal use, but that should be a decision, not a side effect.
+    Whatever gets built needs a hard limit (~90s or 6 turns, then FRED
+    excuses itself and hangs up) and a commitment gate — never agree to
+    a booking, a price, or anything with consequences without coming
+    back to Vatsal. Same reasoning as the destructive-tool gate, applied
+    to speech.
+    Cheap adjacent win, NOT blocked on any of the above: IVR navigation.
+    DTMF via adb key events during a call gets FRED through a phone tree
+    to a human for a fraction of the work, and is probably useful more
+    often than conversation would be.
+    If this is ever attempted, do the acoustic-coupling version as a
+    weekend experiment first — it answers "is the latency tolerable"
+    before a rupee goes to Twilio.
+
   - Genuine self-awareness — explicitly NOT an engineering target for
     this or any current system; this stays out of every version, not
     just deferred. Discuss with Vatsal after 50% of v1.1 is complete.
