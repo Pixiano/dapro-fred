@@ -283,6 +283,39 @@ Everything already identified as its own frontier, separate from
   - In-house manufacturing / physical equipment control (too quick for,
     maybe years later)
   - Scientific simulation tooling (interesting to see)
+  - Home network access + device control ("JARVIS mode") — FRED gets
+    visibility into and limited control over the home network: device
+    inventory, IPs, names, logs, and an actuator layer to restart/shut
+    down devices, similar in spirit to SSH but scoped, not a raw shell.
+    Filed here 2026-08-16, gated explicitly on the local model being
+    good enough to trust with this, since none of it should touch a
+    cloud API — deferred until then, not scheduled.
+      - TWO TIERS. Read-only first (structured device inventory: names,
+        IPs, roles), logs only once the local model's interpretation of
+        them is trustworthy — logs are messier and more likely to
+        produce a confidently-wrong diagnosis than clean structured
+        data. Actuators (restart/shutdown) come after read-only has a
+        track record.
+      - ACTUATORS ARE ALLOW-LISTED, NOT SHELL. "Restart device X",
+        "shut down device Y" as a fixed command set per device, not
+        arbitrary command execution — same reasoning as the
+        destructive-tool gate elsewhere in this doc.
+      - SHUTDOWN/RESTART MUST BE DETACHED. Don't let an actuator call
+        block or race FRED's own response — fire it async after FRED
+        finishes replying. If the target is FRED's own host, that's an
+        ordinary graceful shutdown; the actual risk is a botched command
+        cutting FRED off mid-reasoning, not anything more dramatic.
+      - REALISTIC USE CASES (not hypothetical): "is the drive down
+        again" (checks the DaPro Drive healthcheck instead of Vatsal
+        running it by hand), "restart the router, my download's stuck",
+        "put the house in night mode" before bed (idle machines off,
+        NAS stays up), "why is my laptop slow right now" (pulls device
+        list / basic traffic and points at the culprit), scheduled
+        overnight maintenance restarts gated on nothing actively using
+        the target, "what crashed" (summarizes the last N log lines of
+        a service instead of Vatsal SSHing in). All things Vatsal
+        already does manually — FRED saves the context-switch, doesn't
+        do anything new in kind.
   - FRED holding the call himself — short, single-purpose calls placed
     and spoken by FRED instead of Vatsal ("is my order ready", "table
     for four at eight"). Filed here 2026-08-16, deliberately, after
