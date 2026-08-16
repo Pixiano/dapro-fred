@@ -17,18 +17,21 @@ pip install llama-cpp-python faiss-cpu vosk pyaudio pyttsx3 sounddevice pycaw py
 
 ### 2. Launch FRED
 
-Two options on your **Desktop**:
+Three launchers at the repo root:
 
-#### GUI Version (Graphical Interface)
-- **Double-click**: `FRED (GUI).bat`
-- Dark-themed window with conversation display
-- Easy to use, no terminal needed
-- Shows state indicator (IDLE/LISTENING/THINKING/SPEAKING)
+#### `FRED.bat` — the normal way to start FRED
+- Starts the voice assistant; the HUD server comes up quietly in the
+  background and stays closed until you click the tray icon
+- Greets you immediately when started by hand (`--greet-now`); waits
+  ten minutes when started at log-on via `install_startup.py`, so it
+  isn't talking over the rest of Windows starting up
 
-#### CLI Version (Command Line)
-- **Double-click**: `FRED CLI.bat`
-- Terminal-based interface
-- Great for scripting and voice testing
+#### `FRED_POPUP.bat` — hold-to-talk popup
+- Launches the hold-to-talk popup GUI directly (no tray-icon step)
+
+#### `fred_cli.bat` — command line
+- Terminal-based interface, runs `Core\main.py`
+- Useful for scripting and voice testing without the HUD
 
 ### 3. First Run
 
@@ -39,25 +42,25 @@ When you launch FRED for the first time, it will:
 
 ### 4. Try These Commands
 
-**GUI:**
-- Type: "hello fred"
-- Type: "what's the weather in Mumbai?"
-- Type: "what's 847 * 23?"
+**Voice/HUD (`FRED.bat`, `FRED_POPUP.bat`):**
+- Say or type: "hello fred"
+- "what's the weather in Mumbai?"
+- "what's 847 * 23?"
 
-**CLI:**
+**CLI (`fred_cli.bat`):**
 - Type: `hello`
 - Type: `voice` to switch to voice mode
 - Type: `exit` to quit
 
 ## Troubleshooting
 
-### "ModuleNotFoundError" when launching GUI
+### "ModuleNotFoundError" when launching
 **Fix:** Make sure all dependencies are installed:
 ```powershell
 pip install -r requirements.txt
 ```
 
-### GUI window appears but doesn't respond
+### HUD/popup window appears but doesn't respond
 **Fix:** Close it and try again. First launch loads models which takes time.
 
 ### "Failed to initialize CUDA" or GPU errors
@@ -72,27 +75,28 @@ pip install -r requirements.txt
 Project_FRED/
 ├── Core/                 # Main FRED codebase
 │   ├── main.py          # CLI entry point
-│   ├── ui/gui_app.py    # GUI interface
-│   ├── orchestrator/    # Command router
-│   ├── llm/            # LLM client (local models)
-│   ├── memory/         # Memory system
-│   ├── tools/          # FRED's abilities
-│   ├── audio/          # STT/TTS
-│   ├── config/         # Settings
+│   ├── ui/pill_app.py   # Hold-to-talk popup UI
+│   ├── orchestrator/    # Command router / tool registry
+│   ├── llm/             # LLM client (cloud-first, local fallback)
+│   ├── memory/          # Memory system
+│   ├── tools/           # FRED's abilities
+│   ├── audio/           # STT/TTS
+│   ├── config/          # Settings
 │   └── ...
-├── fred_gui.py         # GUI launcher (Python)
-├── FRED_GUI.bat        # GUI launcher (Batch)
-├── FRED CLI.bat        # CLI launcher
-├── requirements.txt    # Dependencies
+├── hud/                 # HUD server + tray UI
+├── fred_popup.py         # Popup entry point (used by FRED.bat / FRED_POPUP.bat)
+├── FRED.bat              # Normal launcher (voice + HUD tray)
+├── FRED_POPUP.bat         # Hold-to-talk popup launcher
+├── fred_cli.bat           # CLI launcher
+├── requirements.txt       # Dependencies
 └── README.md
 ```
 
 ## Development
 
-### Run GUI directly (for debugging):
+### Run the popup UI directly (for debugging):
 ```powershell
-cd Core
-python ui/gui_app.py
+python fred_popup.py
 ```
 
 ### Run CLI directly:
@@ -106,8 +110,10 @@ Launch either version and watch the state indicator in the top-right corner cycl
 
 ## Notes
 
-- All models run locally (offline after first download)
-- No data sent to cloud except deliberate web search/weather lookups
+- Conversation and vision try a cloud API (Cerebras) first, falling
+  back to local models (Qwen3-8B, etc.) if that fails — see the
+  Privacy section in README.md for the current cascade and the
+  sensitive-content local-only pin
 - Models stored in: `Core/config/settings.py` (MODELS_DIR)
 - Conversation history saved locally
 - Memory persists across sessions

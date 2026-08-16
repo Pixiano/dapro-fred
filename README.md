@@ -1,8 +1,6 @@
 # F.R.E.D.
 
-**F**riendly, **R**esponsive, **R**ational, **R**akish **E**lectronic **D**ude — a personal JARVIS that runs entirely on local hardware.
-
-Not a product. Not for sale. An assistant built to live with, on one RTX 5060 Ti, with nothing leaving the machine except two deliberate exceptions (live web search and weather).
+**F**riendly, **R**esponsive, **R**ational, **R**akish **E**lectronic **D**ude — a personal JARVIS-style assistant Vatsal builds and lives with day to day. Not a product, not for sale.
 
 ---
 
@@ -16,12 +14,12 @@ Core\venv\Scripts\python.exe fred_popup.py
 
 | | |
 |---|---|
-| `python fred_popup.py` | the assistant |
+| `python fred_popup.py` | the assistant (also `FRED_POPUP.bat`) |
 | `python fred_popup.py --mock` | pill only — cycles every state with synthetic audio, loads no models. Use this for any visual work. |
 | `python install_startup.py` | start automatically at log-on (`--status`, `--remove`) |
-| `python Core\main.py` | CLI mode — text, or type `voice` |
+| `python Core\main.py` | CLI mode — text, or type `voice` (also `fred_cli.bat`) |
 
-Press the hotkey again while FRED is speaking to interrupt it.
+Press the hotkey again while FRED is speaking to interrupt it. First-time setup and dependency install: see `SETUP.md` (note: its file-structure section predates the current `fred_popup.py`/pill UI — the table above and `Core/main.py` are the source of truth for how to actually launch it).
 
 ---
 
@@ -30,10 +28,11 @@ Press the hotkey again while FRED is speaking to interrupt it.
 | Layer | What runs | Notes |
 |---|---|---|
 | **Ears** | `faster-whisper large-v3-turbo` | CUDA via CTranslate2. Warm RTF ~0.06–0.13 |
-| **Brain** | Gemma 4 E4B (`gemma4` tier) | Thinking enabled — reasons privately, speaks the conclusion |
+| **Brain** | Cloud-first, local-fallback | Tries a cloud API (Cerebras, `gpt-oss-120b`, no-retention terms) first for conversation/tool-calling; falls through untouched to a local llama.cpp tier (Qwen3-8B, thinking on) if every cloud attempt fails. Content flagged sensitive (personal/people vault data) can be pinned to the local-only path — currently disabled by explicit user choice, one flag re-arms it. Two more local tiers (Qwen3-14B, gpt-oss-20b) exist configured but aren't dynamically selected yet (`TIER_ROUTING_ENABLED = False`) — see `config/settings.py` |
+| **Eyes** | Cloud vision (Cerebras `gemma-4-31b`), local `gemma-4-12B` GGUF as fallback | On-demand screenshot description (`whats_on_screen`) plus a background screen watcher; see Known limits |
 | **Mouth** | Kokoro-82M | 1.2× speed. Returns real PCM, so the waveform reacts to actual amplitude |
-| **Memory** | FAISS + Qwen3-Embedding-0.6B | Local embeddings, semantic recall per turn |
-| **Face** | Native Win32 layered window | Real per-pixel alpha, click-through, never steals focus |
+| **Memory** | FAISS + Qwen3-Embedding-0.6B | Local embeddings, semantic recall per turn; also powers tool routing and vault retrieval below |
+| **Face** | Native Win32 layered window (pill) + a browser-based HUD (`hud/`) | Real per-pixel alpha, click-through, never steals focus |
 
 Hold-to-talk replaced an always-on wake word. Nothing listens at rest, there are no false triggers, no "Yes?" round trip, and key-release gives Whisper a precisely bounded utterance instead of a silence guess.
 
@@ -41,24 +40,32 @@ Hold-to-talk replaced an always-on wake word. Nothing listens at rest, there are
 
 ## What FRED can do
 
-**40 tools**, and the important part is that it is never shown all of them.
+**~80 registered tools**, and the important part is that it is never shown all of them.
 
-A router classifies each turn first. Conversation never sees tool definitions at all, and an action turn sees only the matching category — an average of **4.2 tools instead of 40**. Handing a small model forty options with nothing meaning "just reply" is what made it open google.com in response to "Hello Fred, how are you?"
+Two layers keep a small model from seeing the whole menu: a CHAT-vs-TOOLS classifier (conversation never sees tool definitions at all) and a category/cue-word router that offers only the tools matching the utterance — a handful instead of eighty. A separate semantic (embedding-similarity) router exists as a rescue path for phrasing the cue lists miss. See `Core/orchestrator/intent.py` and `Core/orchestrator/tool_router.py`.
 
 | Category | Tools |
 |---|---|
 | Info | time, weather, web search, calculator, system status, network status |
-| Apps | launch app, open website, open file/folder |
-| Audio | volume get/set, mute, media play-pause-skip |
-| Display | brightness get/set, screenshot |
+| Apps | launch app, open website, open file/folder, open a vault note |
+| Audio | volume get/set/adjust, mute, media play-pause-skip, input/output device |
+| Display | brightness get/set/adjust, screenshot |
+| Vision | describe what's on screen (on-demand capture + cloud/local fallback) |
 | Windows | list, focus, minimise, maximise, close |
-| Files | create, append, read, list, search, move, rename, delete |
+| Files | create, append, read, list, search (incl. fuzzy "find_file_smart"), move, rename, delete |
 | Processes | list, kill |
-| Power | lock, sleep, restart, shutdown |
-| Schedule | reminders (clock times or offsets), timers, file watches, list, cancel |
+| Power | lock, sleep, restart, shutdown, "end of day", restart FRED itself |
+| Schedule | reminders (clock times or offsets), recurring, timers, file watches, list, cancel |
 | Phone | call by name or number, hang up, sync contacts — see `PHONE.md` |
+| Tasks / agenda | add, list, complete tasks; add/list/update/delete agenda items |
+| Workout | split, today's workout, schedule workouts |
+| Git | status, log, diff summary (for FRED's own repo or another) |
+| Recap / recall | summarise today, save a daily summary, recall recent conversation |
+| Self-docs | describe FRED's own live state, answer questions from his own docs |
+| Vault | semantic retrieval + direct open over Vatsal's personal markdown notes |
+| Lockdown | a kill-switch — while engaged, every tool except unlock is refused; conversation still works |
 
-**Five tools ask before acting** — `close_window`, `kill_process`, `delete_file`, `power_action`, `call_phone`. FRED halts the whole batch when it sees one, so a confirmation can't smuggle another action alongside it. `call_phone` resolves the contact name before asking, so the number in the question is the number that gets dialled.
+**Destructive tools ask before acting** (`close_window`, `kill_process`, `delete_file`, `power_action`, `restart_fred`, `call_phone`, `delete_agenda_item`). FRED halts the whole batch when it sees one, so a confirmation can't smuggle another action alongside it. `call_phone` resolves the contact name before asking, so the number in the question is the number that gets dialled.
 
 Reminders accept real clock times: *"remind me to call mum at 7pm"*, *"tomorrow at 8:30am"*, *"tonight at 10"*. A time already past rolls to the next day, and FRED reads the resolved time back so a misparse is audible immediately.
 
@@ -66,17 +73,17 @@ Reminders accept real clock times: *"remind me to call mum at 7pm"*, *"tomorrow 
 
 ## Things worth knowing
 
-**It streams.** Speech starts on the first finished sentence rather than after the whole reply. Time-to-first-text measured at 2.12 s against 7.43 s unstreamed. Only conversation streams — a tool result can't be narrated before the tool has run.
+**It streams.** Speech starts on the first finished sentence rather than after the whole reply. Only conversation streams — a tool result can't be narrated before the tool has run.
 
-**It gives VRAM back.** After 1 h idle the LLM unloads; 15 min later Whisper follows, freeing ~5.7 GB. Reload starts on the *keypress*, concurrently with you speaking, so it normally costs nothing — audio capture needs no model at all. First use after a long idle can wait 2–3 s.
+**It gives VRAM back.** After 1 h idle the local LLM unloads; 15 min later Whisper follows. Reload starts on the *keypress*, concurrently with you speaking, so it normally costs nothing.
 
-**It sees what you're doing.** One line of context per turn names the active window, so "what's this" has something to resolve against. Title only — no screenshot, no vision model yet.
+**It sees what you're doing, two ways.** A line of active-window context is attached to every turn, and a separate `whats_on_screen` tool can take and describe an actual screenshot (cloud vision first, local model or a cache with an honest staleness hedge if that's unavailable).
 
-**Nothing leaves the machine** except `web_search` and `get_weather`, which by definition need the internet. No API keys, no cloud inference.
+**Most conversation goes to a cloud API.** This is a change from FRED's original local-only design: text conversation and tool-calling now try a no-retention cloud provider first and fall back to a fully local model only if that fails, and screen-vision does the same. `web_search` and `get_weather` still need the internet by definition. Content flagged as sensitive personal/people data can be pinned to local-only inference; that pin is currently off by explicit user choice. See `Core/config/settings.py`'s cloud-cascade comments for the exact reasoning and provider terms checked.
 
-**Your phone can drive it.** A token-gated LAN endpoint on `:8779` accepts a command and returns FRED's reply, sharing the same file bus as the HUD console — so every registered tool works from the phone with no per-command code. FRED can also dial contacts on a paired Android phone. Both in `PHONE.md`.
+**Your phone can drive it.** A token-gated LAN endpoint on `:8779` accepts a command and returns FRED's reply, sharing the same file bus as the HUD console. FRED can also dial contacts on a paired Android phone. Both in `PHONE.md`.
 
-**The HUD holds the screen awake.** While it's open the display won't sleep or blank — it's meant to be looked at. Uses the browser's Screen Wake Lock, so the lock lives exactly as long as the HUD page does and nothing touches your power plan; close the HUD and normal sleep behaviour returns immediately.
+**The HUD holds the screen awake.** While it's open the display won't sleep or blank. Uses the browser's Screen Wake Lock, loopback-only server, so it works with no network and nothing touches your power plan.
 
 ---
 
@@ -92,31 +99,47 @@ Core/
     pill_app.py        controller: hotkey -> STT -> LLM -> TTS
     pill/              layered window, renderer, two indicator styles
   orchestrator/
-    orchestrator.py    dispatcher, tool loop, confirmation gate
+    orchestrator.py    dispatcher, tool loop, confirmation gate, tool registration
     intent.py          chat-vs-tools router + category subsetting
+    tool_router.py     semantic (embedding) tool rescue-router
+    vault_router.py    semantic retrieval over the personal markdown vault
     scheduler.py       reminders, timers, file watches
-  llm/                 llama.cpp inference, load/unload
-  audio/               Whisper STT, Kokoro TTS, legacy Vosk/SAPI for CLI
-  memory/              FAISS + local embeddings
-  tools/               the 40 tools
+  llm/                 llama.cpp local inference + cloud-API cascade, load/unload
+  audio/                Whisper STT, Kokoro TTS, legacy Vosk/SAPI for CLI
+  vision/               screen watcher/capture, screen-context cache
+  memory/               FAISS + local embeddings
+  tools/                the registered tools (machine, files, phone, vault, git, workout, agenda...)
   web/phone_api.py     token-gated LAN endpoint for the phone (see PHONE.md)
-  utils/               notifier, model lifecycle, CUDA bootstrap
-  data/memory/         conversation memory (gitignored)
-Attic/                 superseded implementations, kept readable
-Legacy/                earlier generations of the project
-old readmes/           previous versions of this file
-Phases *.txt           the roadmap
+  utils/                notifier, model lifecycle, CUDA bootstrap
+  state/                lockdown flag, persisted across restarts
+  data/                 conversation memory, indexes, logs (gitignored)
+hud/                    browser-based always-on-top HUD (Phase 16), loopback server
+Attic/                  superseded implementations, kept readable
+Legacy/                 an earlier, abandoned generation of the project — not current
+old readmes/            previous versions of this file
 ```
 
 Models live outside the repo (LM Studio's folder) and are gitignored — see `Core/config/settings.py` for paths. Kokoro's model files are separate release downloads; the URL is in that file.
 
 ---
 
+## Roadmap
+
+The authoritative, actively-maintained scope document is **`MVP Plan (v1.0 - v1.1).txt`** at the repo root. Summary:
+
+- **v1.0 (MVP, due June 28 2026):** cut-down Phases 16-20 — HUD with live transcript, screen vision, a faster personality-iteration loop, memory split into real categories, and a permission-gate audit plus "stay in conversation" voice mode.
+- **v1.1 (due Jan 31 2027):** the full backlog cut from v1.0 — dispatcher self-learning, account integrations (Spotify/YouTube/etc.) behind a proper credentials vault, an opt-in "extreme of extreme" cloud tier for the hardest tasks, real desktop-shell UI, voice cloning, and more.
+- **v2+ (unscheduled):** bigger, deliberately-deferred ideas — self-improvement, a home-network "JARVIS mode" (device inventory, read-only logs, allow-listed actuators like Wake-on-LAN, gated on local-model trust before anything touches the network), and FRED placing/answering short phone calls himself. Both were scoped in depth on 2026-08-16 specifically to record their blockers, not to schedule them.
+
+Don't duplicate that document's detail here — read it directly for the reasoning behind any of the above, the triage rule for new ideas, and what's explicitly out of scope.
+
+---
+
 ## Known limits
 
-- **Latency.** Thinking generates reasoning tokens before any audio can start. Streaming hides most of it, not all.
-- **Tool choice on a 4B.** Genuine action requests still depend on the model picking correctly within a category, and that accuracy falls with model size. The router shields the common cases deterministically; it can't shield everything.
-- **Memory is unfiltered.** Every turn is stored whole, and FAISS `IndexFlatL2` has no delete — a wrong memory needs an index rebuild. Selective memory is Phase 19.
-- **No vision yet.** The multimodal projector is downloaded and `Gemma4ChatHandler` exists, so this is wiring rather than research. Phase 17.
+- **Most conversation now depends on a third-party API being up.** The local fallback is real and untouched, but it's the tertiary path, not the default, as of the 2026-08-03 cloud cascade. See "Things worth knowing" above.
+- **Tool choice on a small model.** Genuine action requests still depend on the model picking correctly within a routed subset, and that accuracy falls with model size. The router shields the common cases deterministically; it can't shield everything.
+- **Memory is unfiltered within a turn.** Every turn is stored whole, and FAISS `IndexFlatL2` has no delete — a wrong memory needs an index rebuild. Real category-based organisation is Phase 19 (v1.0 scope, not yet landed as of this writing — verify against `Core/memory/memory_manager.py` before relying on this).
+- **Dynamic tier selection isn't wired up.** Three local tiers are configured (Standard/Deep/Extreme) but only Standard is ever picked; smarter routing between them is explicitly v1.1 scope.
 
-See `Phases 11 - 20 (JARVIS Roadmap).txt` for what's built, what's next, and why.
+See `MVP Plan (v1.0 - v1.1).txt` for what's built, what's next, and why.
