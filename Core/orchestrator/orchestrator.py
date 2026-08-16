@@ -16,6 +16,7 @@ from tools import machine_tools
 from tools import assist_tools
 from tools import git_tools
 from tools import phone_tools
+from tools import whatsapp_tools
 from tools import smart_search
 from tools import session_summary
 from tools import vision_tools
@@ -1192,6 +1193,76 @@ class FREDOrchestrator:
                 "type": "object",
                 "properties": {
                     "limit": {"type": "integer", "description": "How many contacts to keep. Optional, defaults to 50."},
+                },
+                "required": [],
+            },
+        )
+
+        # ---------------------------------------------------
+        # WhatsApp. read_messages and send_message are deliberately in
+        # DIFFERENT intent categories (see intent.py): reading pulls in
+        # attacker-controlled text, and it must not arrive on a turn that
+        # also has the ability to send. Structural, not a prompt rule.
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="read_messages",
+            function=whatsapp_tools.read_messages,
+            description="Read recent WhatsApp messages. Senders you've marked useless are skipped.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "How many messages. Optional, defaults to 10."},
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="send_message",
+            function=whatsapp_tools.send_message,
+            description="Send a WhatsApp message to a trusted contact. Refuses anyone not marked trusted or VIP.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "contact": {"type": "string", "description": "Chat or contact name, exactly as it appears in WhatsApp."},
+                    "text": {"type": "string", "description": "The message to send."},
+                },
+                "required": ["contact", "text"],
+            },
+            destructive=True,
+        )
+
+        self.tools.register(
+            name="set_contact_tier",
+            function=whatsapp_tools.set_contact_tier,
+            description="Change what FRED may do about a sender: useless, basic, trusted or vip.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The sender or chat name."},
+                    "tier": {"type": "string", "description": "useless, basic, trusted, or vip."},
+                },
+                "required": ["name", "tier"],
+            },
+            destructive=True,
+        )
+
+        self.tools.register(
+            name="list_contact_tiers",
+            function=whatsapp_tools.list_contact_tiers,
+            description="Show which WhatsApp senders are in which trust tier.",
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+        self.tools.register(
+            name="use_phone",
+            function=phone_tools.use_phone,
+            description="Choose which paired phone FRED acts on, by name. Blank reports the current one.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Configured phone name. Optional."},
                 },
                 "required": [],
             },

@@ -94,27 +94,230 @@ def _match_key(number: str) -> str:
     return digits[-10:] if len(digits) >= 10 else digits
 
 
-def _adb(*args, timeout: int = 15) -> subprocess.CompletedProcess:
+# Which phone a command goes to. Every adb call is targeted with -s from
+# 2026-08-16 on, because bare commands stop working the moment a second
+# device appears — confirmed live with both phones attached:
+# "adb: more than one device/emulator". One phone at a time is the normal
+# case, but "normal" is not "guaranteed", and the failure is total.
+#
+# Phones are named rather than indexed so "call Mom from my work phone"
+# means something, and so the serial (which never changes) is the identity
+# rather than the address (which changes constantly — see _discover).
+#
+#   FRED_PHONES = "personal=O3PRIS25DB005413,work=RZGL50FCL4W"
+#
+# First entry is the default. A bare serial with no name is allowed and
+# gets named "phone".
+_PHONES_RAW = os.environ.get("FRED_PHONES", "")
+
+# Legacy single-address setting, still honoured as the last-resort address
+# for the default phone (see _discover step 3).
+_ADDR = os.environ.get("FRED_PHONE_ADB", "")
+
+_active_phone = ""      # name; empty means "the default"
+
+
+def _phones() -> dict:
+    """{name: serial} in declaration order. Empty when unconfigured."""
+    phones = {}
+    for i, part in enumerate(p.strip() for p in _PHONES_RAW.split(",")):
+        if not part:
+            continue
+        name, _, serial = part.partition("=")
+        if serial:
+            phones[name.strip().lower()] = serial.strip()
+        else:
+            phones["phone" if i == 0 else f"phone{i + 1}"] = name.strip()
+    return phones
+
+
+def _adb(*args, target: str = None, timeout: int = 15) -> subprocess.CompletedProcess:
+    """
+    Run adb against one specific device.
+
+    target is an adb serial OR an ip:port; both are valid -s arguments.
+    None means "whatever _resolve() picks", which is the normal path.
+    """
+    if target is None:
+        target = _resolve()
+    prefix = ["-s", target] if target else []
+    # encoding is NOT optional. text=True alone decodes with the locale
+    # codec, which on this machine is cp1252 — and a WhatsApp
+    # notification dump is full of emoji. Confirmed 2026-08-16: the
+    # subprocess reader thread died with UnicodeDecodeError on byte 0x8d,
+    # stdout came back empty, and read_messages cheerfully reported "No
+    # messages waiting" while the phone had plenty. A silent wrong answer,
+    # not a crash. errors="replace" so one odd byte degrades a character
+    # instead of losing the whole read.
     return subprocess.run(
-        ["adb", *args], capture_output=True, text=True, timeout=timeout
+        ["adb", *prefix, *args], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=timeout,
     )
 
 
+def _attached() -> dict:
+    """{serial_or_address: state} straight from `adb devices`."""
+    try:
+        out = subprocess.run(
+            ["adb", "devices"], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=15,
+        ).stdout
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return {}
+
+    found = {}
+    for line in out.splitlines()[1:]:
+        if "\t" in line:
+            name, _, state = line.partition("\t")
+            found[name.strip()] = state.strip()
+    return found
+
+
+def _discover(serial: str) -> str:
+    """
+    Address for `serial` that adb can actually talk to, or "".
+
+    Order matters and each step earns its place (measured 2026-08-16):
+      1. Already attached — USB, or a live wireless session.
+      2. mDNS. Wireless debugging picks a NEW RANDOM PORT every time the
+         service starts, and Android disables the whole thing on every
+         reboot, so there is nothing stable to remember. Three sessions
+         gave three ports. mDNS is how the port is found at all; the
+         service name embeds the serial, which is what makes it pick the
+         right phone out of two.
+      3. The legacy fixed FRED_PHONE_ADB address, for a phone set up the
+         old `adb tcpip 5555` way.
+    """
+    attached = _attached()
+
+    if attached.get(serial) == "device":
+        return serial
+
+    # A live WIRELESS session is keyed by ip:port, not by serial, so the
+    # check above misses it entirely. Ask each attached device who it is.
+    #
+    # This has to come before mDNS, not after: confirmed 2026-08-16, the
+    # phone was connected and working at 192.168.0.105:40017 while
+    # `adb mdns services` returned nothing, and discovery reported "no
+    # phone reachable" about a phone it was already talking to.
+    # Announcements come and go; an open connection is the harder fact.
+    for address, state in attached.items():
+        if state != "device" or address == serial:
+            continue
+        who = _adb("shell", "getprop", "ro.serialno",
+                   target=address, timeout=10).stdout.strip()
+        if who == serial:
+            return address
+
+    # Nothing connected yet — find where it is listening. The port is
+    # random every time the service starts, so mDNS is the only way to
+    # learn it; it just isn't the only way to recognise the phone.
+    try:
+        services = _adb("mdns", "services", target="", timeout=10).stdout
+    except (FileNotFoundError, subprocess.SubprocessError):
+        services = ""
+
+    for line in services.splitlines():
+        if serial in line:
+            match = re.search(r"(\d{1,3}(?:\.\d{1,3}){3}:\d+)", line)
+            if not match:
+                continue
+            address = match.group(1)
+            if attached.get(address) == "device":
+                return address
+            # `adb connect` exits 0 even when it prints "failed to
+            # connect" (confirmed 2026-08-16), so its return code says
+            # nothing. Only the device list is evidence.
+            _adb("connect", address, target="", timeout=10)
+            if _attached().get(address) == "device":
+                return address
+
+    if _ADDR:
+        if attached.get(_ADDR) == "device":
+            return _ADDR
+        _adb("connect", _ADDR, target="", timeout=10)
+        if _attached().get(_ADDR) == "device":
+            return _ADDR
+
+    return ""
+
+
+def _resolve() -> str:
+    """
+    Address of the phone commands should go to, or "".
+
+    With no FRED_PHONES configured this falls back to "the single attached
+    device", which is the pre-2026-08-16 behaviour and correct for a
+    one-phone setup.
+    """
+    phones = _phones()
+
+    if phones:
+        name = _active_phone or next(iter(phones))
+        serial = phones.get(name)
+        return _discover(serial) if serial else ""
+
+    ready = [k for k, v in _attached().items() if v == "device"]
+    if len(ready) == 1:
+        return ready[0]
+    if not ready and _ADDR:
+        _adb("connect", _ADDR, target="", timeout=10)
+        return _ADDR if _attached().get(_ADDR) == "device" else ""
+
+    # Two devices and no configuration: refuse rather than guess which
+    # phone to dial from.
+    return ""
+
+
+def use_phone(name: str = "") -> str:
+    """Choose which configured phone subsequent commands act on."""
+    global _active_phone
+
+    phones = _phones()
+    if not phones:
+        return "Only one phone is set up, so there's nothing to switch between."
+
+    if not name:
+        current = _active_phone or next(iter(phones))
+        return f"Using {current}. Also configured: {', '.join(phones)}."
+
+    key = name.strip().lower()
+    if key not in phones:
+        return f"I don't have a phone called {name}. I have: {', '.join(phones)}."
+
+    _active_phone = key
+    return f"Using {key} from now on."
+
+
 def _device_ready() -> bool:
-    """True if exactly one authorised device is attached, reconnecting once."""
-    for attempt in range(2):
-        try:
-            lines = _adb("devices").stdout.splitlines()[1:]
-        except (FileNotFoundError, subprocess.SubprocessError):
-            return False
+    """True when the selected phone is reachable."""
+    return bool(_resolve())
 
-        if any(l.split("\t")[-1] == "device" for l in lines if "\t" in l):
-            return True
 
-        if attempt == 0 and _ADDR:
-            _adb("connect", _ADDR, timeout=10)
+def device_status() -> str:
+    """
+    Why the phone isn't reachable, in terms that name the fix.
 
-    return False
+    "The phone isn't connected" sent Vatsal hunting on 2026-08-16 when the
+    real cause was Android having switched wireless debugging off during a
+    reboot — which it does every reboot, on every device, by design.
+    """
+    target = _resolve()
+    if target:
+        return f"Phone reachable at {target}."
+
+    attached = _attached()
+    unauthorised = [k for k, v in attached.items() if v == "unauthorized"]
+    if unauthorised:
+        return "The phone is attached but not authorised - accept the USB debugging prompt on its screen."
+
+    ready = [k for k, v in attached.items() if v == "device"]
+    if len(ready) > 1 and not _phones():
+        return (f"{len(ready)} phones are attached and I don't know which to use. "
+                "Set FRED_PHONES, or unplug one.")
+
+    return ("No phone is reachable. Check Wireless debugging is still on - "
+            "Android turns it off on every reboot - or plug in over USB.")
 
 
 # =========================================================
@@ -170,33 +373,59 @@ def _parse_call_counts(output: str) -> dict:
     return counts
 
 
-def _read_contacts() -> dict:
-    """{name: number} from the vault file, insertion-ordered."""
-    if not CONTACTS_PATH.exists():
-        return {}
+def _read_contacts(with_removed: bool = False):
+    """
+    {name: number} from the vault file, insertion-ordered.
 
-    entries = {}
+    with_removed also returns the tombstones — see _REMOVED_HEADING.
+    """
+    entries, removed = {}, {}
+    if not CONTACTS_PATH.exists():
+        return (entries, removed) if with_removed else entries
+
+    section = ""
     for line in CONTACTS_PATH.read_text(encoding="utf-8").splitlines():
         line = line.strip()
+        if line.startswith("## "):
+            section = line[3:].strip().lower()
+            continue
         if not line.startswith("- ") or ":" not in line:
             continue
         name, _, number = line[2:].rpartition(":")
         name, number = name.strip(), number.strip()
-        if name and number:
+        if not (name and number):
+            continue
+        if section == "removed":
+            removed[name] = number
+        else:
             entries[name] = number
-    return entries
+
+    return (entries, removed) if with_removed else entries
 
 
-def _write_contacts(entries: dict):
+def _write_contacts(entries: dict, removed: dict = None):
     """Atomic rewrite — a half-written phone book is worse than none."""
     body = "".join(f"- {name}: {number}\n" for name, number in entries.items())
+
+    tail = ""
+    if removed:
+        lines = "".join(f"- {n}: {num}\n" for n, num in sorted(removed.items()))
+        tail = _REMOVED_HEADING + lines
+
     CONTACTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = CONTACTS_PATH.with_suffix(".md.tmp")
-    tmp.write_text(_HEADER + body, encoding="utf-8")
+    tmp.write_text(_HEADER + body + tail, encoding="utf-8")
     tmp.replace(CONTACTS_PATH)
 
 
-def _merge(existing: dict, incoming: list) -> tuple:
+_REMOVED_HEADING = (
+    "\n## removed\n\n"
+    "Deliberately deleted. A sync must never bring these back.\n"
+    "Delete a line from here to let that contact return.\n\n"
+)
+
+
+def _merge(existing: dict, incoming: list, removed: dict = None) -> tuple:
     """
     Append-only merge. Returns (merged, added, corrected).
 
@@ -228,10 +457,20 @@ def _merge(existing: dict, incoming: list) -> tuple:
     # label Vatsal chose wins over the phone's, permanently.
     by_number = {_match_key(num): name for name, num in existing.items()}
 
+    # Tombstones. Append-only protects hand EDITS but not hand DELETIONS:
+    # the file cannot tell "Vatsal deleted this" from "never seen", so
+    # without this every sync resurrects everything he trimmed. Measured
+    # 2026-08-16 on the real file — a sync would have re-added 33 of the
+    # 34 entries he had just curated away, silently.
+    gone = {_match_key(num) for num in (removed or {}).values()}
+
     for name, number in incoming:
         if name in seen:
             continue
         seen.add(name)
+
+        if _match_key(number) in gone:
+            continue
 
         known_as = by_number.get(_match_key(number))
         if known_as is not None and known_as != name:
@@ -285,12 +524,13 @@ def sync_contacts(limit: int = 50) -> str:
     )
     incoming = [name_num for _, name_num in ranked][:limit]
 
-    merged, added, corrected = _merge(_read_contacts(), incoming)
+    existing, removed = _read_contacts(with_removed=True)
+    merged, added, corrected = _merge(existing, incoming, removed)
 
     if not added and not corrected:
         return f"Contacts already up to date — {len(merged)} on file."
 
-    _write_contacts(merged)
+    _write_contacts(merged, removed)
 
     parts = [f"Synced {len(merged)} contacts"]
     if added:
@@ -478,5 +718,21 @@ if __name__ == "__main__":
         [("Other Label", "+919000000008"), ("Brand New", "+919000000010")],
     )
     assert added == ["Brand New"], added
+
+    # A deliberately deleted contact must not come back on the next sync.
+    # Matched by NUMBER, so it stays dead even if the phone renames it.
+    merged, added, _ = _merge(
+        {"Kept": "+919000000011"},
+        [("Kept", "+919000000011"), ("Deleted Person", "+919000000012")],
+        {"Deleted Person": "+919000000012"},
+    )
+    assert added == [], added
+    assert "Deleted Person" not in merged
+
+    merged, added, _ = _merge(
+        {}, [("Renamed On Phone", "09000000012")],
+        {"Deleted Person": "+919000000012"},
+    )
+    assert added == [], "tombstone must match on number, not name"
 
     print("ok")

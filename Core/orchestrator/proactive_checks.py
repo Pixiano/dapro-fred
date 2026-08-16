@@ -30,8 +30,10 @@ from config.settings import (
     PROACTIVE_DEADLINE_WARN_DAYS,
     PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
+    VIP_MESSAGE_CHECK_MINUTES,
 )
 from tools import agenda, daily_tasks, session_summary
+from utils import event_log
 from utils.notifier import notify
 from utils.vault_md import parse_frontmatter
 
@@ -574,6 +576,33 @@ def check_day_rollover(llm=None):
 # WIRING
 # =========================================================
 
+def check_vip_messages():
+    """
+    Speak up when a VIP messages, and stay silent otherwise.
+
+    Deliberately does NOT dedup through _load_state() like the checks
+    above: whatsapp_tools keeps its own seen-set keyed on the message's
+    own epoch timestamp, which is finer-grained than "once per stretch"
+    and is the right granularity here — two different VIP messages an
+    hour apart are two separate things worth hearing, whereas one message
+    must never be announced twice.
+
+    Reading works with the phone locked (verified 2026-08-16), so this
+    costs nothing but an adb round trip when nothing has arrived. Never
+    raises into the scheduler: a phone that's asleep or off the network
+    is the normal case, not an error.
+    """
+    try:
+        from tools.whatsapp_tools import check_vip_messages as fetch
+        summary = fetch()
+    except Exception as e:
+        event_log.log_error("proactive_vip_messages", e)
+        return
+
+    if summary:
+        notify(summary, title="Message")
+
+
 def register(scheduler, llm=None, on_agenda_ask=None):
     """
     Call once at orchestrator startup — see orchestrator.py's __init__.
@@ -613,4 +642,10 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     scheduler.add_periodic(
         lambda: check_agenda_carryover(on_agenda_ask),
         PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_agenda_carryover",
+    )
+    # Runs on its own, much shorter interval: every other check here is
+    # about state that changes over hours, but "someone important just
+    # messaged you" is worthless if it arrives twenty minutes late.
+    scheduler.add_periodic(
+        check_vip_messages, VIP_MESSAGE_CHECK_MINUTES, "proactive_vip_messages"
     )

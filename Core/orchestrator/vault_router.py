@@ -35,6 +35,7 @@ from config.settings import (
     VAULT_DIR,
     VAULT_HARDCODED_FILES,
     VAULT_EXCLUDED_FILES,
+    VAULT_EXCLUDED_PREFIXES,
     VAULT_INDEXED_SUFFIXES,
     VAULT_INDEX_DIR,
     VAULT_RETRIEVAL_TOP_K,
@@ -69,6 +70,8 @@ def _iter_vault_files():
         return
     for path in sorted(VAULT_DIR.rglob("*")):
         if path.suffix.lower() not in VAULT_INDEXED_SUFFIXES:
+            continue
+        if any(path.name.startswith(p) for p in VAULT_EXCLUDED_PREFIXES):
             continue
         if path.name in skip or not path.is_file():
             continue

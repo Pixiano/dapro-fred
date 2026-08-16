@@ -128,6 +128,12 @@ Core/data/lockdown_log.jsonl
 # — which physical devices are plugged into this machine, runtime state.
 Core/data/audio_device_prefs.json
 
+# Which WhatsApp messages the VIP watcher has already announced (see
+# Core/tools/whatsapp_tools.py). Timestamps and sender names — a record of
+# who messaged him and when, so it stays out of the repo. The tiers
+# themselves live in the vault, not here.
+Core/data/whatsapp_seen.json
+
 # Screen-watcher's cached description of the screen. Never the
 # screenshot image itself (that never touches disk at all — see
 # Core/vision/screen_watcher.py) but the text description is still a

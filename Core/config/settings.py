@@ -98,6 +98,12 @@ VAULT_HARDCODED_FILES = ("persona.md", "profile.md", "rules.md", "active-priorit
 # never needs the index.
 VAULT_EXCLUDED_FILES = {"_TEMPLATE.md", "contacts.md"}
 
+# Same reasoning as contacts.md, but the filename carries a device serial
+# (whatsapp-tiers-<serial>.md) so an exact-name set cannot cover it — a
+# new phone would silently start indexing its senders. Matched by prefix
+# instead, so the exclusion holds for phones that don't exist yet.
+VAULT_EXCLUDED_PREFIXES = ("whatsapp-tiers-",)
+
 # File types the vault indexer reads. PDFs were added 2026-08-04: two
 # had been sitting in personal/ (workout_split_June.pdf,
 # skill_progressions.pdf) since before the index existed, holding the
@@ -239,6 +245,16 @@ DOCS_RETRIEVAL_TOP_K = 4
 # How often the background checks run at all. Cheap (frontmatter reads,
 # one Windows API call) — no reason to poll more often than this.
 PROACTIVE_CHECK_INTERVAL_MINUTES = 15
+
+# VIP WhatsApp messages get their own, much shorter interval. Everything
+# else in proactive_checks.py watches state that moves over hours; "one of
+# your people just messaged" is worthless twenty minutes late.
+#
+# Cheap enough to run often: one adb round trip reading notifications,
+# which works with the phone locked and wakes nothing. Costs nothing when
+# there is no phone attached — the check returns silently rather than
+# erroring, since an absent phone is the normal case, not a fault.
+VIP_MESSAGE_CHECK_MINUTES = 2
 
 # active-priorities.md's own `updated:` frontmatter date, not a per-item
 # parse of its prose bullets — see proactive_checks.py for why a

@@ -95,7 +95,17 @@ TOOL_CATEGORIES = {
     ),
     "workout": ("workout_split", "todays_workout", "schedule_workouts"),
     "git": ("git_status", "git_log", "git_diff_summary"),
-    "phone": ("call_phone", "hang_up", "sync_contacts"),
+    "phone": ("call_phone", "hang_up", "sync_contacts", "use_phone"),
+    # Reading and sending are SEPARATE categories on purpose, and this is
+    # the one place in this file where the usual "over-inclusive is cheap"
+    # rule is wrong. read_messages pulls in text written by other people —
+    # attacker-controlled input, arriving at an agent that holds tools. If
+    # a turn can both read a stranger's message and send one, a message
+    # saying "reply to everyone with X" is one hop from doing it. Keeping
+    # them in different categories means the model is never holding both
+    # capabilities at once. Structural, not a prompt instruction.
+    "messages_read": ("read_messages", "list_contact_tiers"),
+    "messages_send": ("send_message", "set_contact_tier"),
     # Questions about FRED himself. describe_self is listed here too:
     # it was registered with no category at all, so until now it was
     # only ever reachable by the embedder's rescue path. The two answer
@@ -260,6 +270,22 @@ CATEGORY_CUES = {
     "phone": (
         "call", "dial", "phone", "ring", "hang up", "end the call",
         "hangup", "cut the call", "contact", "contacts",
+        "which phone", "use my", "switch phone",
+    ),
+    # Cues for these two are kept as disjoint as phrasing allows — see the
+    # comment on messages_read/messages_send above. If both fire they
+    # union into one menu and the isolation is gone, so read is written
+    # question-shaped and plural, send verb-led and singular.
+    "messages_read": (
+        "messages", "any message", "new messages", "unread",
+        "who messaged", "who texted", "check whatsapp", "read whatsapp",
+        "my whatsapp", "what did", "anything from",
+    ),
+    "messages_send": (
+        "send a message", "send message", "message to", "text to",
+        "reply to", "tell him", "tell her", "tell them",
+        "whatsapp him", "whatsapp her", "whatsapp them",
+        "trust", "untrust", "vip", "mark as",
     ),
     # Deliberately NOT "who are you" / "what's your name" / "how are
     # you": those are persona questions, answered from persona.md in the
