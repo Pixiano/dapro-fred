@@ -216,12 +216,13 @@ def _merge(existing: dict, incoming: list) -> tuple:
     added, corrected = [], []
     seen = set()
 
-    # Identity is the NUMBER, not the name. Hand-renaming is a supported
-    # workflow ("Sara Dad" -> "Sara's Dad", "Papa" -> "Papa(My dad)"), and
-    # keying on name meant the phone's original spelling came back as a
-    # brand-new contact on the very next sync — confirmed 2026-08-16, one
-    # person on file twice within minutes of a rename. Left alone it does
-    # that to EVERY renamed contact, every sync, forever.
+    # Identity is the NUMBER, not the name. Hand-renaming an entry —
+    # adding a possessive, a nickname, a note in brackets — is a supported
+    # workflow, and keying on name meant the phone's original spelling
+    # came back as a brand-new contact on the very next sync. Confirmed
+    # 2026-08-16: one person on file twice within minutes of a rename.
+    # Left alone it does that to EVERY renamed contact, every sync,
+    # forever.
     #
     # So a number already on file under any name is skipped entirely: the
     # label Vatsal chose wins over the phone's, permanently.
@@ -455,26 +456,26 @@ if __name__ == "__main__":
     # A hand-renamed contact must not come back under the phone's own
     # spelling. Same number, different label: the label on file wins.
     merged, added, corrected = _merge(
-        {"Sara's Dad": "+919000000007"},
-        [("Sara Dad", "+919000000007")],
+        {"Renamed By Hand": "+919000000007"},
+        [("Phone Spelling", "+919000000007")],
     )
-    assert merged == {"Sara's Dad": "+919000000007"}, merged
+    assert merged == {"Renamed By Hand": "+919000000007"}, merged
     assert added == [] and corrected == []
 
     # Same person, number written differently on each side — still one
     # contact, because identity is the last 10 digits, not the string.
     merged, added, corrected = _merge(
-        {"Papa(My dad)": "+919000000008"},
-        [("Papa", "09000000008")],
+        {"Kept Label": "+919000000008"},
+        [("Other Label", "09000000008")],
     )
-    assert merged == {"Papa(My dad)": "+919000000008"}, merged
+    assert merged == {"Kept Label": "+919000000008"}, merged
     assert added == []
 
     # A genuinely new person is still added — the skip must not swallow
     # everything just because some numbers already exist.
     merged, added, _ = _merge(
-        {"Papa(My dad)": "+919000000008"},
-        [("Papa", "+919000000008"), ("Brand New", "+919000000010")],
+        {"Kept Label": "+919000000008"},
+        [("Other Label", "+919000000008"), ("Brand New", "+919000000010")],
     )
     assert added == ["Brand New"], added
 
