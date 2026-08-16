@@ -137,3 +137,6 @@ Core/data/screen_context.json
 # Pre-synthesised filler/tool-caption audio cache — regenerates on
 # first launch after a clean clone, nothing authored lives here.
 Core/data/phrase_cache/
+
+# Dev-session working notes (not meant for the public repo)
+session_2026-08-12_wakeword_changes.md

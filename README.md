@@ -1,6 +1,6 @@
 # F.R.E.D.
 
-**F**riendly, **R**esponsive, **R**ational, **R**akish **E**lectronic **D**ude — a personal JARVIS-style assistant Vatsal builds and lives with day to day. Not a product, not for sale.
+**F**riendly, **R**esponsive, **R**ational, **R**akish **E**lectronic **D**ude — a personal JARVIS-style assistant I built and live with day to day. Not a product, not for sale.
 
 ---
 
@@ -28,7 +28,7 @@ Press the hotkey again while FRED is speaking to interrupt it. First-time setup 
 | Layer | What runs | Notes |
 |---|---|---|
 | **Ears** | `faster-whisper large-v3-turbo` | CUDA via CTranslate2. Warm RTF ~0.06–0.13 |
-| **Brain** | Cloud-first, local-fallback | Tries a cloud API (Cerebras, `gpt-oss-120b`, no-retention terms) first for conversation/tool-calling; falls through untouched to a local llama.cpp tier (Qwen3-8B, thinking on) if every cloud attempt fails. Content flagged sensitive (personal/people vault data) can be pinned to the local-only path — currently disabled by explicit user choice, one flag re-arms it. Two more local tiers (Qwen3-14B, gpt-oss-20b) exist configured but aren't dynamically selected yet (`TIER_ROUTING_ENABLED = False`) — see `config/settings.py` |
+| **Brain** | Cloud-first, local-fallback | Tries a cloud API (Cerebras, `gpt-oss-120b`, no-retention terms) first for conversation/tool-calling; falls through untouched to a local llama.cpp tier (Qwen3-8B, thinking on) if every cloud attempt fails. Content flagged sensitive (personal/people vault data) can be pinned to the local-only path — currently disabled by explicit user choice, one flag re-arms it. Two more local tiers (Qwen3-14B, gpt-oss-20b) exist, configured, but aren't dynamically selected yet (`TIER_ROUTING_ENABLED = False`) — see `config/settings.py` |
 | **Eyes** | Cloud vision (Cerebras `gemma-4-31b`), local `gemma-4-12B` GGUF as fallback | On-demand screenshot description (`whats_on_screen`) plus a background screen watcher; see Known limits |
 | **Mouth** | Kokoro-82M | 1.2× speed. Returns real PCM, so the waveform reacts to actual amplitude |
 | **Memory** | FAISS + Qwen3-Embedding-0.6B | Local embeddings, semantic recall per turn; also powers tool routing and vault retrieval below |
@@ -52,22 +52,25 @@ Two layers keep a small model from seeing the whole menu: a CHAT-vs-TOOLS classi
 | Display | brightness get/set/adjust, screenshot |
 | Vision | describe what's on screen (on-demand capture + cloud/local fallback) |
 | Windows | list, focus, minimise, maximise, close |
-| Files | create, append, read, list, search (incl. fuzzy "find_file_smart"), move, rename, delete |
+| Files | create, append, read, list, search (incl. fuzzy `find_file_smart`), move, rename, delete |
 | Processes | list, kill |
 | Power | lock, sleep, restart, shutdown, "end of day", restart FRED itself |
 | Schedule | reminders (clock times or offsets), recurring, timers, file watches, list, cancel |
 | Phone | call by name or number, hang up, sync contacts — see `PHONE.md` |
+| Messaging | WhatsApp: read recent messages, send to a trusted contact, list/change per-contact trust tier — driven over adb, no third-party API |
 | Tasks / agenda | add, list, complete tasks; add/list/update/delete agenda items |
 | Workout | split, today's workout, schedule workouts |
 | Git | status, log, diff summary (for FRED's own repo or another) |
 | Recap / recall | summarise today, save a daily summary, recall recent conversation |
 | Self-docs | describe FRED's own live state, answer questions from his own docs |
-| Vault | semantic retrieval + direct open over Vatsal's personal markdown notes |
+| Vault | semantic retrieval + direct open over my personal markdown notes |
 | Lockdown | a kill-switch — while engaged, every tool except unlock is refused; conversation still works |
 
-**Destructive tools ask before acting** (`close_window`, `kill_process`, `delete_file`, `power_action`, `restart_fred`, `call_phone`, `delete_agenda_item`). FRED halts the whole batch when it sees one, so a confirmation can't smuggle another action alongside it. `call_phone` resolves the contact name before asking, so the number in the question is the number that gets dialled.
+**Destructive tools ask before acting** (`close_window`, `kill_process`, `delete_file`, `power_action`, `restart_fred`, `call_phone`, `delete_agenda_item`, `send_message`, `set_contact_tier`). FRED halts the whole batch when it sees one, so a confirmation can't smuggle another action alongside it. `call_phone` resolves the contact name before asking, so the number in the question is the number that gets dialled.
 
 Reminders accept real clock times: *"remind me to call mum at 7pm"*, *"tomorrow at 8:30am"*, *"tonight at 10"*. A time already past rolls to the next day, and FRED reads the resolved time back so a misparse is audible immediately.
+
+**WhatsApp senders are tiered, per contact, per phone:** *useless* (dropped before FRED ever reads the text — every unread WhatsApp message is attacker-controlled input going into a tool-using model, so a whole class of sender is cut before it can be a prompt-injection surface, not just filtered after the fact), *basic* (readable, never messaged, never interrupts), *trusted* (FRED may reply), *vip* (FRED may reply, and proactively speaks up when they message). Reading works with the phone locked; sending needs it unlocked, since it drives the real WhatsApp UI over adb rather than any API. Reading and sending are deliberately separate tool-router categories so a single turn can never both ingest untrusted message text and act on it.
 
 ---
 
@@ -108,7 +111,7 @@ Core/
   audio/                Whisper STT, Kokoro TTS, legacy Vosk/SAPI for CLI
   vision/               screen watcher/capture, screen-context cache
   memory/               FAISS + local embeddings
-  tools/                the registered tools (machine, files, phone, vault, git, workout, agenda...)
+  tools/                the registered tools (machine, files, phone, whatsapp, vault, git, workout, agenda...)
   web/phone_api.py     token-gated LAN endpoint for the phone (see PHONE.md)
   utils/                notifier, model lifecycle, CUDA bootstrap
   state/                lockdown flag, persisted across restarts
@@ -132,6 +135,8 @@ The authoritative, actively-maintained scope document is **`MVP Plan (v1.0 - v1.
 - **v2+ (unscheduled):** bigger, deliberately-deferred ideas — self-improvement, a home-network "JARVIS mode" (device inventory, read-only logs, allow-listed actuators like Wake-on-LAN, gated on local-model trust before anything touches the network), and FRED placing/answering short phone calls himself. Both were scoped in depth on 2026-08-16 specifically to record their blockers, not to schedule them.
 
 Don't duplicate that document's detail here — read it directly for the reasoning behind any of the above, the triage rule for new ideas, and what's explicitly out of scope.
+
+**Two unrelated things are both called "fine-tune" in this project — don't conflate them.** The v1.1 item above is a TTS voice-clone fine-tune: cloning my own voice so FRED speaks in it instead of Kokoro's stock one. Separately, `Fine-Tune MVP Plan (2026-08-09).md` and `Fine-Tune Plan Draft (2026-08-12).md` at the repo root scope a LoRA fine-tune of FRED's own tool-calling model (Qwen3-8B, the Standard tier) on logged real usage, once the tool-calling path is stable enough that the training data isn't just baking in today's known bugs. Both docs are planning-only — nothing has been trained yet — and neither is folded into the phase list above.
 
 ---
 
