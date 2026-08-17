@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from datetime import datetime
 
 from state.conversation_state import ConversationState
@@ -2738,6 +2739,20 @@ class FREDOrchestrator:
         if not all_results:
             return True
 
+        # Only a WRITE claim qualifies here, not the full _ACTION_DONE
+        # vocabulary. Tools like ask_about_myself return documentation
+        # excerpts stuffed with filenames and words like "added" and
+        # "set", and a reply quoting them must not be read as claiming to
+        # have written a file. A false "I haven't actually done that" on
+        # an ordinary question is its own kind of broken — one was
+        # already observed on 2026-08-17 14:19 from the older guard.
+        if not re.search(
+            r"\b(?:created|wrote|written|saved|appended|updated|"
+            r"deleted|removed|moved|renamed)\b",
+            content or "", re.IGNORECASE,
+        ):
+            return False
+
         named = self._NAMED_ARTIFACT.findall(content or "")
         if not named:
             return False
@@ -3030,6 +3045,26 @@ class FREDOrchestrator:
         context = self._screen_context()
         if context:
             system_sections.append(context)
+
+        # What FRED interrupted with recently, and that it was unprompted.
+        # The transcript already carries the words, but nothing marked
+        # them as a reminder that fired rather than something FRED chose
+        # to say — so a follow-up ("what was that?", "how long till
+        # then?") had the text with no handle on it. Kept out of the
+        # transcript itself deliberately: anything the recorder stores
+        # becomes a line attributed to FRED, and a bracketed prefix in
+        # there is both something he never said and a format the model
+        # would copy aloud. See utils/notifier.last_proactive.
+        recent_interruption = notifier.last_proactive()
+        if recent_interruption:
+            kind = recent_interruption["kind"] or "notification"
+            minutes = int((time.time() - recent_interruption["at"]) // 60)
+            when = "just now" if minutes < 1 else f"{minutes} minute(s) ago"
+            system_sections.append(
+                f"You interrupted him {when} with a {kind.lower()}, unprompted: "
+                f"\"{recent_interruption['message']}\". If he's replying to that, "
+                f"answer about it directly."
+            )
 
         # Vault knowledge (the other files — persona/profile/rules are
         # loaded directly and always, see personality/system_prompt.py)

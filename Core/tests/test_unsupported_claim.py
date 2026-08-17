@@ -54,3 +54,16 @@ def test_no_named_artifact_is_not_treated_as_evidence():
 def test_a_question_is_never_a_claim():
     fred = _fred()
     assert not fred._unsupported_claim("Shall I create notes.md?", [])
+
+
+def test_quoting_docs_is_not_a_write_claim():
+    # ask_about_myself returns documentation excerpts full of filenames
+    # and words like "added" / "set". A reply built from those must not
+    # read as claiming to have written a file - a false "I haven't
+    # actually done that" on an ordinary question is its own bug, and one
+    # was seen live on 2026-08-17 from the older guard.
+    fred = _fred()
+    results = ["From README.md: FRED has ~80 registered tools."]
+    reply = ("PHONE.md says calling was added in August, and settings.py "
+             "set the default tier to Qwen3-8B.")
+    assert not fred._unsupported_claim(reply, results)
