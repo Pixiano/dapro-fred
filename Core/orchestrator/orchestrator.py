@@ -2334,7 +2334,7 @@ class FREDOrchestrator:
                 # the small-model misfire problem that motivated the
                 # filtering stays contained to a path that has already
                 # produced a falsehood.
-                if not all_results and self._claims_completed_action(content):
+                if self._unsupported_claim(content, all_results):
                     if not widened:
                         widened = True
                         print("[intent] completion claim with no tool run — widening the menu")
@@ -2698,6 +2698,57 @@ class FREDOrchestrator:
         r"launched|installed|uninstalled|engaged|lifted|set)\b",
         re.IGNORECASE,
     )
+
+# A file or folder name the reply names as the thing it acted on.
+    # Deliberately requires an extension: bare words are far too common in
+    # ordinary prose to treat as evidence of a claim.
+    # No spaces in the name: `[\w\-. ]+` swallowed the preceding word, so
+    # "Updated notes.md" was read as a file called "Updated notes.md" and
+    # never matched the tool's real "notes.md". A filename with a space in
+    # it is rarer than that false positive.
+    _NAMED_ARTIFACT = re.compile(r"[\w\-.]+\.(?:md|txt|json|jsonl|py|csv|pdf|png|jpg|docx?|xlsx?)\b")
+
+    def _unsupported_claim(self, content: str, all_results) -> bool:
+        """
+        True when a reply asserts an action that the tools which actually
+        ran cannot account for.
+
+        Two cases, and the second is why this exists as its own method:
+
+        1. Nothing ran at all, and the reply claims something finished.
+           The original guard, unchanged.
+
+        2. SOMETHING ran, but not the thing being claimed. Confirmed live
+           2026-08-17 14:16-14:17: asked to log the day, FRED called
+           create_folder on a folder that had existed since 2026-08-03,
+           then said "File created: daily/2026-08/2026-08-17.md with the
+           session log." No write tool ran; the file's mtime never moved.
+           The old test was `not all_results`, so one unrelated tool
+           running was enough to wave the falsehood through — and the
+           claim named a file nothing had touched.
+
+        The evidence required for case 2 is deliberately narrow: the reply
+        must name a concrete artifact (something.md) that appears in NO
+        tool result. Matching on the basename, since a tool reports an
+        absolute Windows path while the reply says a vault-relative one.
+        """
+        if not self._claims_completed_action(content):
+            return False
+
+        if not all_results:
+            return True
+
+        named = self._NAMED_ARTIFACT.findall(content or "")
+        if not named:
+            return False
+
+        blob = " ".join(str(r) for r in all_results).lower()
+        for artifact in named:
+            basename = artifact.strip().split("/")[-1].split("\\")[-1].lower()
+            if basename and basename not in blob:
+                return True
+
+        return False
 
     def _claims_completed_action(self, content: str) -> bool:
         """

@@ -323,10 +323,16 @@ CATEGORY_CUES = {
         # menu, which is this file's stated tradeoff everywhere else.
         "how does the", "how does your", "how do your",
     ),
+    # "session log" / "daily log" / "daily note" added 2026-08-17. Asked
+    # "Is today's session log maintained?", the router matched no category
+    # at all, offered workout tools via the semantic rescue path, and FRED
+    # answered the filesystem question from nothing — twice, insisting it
+    # had checked. It had no way to check, so it guessed.
     "recap": (
         "what did we do", "what have we done", "recap", "summarise today",
         "summarize today", "today's summary", "wrap up", "sum up today",
-        "log today", "save today",
+        "log today", "save today", "session log", "daily log", "daily note",
+        "today's log", "log for today", "logged today",
     ),
     "recall_recent": (
         "what did we just talk about", "what did i just say",
