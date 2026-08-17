@@ -117,12 +117,20 @@ _ADDR = os.environ.get("FRED_PHONE_ADB", "")
 _active_phone = ""      # name; empty means "the default"
 
 
-# Wireless is built and tested but deliberately NOT enabled yet
-# (Vatsal, 2026-08-16): messaging drives the phone's UI, and a link that
-# drops when the screen sleeps is a worse failure mid-send than mid-read.
-# Wired only until that is worth revisiting. Flip to False to restore
-# mDNS discovery — the code path is intact and exercised.
-WIRED_ONLY = True
+# Wireless enabled 2026-08-17 at Vatsal's call, after a day wired-only.
+#
+# The reservation that put it behind this flag still stands and is worth
+# keeping in view: messaging drives the phone's UI, and a link dropping
+# mid-send is worse than one dropping mid-read. Reading survives a flaky
+# link (poll again in two minutes); a half-finished send does not.
+# send_message's verify-before-tap and its landed/cleared confirmation
+# are what make that acceptable rather than merely tolerable.
+#
+# Not per-phone: only A is paired for wireless, so a per-phone policy
+# would be machinery for a distinction that doesn't exist yet. B simply
+# won't be found wirelessly until it's paired. Set back to True to go
+# wired-only again.
+WIRED_ONLY = False
 
 _WIRELESS = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}:\d+$")
 
