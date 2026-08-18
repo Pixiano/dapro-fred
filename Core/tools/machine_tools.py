@@ -734,4 +734,9 @@ def delete_file(path: str) -> str:
     else:
         target.unlink()
 
+    # Local import: file_index imports machine_tools._walk_pruned at
+    # module load, so a top-level import here would be circular.
+    from tools import file_index
+    file_index.remove_entry(target)
+
     return f"Deleted: {target}"

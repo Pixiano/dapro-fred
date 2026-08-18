@@ -309,7 +309,14 @@ PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 SCREEN_WATCHER_IDLE_MINUTES = 5
 
 # How often the watcher re-screenshots while it's running.
-SCREEN_WATCHER_INTERVAL_SECONDS = 60
+#
+# Throttled 5x (60 -> 300) 2026-08-18 while Cerebras is out of credits
+# (see CEREBRAS_API_KEY above): this cycle normally goes through cloud
+# vision, cheap and fast; with cloud forced off it falls to local Vision
+# inference EVERY cycle instead, which is exactly the GPU load
+# CLOUD_VISION_PROVIDER was added to avoid in the first place. Revert to
+# 60 once CEREBRAS_API_KEY is restored.
+SCREEN_WATCHER_INTERVAL_SECONDS = 300
 
 # Cross-process coordination. The main process's LLMClient writes its
 # currently-resident tier here on every load/unload; the watcher child
@@ -446,7 +453,18 @@ MODEL_TIERS = {
 # live) — a provider failover mid-outage changes nothing about how the
 # reply gets parsed.
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY")
+
+# Forced off 2026-08-18: the Cerebras account is out of credits (every
+# call returning HTTP 402 Payment Required — 463 times in one day before
+# this was caught). Both the text cascade (line ~170 in llm_client.py,
+# `[p for p in CLOUD_PROVIDERS if p.get("api_key")]`) and the vision
+# cascade (`CLOUD_VISION_PROVIDER.get("api_key")`) key off this one
+# value being truthy, so forcing it None here drops cloud from both
+# cascades in one place — every turn goes straight to local, no wasted
+# network round-trip eating latency on a call that was always going to
+# fail anyway. Restore `os.environ.get("CEREBRAS_API_KEY")` once billing
+# is sorted.
+CEREBRAS_API_KEY = None
 
 # Groq removed 2026-08-05. Not a preference — it cannot serve FRED at
 # all on the free tier. Probed against the live API:

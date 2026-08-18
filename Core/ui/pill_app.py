@@ -176,6 +176,15 @@ class PillApp:
             from utils import notifier
             notifier.set_voice(self._speak_proactive)
 
+        # Only now — with set_voice already wired up if there's a voice
+        # to wire — does the scheduler start processing jobs. Starting it
+        # any earlier (e.g. inside FREDOrchestrator.__init__, which runs
+        # as the very first line of this method) risked a persisted,
+        # overdue reminder firing within moments of construction, while
+        # notifier._voice was still None — speaking through the robotic
+        # SAPI fallback instead of Kokoro even though this is GUI mode.
+        self.orchestrator.scheduler.start()
+
         self._cancel = threading.Event()
         self._turn_lock = threading.Lock()
         self._recording = False

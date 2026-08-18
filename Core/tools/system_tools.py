@@ -10,7 +10,7 @@ import winreg
 from pathlib import Path
 from datetime import datetime
 
-from tools.assist_tools import resolve_user_path
+from tools.assist_tools import resolve_user_path, DEFAULT_DOCS
 from config.settings import DATA_DIR
 from state import lockdown_log, lockdown_state
 
@@ -284,20 +284,38 @@ def launch_application(app_name: str) -> str:
 # FILE TOOLS
 # =========================================================
 
+def _needs_destination(name: str) -> bool:
+    """
+    True when `name` is a bare filename/folder with nowhere real to go —
+    no separator, and resolve_user_path would silently anchor it under
+    Documents/FRED. A path containing a separator, or one that already
+    resolves outside that anchor (e.g. "Downloads/x"), names its own
+    destination and doesn't need one asked for.
+    """
+    if "/" in name or "\\" in name:
+        return False
+    resolved = resolve_user_path(name)
+    return resolved == DEFAULT_DOCS or DEFAULT_DOCS in resolved.parents
+
+
 def create_text_file(
     filename: str,
-    content: str = ""
+    content: str = "",
+    directory: str = ""
 ) -> str:
     """
     Create a text file.
 
-    A bare filename is anchored under Documents/FRED rather than the
-    working directory — see resolve_user_path. Previously "notes.txt"
-    landed wherever the process was launched from, which for a detached
-    background app meant somewhere the user would never find it.
+    No more silent Documents/FRED default: a bare filename with no
+    `directory` and nowhere real to go is refused instead — see
+    _needs_destination. When `directory` is given it's resolved and
+    `filename` joined onto it.
     """
 
-    path = resolve_user_path(filename)
+    if not directory and _needs_destination(filename):
+        return f"Where should I create {filename}? Give me a folder or full path."
+
+    path = resolve_user_path(directory) / filename if directory else resolve_user_path(filename)
 
     if not path.suffix:
         path = path.with_suffix(".txt")
@@ -309,20 +327,30 @@ def create_text_file(
     except OSError as e:
         return f"Couldn't create {path.name}: {e}"
 
+    from tools.file_index import add_entry
+    add_entry(path)  # so it's findable via search_index before the next reindex_drive
+
     return f"Created file: {path}"
 
 
-def create_folder(folder_name: str) -> str:
+def create_folder(folder_name: str, directory: str = "") -> str:
     """
-    Create a folder. Bare names go under Documents/FRED, as above.
+    Create a folder. Same destination requirement as create_text_file —
+    see _needs_destination.
     """
 
-    path = resolve_user_path(folder_name)
+    if not directory and _needs_destination(folder_name):
+        return f"Where should I create {folder_name}? Give me a folder or full path."
+
+    path = resolve_user_path(directory) / folder_name if directory else resolve_user_path(folder_name)
 
     try:
         path.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         return f"Couldn't create {path.name}: {e}"
+
+    from tools.file_index import add_entry
+    add_entry(path)  # so it's findable via search_index before the next reindex_drive
 
     return f"Created folder: {path}"
 
@@ -402,21 +430,29 @@ def print_file(path: str) -> str:
 # SYSTEM INFO TOOLS
 # =========================================================
 
-def get_current_time() -> str:
+def get_current_time(part: str = "both") -> str:
     """
-    Local date and time, phrased for speech.
+    Local date and/or time, phrased for speech.
 
-    Includes the weekday, which the previous version omitted — asked
-    "what day is it today" it answered "It's 06:24:23 on 2026-07-30",
-    which technically contains the date and yet doesn't answer the
-    question. Seconds are dropped for the same reason: nobody asking the
-    time out loud wants them.
+    `part`: "time" for the clock only, "date" for the calendar only,
+    "both" (default) for the combined sentence. Split 2026-08-18 —
+    "what time is it" used to always answer with the date glued on too
+    ("It's 6:24 PM on Tuesday, 30 July 2026"), which is a correct
+    answer to a question nobody asked as much as it is one to "what
+    time is it". Seconds are dropped from the clock either way: nobody
+    asking the time out loud wants them.
     """
 
     now = datetime.now()
     clock = now.strftime("%I:%M %p").lstrip("0")
+    date = now.strftime("%A, %d %B %Y")
 
-    return f"It's {clock} on {now.strftime('%A, %d %B %Y')}."
+    part = (part or "both").strip().lower()
+    if part == "time":
+        return f"It's {clock}."
+    if part == "date":
+        return f"It's {date}."
+    return f"It's {clock} on {date}."
 
 
 # =========================================================

@@ -1,17 +1,31 @@
 # Core/tests/test_end_of_day.py
 #
-# The wind-down sequence: one confirmation per open window, then the
-# recap, then the shutdown offer. Built on pending_action, so what's
-# tested here is that the queue advances on yes AND on no, and that only
-# an abort word ends it early.
+# The wind-down sequence: ONE confirmation covers the whole thing —
+# closing every open window a few seconds apart in the background, then
+# shutting down. Rewritten 2026-08-18 (see orchestrator.py's end_of_day/
+# _run_end_of_day docstrings): the old version asked yes/no once per
+# window via pending_chain, which is what this file used to test. What's
+# tested now: yes schedules the background close+shutdown sequence with
+# the right titles/order, and either no or stop simply cancels the whole
+# thing outright — there's no longer a multi-step chain to abort out of.
 
 import types
 
 from orchestrator.orchestrator import FREDOrchestrator
 
 
+class _FakeAPScheduler:
+    """Records add_job calls instead of actually scheduling anything."""
+
+    def __init__(self):
+        self.jobs = []
+
+    def add_job(self, func, args=None, kwargs=None, **_ignored):
+        self.jobs.append((func, args or [], kwargs or {}))
+
+
 def _fake(monkeypatch, titles, closed):
-    """An orchestrator with just enough wired up to walk the chain."""
+    """An orchestrator with just enough wired up to run end_of_day."""
     fred = FREDOrchestrator.__new__(FREDOrchestrator)
     fred.pending_action = None
     fred.pending_chain = []
@@ -21,6 +35,11 @@ def _fake(monkeypatch, titles, closed):
     fred.tools = types.SimpleNamespace(
         execute=lambda name, **kw: closed.append((name, kw)) or "done",
     )
+    fake_aps = _FakeAPScheduler()
+    fred.scheduler = types.SimpleNamespace(
+        _scheduler=fake_aps,
+        _next_job_id=lambda prefix: f"{prefix}_test",
+    )
 
     import orchestrator.orchestrator as module
     monkeypatch.setattr(module.machine_tools, "open_window_titles", lambda: titles)
@@ -28,55 +47,60 @@ def _fake(monkeypatch, titles, closed):
                         lambda llm=None: "You did three things.")
     monkeypatch.setattr(module.tool_call_log, "log_tool_call", lambda *a, **k: None)
     monkeypatch.setattr(module.event_log, "log", lambda *a, **k: None)
-    return fred
+    return fred, fake_aps
 
 
-def test_asks_once_per_window_then_recaps_and_offers_shutdown(monkeypatch):
+def test_single_confirmation_schedules_close_sequence(monkeypatch):
     closed = []
-    fred = _fake(monkeypatch, ["Chrome", "VS Code"], closed)
+    fred, aps = _fake(monkeypatch, ["Chrome", "VS Code"], closed)
 
     opening = fred.end_of_day()
-    assert "Close Chrome?" in opening
+    assert "2 window(s)" in opening
+    assert "You did three things." in opening
+    assert "Proceed? (yes/no)" in opening
+    assert aps.jobs == []  # nothing scheduled until confirmed
 
-    second = fred._handle_pending_confirmation("yes")
-    assert "Close VS Code?" in second
+    result = fred._handle_pending_confirmation("yes")
+    assert "Closing them now." in result
+    assert fred.pending_action is None
 
-    last = fred._handle_pending_confirmation("yes")
-    assert "You did three things." in last
-    assert "Shut the machine down?" in last
+    # Two window-close jobs (in order) plus one shutdown job at the end.
+    assert len(aps.jobs) == 3
+    from orchestrator.orchestrator import _close_window_and_announce, _shutdown_and_announce
+    assert aps.jobs[0] == (_close_window_and_announce, ["Chrome"], {})
+    assert aps.jobs[1] == (_close_window_and_announce, ["VS Code"], {})
+    assert aps.jobs[2] == (_shutdown_and_announce, [fred.tools], {})
+    assert closed == []  # nothing actually run synchronously — all scheduled
 
-    assert [kw["title"] for _, kw in closed] == ["Chrome", "VS Code"]
 
-    # The shutdown itself is the final confirmation, nothing queued after.
-    fred._handle_pending_confirmation("yes")
-    assert closed[-1] == ("power_action", {"action": "shutdown"})
-    assert fred.pending_chain == []
+def test_no_cancels_the_whole_sequence(monkeypatch):
+    closed = []
+    fred, aps = _fake(monkeypatch, ["Chrome", "VS Code"], closed)
+    fred.end_of_day()
+
+    result = fred._handle_pending_confirmation("no")
+    assert "Cancelled" in result
+    assert aps.jobs == []
     assert fred.pending_action is None
 
 
-def test_no_skips_one_window_but_keeps_going(monkeypatch):
+def test_stop_also_cancels_the_whole_sequence(monkeypatch):
+    # No pending_chain to abort out of anymore — "stop" and "no" both
+    # just decline the single confirmation the same way.
     closed = []
-    fred = _fake(monkeypatch, ["Chrome", "VS Code"], closed)
+    fred, aps = _fake(monkeypatch, ["Chrome", "VS Code"], closed)
     fred.end_of_day()
 
-    nxt = fred._handle_pending_confirmation("no")
-    assert "Close VS Code?" in nxt
-    assert closed == []
-
-
-def test_stop_ends_the_whole_sequence(monkeypatch):
-    closed = []
-    fred = _fake(monkeypatch, ["Chrome", "VS Code"], closed)
-    fred.end_of_day()
-
-    assert "Stopped" in fred._handle_pending_confirmation("stop")
+    result = fred._handle_pending_confirmation("stop")
+    assert "Cancelled" in result
     assert fred.pending_chain == []
     assert fred.pending_action is None
+    assert aps.jobs == []
     assert closed == []
 
 
 def test_nothing_open_still_recaps_and_offers_shutdown(monkeypatch):
-    fred = _fake(monkeypatch, [], [])
+    fred, _aps = _fake(monkeypatch, [], [])
     opening = fred.end_of_day()
     assert "You did three things." in opening
     assert "Shut the machine down?" in opening

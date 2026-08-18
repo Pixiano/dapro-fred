@@ -13,6 +13,7 @@
 # reimplementing the heavy-directory skip list (AppData, node_modules,
 # .git, venvs, ...) a second time — same rationale documented there.
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -62,6 +63,52 @@ def reindex_drive(directory: str = "", db_path: Path = None) -> str:
     conn.close()
 
     return f"Indexed {len(rows)} file(s) under {base}."
+
+
+def add_entry(path, db_path: Path = None):
+    """
+    Insert/refresh one file or folder into the index — called right
+    after create_text_file/create_folder/move_file/rename_file succeed,
+    so a newly created path is findable via search_index without
+    waiting for the next full reindex_drive walk. Silently does nothing
+    on any OSError (e.g. path vanished between creation and this call);
+    this is a best-effort side-effect of a real file operation, not
+    allowed to fail the operation it's attached to.
+    """
+    p = Path(path)
+    try:
+        stat = p.stat()
+    except OSError:
+        return
+    conn = _connect(db_path)
+    conn.execute(
+        "INSERT OR REPLACE INTO files (path, name, mtime, size) VALUES (?, ?, ?, ?)",
+        (str(p), p.name, stat.st_mtime, 0 if p.is_dir() else stat.st_size),
+    )
+    conn.commit()
+    conn.close()
+
+
+def remove_entry(path, db_path: Path = None):
+    """
+    Drop `path` from the index, and — for a folder — every indexed path
+    that lived under it, so a deleted folder doesn't leave its former
+    contents as ghost search_index hits. Called right after delete_file
+    succeeds. No-op if the index doesn't exist yet or nothing matches.
+    """
+    resolved = Path(db_path) if db_path else DB_PATH
+    if not resolved.exists():
+        return
+    p = str(Path(path))
+    conn = _connect(db_path)
+    conn.execute("DELETE FROM files WHERE path = ?", (p,))
+    # Prefix match for a folder's former contents. LIKE needs its
+    # wildcard characters escaped or a path containing literal % or _
+    # would over-match; ESCAPE '\' with the escaped forms below covers it.
+    like_prefix = p.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_") + os.sep + "%"
+    conn.execute("DELETE FROM files WHERE path LIKE ? ESCAPE '\\'", (like_prefix,))
+    conn.commit()
+    conn.close()
 
 
 def search_index(query: str, limit: int = 10, db_path: Path = None) -> str:

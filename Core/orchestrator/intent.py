@@ -74,6 +74,8 @@ TOOL_CATEGORIES = {
     "sysinfo": ("get_system_status", "get_network_status"),
     "apps": ("launch_application", "open_website", "open_path", "open_vault_file"),
     "audio": ("get_volume", "set_volume", "adjust_volume", "mute", "media_control"),
+    "devices": ("list_audio_devices", "set_input_device", "set_output_device"),
+    "self_restart": ("restart_fred",),
     "lockdown": ("lockdown_engage", "lockdown_disengage"),
     "display": ("get_brightness", "set_brightness", "adjust_brightness", "take_screenshot"),
     "clipboard": ("get_clipboard", "set_clipboard"),
@@ -114,7 +116,11 @@ TOOL_CATEGORIES = {
     # model picks from their descriptions.
     "selfdoc": ("ask_about_myself", "describe_self"),
     "recap": ("summarise_today", "save_today_summary"),
-    "recall_recent": ("recall_recent_conversation",),
+    # repeat_last is grouped WITH recall_recent_conversation, not given
+    # its own category — "what did you say" is genuinely ambiguous
+    # between "repeat your last line" and "what was said a minute ago",
+    # so both tools are offered and the model's descriptions disambiguate.
+    "recall_recent": ("recall_recent_conversation", "repeat_last"),
     "vision": ("whats_on_screen",),
     "tasks": ("add_task", "list_tasks", "complete_task"),
     "agenda": (
@@ -183,6 +189,15 @@ CATEGORY_CUES = {
         "lockdown", "lock down", "lockdown protocol", "engage lockdown",
         "unlock", "lift lockdown", "stand down",
     ),
+    "devices": (
+        "microphone", "mic", "speaker", "audio device", "input device",
+        "output device",
+    ),
+    # Multi-word phrases only, so this never fires on the bare
+    # "restart"/"reboot" that already routes to power_action (PC restart).
+    "self_restart": (
+        "restart yourself", "restart fred", "reboot yourself",
+    ),
     "display": (
         "brightness", "brighter", "dimmer", "dim", "screen",
         "screenshot", "screen shot", "capture", "grab the screen",
@@ -223,6 +238,11 @@ CATEGORY_CUES = {
         "write", "rename", "move", "delete", "remove", "read", "append",
         "add to", "list", "what's in", "document", "shopping list", "find",
         "vault", "priorities", "priority",
+        # open_last_found, convert_file, print_file, reindex_drive,
+        # search_index had no cues at all — reachable only via the
+        # semantic-embedding fallback. Added 2026-08-17 per review.
+        "open it", "open that one", "the last one", "convert", "print",
+        "reindex", "file index",
         # "find" added after a confirmed misroute: "find spotify.exe"
         # matched only "apps" (via the "spotify" cue), so search_files/
         # find_file_smart were never offered at all — the model had no
@@ -256,6 +276,12 @@ CATEGORY_CUES = {
         # schedule_recurring rather than only the one-shot tools.
         "every", "each", "daily", "weekly", "weekdays", "weekends",
         "recurring", "repeating",
+        # schedule_file_watch had no cue of its own beyond generic
+        # "schedule" wording. Added 2026-08-17 per review.
+        "watch for", "let me know when",
+        # cancel_scheduled already accepts identifier="all" but had no
+        # phrasing that reaches it as a "clear everything" request.
+        "clear my day", "clear my schedule",
     ),
     "workout": (
         "workout", "workouts", "training", "train", "gym", "split",
@@ -339,6 +365,8 @@ CATEGORY_CUES = {
         "what did you just say", "what did i say", "what did you say",
         "a minute ago", "just now", "just said", "repeat what we said",
         "our conversation", "what were we talking about",
+        # repeat_last cues (see TOOL_CATEGORIES comment on this category).
+        "say that again", "repeat that",
     ),
     # Confirmed miss, live 2026-08-13: "Can you look AT my screen..."
     # matched only "display" (bare "screen") — none of the specific
@@ -374,6 +402,13 @@ CATEGORY_CUES = {
         # task list, and would widen the menu on nearly every turn.
         "task", "tasks", "to-do", "to-do list", "to do list", "todo",
         "checklist", "today's tasks", "my tasks", "mark as done",
+        # "shopping list" was a FILES cue only, so it never offered
+        # add_task at all — confirmed root cause (review, 2026-08-17) of
+        # to-do items landing in create_text_file/append_to_file instead.
+        # "remind me to"/"need to"/"add to my list" widen tasks-vs-files
+        # coverage the same way; over-inclusive on purpose, same
+        # reasoning as every other cue in this file.
+        "shopping list", "remind me to", "need to", "add to my list",
         "mark as complete", "mark complete", "mark incomplete", "mark done",
     ),
     # Homework/project/event tracking (add_agenda_item etc.) — school

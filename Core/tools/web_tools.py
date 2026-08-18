@@ -6,6 +6,9 @@
 # LLM/embeddings stay 100% local; these two tools reach the network
 # on purpose, only when explicitly invoked.
 
+import re
+from datetime import date, timedelta
+
 import requests
 
 try:
@@ -74,13 +77,75 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 # "" / "now" / "today" -> 0 (current conditions, unchanged path below).
 # Anything else recognized -> a wttr.in forecast day offset. wttr.in's
-# free tier only returns 3 days (today/+1/+2), so that's the entire
-# map — no historical weather, no further-out forecast, on purpose.
+# free tier only returns 3 days (today/+1/+2), so 2 is the real ceiling
+# — no historical weather, no further-out forecast, on purpose.
 _FORECAST_DAYS = {
     "": 0, "now": 0, "today": 0,
     "tomorrow": 1,
     "day after tomorrow": 2, "overmorrow": 2,
 }
+_MAX_OFFSET = 2
+
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_IN_DAYS_RE = re.compile(r"^in (\d+) days?$")
+_RANGE_RE = re.compile(r"^(\w+)\s*(?:through|to|-|until)\s*(\w+)$")
+
+
+def _weekday_offset(name: str) -> int | None:
+    """Days from today to the next occurrence of weekday `name` (0-6), or None if not a weekday name."""
+    if name not in _WEEKDAYS:
+        return None
+    return (_WEEKDAYS.index(name) - date.today().weekday()) % 7
+
+
+def _single_offset(word: str) -> int | None:
+    """One range endpoint: a literal ("today"/"tomorrow") or a weekday name."""
+    if word in _FORECAST_DAYS:
+        return _FORECAST_DAYS[word]
+    return _weekday_offset(word)
+
+
+def _resolve_when(when: str):
+    """
+    Normalized `when` -> a single day offset, a list of offsets (a
+    range), or None if unrecognized/past/beyond `_MAX_OFFSET`.
+    """
+
+    if when in _FORECAST_DAYS:
+        offset = _FORECAST_DAYS[when]
+        return offset if offset <= _MAX_OFFSET else None
+
+    if when in ("weekend", "this weekend", "the weekend"):
+        offsets = sorted({_weekday_offset("saturday"), _weekday_offset("sunday")})
+        return offsets if max(offsets) <= _MAX_OFFSET else None
+
+    m = _IN_DAYS_RE.match(when)
+    if m:
+        offset = int(m.group(1))
+        return offset if offset <= _MAX_OFFSET else None
+
+    offset = _weekday_offset(when)
+    if offset is not None:
+        return offset if offset <= _MAX_OFFSET else None
+
+    m = _RANGE_RE.match(when)
+    if m:
+        start, end = _single_offset(m.group(1)), _single_offset(m.group(2))
+        if start is not None and end is not None:
+            if end < start:
+                end += 7
+            offsets = list(range(start, end + 1))
+            return offsets if max(offsets) <= _MAX_OFFSET else None
+
+    return None
+
+
+def _day_label(offset: int) -> str:
+    if offset == 0:
+        return "Today"
+    if offset == 1:
+        return "Tomorrow"
+    return (date.today() + timedelta(days=offset)).strftime("%A")
 
 
 def get_weather(location: str = "", when: str = "") -> str:
@@ -89,10 +154,13 @@ def get_weather(location: str = "", when: str = "") -> str:
     if left blank), via wttr.in.
 
     `when` blank/"now"/"today" -> current conditions (below, unchanged).
-    "tomorrow" / "day after tomorrow" -> a short forecast via wttr.in's
-    JSON endpoint. Anything else (further out, or any past reference)
+    "tomorrow", "day after tomorrow"/"overmorrow", a weekday name, or
+    "in N days" that falls within wttr.in's forecast window -> that
+    day's forecast. A weekday range ("tuesday through thursday") or
+    "weekend" fully inside the window -> each day's forecast joined
+    into one sentence. Anything further out, or any past reference,
     gets a plain "can't do that" reply instead of a guess — wttr.in's
-    free tier has no historical data and only forecasts 3 days out.
+    free tier has no historical data and only forecasts a few days out.
 
     Requests condition, temperature and resolved location as three
     separate fields (%C|%t|%l) rather than wttr.in's default one-line
@@ -103,14 +171,16 @@ def get_weather(location: str = "", when: str = "") -> str:
     still zero LLM calls.
     """
 
-    offset = _FORECAST_DAYS.get((when or "").strip().lower())
-    if offset is None:
+    resolved = _resolve_when((when or "").strip().lower())
+    if resolved is None:
         return (
-            "I can only forecast about 3 days ahead, and I don't have "
+            f"I can only forecast up to {_MAX_OFFSET} days ahead, and I don't have "
             "historical weather data."
         )
-    if offset != 0:
-        return _get_forecast(location, offset)
+    if isinstance(resolved, list):
+        return " ".join(_get_forecast(location, o) for o in resolved)
+    if resolved != 0:
+        return _get_forecast(location, resolved)
 
     url = f"https://wttr.in/{location}" if location else "https://wttr.in/"
 
@@ -150,10 +220,10 @@ def get_weather(location: str = "", when: str = "") -> str:
 
 def _get_forecast(location: str, offset: int) -> str:
     """
-    offset 1 or 2 -> wttr.in's JSON endpoint, day index `offset` into
-    its 3-day (today/+1/+2) forecast array. Midday (hourly block 4 of
-    the ~8 three-hour blocks) stands in for "the day's condition" —
-    good enough for a spoken one-liner, not a full breakdown.
+    offset 0-2 -> wttr.in's JSON endpoint, day index `offset` into its
+    3-day (today/+1/+2) forecast array. Midday (hourly block 4 of the
+    ~8 three-hour blocks) stands in for "the day's condition" — good
+    enough for a spoken one-liner, not a full breakdown.
     """
 
     url = f"https://wttr.in/{location}" if location else "https://wttr.in/"
@@ -183,7 +253,7 @@ def _get_forecast(location: str, offset: int) -> str:
     except (ValueError, KeyError, IndexError, TypeError):
         return "Couldn't get the forecast — wttr.in didn't return what I expected."
 
-    when_word = "Tomorrow" if offset == 1 else "The day after tomorrow"
+    when_word = _day_label(offset)
     return (
         f"{when_word} in {place} looks like {condition[0].lower()}{condition[1:]}, "
         f"with a high of {max_t}°C and a low of {min_t}°C."
@@ -220,10 +290,29 @@ if __name__ == "__main__":
         overmorrow = get_weather("Mumbai", "day after tomorrow")
         assert "rainy" in overmorrow and "29" in overmorrow, overmorrow
 
+        # "in 2 days" is the same offset as "day after tomorrow", different phrasing.
+        in_2_days = get_weather("Mumbai", "in 2 days")
+        assert "rainy" in in_2_days and "29" in in_2_days, in_2_days
+
+        # A weekday name computed relative to "today" so this stays correct on any run date.
+        today = date.today()
+        in_range_day = (today + timedelta(days=2)).strftime("%A")
+        by_weekday = get_weather("Mumbai", in_range_day)
+        assert "rainy" in by_weekday and "29" in by_weekday, by_weekday
+
+        # Range spanning today (offset 0) through tomorrow (offset 1), joined into one string.
+        span = get_weather("Mumbai", "today through tomorrow")
+        assert "sunny" in span and "30" in span and "cloudy" in span and "31" in span, span
+
     out_of_range = get_weather("Mumbai", "next week")
-    assert "3 days" in out_of_range and "historical" in out_of_range, out_of_range
+    assert f"{_MAX_OFFSET} days" in out_of_range and "historical" in out_of_range, out_of_range
+
+    # 5 days out by weekday name is always beyond _MAX_OFFSET regardless of today's date.
+    out_of_range_day = (date.today() + timedelta(days=5)).strftime("%A")
+    far_weekday = get_weather("Mumbai", out_of_range_day)
+    assert f"{_MAX_OFFSET} days" in far_weekday and "historical" in far_weekday, far_weekday
 
     past = get_weather("Mumbai", "yesterday")
-    assert "3 days" in past and "historical" in past, past
+    assert f"{_MAX_OFFSET} days" in past and "historical" in past, past
 
     print("web_tools weather forecast self-check: all passed")

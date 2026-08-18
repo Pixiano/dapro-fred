@@ -22,6 +22,7 @@ import difflib
 import os
 import re
 import subprocess
+import time
 
 from config.settings import VAULT_DIR
 
@@ -214,6 +215,49 @@ def _attached() -> dict:
     return found
 
 
+# Opportunistic wireless-address cache, refreshed off a live USB link (see
+# _refresh_wireless_cache) so that an unplug later has something to try
+# immediately instead of waiting on a fresh, sometimes-slow-or-flaky mDNS
+# scan at that exact moment. serial -> (address, time.monotonic() cached).
+# In-memory, per-process only, on purpose - mDNS re-discovers on the next
+# USB connect anyway, so there's nothing worth persisting across restarts.
+_wireless_cache = {}
+
+# Every _resolve() call would otherwise pay for an mDNS scan on every USB
+# command; five minutes is "healthily" without being "constantly" - the
+# port only moves when the wireless debugging service itself restarts,
+# which reboots and manual toggles cause, not the passage of time.
+_WIRELESS_REFRESH_INTERVAL = 300
+
+
+def _refresh_wireless_cache(serial: str) -> None:
+    """
+    Best-effort: while USB is the live target, look up the phone's current
+    wireless address via mDNS (same lookup _discover does for wireless-only
+    discovery) and cache it against its serial.
+
+    Must never affect the USB command actually in flight - this rides
+    along on _resolve() calls it did not originate, so any failure here is
+    swallowed, same instinct as _adb's encoding fix: a side effect must
+    degrade quietly, not take the real operation down with it.
+    """
+    if not serial:
+        return
+    cached = _wireless_cache.get(serial)
+    if cached and time.monotonic() - cached[1] < _WIRELESS_REFRESH_INTERVAL:
+        return
+    try:
+        services = _adb("mdns", "services", target="", timeout=10).stdout
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return
+    for line in services.splitlines():
+        if serial in line:
+            match = re.search(r"(\d{1,3}(?:\.\d{1,3}){3}:\d+)", line)
+            if match:
+                _wireless_cache[serial] = (match.group(1), time.monotonic())
+            return
+
+
 def _discover(serial: str) -> str:
     """
     Address for `serial` that adb can actually talk to, or "".
@@ -254,6 +298,19 @@ def _discover(serial: str) -> str:
         who = _adb("shell", "getprop", "ro.serialno",
                    target=address, timeout=10).stdout.strip()
         if who == serial:
+            return address
+
+    # A cached address from a recent USB-live refresh (_refresh_wireless_
+    # cache) is worth a direct connect attempt before paying for a fresh
+    # mDNS scan - it's usually still current, since the port only moves
+    # when the wireless debugging service itself restarts.
+    cached = _wireless_cache.get(serial)
+    if cached:
+        address = cached[0]
+        if attached.get(address) == "device":
+            return address
+        _adb("connect", address, target="", timeout=10)
+        if _attached().get(address) == "device":
             return address
 
     # Nothing connected yet — find where it is listening. The port is
@@ -309,9 +366,18 @@ def _resolve() -> str:
     # One phone plugged in is unambiguous — use it, whatever it is, and
     # whatever use_phone() last selected. "Wired to A or B, whatever" is
     # the actual working style; making it depend on a remembered selection
-    # would just be a way to act on the wrong phone.
+    # would just be a way to act on the wrong phone. Unchanged by the
+    # wireless-cache refresh below: this still returns immediately, before
+    # _discover or the cache are ever consulted, so USB keeps winning.
     if len(ready) == 1:
-        return ready[0]
+        target = ready[0]
+        # A wired target IS its own serial (see _serial_of). Piggyback the
+        # opportunistic mDNS refresh here, not in _adb, so it costs one
+        # dict lookup on every USB command and an actual scan only once
+        # per _WIRELESS_REFRESH_INTERVAL.
+        if not _is_wireless(target):
+            _refresh_wireless_cache(target)
+        return target
 
     if phones:
         name = _active_phone or next(iter(phones))
@@ -834,5 +900,39 @@ if __name__ == "__main__":
     )
     assert merged["Solo"] == "+919000000031"
     assert [c[0] for c in corrected] == ["Solo"]
+
+    # Wireless-address cache: refreshed off a live USB link, throttled so
+    # it doesn't scan on every call, and consulted by _discover before a
+    # fresh mDNS scan once USB is gone. Fake _adb stands in for adb itself
+    # so this doesn't touch a real device or network.
+    _real_adb = _adb
+    calls = []
+
+    def _fake_adb(*args, **kwargs):
+        calls.append(args)
+        out = "adb tls-connection\tSERIAL123\t192.168.1.50:41000\n"
+        return subprocess.CompletedProcess(args, 0, stdout=out, stderr="")
+
+    globals()["_adb"] = _fake_adb
+    try:
+        _wireless_cache.clear()
+        _refresh_wireless_cache("SERIAL123")
+        assert _wireless_cache["SERIAL123"][0] == "192.168.1.50:41000"
+        assert len(calls) == 1
+
+        # Within the interval, a second refresh must not scan again.
+        _refresh_wireless_cache("SERIAL123")
+        assert len(calls) == 1, "refresh must be throttled, not per-call"
+
+        # Force the interval to have elapsed: it scans again.
+        _wireless_cache["SERIAL123"] = (
+            _wireless_cache["SERIAL123"][0],
+            time.monotonic() - _WIRELESS_REFRESH_INTERVAL - 1,
+        )
+        _refresh_wireless_cache("SERIAL123")
+        assert len(calls) == 2
+    finally:
+        globals()["_adb"] = _real_adb
+        _wireless_cache.clear()
 
     print("ok")

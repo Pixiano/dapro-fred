@@ -21,6 +21,15 @@ from utils.notifier import notify
 # path would poll forever, silently, until the process is killed.
 _MAX_FILE_WATCH_HOURS = 24
 
+# How overdue a one-shot reminder/timer can be and still be worth firing
+# late. misfire_grace_time=None (the old value) meant NO ceiling at all —
+# a reminder due while FRED happened to be off for a week would fire the
+# instant it next started, as if it were current. Bounded instead: a
+# restart minutes or hours after the due time still gets the reminder
+# (the whole point of persisting it), but one abandoned for days/weeks
+# is silently dropped as missed rather than firing stale and unprompted.
+_REMINDER_MISFIRE_GRACE_SECONDS = int(timedelta(hours=3).total_seconds())
+
 # "in 20 minutes", "in 2 hours"
 _RELATIVE_RE = re.compile(
     r"\bin\s+(\d+(?:\.\d+)?)\s*"
@@ -194,6 +203,25 @@ def describe_when(when: datetime, now: datetime = None) -> str:
     return f"{when.strftime('%A %d %B')} at {clock}"
 
 
+def describe_ago(when: datetime, now: datetime = None) -> str:
+    """
+    describe_when's mirror for the past — "how overdue", not "how soon".
+    Used only for the missed-reminders catch-up announcement, where
+    `when` is a job's next_run_time reloaded from the jobstore (tz-aware,
+    per APScheduler's DateTrigger) — now defaults against `when`'s own
+    tzinfo so a naive/aware mismatch never raises here.
+    """
+    now = now or datetime.now(when.tzinfo)
+    delta = now - when
+    days = delta.days
+    if days >= 1:
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    hours = int(delta.total_seconds() // 3600)
+    if hours >= 1:
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    return "less than an hour ago"
+
+
 # APScheduler's cron day_of_week vocabulary. Its own abbreviations, so
 # the parsed value can be handed straight to add_job without a second
 # translation step.
@@ -325,7 +353,9 @@ class ReminderScheduler:
     Reminders persist to a local SQLite file (SCHEDULER_DB_PATH) so
     they survive FRED being restarted or killed mid-wait — if it's
     been off past the reminder's due time, it fires the moment it's
-    next running, late rather than lost. File-watches stay in-memory
+    next running, late rather than lost, as long as it's not been off
+    for so long the reminder is more stale than useful (see
+    _REMINDER_MISFIRE_GRACE_SECONDS). File-watches stay in-memory
     only: they poll a bound method, which isn't safely picklable into
     a persistent store, and a "watch for this file" request is more
     reasonably session-scoped anyway.
@@ -333,16 +363,97 @@ class ReminderScheduler:
 
     def __init__(self):
 
+        # Kept as its own reference (not just scheduler._jobstores["default"])
+        # because _catch_up_missed_reminders reads it before start() — see
+        # that method for why: self._scheduler.get_jobs() can't see anything
+        # persisted from a past run until the scheduler (and with it this
+        # jobstore's engine) has actually started.
+        self._default_jobstore = SQLAlchemyJobStore(
+            url=f"sqlite:///{SCHEDULER_DB_PATH}"
+        )
         self._scheduler = BackgroundScheduler(
             jobstores={
-                "default": SQLAlchemyJobStore(
-                    url=f"sqlite:///{SCHEDULER_DB_PATH}"
-                ),
+                "default": self._default_jobstore,
                 "memory": MemoryJobStore(),
             }
         )
-        self._scheduler.start()
         self._job_counter = 0
+        # Not started here — see start(). APScheduler happily queues
+        # add_job() calls before start(); nothing fires until it's called.
+
+    def start(self):
+        """
+        Begin processing jobs, including firing any persisted job whose
+        run_date has already passed (see schedule_reminder's docstring).
+
+        Split out from __init__ on purpose: __init__ runs as the very
+        first line of FREDOrchestrator/PillApp construction, before
+        notifier.set_voice() has wired up the real Kokoro voice (see
+        pill_app.py). An overdue reminder can fire within moments of
+        start() — if that were __init__, it would fire through
+        notifier's SAPI fallback every time, regardless of GUI mode.
+        Callers start the scheduler once their own setup (voice
+        included) is ready — see main.py and ui/pill_app.py.
+        """
+        # Must run before _scheduler.start() — once that's called,
+        # APScheduler is already free to skip (not fire, not report) the
+        # same overdue jobs on its own thread. Doing the scan-and-remove
+        # first makes the skip an announced, explicit thing instead.
+        self._catch_up_missed_reminders()
+        self._scheduler.start()
+
+    def _catch_up_missed_reminders(self):
+        """
+        One-shot reminders/timers left over from a run that ended more
+        than _REMINDER_MISFIRE_GRACE_SECONDS before their due time would
+        otherwise just vanish — APScheduler's misfire handling skips them
+        with no error and no announcement (see that constant's comment).
+        Collects and removes every one, then speaks them as a single
+        batched notify() so a FRED that was off for a while catches you
+        up in one sentence instead of one interruption per missed item.
+
+        workout_/recurring_ jobs are cron-triggered and already coalesce
+        their own catch-up (schedule_recurring's coalesce=True) — out of
+        scope here, left running untouched.
+
+        Reads self._default_jobstore directly rather than
+        self._scheduler.get_jobs(): before the scheduler has started,
+        get_jobs() only returns jobs added this process (APScheduler's
+        own _pending_jobs queue) — the jobstore's SQLite engine, and
+        anything persisted in it from a previous run, isn't visible
+        through the scheduler until start() opens it. The jobstore
+        object itself has no such restriction.
+        """
+        # checkfirst=True internally, so a no-op on every run after the
+        # first — but on a brand-new install there's no table yet (that
+        # normally happens inside this same start() call, further down),
+        # and get_all_jobs() below would hit "no such table" instead of
+        # the empty result a fresh install should silently get.
+        self._default_jobstore.start(self._scheduler, "default")
+
+        missed = []
+
+        for job in self._default_jobstore.get_all_jobs():
+            if not (job.id.startswith("reminder_") or job.id.startswith("timer_")):
+                continue
+            if job.next_run_time is None:
+                continue
+            # datetime.now(tzinfo) rather than a single now grabbed up
+            # front: next_run_time is tz-aware for a real, persisted job
+            # (APScheduler localizes it) but naive in the plain-datetime
+            # fakes the tests use — matching tzinfo per job is what keeps
+            # this working for both without a naive/aware subtraction.
+            overdue = datetime.now(job.next_run_time.tzinfo) - job.next_run_time
+            if overdue <= timedelta(seconds=_REMINDER_MISFIRE_GRACE_SECONDS):
+                continue
+
+            kind = "reminder" if job.id.startswith("reminder_") else "timer"
+            message = job.args[0] if job.args else job.id
+            missed.append(f"{kind} \"{message}\", was due {describe_ago(job.next_run_time)}")
+            self._default_jobstore.remove_job(job.id)
+
+        if missed:
+            notify(f"While I was off: missed {'; '.join(missed)}.", title="Missed while off")
 
     def shutdown(self):
 
@@ -426,7 +537,7 @@ class ReminderScheduler:
             run_date=run_at,
             id=self._next_job_id("reminder"),
             jobstore="default",
-            misfire_grace_time=None,
+            misfire_grace_time=_REMINDER_MISFIRE_GRACE_SECONDS,
         )
 
         return f"Reminder set for {describe_when(run_at, now)}: \"{message}\""
@@ -467,7 +578,7 @@ class ReminderScheduler:
             run_date=run_at,
             id=self._next_job_id("timer"),
             jobstore="default",
-            misfire_grace_time=None,
+            misfire_grace_time=_REMINDER_MISFIRE_GRACE_SECONDS,
         )
 
         suffix = f" for {label}" if label else ""

@@ -121,11 +121,16 @@ def test_reminder_and_check_compound_still_uses_the_models_own_synthesis(monkeyp
     assert reply == "Set for 6pm. You already had one other reminder."
 
 
-def test_mixed_agenda_and_other_tool_uses_model_synthesis_not_raw_join(monkeypatch):
-    """add_agenda_item is in EXACT_READBACK_TOOLS, list_scheduled is
-    not — the moment ANY non-exact-readback tool is called this turn,
-    the whole turn falls back to the model's own words, same as
-    SELF_NARRATING_TOOLS' existing all-or-nothing membership check."""
+def test_mixed_agenda_and_scheduled_now_both_exact_readback_raw_joins(monkeypatch):
+    """list_scheduled joined EXACT_READBACK_TOOLS 2026-08-18 (review
+    finding: it reads live scheduler state and a due date/reminder count
+    deserves the same raw-readback protection add_agenda_item already
+    gets, especially on a compound turn) — so this pairing now raw-joins
+    instead of falling back to model synthesis, the same shape as
+    test_compound_agenda_add_returns_the_raw_confirmations_not_a_paraphrase
+    above. The schedule_reminder+list_scheduled pairing tested above this
+    one is unaffected: schedule_reminder is still deliberately NOT
+    exact-readback, so that compound case keeps its synthesis."""
     monkeypatch.setattr(
         intent, "classify", lambda text, llm, router: (True, ["agenda", "schedule"], "test")
     )
@@ -133,12 +138,17 @@ def test_mixed_agenda_and_other_tool_uses_model_synthesis_not_raw_join(monkeypat
     monkeypatch.setattr(intent, "looks_compound", lambda text: True)
     monkeypatch.setattr("orchestrator.orchestrator.TOOLS_ENABLED", True)
 
+    agenda_result = "Logged, sir — Geography, due tomorrow."
+    scheduled_result = "No reminders scheduled."
+
     llm = _FakeLLM([
         {"content": None, "tool_calls": [_tool_call("1", "add_agenda_item")]},
         {"content": None, "tool_calls": [_tool_call("2", "list_scheduled")]},
+        # Round 3: the model stops calling tools and tries to summarise
+        # in its own words — this must NOT be what gets spoken.
         {"content": "Logged the homework and you've no reminders pending.", "tool_calls": None},
     ])
-    calls = iter(["Logged, sir — Geography, due tomorrow.", "No reminders scheduled."])
+    calls = iter([agenda_result, scheduled_result])
     orch = _bare_orchestrator(llm, {})
     orch._execute_tool_call = lambda call: next(calls)
 
@@ -146,7 +156,9 @@ def test_mixed_agenda_and_other_tool_uses_model_synthesis_not_raw_join(monkeypat
         "log geography homework due tomorrow and tell me if I have any reminders"
     ))
 
-    assert reply == "Logged the homework and you've no reminders pending."
+    assert agenda_result in reply
+    assert scheduled_result in reply
+    assert "Logged the homework and you've no reminders pending." not in reply
 
 
 def test_single_agenda_add_still_takes_the_fast_self_narrating_path(monkeypatch):

@@ -82,6 +82,9 @@ def main():
     print(describe_audio_devices())
 
     orchestrator = FREDOrchestrator()
+    # CLI mode never calls notifier.set_voice() (always SAPI), so there's
+    # no voice-ordering reason to delay this — start right away.
+    orchestrator.scheduler.start()
 
     try:
         run_text_loop(orchestrator)

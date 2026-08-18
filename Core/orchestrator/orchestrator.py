@@ -3,7 +3,7 @@
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from state.conversation_state import ConversationState
 from state import lockdown_state
@@ -142,6 +142,42 @@ TOOL_LABELS = {
 # actual question (no). calculate() stays self-narrating for the
 # dispatcher's zero-LLM path; the tool-loop path now always gets its
 # interpretive sentence.
+def _close_window_and_announce(title: str):
+    """
+    One step of Orchestrator._run_end_of_day's close sequence — fired
+    by the background scheduler, same shape as scheduler._fire_reminder
+    (standalone, not a bound method, since it runs on APScheduler's
+    thread). Announces via notifier.notify so it's heard even though
+    nothing asked a question this turn.
+    """
+    try:
+        result = machine_tools.close_window(title)
+    except Exception as e:
+        notifier.notify(f"Couldn't close {title}: {e}", title="End of day")
+        return
+    notifier.notify(result, title="End of day")
+
+
+def _shutdown_and_announce(tools):
+    """
+    Final step of _run_end_of_day's sequence, fired once every window is
+    closed. Used to call tools.execute("power_action", ...) directly and
+    drop the return value on the floor — nothing announced the shutdown
+    countdown at all, silent even though power_action returns a specific
+    "cancel shutdown to stop it" message. Routing it through
+    notifier.notify matches _close_window_and_announce above, and as a
+    side effect wakes the pill: PillApp registers itself with
+    notifier.set_voice at startup, so notify() speaking the result also
+    shows and un-idles the pill for it, no separate hook needed.
+    """
+    try:
+        result = tools.execute("power_action", action="shutdown")
+    except Exception as e:
+        notifier.notify(f"Couldn't shut down: {e}", title="End of day")
+        return
+    notifier.notify(str(result), title="End of day")
+
+
 SELF_NARRATING_TOOLS = {
     "get_current_time",
     "get_weather",
@@ -205,6 +241,17 @@ EXACT_READBACK_TOOLS = {
     "add_agenda_item",
     "list_agenda_items",
     "update_agenda_item",
+    # list_scheduled reads live from the scheduler (self._scheduler.get_jobs()
+    # in scheduler.py) — it cannot itself be stale. But it was only in
+    # SELF_NARRATING_TOOLS, not here, so on a COMPOUND turn ("what's
+    # scheduled, and set one for 8pm") the model paraphrased its own
+    # correct tool result instead of reading it back verbatim — the same
+    # failure class add_agenda_item/list_agenda_items were hardened
+    # against above, and the likely source of "list_scheduled sometimes
+    # hallucinates" (review, 2026-08-18). cancel_scheduled added with it:
+    # same tool family, same risk if its confirmation gets paraphrased.
+    "list_scheduled",
+    "cancel_scheduled",
 }
 
 # Tools whose RESULT contains vault content marked sensitive — today
@@ -562,41 +609,82 @@ class FREDOrchestrator:
         self.pending_action = {"tool": step["tool"], "arguments": step["arguments"]}
         return step["prompt"]
 
+    # Seconds between each window closing during end_of_day — long enough
+    # to hear the announcement for one before the next fires.
+    _END_OF_DAY_CLOSE_INTERVAL = 3
+
     def end_of_day(self) -> str:
         """
-        The wind-down: close each open window one at a time, recap the
-        day, then offer to shut the machine down.
+        The wind-down: one confirmation for the whole sequence — closing
+        every open window a few seconds apart (each with its own spoken
+        announcement as it happens), then shutting down.
+
+        Rewritten 2026-08-18: the previous version asked yes/no once PER
+        WINDOW via pending_chain — the "multi-sequence" fragility flagged
+        in review, where one missed or misheard answer stalled the rest
+        of the wind-down. A single upfront confirmation plus a background
+        schedule (_run_end_of_day) removes every one of those extra
+        chances to derail it. power_action's own 5-second cancellable
+        delay is still the last word before the machine actually shuts
+        down, so the destructive step keeps its own guard even though
+        this no longer asks about it separately.
         """
         titles = machine_tools.open_window_titles()
 
-        self.pending_chain = [
-            {
-                "tool": "close_window",
-                "arguments": {"title": title},
-                "prompt": f"Close {title}? (yes/no)",
-            }
-            for title in titles
-        ]
-
-        # Summarised NOW, not when the last window closes: closing
-        # windows adds nothing to the day's log, and generating it here
-        # means the recap doesn't stall the sequence at its end. Say
-        # "stop" at any point to leave the rest of it alone.
+        # Summarised NOW, not after the windows close: closing windows
+        # adds nothing to the day's log, and generating it here means the
+        # confirmation prompt already has the full recap in it.
         summary = session_summary.summarise_today(llm=self.llm)
 
-        self.pending_chain.append({
-            "tool": "power_action",
-            "arguments": {"action": "shutdown"},
-            "prompt": (
-                f"{summary}\n\nThat's the day, sir. Shut the machine down? (yes/no)"
-            ),
-        })
+        if not titles:
+            self.pending_action = {"tool": "power_action", "arguments": {"action": "shutdown"}}
+            return f"Nothing open to close.\n{summary}\n\nThat's the day, sir. Shut the machine down? (yes/no)"
 
-        opening = (
-            f"Winding down. {len(titles)} window(s) open — one at a time."
-            if titles else "Nothing open to close."
+        self.pending_action = {"tool": "_end_of_day_sequence", "arguments": {"titles": titles}}
+        return (
+            f"Winding down. {len(titles)} window(s) open — closing them "
+            f"{self._END_OF_DAY_CLOSE_INTERVAL} seconds apart, then shutting down.\n"
+            f"{summary}\n\nProceed? (yes/no)"
         )
-        return f"{opening}\n{self._arm_next_step()}"
+
+    def _run_end_of_day(self, titles: list) -> str:
+        """
+        Schedules the actual close sequence plus the final shutdown,
+        fired by _handle_pending_confirmation once end_of_day's single
+        confirmation is answered yes. Runs entirely in the background via
+        the same APScheduler instance schedule_reminder/set_timer use —
+        the conversation isn't blocked waiting for it, and each step
+        announces itself through notifier.notify as it happens.
+        """
+        aps = self.scheduler._scheduler
+        now = datetime.now()
+
+        for i, title in enumerate(titles, start=1):
+            aps.add_job(
+                _close_window_and_announce,
+                args=[title],
+                trigger="date",
+                run_date=now + timedelta(seconds=self._END_OF_DAY_CLOSE_INTERVAL * i),
+                # "proactive_" prefix: list_scheduled skips these entirely
+                # (see scheduler.list_scheduled) — internal steps of an
+                # already-confirmed sequence, not something to read back
+                # as a pending reminder.
+                id=self.scheduler._next_job_id("proactive_endofday"),
+                jobstore="default",
+                misfire_grace_time=None,
+            )
+
+        aps.add_job(
+            _shutdown_and_announce,
+            args=[self.tools],
+            trigger="date",
+            run_date=now + timedelta(seconds=self._END_OF_DAY_CLOSE_INTERVAL * (len(titles) + 1)),
+            id=self.scheduler._next_job_id("proactive_endofday"),
+            jobstore="default",
+            misfire_grace_time=None,
+        )
+
+        return "Closing them now."
 
     def _handle_pending_confirmation(self, user_input: str) -> str:
 
@@ -628,7 +716,15 @@ class FREDOrchestrator:
         answer = user_input.strip().lower().strip(" ,.!?")
         if intent.is_affirmative(user_input) or answer == "y":
             try:
-                result = str(self.tools.execute(action["tool"], **action["arguments"]))
+                # Not a real registered tool — end_of_day's single
+                # confirmation covers a whole background sequence (see
+                # _run_end_of_day), not one self.tools.execute call, so
+                # it's special-cased here rather than added to the
+                # registry where the LLM could reach it directly.
+                if action["tool"] == "_end_of_day_sequence":
+                    result = self._run_end_of_day(**action["arguments"])
+                else:
+                    result = str(self.tools.execute(action["tool"], **action["arguments"]))
             except Exception as error:
                 result = f"Couldn't do that: {error}"
                 event_log.log_error(f"tool:{action['tool']}", error)
@@ -724,17 +820,26 @@ class FREDOrchestrator:
         self.tools.register(
             name="create_text_file",
             function=system_tools.create_text_file,
-            description="Create a text file with optional content.",
+            description=(
+                "Create a text file with optional content. Always ask the "
+                "user where it should go if they haven't said — a bare "
+                "filename with no real destination gets refused rather "
+                "than silently landing somewhere unexpected."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
                     "filename": {
                         "type": "string",
-                        "description": "File name or path to create.",
+                        "description": "File name, or a full path if directory isn't given separately.",
                     },
                     "content": {
                         "type": "string",
                         "description": "Text content to write into the file.",
+                    },
+                    "directory": {
+                        "type": "string",
+                        "description": "Folder to create it in. Required unless filename is already a real path.",
                     },
                 },
                 "required": ["filename"],
@@ -744,14 +849,23 @@ class FREDOrchestrator:
         self.tools.register(
             name="create_folder",
             function=system_tools.create_folder,
-            description="Create a folder/directory.",
+            description=(
+                "Create a folder/directory. Always ask the user where it "
+                "should go if they haven't said — a bare name with no "
+                "real destination gets refused rather than silently "
+                "landing somewhere unexpected."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
                     "folder_name": {
                         "type": "string",
-                        "description": "Folder name or path to create.",
-                    }
+                        "description": "Folder name, or a full path if directory isn't given separately.",
+                    },
+                    "directory": {
+                        "type": "string",
+                        "description": "Parent folder to create it in. Required unless folder_name is already a real path.",
+                    },
                 },
                 "required": ["folder_name"],
             },
@@ -799,7 +913,13 @@ class FREDOrchestrator:
                     },
                     "when": {
                         "type": "string",
-                        "description": "'tomorrow' or 'day after tomorrow' for a forecast; leave blank for right now. No historical/past data available.",
+                        "description": (
+                            "Leave blank for right now. A day within the next couple "
+                            "of days works: 'tomorrow', 'day after tomorrow', a "
+                            "weekday name ('wednesday'), 'in 2 days', or a range "
+                            "('today through friday', 'this weekend'). No historical/"
+                            "past data, and nothing further out than a couple of days."
+                        ),
                     },
                 },
             },
@@ -1299,12 +1419,22 @@ class FREDOrchestrator:
 
         self.tools.register(
             name="read_file",
-            function=machine_tools.read_file,
-            description="Read a text file's contents.",
+            function=self._read_file,
+            description=(
+                "Read a text file and speak back a short summary of it, "
+                "built from the file's own wording rather than read "
+                "verbatim — for a long file, hearing the whole thing "
+                "read out loud is not useful. Pass raw=true only if the "
+                "user explicitly wants the exact literal contents."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Path to the file."}
+                    "path": {"type": "string", "description": "Path to the file."},
+                    "raw": {
+                        "type": "boolean",
+                        "description": "True to skip summarising and return the literal contents. Defaults false.",
+                    },
                 },
                 "required": ["path"],
             },
@@ -2853,6 +2983,52 @@ class FREDOrchestrator:
         tools that need orchestrator-level state.
         """
         return smart_search.find_file_smart(description, directory, llm=self.llm)
+
+    # Below this, read_file summarises instead of reading verbatim —
+    # short enough that hearing it read out loud in full is already the
+    # fastest way to take it in, so a summarisation round-trip would
+    # only add latency for no benefit.
+    _READ_FILE_SUMMARY_FLOOR = 250
+
+    def _read_file(self, path: str, raw: bool = False) -> str:
+        """
+        Bound wrapper, same shape as _find_file_smart above: reads the
+        file via the plain tool function (unchanged — other callers,
+        including tests, depend on it returning literal content), then
+        for a long file replaces the verbatim dump with a short spoken
+        summary built FROM the file's own wording rather than a free
+        paraphrase, so summarising doesn't become a second place for the
+        model to invent something the file didn't say.
+        """
+        content = machine_tools.read_file(path)
+
+        if raw or content.startswith("File not found:") or content.startswith("Couldn't read file:"):
+            return content
+
+        if len(content) <= self._READ_FILE_SUMMARY_FLOOR:
+            return content
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Summarise the following file for someone hearing it "
+                    "read aloud, in 3-5 short sentences. Prefer the "
+                    "file's own words and phrasing over inventing new "
+                    "ones — pull key terms, names, and numbers straight "
+                    "from the text rather than paraphrasing them, so the "
+                    "summary can't drift from what the file actually "
+                    "says. Do not add anything the file doesn't contain."
+                ),
+            },
+            {"role": "user", "content": content},
+        ]
+        try:
+            summary = self.llm.generate(messages, local_only=self._turn_local_only)
+        except Exception:
+            return content  # summarising is a nicety; the raw read must still work
+
+        return f"{summary.strip()}\n\n(Summarised — say 'read it raw' for the full text.)"
 
     def _ask_about_myself(self, question: str) -> str:
         """
