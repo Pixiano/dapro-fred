@@ -37,6 +37,42 @@ def test_bracket_stripping_does_not_silently_drop_task_status():
     assert clean_for_speech(text) == text
 
 
+def test_latex_frac_speaks_as_over():
+    text = r"The answer is \frac{3}{4} of the total."
+    assert clean_for_speech(text) == "The answer is 3 over 4 of the total."
+
+
+def test_bare_slash_fraction_speaks_as_over():
+    text = "About 3/4 of the class passed."
+    assert clean_for_speech(text) == "About 3 over 4 of the class passed."
+
+
+def test_latex_sqrt_speaks_as_square_root_of():
+    text = r"The result is \sqrt{16} exactly."
+    assert clean_for_speech(text) == "The result is square root of 16 exactly."
+
+
+def test_exponent_squared_and_cubed_use_words():
+    assert clean_for_speech("x^2 plus y^3") == "x squared plus y cubed"
+
+
+def test_exponent_other_power_speaks_as_to_the_power():
+    assert clean_for_speech("2^10 is 1024") == "2 to the power 10 is 1024"
+
+
+def test_latex_symbols_speak_as_words():
+    text = r"a \times b \pm c \leq d \geq e \neq f \approx g, near \infty, using \pi"
+    assert clean_for_speech(text) == (
+        "a times b plus or minus c less than or equal to d greater than or "
+        "equal to e not equal to f approximately g, near infinity , using pi"
+    )
+
+
+def test_bare_star_multiplication_speaks_as_times():
+    text = "3 * 4 equals 12"
+    assert clean_for_speech(text) == "3 times 4 equals 12"
+
+
 def test_list_scheduled_job_ids_are_not_spoken():
     # Confirmed 2026-08-03: list_scheduled()'s own bracketed job id
     # ("[reminder_1785718306_1]") was reaching Kokoro and being read out

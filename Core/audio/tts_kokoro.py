@@ -64,6 +64,42 @@ _MD_LINK = re.compile(r"\[([^\]]*)\]\(https?://[^\s)]+\)")
 # https://example.com/report, not the whole address read out loud.
 _URL = re.compile(r"https?://(?:www\.)?([a-z0-9-]+)\.\S+", re.IGNORECASE)
 
+# Fractions read as raw symbols instead of words — \frac{3}{4} has no
+# backslash/brace in _MD_NOISE below, so it reached Kokoro completely
+# untouched ("backslash frac open brace three..."). Runs first, before
+# anything else gets a chance to mangle the backslash/braces.
+_LATEX_FRAC = re.compile(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}")
+# Bare digit fractions ("3/4") — not slash-anything, just digit/digit, so
+# this can't collide with a URL path (letters, not digits, either side).
+_SLASH_FRAC = re.compile(r"(?<!\d)(\d+)\s*/\s*(\d+)(?!\d)")
+
+# Same class of bug as _LATEX_FRAC — other LaTeX/math notation Kokoro would
+# otherwise read as raw symbols or drop silently. All run before _MD_NOISE
+# strips stray '*'/'_' below, and before it since \sqrt{} has braces too.
+_LATEX_SQRT = re.compile(r"\\sqrt\s*\{([^{}]+)\}")
+_LATEX_SYMBOLS = [
+    (re.compile(r"\\times|\\cdot"), " times "),
+    (re.compile(r"\\pm"), " plus or minus "),
+    (re.compile(r"\\leq"), " less than or equal to "),
+    (re.compile(r"\\geq"), " greater than or equal to "),
+    (re.compile(r"\\neq"), " not equal to "),
+    (re.compile(r"\\approx"), " approximately "),
+    (re.compile(r"\\infty"), " infinity "),
+    (re.compile(r"\\pi"), " pi "),
+]
+# Exponents: x^2 -> "x squared", x^3 -> "x cubed", x^{10} -> "x to the power 10".
+_EXPONENT = re.compile(r"(\w)\^\{?(-?\d+)\}?")
+_EXPONENT_WORDS = {"2": "squared", "3": "cubed"}
+# Bare digit multiplication ("3 * 4") — digit-bounded same as _SLASH_FRAC,
+# so it can't collide with markdown *bold*/_italic_ around words.
+_STAR_MULT = re.compile(r"(?<!\d)(\d+)\s*\*\s*(\d+)(?!\d)")
+
+
+def _exponent_sub(match: "re.Match") -> str:
+    base, exp = match.group(1), match.group(2)
+    word = _EXPONENT_WORDS.get(exp, f"to the power {exp}")
+    return f"{base} {word}"
+
 # Bracket tags like list_scheduled()'s "[reminder_1785718306_1] Reminder:
 # ..." — an internal job id meant for matching, not for a listener to
 # hear as a string of digits. Runs after _MD_LINK, which has already
@@ -90,6 +126,13 @@ _BRACKET_TAG = re.compile(r"\[[^\]]*\]")
 
 
 def clean_for_speech(text: str) -> str:
+    text = _LATEX_FRAC.sub(r"\1 over \2", text)
+    text = _SLASH_FRAC.sub(r"\1 over \2", text)
+    text = _LATEX_SQRT.sub(r"square root of \1", text)
+    for pattern, replacement in _LATEX_SYMBOLS:
+        text = pattern.sub(replacement, text)
+    text = _EXPONENT.sub(_exponent_sub, text)
+    text = _STAR_MULT.sub(r"\1 times \2", text)
     text = _MD_LINK.sub(r"\1", text)
     text = _URL.sub(r"\1", text)
     text = _BRACKET_TAG.sub("", text)
