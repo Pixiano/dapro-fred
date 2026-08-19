@@ -13,6 +13,10 @@ from utils.gpu_bootstrap import ensure_cuda_dlls
 ensure_cuda_dlls()
 
 from llama_cpp import Llama
+from llama_cpp.llama_chat_format import (
+    Jinja2ChatFormatter,
+    chat_formatter_to_chat_completion_handler,
+)
 
 from config.settings import (
     MODEL_TIERS,
@@ -20,6 +24,7 @@ from config.settings import (
     TIER_ROUTING_ENABLED,
     CHAT_FORMAT_BY_TIER,
     TIER_PROMPT_MARKERS,
+    TIER_TEMPLATE_KWARGS,
     MMPROJ_PATH_BY_TIER,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
@@ -273,7 +278,7 @@ class LLMClient:
             # said nothing at all. Thinking-on Qwen3-8B makes this
             # reachable on any turn whose reasoning overruns max_tokens.
             # Say something honest instead of nothing.
-            return self._generate(model, messages, max_tokens=max_tokens) or (
+            return self._generate(model, chosen_tier, messages, max_tokens=max_tokens) or (
                 "I ran out of room thinking that one through, sir. "
                 "Ask me again, or narrow it down a little."
             )
@@ -286,7 +291,7 @@ class LLMClient:
                 try:
                     model = self._get_model(self.default_tier)
                     return self._generate(
-                        model, messages, max_tokens=max_tokens
+                        model, self.default_tier, messages, max_tokens=max_tokens
                     ) or (
                         "I ran out of room thinking that one through, sir. "
                         "Ask me again, or narrow it down a little."
@@ -380,13 +385,18 @@ class LLMClient:
             local_messages = self._apply_thinking(messages, chosen_tier)
             try:
                 model = self._get_model(chosen_tier)
-                stream = model.create_chat_completion(
-                    messages=local_messages,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    max_tokens=self.max_tokens,
-                    stream=True,
-                )
+                if chosen_tier in TIER_TEMPLATE_KWARGS:
+                    stream = self._native_call(
+                        model, chosen_tier, local_messages, stream=True
+                    )
+                else:
+                    stream = model.create_chat_completion(
+                        messages=local_messages,
+                        temperature=self.temperature,
+                        top_p=self.top_p,
+                        max_tokens=self.max_tokens,
+                        stream=True,
+                    )
             except Exception as error:
                 print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
                 yield self.generate(messages, tier=chosen_tier, local_only=local_only)
@@ -544,14 +554,20 @@ class LLMClient:
         try:
             model = self._get_model(chosen_tier)
 
-            response = model.create_chat_completion(
-                messages=local_messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_tokens=self.max_tokens,
-            )
+            if chosen_tier in TIER_TEMPLATE_KWARGS:
+                response = self._native_call(
+                    model, chosen_tier, local_messages,
+                    tools=tools, tool_choice="auto", max_tokens=self.max_tokens,
+                )
+            else:
+                response = model.create_chat_completion(
+                    messages=local_messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    max_tokens=self.max_tokens,
+                )
 
             message = response["choices"][0]["message"]
 
@@ -641,11 +657,14 @@ class LLMClient:
 
         model = self._get_model("Vision")
 
-        response = model.create_chat_completion(
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=self.temperature,
-        )
+        if "Vision" in TIER_TEMPLATE_KWARGS:
+            response = self._native_call(model, "Vision", messages, max_tokens=max_tokens)
+        else:
+            response = model.create_chat_completion(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=self.temperature,
+            )
         content = response["choices"][0]["message"]["content"] or ""
         return self._strip_thinking(content) or content
 
@@ -858,14 +877,76 @@ class LLMClient:
     # INFERENCE
     # =========================================================
 
-    def _generate(self, model: Llama, messages: list, max_tokens: int = None) -> str:
+    def _native_call(self, model, tier: str, messages: list, tools=None,
+                      tool_choice=None, max_tokens: int = None, stream: bool = False):
+        """
+        Bypass create_chat_completion()'s fixed signature (no **kwargs
+        passthrough — confirmed by reading its source) and call the
+        tier's own handler directly, so TIER_TEMPLATE_KWARGS[tier] (e.g.
+        enable_thinking=False) reaches the jinja render the way the old
+        TIER_PROMPT_MARKERS text injection never could — that guard
+        checks the real jinja variable, not anything in the prompt text.
 
-        response = model.create_chat_completion(
+        Vision already has model.chat_handler set (Gemma4ChatHandler,
+        from _get_model) — reusing it here keeps its existing
+        image-embedding injection intact, nothing reimplemented. Standard
+        has no chat_handler, so build a Jinja2ChatFormatter from the
+        tier's own embedded chat_template once per load and cache it on
+        the model instance (dies with it on unload/close, same lifetime
+        as everything else tied to that Llama object).
+
+        Returns the same shape create_chat_completion() would — both
+        paths end in llama_cpp's own response-conversion functions, so no
+        downstream caller needs shape-specific handling.
+        """
+        handler = model.chat_handler
+        if handler is None:
+            handler = getattr(model, "_fred_native_handler", None)
+            if handler is None:
+                # eos/bos MUST come from token_get_text (the raw vocab
+                # piece), not detokenize() — detokenize() renders special
+                # tokens as "" by design, which silently made stop=[""]
+                # (an empty string "matches" after any single token,
+                # confirmed live: completion_tokens=1, empty content,
+                # finish_reason="stop" on every call). Matches exactly
+                # how llama-cpp-python builds its OWN default handler
+                # internally (llama.py's _try_load_metadata, same
+                # private-attribute access) — not a workaround, the
+                # library's own approach.
+                eos_id = model.token_eos()
+                bos_id = model.token_bos()
+                formatter = Jinja2ChatFormatter(
+                    template=model.metadata["tokenizer.chat_template"],
+                    eos_token=model._model.token_get_text(eos_id) if eos_id != -1 else "",
+                    bos_token=model._model.token_get_text(bos_id) if bos_id != -1 else "",
+                    stop_token_ids=[eos_id] if eos_id != -1 else None,
+                )
+                handler = chat_formatter_to_chat_completion_handler(formatter)
+                model._fred_native_handler = handler
+
+        return handler(
+            llama=model,
             messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
             temperature=self.temperature,
             top_p=self.top_p,
             max_tokens=max_tokens or self.max_tokens,
+            stream=stream,
+            **TIER_TEMPLATE_KWARGS.get(tier, {}),
         )
+
+    def _generate(self, model: Llama, tier: str, messages: list, max_tokens: int = None) -> str:
+
+        if tier in TIER_TEMPLATE_KWARGS:
+            response = self._native_call(model, tier, messages, max_tokens=max_tokens)
+        else:
+            response = model.create_chat_completion(
+                messages=messages,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                max_tokens=max_tokens or self.max_tokens,
+            )
 
         return self._finish_response(response)
 

@@ -372,8 +372,16 @@ MODEL_TIERS = {
     # the tier used every single turn: expect reasoning cost closer to
     # Deep's ~13s-for-a-trivial-reply than the old Standard's near-
     # instant one. Chosen anyway, deliberately, after live testing.
-    "Standard": MODELS_DIR / "lmstudio-community" / "Qwen3-8B-GGUF"
-            / "Qwen3-8B-Q4_K_M.gguf",
+    # Swapped to Bonsai-27B-Q1_0 2026-08-18, temporary/throwaway per
+    # Vatsal's direct instruction after his own live testing — NOT a
+    # verified replacement the way the entries above/below were (their
+    # own comments note being "confirmed by reading each tier's own
+    # embedded chat_template directly"; this one wasn't, revert to the
+    # line below if it misbehaves).
+    # "Standard": MODELS_DIR / "lmstudio-community" / "Qwen3-8B-GGUF"
+    #         / "Qwen3-8B-Q4_K_M.gguf",
+    "Standard": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
+            / "Bonsai-27B-Q1_0.gguf",
 
     # Qwen3.5-4B at Q6_K — demoted from Standard this revision. Reasoning
     # off by default (its own template pre-closes <think></think>
@@ -411,8 +419,14 @@ MODEL_TIERS = {
     # matching mmproj file, so it's the only one that can actually see
     # an image. llama-cpp-python (0.3.31, this venv) confirmed to ship
     # Gemma4ChatHandler for it.
-    "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
-            / "gemma-4-12B-it-QAT-Q4_0.gguf",
+    # Same 2026-08-18 swap as "Standard" above — Bonsai covers both
+    # tiers for now (it's the one entry in this file with a matching
+    # mmproj, see MMPROJ_PATH_BY_TIER below). Revert to gemma-4-12B
+    # (line below) if Bonsai's vision quality disappoints live.
+    # "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
+    #         / "gemma-4-12B-it-QAT-Q4_0.gguf",
+    "Vision": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
+            / "Bonsai-27B-Q1_0.gguf",
 }
 
 # Cloud cascade, 2026-08-03 — deliberately a SEPARATE system from
@@ -523,8 +537,13 @@ SENSITIVE_LOCAL_ONLY = False
 # multimodal — absence here means "this tier has no vision handler",
 # checked explicitly in _get_model rather than assumed.
 MMPROJ_PATH_BY_TIER = {
-    "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
-            / "mmproj-gemma-4-12B-it-QAT-BF16.gguf",
+    # 2026-08-18: points at Bonsai's projector now, matching the
+    # "Vision" swap above. gemma-4-12B's projector left commented, not
+    # deleted, for the same revert-if-needed reason.
+    # "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
+    #         / "mmproj-gemma-4-12B-it-QAT-BF16.gguf",
+    "Vision": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
+            / "mmproj-Bonsai-27B-BF16.gguf",
 }
 
 # Per-tier literal text injected into the system turn, because
@@ -535,6 +554,11 @@ MMPROJ_PATH_BY_TIER = {
 # not guessed per-tier, though "how the model responds to it" is only
 # confirmed live for the ones _apply_thinking's docstring says so.
 TIER_PROMPT_MARKERS = {
+    # Standard/Vision's "/no_think" text-injection entries removed
+    # 2026-08-19: confirmed live not to work — Bonsai's guard checks the
+    # real enable_thinking jinja variable, not any string in the prompt.
+    # Replaced by TIER_TEMPLATE_KWARGS below, which reaches the actual
+    # variable via a direct chat_handler call (see llm_client._native_call).
     # gpt-oss-20b's template (confirmed present, unlike Standard/Deep,
     # which have none of their own): reasoning_effort defaults to
     # "medium" and unconditionally renders "Reasoning: medium\n\n" at a
@@ -548,6 +572,20 @@ TIER_PROMPT_MARKERS = {
     # injected "Reasoning: high" over its own auto-generated "Reasoning:
     # medium", since both may end up present in the same prompt.
     "Extreme": "Reasoning: high",
+}
+
+# Tiers whose chat template needs a jinja kwarg TIER_PROMPT_MARKERS'
+# text-injection can't reach — create_chat_completion() has a fixed
+# keyword signature with no **kwargs passthrough (confirmed by reading
+# its source), so there's no way to set enable_thinking through it. The
+# handler underneath it (Jinja2ChatFormatter/MTMDChatHandler) DOES accept
+# arbitrary kwargs and forwards them into the jinja render — see
+# llm_client._native_call, which calls that handler directly instead.
+# Bonsai's own <think> guard only closes when enable_thinking is
+# explicitly False, confirmed by reading its real embedded template.
+TIER_TEMPLATE_KWARGS = {
+    "Standard": {"enable_thinking": False},
+    "Vision": {"enable_thinking": False},
 }
 
 # Per-tier chat_format override. None means "use the template embedded in

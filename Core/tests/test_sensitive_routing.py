@@ -226,6 +226,19 @@ def _bare_client(monkeypatch, cloud_calls):
 
     class _FakeModel:
         def create_chat_completion(self, **kwargs):
+            return self._respond(**kwargs)
+
+        # "Standard" is in TIER_TEMPLATE_KWARGS (see settings.py) —
+        # generate_stream/generate_with_tools call model.chat_handler
+        # directly via _native_call rather than create_chat_completion.
+        # Real objects always have this attribute (None, or a real
+        # handler); a bare object missing it entirely is what
+        # create_chat_completion-only fakes never needed before.
+        def chat_handler(self, **kwargs):
+            return self._respond(**kwargs)
+
+        @staticmethod
+        def _respond(**kwargs):
             if kwargs.get("stream"):
                 return iter([
                     {"choices": [{"delta": {"content": "local reply"}}]}
@@ -242,7 +255,8 @@ def _bare_client(monkeypatch, cloud_calls):
     monkeypatch.setattr(client, "_cloud_stream", _cloud_stream)
     monkeypatch.setattr(client, "_get_model", lambda tier: _FakeModel())
     monkeypatch.setattr(
-        client, "_generate", lambda model, messages, max_tokens=None: "local reply"
+        client, "_generate",
+        lambda model, tier, messages, max_tokens=None: "local reply"
     )
     return client
 
