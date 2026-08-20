@@ -80,3 +80,55 @@ def whats_on_screen(question: str = "") -> str:
         )
 
     return description
+
+
+def look_through_camera(question: str = "") -> str:
+    """
+    Captures whatever the paired phone's camera is pointed at right now
+    and describes it — "what am I looking at", "read this for me", etc.
+
+    Purely on-demand, no cache, no background process: unlike the screen
+    watcher (a separate OS process specifically because it polls
+    continuously and must never collide with a live conversation turn's
+    inference call — see screen_watcher.py's module docstring), this is
+    a single capture+describe pair that only ever runs as part of
+    handling this exact tool call, sequentially with the turn that
+    triggered it, never concurrently with another inference call. That's
+    the same safety property whats_on_screen()'s forced-local retry
+    above already relies on when it calls straight into
+    app.orchestrator.llm from a tool function — no separate process
+    needed here for the same reason.
+    """
+    import base64
+
+    from tools.phone_tools import capture_camera_photo
+
+    local_path = capture_camera_photo()
+    if not local_path.lower().endswith(".png"):
+        # capture_camera_photo() returns a plain error sentence (no
+        # file extension) on failure, a real path on success — cheaper
+        # than adding a second return value every caller has to unpack.
+        return local_path
+
+    from ui.pill_app import get_current_app
+
+    app = get_current_app()
+    if app is None:
+        return "Camera captured, but there's no running app to describe it with."
+
+    with open(local_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+
+    prompt = (
+        f"Looking through this camera, answer this question as directly "
+        f"and specifically as possible: {question}"
+        if question else
+        "Describe what this camera is pointed at right now — the general "
+        "scene and any specific text, objects, or people that stand out."
+    )
+
+    try:
+        return app.orchestrator.llm.describe_image(data_uri, prompt, max_tokens=300)
+    except Exception as e:
+        return f"I captured the camera view but couldn't describe it: {e}"

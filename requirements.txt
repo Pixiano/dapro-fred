@@ -51,6 +51,12 @@ pystray>=0.19.0
 requests>=2.34.0
 duckduckgo-search>=8.1.0
 
+# Haismart AC control (tools/haismart_tools.py) — AES decrypt/encrypt for
+# the vendored local LAN protocol client (tools/haismart/vendor/). Was
+# NOT actually installed despite the vendoring agent's claim it was
+# already present transitively — confirmed missing live, added here.
+cryptography>=41.0.0
+
 # Scheduling and Time
 apscheduler>=3.10.0
 sqlalchemy>=2.0.0

@@ -31,6 +31,7 @@ from config.settings import (
     PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
     VIP_MESSAGE_CHECK_MINUTES,
+    CALL_LOG_CHECK_MINUTES,
 )
 from tools import agenda, daily_tasks, session_summary
 from utils import event_log
@@ -603,6 +604,31 @@ def check_vip_messages():
         notify(summary, title="Message")
 
 
+def check_recent_calls():
+    """
+    Speak up when a VIP-tier person called since the last check, and
+    stay silent otherwise — "you missed a call from X" gated the exact
+    same way the VIP WhatsApp check above is gated, off the exact same
+    tier data (see phone_tools.check_recent_calls's docstring).
+
+    Same reasoning as check_vip_messages above for skipping _load_state():
+    phone_tools keeps its own watermark (the highest call `date` seen),
+    which is the right granularity here too.
+
+    Never raises into the scheduler: a phone that's asleep or off the
+    network is the normal case, not an error.
+    """
+    try:
+        from tools.phone_tools import check_recent_calls as fetch
+        summary = fetch()
+    except Exception as e:
+        event_log.log_error("proactive_recent_calls", e)
+        return
+
+    if summary:
+        notify(summary, title="Call")
+
+
 def register(scheduler, llm=None, on_agenda_ask=None):
     """
     Call once at orchestrator startup — see orchestrator.py's __init__.
@@ -648,4 +674,9 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     # messaged you" is worthless if it arrives twenty minutes late.
     scheduler.add_periodic(
         check_vip_messages, VIP_MESSAGE_CHECK_MINUTES, "proactive_vip_messages"
+    )
+    # Same short-interval reasoning as VIP messages above, for calls
+    # instead of WhatsApp — see CALL_LOG_CHECK_MINUTES's comment.
+    scheduler.add_periodic(
+        check_recent_calls, CALL_LOG_CHECK_MINUTES, "proactive_recent_calls"
     )

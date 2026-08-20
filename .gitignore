@@ -5,6 +5,27 @@ KEYS!.txt
 # Per-device shared secrets for Core/web/phone_api.py's LAN endpoint.
 Core/data/phone_tokens.json
 
+# Haier AC local keys (see Core/tools/haismart_setup.py / haismart_tools.py)
+# — device_id + localKey together are full control authority over the
+# appliance from anywhere on the LAN. Fetched once from the Haier account,
+# never something to commit.
+Core/data/haismart_devices.json
+
+# HTTP Shortcuts import JSON (Core/tools/http_shortcuts_setup.py) carries
+# a real phone_tokens.json token inline — same sensitivity, same
+# handling. Confirmed 2026-08-20: this was NOT actually covered by any
+# existing rule despite the file's own generating script claiming it
+# was gitignored — real gap, fixed here.
+Core/data/http_shortcuts_export.json
+
+# Call-log proactive-check watermark (phone_tools.CALL_SEEN_PATH) — low
+# sensitivity but still per-run generated state, not source.
+Core/data/call_log_seen.json
+
+# Transient camera capture (tools/phone_tools.capture_camera_photo) —
+# overwritten every call, never source.
+Core/data/camera_capture.png
+
 # Python
 __pycache__/
 *.pyc

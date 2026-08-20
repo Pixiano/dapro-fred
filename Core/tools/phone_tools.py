@@ -19,12 +19,14 @@
 # nothing a caller passes can become an adb or shell argument.
 
 import difflib
+import json
 import os
 import re
 import subprocess
 import time
+from datetime import datetime
 
-from config.settings import VAULT_DIR
+from config.settings import DATA_DIR, VAULT_DIR
 
 _ADDR = os.environ.get("FRED_PHONE_ADB", "")
 
@@ -793,6 +795,357 @@ def hang_up() -> str:
     return "Call ended."
 
 
+# =========================================================
+# ALARM
+# =========================================================
+
+# `adb shell` joins its whole argv into ONE string and runs it through the
+# device's own shell, which re-tokenizes on whitespace. A label with a
+# space in it — "wake up" — therefore arrives on the phone as two separate
+# am-start arguments and the intent parser silently mis-binds them
+# (confirmed live 2026-08-20: an unquoted two-word MESSAGE made am start
+# print "pkg=<second word>" and fail to resolve the intent at all).
+# Wrapping the value in a literal pair of double quotes here survives that
+# re-tokenization, confirmed live the same way — a single word needs no
+# quoting but quoting one doesn't break it either, so it's applied
+# unconditionally rather than branching on whether the label has a space.
+#
+# Those literal quotes make the label a second trust boundary beyond the
+# usual Python-string one: it becomes characters INSIDE a shell string on
+# the phone. A stray `"` in the label would close that quote early and
+# hand the rest of the label to the phone's shell as a new command.
+# Stripped rather than escaped, same instinct as _clean_number rebuilding
+# from scratch: don't try to be clever with a shell metacharacter, just
+# don't let it through.
+_UNSAFE_LABEL = re.compile(r'["\\`$]')
+
+
+def _clean_label(label: str) -> str:
+    """A phone-safe alarm label: no shell-quote-breaking characters, capped
+    to a sane length so a rambling transcription doesn't become the name."""
+    return _UNSAFE_LABEL.sub("", (label or "").strip())[:80]
+
+
+def set_alarm(hour: int = -1, minute: int = 0, label: str = "") -> str:
+    """Set an alarm on the paired Android phone at hour:minute (24h clock)."""
+
+    try:
+        hour, minute = int(hour), int(minute)
+    except (TypeError, ValueError):
+        return "That's not a valid time — give me an hour and a minute."
+
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return "That's not a valid time — hour has to be 0-23, minute 0-59."
+
+    if not _device_ready():
+        return "The phone isn't connected. Plug it in, or check it's awake on the network."
+
+    args = [
+        "shell", "am", "start", "-a", "android.intent.action.SET_ALARM",
+        "--ei", "android.intent.extra.alarm.HOUR", str(hour),
+        "--ei", "android.intent.extra.alarm.MINUTES", str(minute),
+        # Without this the intent just opens the clock app's "new alarm"
+        # screen and waits for a human to tap Save — useless from a voice
+        # command. Confirmed live 2026-08-20 that SKIP_UI=true saves and
+        # enables the alarm with no screen interaction at all.
+        "--ez", "android.intent.extra.alarm.SKIP_UI", "true",
+    ]
+
+    label = _clean_label(label)
+    if label:
+        args += ["--es", "android.intent.extra.alarm.MESSAGE", f'"{label}"']
+
+    result = _adb(*args)
+
+    if result.returncode != 0 or "Error" in result.stderr:
+        return f"Couldn't set the alarm: {result.stderr.strip() or 'the phone refused it'}"
+
+    when = f"{hour:02d}:{minute:02d}"
+    named = f" ({label})" if label else ""
+    return f"Alarm set for {when}{named}."
+
+
+# =========================================================
+# CALL LOG
+# =========================================================
+
+# Android's CallLog.Calls constants — confirmed live 2026-08-20 against
+# content://call_log/calls on the paired phone (adb -s O3PRIS25DB005413).
+_CALL_TYPES = {"1": "incoming", "2": "outgoing", "3": "missed"}
+
+# One row looks like:
+#   Row: 0 number=+919967635204, name=Mom, type=2, date=1765799273822, duration=0
+# name is the provider's own guess at a contact match — usually blank,
+# sometimes populated, never trusted here (see get_call_log): it's parsed
+# only as a last-resort label when _read_contacts() has nothing better.
+# Non-greedy on number/name because, unlike a Contacts display_name, a
+# call-log number or provider name is not expected to legitimately embed
+# ", type=" — but the projection order (fixed by the query below) is what
+# actually makes this safe, not the pattern.
+_CALL_ROW = re.compile(
+    r"^Row: \d+ number=(.*?), name=(.*?), type=(-?\d+), date=(-?\d+), duration=(-?\d+)\s*$"
+)
+
+
+def _parse_call_log(output: str) -> list:
+    """[{number, name, type, date(ms, int), duration(s, int)}], raw row order."""
+    rows = []
+    for line in output.splitlines():
+        m = _CALL_ROW.match(line)
+        if not m:
+            continue
+        number, name, ctype, date, duration = m.groups()
+        rows.append({
+            "number": number.strip(),
+            "name": name.strip(),
+            "type": ctype,
+            "date": int(date),
+            "duration": int(duration),
+        })
+    return rows
+
+
+def _describe_call_time(ms: int, now: datetime = None) -> str:
+    """
+    Same phrasing rule as scheduler.describe_when, mirrored rather than
+    imported — importing orchestrator.scheduler here would drag in
+    apscheduler for one two-line helper. "at <clock>", matching
+    get_current_time's "%I:%M %p" convention, with "yesterday"/a day
+    name prefixed once the call isn't from today.
+    """
+    now = now or datetime.now()
+    when = datetime.fromtimestamp(ms / 1000)
+    clock = when.strftime("%I:%M %p").lstrip("0")
+
+    days = (now.date() - when.date()).days
+    if days == 0:
+        return f"at {clock}"
+    if days == 1:
+        return f"yesterday at {clock}"
+    return f"{when.strftime('%A %d %B')} at {clock}"
+
+
+def _fetch_call_log_rows():
+    """
+    [{number, name, type, date, duration}] straight off the phone, or
+    None if the query itself failed. Shared by get_call_log and
+    check_recent_calls so the adb/content-query/parsing logic exists in
+    exactly one place — both need the SAME raw rows (each with its own
+    `date`), not the pre-formatted sentence get_call_log builds from
+    them.
+    """
+    result = _adb("shell", "content", "query", "--uri",
+                  "content://call_log/calls",
+                  "--projection", "number:name:type:date:duration", timeout=30)
+    if result.returncode != 0:
+        return None
+    return _parse_call_log(result.stdout)
+
+
+def get_call_log(limit: int = 10, missed_only: bool = False) -> str:
+    """
+    Recent calls off the paired phone, most recent first — "who called
+    me" / "any missed calls".
+
+    Names are resolved through _read_contacts(), the same phone book
+    call_phone dials from, so a caller here and a name spoken to dial
+    them are always the same lookup — never the call log's own `name`
+    column, which is frequently blank and not something to lean on.
+    """
+    if not _device_ready():
+        return "The phone isn't connected, so I can't check the call log."
+
+    limit = max(1, min(int(limit), 50))
+
+    rows = _fetch_call_log_rows()
+    if rows is None:
+        return "The phone refused the call-log query."
+
+    if missed_only:
+        rows = [r for r in rows if r["type"] == "3"]
+
+    if not rows:
+        return "No missed calls." if missed_only else "No calls in the log."
+
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    rows = rows[:limit]
+
+    known = {_match_key(num): name for name, num in _read_contacts().items()}
+    now = datetime.now()
+
+    parts = []
+    for r in rows:
+        name = known.get(_match_key(r["number"])) or r["name"] or f"Unknown number ({r['number']})"
+        when = _describe_call_time(r["date"], now)
+        if missed_only:
+            parts.append(f"{name} {when}")
+        else:
+            parts.append(f"{name} ({_CALL_TYPES.get(r['type'], 'call')}) {when}")
+
+    count = len(parts)
+    label = "missed call" if missed_only else "call"
+    return f"{count} {label}{'s' if count != 1 else ''}: {', '.join(parts)}."
+
+
+# =========================================================
+# PROACTIVE: "you missed a call from X" (mirrors
+# whatsapp_tools.check_vip_messages' shape exactly)
+# =========================================================
+
+# Persisted watermark for the proactive call check, alongside
+# whatsapp_tools.SEEN_PATH in the same data dir/convention. Call-log
+# rows are already timestamped and naturally ordered, so tracking the
+# single max `date` seen is enough — unlike WhatsApp's dedup, which
+# needs a full stamp set because messages aren't a strictly increasing
+# single stream the way one phone's call log is.
+CALL_SEEN_PATH = DATA_DIR / "call_log_seen.json"
+
+
+def _load_seen_call_stamp():
+    """Max call `date` (epoch ms) seen so far, or None on first-ever run."""
+    try:
+        return int(json.loads(CALL_SEEN_PATH.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _save_seen_call_stamp(stamp: int):
+    CALL_SEEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CALL_SEEN_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(int(stamp)), encoding="utf-8")
+    tmp.replace(CALL_SEEN_PATH)
+
+
+# =========================================================
+# CAMERA
+# =========================================================
+
+_CAMERA_CAPTURE_PATH = DATA_DIR / "camera_capture.png"
+
+
+def capture_camera_photo() -> str:
+    """
+    Wakes the phone's camera and captures whatever it's pointed at right
+    now, pulling the frame back to this machine. Returns the local file
+    path on success, or a plain error string.
+
+    NOT the standard IMAGE_CAPTURE -> MediaStore -> pull flow — confirmed
+    live 2026-08-20 that it silently drops the frame on this phone's
+    scoped storage (Android 15): `am start` has no calling Activity to
+    receive onActivityResult or honor an output Uri, so the camera app
+    has nowhere trusted to persist it and just discards it, no error
+    either way. Instead this screenshots the live viewfinder directly,
+    before any shutter press — screen-resolution, not full sensor
+    resolution, but that's a non-issue for the only consumer
+    (llm_client.describe_image()'s vision pipeline). ~3s end to end.
+
+    KEYCODE_HOME (not a package-specific force-stop) leaves the camera
+    app afterward, so this stays portable across phones with a different
+    stock camera package.
+    """
+    if not _device_ready():
+        return "The phone isn't connected. Plug it in, or check it's awake on the network."
+
+    remote_path = "/sdcard/fred_camera_capture.png"
+
+    _adb("shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE")
+    time.sleep(1.2)  # let the camera init/autofocus settle - confirmed live 2026-08-20
+
+    shot = _adb("shell", "screencap", "-p", remote_path, timeout=20)
+    if shot.returncode != 0:
+        _adb("shell", "input", "keyevent", "KEYCODE_HOME")
+        return "Couldn't capture the camera preview."
+
+    pull = _adb("pull", remote_path, str(_CAMERA_CAPTURE_PATH), timeout=20)
+    _adb("shell", "rm", remote_path)
+    _adb("shell", "input", "keyevent", "KEYCODE_HOME")
+
+    if pull.returncode != 0 or not _CAMERA_CAPTURE_PATH.exists():
+        return "Captured on the phone but couldn't pull the image back."
+
+    return str(_CAMERA_CAPTURE_PATH)
+
+
+def check_recent_calls() -> str:
+    """
+    Calls from VIP-tier people since the last check, for the proactive
+    watcher. Returns "" when there's nothing new — the caller stays
+    silent on empty, same contract as whatsapp_tools's check_vip_messages.
+
+    Gated on VIP tier, same as the WhatsApp check, and on PURPOSE the
+    SAME tier data: imports whatsapp_tools._read_tiers/tier_of directly
+    rather than growing a second, call-specific tier file that could
+    drift out of sync with the WhatsApp one. A person's trust level
+    isn't a property of the channel they're reaching you through — one
+    "vip" list, keyed by the resolved contact name, same as get_call_log
+    already resolves through _read_contacts() before display. A number
+    with no resolved name can never be VIP here, same as it can never be
+    VIP on the WhatsApp side either (that keys on sender NAME too).
+
+    Every call still advances the seen-watermark, VIP or not — mirrors
+    check_vip_messages, which dedups every message it sees and only
+    filters to VIP *after* marking it seen, so a non-VIP call is never
+    re-examined and re-tiered on every future check just because it
+    wasn't announced.
+
+    First-ever run seeds the watermark at the current newest call and
+    reports nothing retroactively, matching check_vip_messages' own
+    first-run behaviour with an empty seen-set — VIP calls, like VIP
+    messages, are a small deliberately-curated set, so there's no
+    "backlog is too much to read out" problem the way there would be
+    if every call qualified.
+    """
+    if not _device_ready():
+        return ""
+
+    rows = _fetch_call_log_rows()
+    if not rows:
+        return ""
+
+    last_seen = _load_seen_call_stamp()
+    max_date = max(r["date"] for r in rows)
+
+    if last_seen is None:
+        _save_seen_call_stamp(max_date)
+        return ""
+
+    new_rows = sorted((r for r in rows if r["date"] > last_seen), key=lambda r: r["date"])
+    _save_seen_call_stamp(max(max_date, last_seen))
+
+    if not new_rows:
+        return ""
+
+    from tools.whatsapp_tools import _read_tiers, tier_of
+
+    target = _resolve()
+    policy, tiers, seen = _read_tiers(target) if target else ("strict", {}, {})
+    known = {_match_key(num): name for name, num in _read_contacts().items()}
+
+    fresh = []
+    for r in new_rows:
+        # Same name lookup get_call_log uses: contacts.md first, the
+        # call log's own (usually blank) provider name as fallback.
+        # Nameless rows can't be looked up in a tier file keyed by name,
+        # so they're skipped rather than tiered as "useless" via "".
+        name = known.get(_match_key(r["number"])) or r["name"]
+        if not name:
+            continue
+        if tier_of(name, policy, tiers, seen) == "vip":
+            fresh.append((name, r))
+
+    if not fresh:
+        return ""
+    if len(fresh) == 1:
+        name, row = fresh[0]
+        return f"{name} called {_describe_call_time(row['date'])}."
+
+    names = [name for name, _ in fresh]
+    uniq = list(dict.fromkeys(names))
+    if len(uniq) == 1:
+        return f"{uniq[0]} called {len(fresh)} times while I was away."
+    return f"{', '.join(uniq[:-1])} and {uniq[-1]} called while I was away."
+
+
 if __name__ == "__main__":
     assert _clean_number("+91 98765 43210") == "+919876543210"
     assert _clean_number("(022) 2345-6789") == "02223456789"
@@ -934,5 +1287,20 @@ if __name__ == "__main__":
     finally:
         globals()["_adb"] = _real_adb
         _wireless_cache.clear()
+
+    # Call log: row parsing off a real captured shape, and the
+    # contacts-over-provider-name precedence get_call_log relies on.
+    real_rows = (
+        "Row: 0 number=9967635204, name=, type=2, date=1764080748927, duration=0\n"
+        "Row: 6 number=+919967635204, name=Mom, type=2, date=1764419915201, duration=0\n"
+        "Row: 21 number=+919998612855, name=, type=3, date=1765442102928, duration=0\n"
+    )
+    parsed = _parse_call_log(real_rows)
+    assert len(parsed) == 3
+    assert parsed[1] == {
+        "number": "+919967635204", "name": "Mom", "type": "2",
+        "date": 1764419915201, "duration": 0,
+    }
+    assert parsed[2]["type"] == "3" and parsed[2]["name"] == ""
 
     print("ok")

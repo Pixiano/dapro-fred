@@ -27,6 +27,8 @@ from tools import vault_files
 from tools import workout_plan
 from tools import file_index
 from tools import self_docs
+from tools import otp_tools
+from tools import haismart_tools
 from audio import device_info
 from utils import confidence, sensitive
 from orchestrator import canned_replies
@@ -1307,6 +1309,35 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="get_call_log",
+            function=phone_tools.get_call_log,
+            description="Who called recently on the paired phone, or just missed calls.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "How many calls. Optional, defaults to 10."},
+                    "missed_only": {"type": "boolean", "description": "Only missed calls. Optional, defaults to false."},
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="set_alarm",
+            function=phone_tools.set_alarm,
+            description="Set an alarm on the paired Android phone.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "hour": {"type": "integer", "description": "Hour, 24h clock (0-23)."},
+                    "minute": {"type": "integer", "description": "Minute (0-59). Optional, defaults to 0."},
+                    "label": {"type": "string", "description": "What the alarm is for. Optional."},
+                },
+                "required": ["hour"],
+            },
+        )
+
+        self.tools.register(
             name="sync_contacts",
             function=phone_tools.sync_contacts,
             description="Update the saved contact list from the phone, ranked by how often they're called.",
@@ -1374,6 +1405,27 @@ class FREDOrchestrator:
             function=whatsapp_tools.list_contact_tiers,
             description="Show which WhatsApp senders are in which trust tier.",
             parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+        self.tools.register(
+            name="find_otp",
+            function=otp_tools.find_otp,
+            description=(
+                "Find a recent OTP/verification code in the paired phone's SMS "
+                "inbox. Only ever looks at the last 5 minutes. Use this ONLY "
+                "after explicitly asking the user first and getting a yes — "
+                "e.g. FRED notices a login/OTP prompt on screen and asks "
+                "'should I try to find the OTP, sir?' — never call this on a "
+                "bare request to 'read my texts', which this tool does not do."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "service_hint": {"type": "string", "description": "The service asking for the code, if known (e.g. 'Amazon'). Optional."},
+                },
+                "required": [],
+            },
+            destructive=True,
         )
 
         self.tools.register(
@@ -1693,6 +1745,104 @@ class FREDOrchestrator:
                         ),
                     },
                 },
+            },
+        )
+
+        self.tools.register(
+            name="look_through_camera",
+            function=vision_tools.look_through_camera,
+            description=(
+                "Capture whatever the paired phone's CAMERA is pointed at "
+                "right now and describe or answer questions about it — use "
+                "this for 'what am I looking at' / 'read this for me' / "
+                "'what is this' when the user means their surroundings or "
+                "something physical in front of the phone, NOT the screen. "
+                "For the phone or PC's own screen content, use "
+                "whats_on_screen instead."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "What to find out about what the camera sees. Optional.",
+                    },
+                },
+            },
+        )
+
+        # ---------------------------------------------------
+        # Haismart AC control — local LAN protocol, no cloud/internet touch
+        # after Core/tools/haismart_setup.py's one-time key fetch. See
+        # tools/haismart/vendor/__init__.py for provenance.
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="get_ac_status",
+            function=haismart_tools.get_ac_status,
+            description="Read the AC's current power/temperature/mode/fan state.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "device": {"type": "string", "description": "Which AC, if more than one is set up. Optional."},
+                },
+                "required": [],
+            },
+        )
+
+        self.tools.register(
+            name="set_ac_power",
+            function=haismart_tools.set_ac_power,
+            description="Turn the AC on or off.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "on": {"type": "boolean", "description": "True to turn on, false to turn off."},
+                    "device": {"type": "string", "description": "Which AC, if more than one is set up. Optional."},
+                },
+                "required": ["on"],
+            },
+        )
+
+        self.tools.register(
+            name="set_ac_temperature",
+            function=haismart_tools.set_ac_temperature,
+            description="Set the AC's target temperature (16-30°C).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "celsius": {"type": "integer", "description": "Target temperature, 16-30."},
+                    "device": {"type": "string", "description": "Which AC, if more than one is set up. Optional."},
+                },
+                "required": ["celsius"],
+            },
+        )
+
+        self.tools.register(
+            name="set_ac_mode",
+            function=haismart_tools.set_ac_mode,
+            description="Set the AC's mode: auto, cool, dry, heat, or fan_only.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "mode": {"type": "string", "description": "auto, cool, dry, heat, or fan_only."},
+                    "device": {"type": "string", "description": "Which AC, if more than one is set up. Optional."},
+                },
+                "required": ["mode"],
+            },
+        )
+
+        self.tools.register(
+            name="set_ac_fan_speed",
+            function=haismart_tools.set_ac_fan_speed,
+            description="Set the AC's fan speed: high, medium, low, or auto.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "speed": {"type": "string", "description": "high, medium, low, or auto."},
+                    "device": {"type": "string", "description": "Which AC, if more than one is set up. Optional."},
+                },
+                "required": ["speed"],
             },
         )
 

@@ -256,6 +256,17 @@ PROACTIVE_CHECK_INTERVAL_MINUTES = 15
 # erroring, since an absent phone is the normal case, not a fault.
 VIP_MESSAGE_CHECK_MINUTES = 2
 
+# "You missed a call from X" gets the same short-interval treatment as
+# VIP messages, for the identical reason: the point of persisting a
+# seen-watermark across restarts (see phone_tools.CALL_SEEN_PATH) is
+# "who called while FRED was off", which only works if the FIRST check
+# after startup lands soon after startup — at PROACTIVE_CHECK_INTERVAL_
+# MINUTES (15) that window is wide enough that "just now" can mean
+# nearly a quarter hour late. Same adb-round-trip cost profile as the
+# VIP check (cheap, silent when no phone is attached), so there's no
+# reason to poll it any less often.
+CALL_LOG_CHECK_MINUTES = 2
+
 # active-priorities.md's own `updated:` frontmatter date, not a per-item
 # parse of its prose bullets — see proactive_checks.py for why a
 # whole-file signal was chosen over trying to date-parse free text.

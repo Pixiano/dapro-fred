@@ -97,7 +97,10 @@ TOOL_CATEGORIES = {
     ),
     "workout": ("workout_split", "todays_workout", "schedule_workouts"),
     "git": ("git_status", "git_log", "git_diff_summary"),
-    "phone": ("call_phone", "hang_up", "sync_contacts", "use_phone"),
+    "phone": (
+        "call_phone", "hang_up", "sync_contacts", "use_phone",
+        "get_call_log", "set_alarm",
+    ),
     # Reading and sending are SEPARATE categories on purpose, and this is
     # the one place in this file where the usual "over-inclusive is cheap"
     # rule is wrong. read_messages pulls in text written by other people —
@@ -121,11 +124,16 @@ TOOL_CATEGORIES = {
     # between "repeat your last line" and "what was said a minute ago",
     # so both tools are offered and the model's descriptions disambiguate.
     "recall_recent": ("recall_recent_conversation", "repeat_last"),
-    "vision": ("whats_on_screen",),
+    "vision": ("whats_on_screen", "look_through_camera"),
     "tasks": ("add_task", "list_tasks", "complete_task"),
     "agenda": (
         "add_agenda_item", "list_agenda_items", "update_agenda_item",
         "delete_agenda_item",
+    ),
+    "otp": ("find_otp",),
+    "ac": (
+        "get_ac_status", "set_ac_power", "set_ac_temperature",
+        "set_ac_mode", "set_ac_fan_speed",
     ),
 }
 
@@ -297,6 +305,9 @@ CATEGORY_CUES = {
         "call", "dial", "phone", "ring", "hang up", "end the call",
         "hangup", "cut the call", "contact", "contacts",
         "which phone", "use my", "switch phone",
+        "missed call", "missed calls", "who called", "called me",
+        "call log", "recent calls", "answered calls",
+        "alarm", "alarms", "wake me up", "set an alarm",
     ),
     # Cues for these two are kept as disjoint as phrasing allows — see the
     # comment on messages_read/messages_send above. If both fire they
@@ -395,6 +406,17 @@ CATEGORY_CUES = {
         "what's on my screen", "on my screen",
         "what's on screen", "screen say", "what does my screen", "screen",
         "looking at",
+        "camera", "through the camera", "point the camera",
+        "what am i holding", "what is this", "read this for me",
+    ),
+    "otp": (
+        "otp", "one time password", "one-time password", "verification code",
+        "security code", "login code", "passcode",
+    ),
+    "ac": (
+        "ac", "a/c", "air conditioner", "air conditioning", "aircon",
+        "haier", "haismart", "cool the room", "heat the room",
+        "fan speed", "thermostat",
     ),
     "tasks": (
         # Bare "to do" is deliberately left out — "things to do", "what
