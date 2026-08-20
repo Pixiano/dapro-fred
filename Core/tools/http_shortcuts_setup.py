@@ -210,24 +210,33 @@ def _serve_once(directory: Path, port: int) -> http.server.ThreadingHTTPServer:
 
 def _tap_import_confirm(serial: str) -> bool:
     """
-    Best-effort: find and tap whatever button confirms the import (its
-    exact label varies by app version — "IMPORT", "Import selected
-    entries", etc.), so the run can finish unattended when it works.
+    Best-effort: find and tap whatever button confirms the import.
 
-    Ponytail: one dump-and-regex pass, not a retry loop or a real
-    UiAutomator client. Good enough for a same-screen, freshly-opened
-    dialog; if the app is slower to render than this, or the label
-    changes, this quietly returns False and the caller reports that a
-    human needs to tap it — never guesses at coordinates.
+    Confirmed live 2026-08-20 this dialog's real confirm button is
+    plain "OK" — the URL field auto-focuses on open and pops the
+    keyboard, which both covers "OK" (off-screen in a screenshot taken
+    right after the deep link fires) AND meant the original version of
+    this function's `[Ii]mport` regex matched the "Import from URL"
+    TITLE text instead (it contains "import" too, and came first in
+    the dump) — silently tapping the URL text field, not the button.
+    Fixed: dismiss the keyboard first (BACK closes it without closing
+    the dialog), then search for "OK" specifically, "Import"-containing
+    text only as a fallback for a differently-worded dialog.
     """
+    _adb("-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK", timeout=10)
+    time.sleep(0.5)
+
     dump = _adb("-s", serial, "shell", "uiautomator", "dump", "/sdcard/ui.xml", timeout=15)
     if dump.returncode != 0:
         return False
     xml = _adb("-s", serial, "shell", "cat", "/sdcard/ui.xml", timeout=15).stdout
 
-    match = re.search(
-        r'text="[^"]*[Ii]mport[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',
-        xml,
+    match = (
+        re.search(r'text="OK"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', xml)
+        or re.search(
+            r'text="[^"]*[Ii]mport[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',
+            xml,
+        )
     )
     if not match:
         return False

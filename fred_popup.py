@@ -115,6 +115,15 @@ def main():
     crash_log = _enable_crash_dump()
     print(f"[fred_popup] crash traces -> {crash_log}")
 
+    # Before anything spawns a child (screen_watcher's multiprocessing
+    # workers, hud/server.py, phone_api.py): a hard kill of THIS process
+    # (Stop-Process -Force, a crash, Task Manager) otherwise orphans them
+    # — confirmed live, two such orphans found still running on stale
+    # settings, one holding 15GB VRAM with nothing left alive to stop it.
+    # See utils/process_group.py for the mechanism.
+    from utils.process_group import contain_children
+    contain_children()
+
     if args.mock:
         run_mock(args.indicator)
         return
@@ -142,8 +151,29 @@ def main():
     for failure in health_check.failures(results):
         print(f"[fred_popup] HEALTH FAILURE — {failure}")
 
-    from ui.pill_app import main as app_main
-    app_main(greet_now=args.greet_now, session_announce=session_announce)
+    # Keep the paired phone's screen from auto-locking mid-task (adb UI
+    # automation — set_alarm, the Haismart/HTTP-Shortcuts setup scripts,
+    # camera capture — needs the screen on and unlocked to work at all).
+    # Reverted the instant FRED actually exits, not left on permanently:
+    # "stayon usb" only while FRED is running, normal behavior otherwise.
+    # Best-effort — a disconnected phone or missing adb must never block
+    # startup. Does NOT cover a hard kill (Stop-Process, crash): the
+    # revert below never runs then, same accepted gap as every other
+    # "runs on clean exit only" cleanup in this codebase.
+    def _set_phone_stayon(value: str):
+        try:
+            from tools.phone_tools import _adb, _device_ready
+            if _device_ready():
+                _adb("shell", "svc", "power", "stayon", value, timeout=5)
+        except Exception:
+            pass
+
+    _set_phone_stayon("usb")
+    try:
+        from ui.pill_app import main as app_main
+        app_main(greet_now=args.greet_now, session_announce=session_announce)
+    finally:
+        _set_phone_stayon("false")
 
 
 if __name__ == "__main__":
