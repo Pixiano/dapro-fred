@@ -15,7 +15,26 @@ Or install manually:
 pip install llama-cpp-python faiss-cpu vosk pyaudio pyttsx3 sounddevice pycaw pyperclip pygetwindow pyautogui screen-brightness-control mss pillow winotify requests duckduckgo-search apscheduler sqlalchemy psutil comtypes pywin32
 ```
 
-### 2. Launch FRED
+### 2. Get llama.cpp's binaries (needed for Vision)
+
+llama-cpp-python's in-process multimodal handlers give wrong output on
+FRED's current Vision model family (confirmed real binding bug, not a
+config issue — see `Core/llm/vision_server.py`), so Vision runs through
+llama.cpp's own `llama-server.exe` as a subprocess instead. These
+binaries aren't in the repo (670MB, same reasoning as the model weights
+below) — download them once:
+
+1. Grab both zips from the llama.cpp release matching your CUDA version
+   (this project used `b10509`, `win-cuda-13.3-x64` — pick the closest
+   `win-cuda-13.x` asset if versions have moved on):
+   - `https://github.com/ggml-org/llama.cpp/releases/download/b10509/llama-b10509-bin-win-cuda-13.3-x64.zip`
+   - `https://github.com/ggml-org/llama.cpp/releases/download/b10509/cudart-llama-bin-win-cuda-13.3-x64.zip`
+2. Extract both into the SAME folder: `C:\Users\Dhiraj Vatsal\llama.cpp\bin\`
+   (the cudart zip provides the `cudart64_13.dll`/`cublas64_13.dll` etc.
+   `llama-server.exe` needs at runtime). This exact path is hardcoded as
+   `LLAMACPP_BIN_DIR` in `Core/config/settings.py` — must match.
+
+### 3. Launch FRED
 
 Three launchers at the repo root:
 
@@ -33,14 +52,14 @@ Three launchers at the repo root:
 - Terminal-based interface, runs `Core\main.py`
 - Useful for scripting and voice testing without the HUD
 
-### 3. First Run
+### 4. First Run
 
 When you launch FRED for the first time, it will:
 1. Load the LLM models (takes 10-30 seconds)
 2. Initialize the memory system
 3. Start listening for commands
 
-### 4. Try These Commands
+### 5. Try These Commands
 
 **Voice/HUD (`FRED.bat`, `FRED_POPUP.bat`):**
 - Say or type: "hello fred"

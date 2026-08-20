@@ -312,3 +312,81 @@ freeze that gets lifted twice is not a freeze, so the next one should be
 declared only when there is no known, already-decided addition pending —
 which is the same rule section 4 already stated and which lifting this
 one does not change.
+
+---
+
+## 9. BASE MODEL SWITCHED — 2026-08-19
+
+Vatsal's call. Base model moves from Qwen3-8B Q4_K_M (section 3) to
+Qwen3.5-4B, Unsloth's vision-capable checkpoint:
+`https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Qwen3_5_(4B)_Vision.ipynb`.
+This is the model `DEFAULT_TIER` pointed at before it moved to Qwen3-8B on
+2026-08-01 — section 6 had this open as "may now be pointed at the wrong
+model family," now resolved by moving back rather than re-reviewing the
+guide against 8B.
+
+**Reopens section 6's "scope beyond Standard" question, and answers it.**
+The 4B checkpoint is genuinely multimodal, so one fine-tuned model can
+plausibly serve both Standard and Vision, not Standard alone. Section 3's
+"nothing here assumes beyond Standard" no longer holds as written — a real
+change, not just a size swap.
+
+**VRAM, with an actual number behind it.** Section 3 flagged "not yet
+computed" for 8B's LoRA footprint. For 4B, Unsloth's own docs
+(`https://unsloth.ai/docs/models/qwen3.5/fine-tune`) put bf16 LoRA at
+~10GB — comfortably inside the 16310 MiB card referenced throughout section
+3, with real headroom left over. QLoRA is not recommended for Qwen3.5
+(Unsloth's own note: quantization artifacts) — plain bf16 LoRA, same
+conclusion section 3 reached for 8B, now with a number instead of a guess.
+
+**GGUF export has a concrete tool, not just a plan.** Section 3's "training
+happens against a different weight format than the one FRED actually
+loads... merging back is an extra conversion step, not automatic" gap is
+still real, but the same notebook has `model.save_pretrained_gguf`
+(q4_k_m/q8_0/f16) built in. That's a tool existing, not the round-trip
+being verified — section 5 step 5 (train → merge → GGUF →
+llama.cpp-load, confirmed end to end on this card) still has to happen
+before trusting it on a real run.
+
+**Not the same thing as Bonsai.** `Core/config/settings.py`'s `Standard`
+tier currently points at Bonsai-27B — a separate, deliberately temporary
+swap this session for an unrelated reason (thinking-suppression testing).
+This plan's base model is about what gets fine-tuned, independent of
+whatever `DEFAULT_TIER` happens to point at day to day. Bonsai is 27B and
+untouched by this plan; the two got conflated in conversation and
+shouldn't be again.
+
+Sections 1-8 otherwise stand as written — freeze status (lifted, section
+8), eval-set strategy (section 2), and the open questions (section 6,
+still open except the one this section resolves) are unchanged.
+
+---
+
+## 10. OPEN QUESTIONS — PARTIAL ANSWERS, 2026-08-19
+
+Vatsal's calls on the remaining section 6 items:
+
+- **Data source scope:** provisionally both `tool_call_log.jsonl` and raw
+  session logs, not tool-call-log-only as section 2 leaned. "Lets see" —
+  not a firm commitment, revisit once the post-freeze row counts from both
+  sources are actually known.
+- **Tone in scope:** yes, but as a secondary/light touch, not a primary
+  training target. Tool-call accuracy remains the main objective; tone
+  gets "slight focus only" on top of it, not equal weight.
+- **Eval-set human review pass:** required (not skipped), but not done by
+  Vatsal directly — queued as a cheap subagent task (Haiku-tier) to triage
+  weak-labeled error/interrupted rows. **Not run yet — explicitly deferred,
+  "not now."**
+- **Pre-freeze 612+ rows:** neither blanket-discarded nor blanket-kept —
+  queued as a subagent task to filter them into useful/useless rather than
+  a manual all-or-nothing call. **Not run yet — explicitly deferred, "not
+  now."**
+
+Both deferred subagent tasks stay backlog items until Vatsal asks for them
+directly — don't self-trigger either from a future session just because
+this section names them.
+
+Still fully open, untouched by today: training framework/hyperparameters
+beyond "Unsloth, bf16 LoRA" (rank, learning rate, epochs — none chosen),
+"enough data" sizing, and how strict to be about excluding wake-word-
+unstable-window rows.

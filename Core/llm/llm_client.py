@@ -655,17 +655,15 @@ class LLMClient:
         if not allow_local_fallback:
             raise RuntimeError("cloud vision unavailable (no API key) and local fallback not allowed")
 
-        model = self._get_model("Vision")
-
-        if "Vision" in TIER_TEMPLATE_KWARGS:
-            response = self._native_call(model, "Vision", messages, max_tokens=max_tokens)
-        else:
-            response = model.create_chat_completion(
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=self.temperature,
-            )
-        content = response["choices"][0]["message"]["content"] or ""
+        # 2026-08-20: routed through llm/vision_server.py (llama-server.exe
+        # subprocess, llama.cpp's own OpenAI-compatible API) instead of
+        # this class's in-process _get_model("Vision") — llama-cpp-python
+        # gives wrong output on this model family's vision path, confirmed
+        # a binding-layer bug, not fixable by a config change here. See
+        # vision_server.py's module docstring and the MODEL_TIERS["Vision"]
+        # comment in settings.py for the full story.
+        from llm.vision_server import describe_image as _server_describe_image
+        content = _server_describe_image(image_b64_data_uri, prompt, max_tokens=max_tokens)
         return self._strip_thinking(content) or content
 
     # =========================================================

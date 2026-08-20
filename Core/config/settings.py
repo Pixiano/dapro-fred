@@ -318,6 +318,15 @@ SCREEN_WATCHER_IDLE_MINUTES = 5
 # 60 once CEREBRAS_API_KEY is restored.
 SCREEN_WATCHER_INTERVAL_SECONDS = 300
 
+# Off 2026-08-19 to rule it out as the source of a reported periodic GPU
+# spike (the actual measured cadence in the logs didn't match the report
+# — 6-17 min apart, not ~2 min — so this may not even be the cause, but
+# disabling costs nothing and confirms either way). Only gates the
+# automatic idle-loop capture in watcher_manager.start() — capture_now()
+# (on-demand "what's on my screen") is untouched, still works either way.
+# Flip back to True once confirmed/no longer needed.
+SCREEN_WATCHER_ENABLED = False
+
 # Cross-process coordination. The main process's LLMClient writes its
 # currently-resident tier here on every load/unload; the watcher child
 # process reads it before loading its OWN model and skips a cycle
@@ -351,6 +360,21 @@ MODELS_DIR = Path(
     r"C:\Users\Dhiraj Vatsal\.lmstudio\models"
 )
 
+# llama.cpp's own prebuilt binaries (llama-server.exe etc.), release
+# b10509, win-cuda-13.3-x64 — used ONLY for Vision (see
+# llm/vision_server.py and the MODEL_TIERS["Vision"] comment). Kept
+# outside the repo, same reasoning as MODELS_DIR above (670MB of .exe/
+# .dll, nowhere near GitHub's 100MB limit and not source). Fetch/update
+# via the URLs in SETUP.md if this ever needs to move or upgrade.
+LLAMACPP_BIN_DIR = Path(
+    r"C:\Users\Dhiraj Vatsal\llama.cpp\bin"
+)
+
+# Port llama-server.exe listens on for Vision. Arbitrary, chosen to not
+# collide with anything else FRED already binds (see hud/server.py,
+# phone_api.py).
+VISION_SERVER_PORT = 8090
+
 # Revised 2026-08-01, three times in one day. Pass 1 matched MODEL_TIERS
 # to the real contents of MODELS_DIR. Pass 2 renamed to Title Case and
 # dropped Mistral/Gemma-12B, back down to 3 tiers. Pass 3, this one:
@@ -372,16 +396,23 @@ MODEL_TIERS = {
     # the tier used every single turn: expect reasoning cost closer to
     # Deep's ~13s-for-a-trivial-reply than the old Standard's near-
     # instant one. Chosen anyway, deliberately, after live testing.
-    # Swapped to Bonsai-27B-Q1_0 2026-08-18, temporary/throwaway per
-    # Vatsal's direct instruction after his own live testing — NOT a
-    # verified replacement the way the entries above/below were (their
-    # own comments note being "confirmed by reading each tier's own
-    # embedded chat_template directly"; this one wasn't, revert to the
-    # line below if it misbehaves).
+    # Swapped 2026-08-19 to Qwen3.5-4B-Q6_K, the same checkpoint as
+    # "Backup" below (DEFAULT_TIER before the 2026-08-01 move to
+    # Qwen3-8B, brought back per Vatsal's direct call after Bonsai-27B's
+    # temporary swap the night before). Confirmed live: native template
+    # (chat_format=None) closes <think></think> unconditionally with no
+    # kwarg needed (no TIER_TEMPLATE_KWARGS entry required, unlike
+    # Bonsai), plain chat 0.1-0.2s, tool-calling via native
+    # `<tool_call><function=...>` text (same format _parse_text_tool_calls
+    # already handles for Bonsai/Qwen3.5-family models) 0.4s. Bonsai's
+    # own swap below is superseded, not deleted — see its comment for
+    # why it was temporary in the first place.
     # "Standard": MODELS_DIR / "lmstudio-community" / "Qwen3-8B-GGUF"
     #         / "Qwen3-8B-Q4_K_M.gguf",
-    "Standard": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
-            / "Bonsai-27B-Q1_0.gguf",
+    # "Standard": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
+    #         / "Bonsai-27B-Q1_0.gguf",
+    "Standard": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "Qwen3.5-4B-Q6_K.gguf",
 
     # Qwen3.5-4B at Q6_K — demoted from Standard this revision. Reasoning
     # off by default (its own template pre-closes <think></think>
@@ -419,14 +450,45 @@ MODEL_TIERS = {
     # matching mmproj file, so it's the only one that can actually see
     # an image. llama-cpp-python (0.3.31, this venv) confirmed to ship
     # Gemma4ChatHandler for it.
-    # Same 2026-08-18 swap as "Standard" above — Bonsai covers both
-    # tiers for now (it's the one entry in this file with a matching
-    # mmproj, see MMPROJ_PATH_BY_TIER below). Revert to gemma-4-12B
-    # (line below) if Bonsai's vision quality disappoints live.
+    # Reverted 2026-08-19: Bonsai's image embedding doesn't land correctly
+    # through this venv's llama-cpp-python (0.3.31) — confirmed real,
+    # confirmed NOT a context-size issue (crashes at n_ctx 4096, and at
+    # 8192 it stops crashing but hallucinates the image as literal
+    # exclamation-mark text, with the same "find_slot: non-consecutive
+    # token position" warnings either way). Confirmed working in LM
+    # Studio's own backend on the identical model+mmproj files, so this
+    # is a binding/library-layer bug, not a model/mmproj capability
+    # problem — needs its own investigation before trying again, not a
+    # quick retry.
+    #
+    # Retried 2026-08-19 with Qwen3.5-4B (same architecture family as
+    # Bonsai) and TWO different llama-cpp-python handlers
+    # (MTMDChatHandler, Qwen25VLChatHandler) — both hit the identical
+    # "find_slot: non-consecutive token position" warning and both
+    # produced wrong output on a real (non-blank) screenshot: MTMD said
+    # "a large exclamation mark" (the same hallucination pattern Bonsai
+    # produced), Qwen25VL said "a blank computer screen". Confirms this
+    # is a systemic binding bug affecting the whole Qwen3.5 architecture
+    # family's vision path in llama-cpp-python (0.3.31) specifically —
+    # NOT llama.cpp itself. Confirmed 2026-08-20: raw llama.cpp binaries
+    # (llama-mtmd-cli.exe, llama-server.exe, release b10509) get the
+    # identical model+mmproj exactly right ("This is a screenshot of the
+    # YouTube homepage showing various video recommendations and a
+    # promotional banner for YouTube Premium" — genuinely correct), same
+    # find_slot warning printed either way, so that warning is cosmetic,
+    # not the actual failure. Vision moved off llama-cpp-python entirely
+    # as a result — see llm/vision_server.py, which runs llama-server.exe
+    # as a subprocess and talks to its OpenAI-compatible HTTP API instead
+    # of loading a model in-process here. This path's value is now what
+    # that subprocess loads, not what llm_client._get_model() loads —
+    # _get_model("Vision") is no longer called anywhere (describe_image()
+    # routes to vision_server.py instead), kept as plain data.
+    "Vision": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "Qwen3.5-4B-Q6_K.gguf",
     # "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
     #         / "gemma-4-12B-it-QAT-Q4_0.gguf",
-    "Vision": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
-            / "Bonsai-27B-Q1_0.gguf",
+    # "Vision": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
+    #         / "Bonsai-27B-Q1_0.gguf",
 }
 
 # Cloud cascade, 2026-08-03 — deliberately a SEPARATE system from
@@ -537,13 +599,16 @@ SENSITIVE_LOCAL_ONLY = False
 # multimodal — absence here means "this tier has no vision handler",
 # checked explicitly in _get_model rather than assumed.
 MMPROJ_PATH_BY_TIER = {
-    # 2026-08-18: points at Bonsai's projector now, matching the
-    # "Vision" swap above. gemma-4-12B's projector left commented, not
-    # deleted, for the same revert-if-needed reason.
+    # 2026-08-20: now the mmproj llama-server.exe loads (see
+    # llm/vision_server.py and the MODEL_TIERS["Vision"] comment above),
+    # not an llm_client._get_model() chat_handler kwarg — that in-process
+    # path is gone for Vision, this dict just holds the path.
+    "Vision": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "mmproj-BF16.gguf",
     # "Vision": MODELS_DIR / "lmstudio-community" / "gemma-4-12B-it-QAT-GGUF"
     #         / "mmproj-gemma-4-12B-it-QAT-BF16.gguf",
-    "Vision": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
-            / "mmproj-Bonsai-27B-BF16.gguf",
+    # "Vision": MODELS_DIR / "lmstudio-community" / "Bonsai-27B-GGUF"
+    #         / "mmproj-Bonsai-27B-BF16.gguf",
 }
 
 # Per-tier literal text injected into the system turn, because
@@ -584,8 +649,15 @@ TIER_PROMPT_MARKERS = {
 # Bonsai's own <think> guard only closes when enable_thinking is
 # explicitly False, confirmed by reading its real embedded template.
 TIER_TEMPLATE_KWARGS = {
-    "Standard": {"enable_thinking": False},
-    "Vision": {"enable_thinking": False},
+    # "Standard" entry removed 2026-08-19 alongside the Bonsai->Qwen3.5-4B
+    # swap above: 4B's own template pre-closes <think></think>
+    # unconditionally with no kwarg needed (confirmed live, no leakage),
+    # unlike Bonsai which required this. Kept empty rather than deleted —
+    # every tier here goes through plain create_chat_completion() again.
+    # "Vision" removed 2026-08-19 — reverted to gemma-4-12B (see
+    # MODEL_TIERS above), which never needed this and goes back through
+    # plain create_chat_completion(), untouched, exactly as before
+    # last night's Bonsai swap.
 }
 
 # Per-tier chat_format override. None means "use the template embedded in
