@@ -158,6 +158,18 @@ async def _run() -> int:
 
     devices = await client.list_devices_v2()
     if not devices:
+        # Print the RAW list_devices_v2 response too, not just "it came
+        # back empty" — confirmed live 2026-08-20 that fixing an
+        # obviously-wrong zoneInfo (the region name typed instead of its
+        # dialling code) did NOT fix this, so the empty result is real,
+        # not the earlier region bug repeating. Calling client.get()
+        # directly (a public method the vendored class already exposes,
+        # not editing the vendored file) to see retCode/retInfo/data
+        # exactly as the server sent them, since list_devices_v2() itself
+        # discards everything but the parsed (currently empty) list.
+        from tools.haismart.vendor.haismart_extractor.cloud import DEVICE_LIST_PATH_V2
+        raw_v2 = await client.get(client.domains.uhome, DEVICE_LIST_PATH_V2)
+        print(f"list_devices_v2 raw response:\n{json.dumps(raw_v2, indent=2)}")
         # list_devices_v2 is ONE of three device-list paths the vendored
         # library exposes (list_user_devices, list_devices are the other
         # two) — confirmed live 2026-08-20: a real account with a real,
