@@ -48,6 +48,7 @@ from config.settings import (
     LLAMACPP_BIN_DIR,
     MMPROJ_PATH_BY_TIER,
     MODEL_TIERS,
+    THINKING_LENGTH_THRESHOLD,
     VISION_SERVER_PORT,
 )
 
@@ -111,13 +112,24 @@ def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
     """
     Same call shape as the old in-process describe_image() local
     fallback: one-shot image + prompt, plain string back.
-    chat_template_kwargs.enable_thinking=False is llama-server's own
-    equivalent of TIER_TEMPLATE_KWARGS — confirmed live 2026-08-20,
-    without it the model's <think> block eats the whole max_tokens
-    budget before ever answering.
+    chat_template_kwargs.enable_thinking is llama-server's own equivalent
+    of the old TIER_TEMPLATE_KWARGS mechanism — confirmed live 2026-08-20,
+    without an explicit False the model's <think> block eats the whole
+    max_tokens budget before ever answering.
+
+    TEMPORARY 2026-08-20, per Vatsal's direct call: thinking now toggles
+    on THINKING_LENGTH_THRESHOLD applied to `prompt`, the same rule
+    llm_client._native_call applies to text. When thinking turns on, the
+    token budget is bumped to a floor of 800 — confirmed live earlier
+    tonight that 300 wasn't enough (finish_reason="length", empty
+    content, the whole budget spent inside <think>) — a caller-supplied
+    max_tokens above that floor is still respected.
     """
     if not ensure_running():
         raise RuntimeError("vision server failed to start")
+
+    enable_thinking = len(prompt) > THINKING_LENGTH_THRESHOLD
+    effective_max_tokens = max(max_tokens, 800) if enable_thinking else max_tokens
 
     payload = {
         "messages": [{
@@ -127,9 +139,9 @@ def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
                 {"type": "text", "text": prompt},
             ],
         }],
-        "max_tokens": max_tokens,
+        "max_tokens": effective_max_tokens,
         "temperature": 0.2,
-        "chat_template_kwargs": {"enable_thinking": False},
+        "chat_template_kwargs": {"enable_thinking": enable_thinking},
     }
     req = urllib.request.Request(
         f"{_BASE_URL}/v1/chat/completions",

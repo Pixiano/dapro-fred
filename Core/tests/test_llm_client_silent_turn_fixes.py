@@ -28,11 +28,12 @@ def _client():
 # leftover-buffer path didn't. Confirmed live: a plain chat turn logged
 # `"text": ""` and FRED said nothing at all.
 client = _client()
-# "Standard" is no longer in TIER_TEMPLATE_KWARGS (2026-08-19, moved to
-# Qwen3.5-4B which doesn't need the enable_thinking kwarg) — back to the
-# plain create_chat_completion() path, matching the real call shape.
+# 2026-08-20: _native_call is now ALWAYS used regardless of tier (every
+# text tier is the same Qwen3.5-4B checkpoint, see settings.py's
+# THINKING_LENGTH_THRESHOLD comment) — back to a chat_handler fake,
+# matching the real call shape.
 client._get_model = lambda tier: types.SimpleNamespace(
-    create_chat_completion=lambda **kw: iter([
+    chat_handler=lambda **kw: iter([
         {"choices": [{"delta": {"content": "<|channel>thought never closes"}}]},
     ])
 )
@@ -46,7 +47,7 @@ assert "ran out of room" in reply, reply
 # fallback message — the fix must not swallow real short replies.
 client2 = _client()
 client2._get_model = lambda tier: types.SimpleNamespace(
-    create_chat_completion=lambda **kw: iter([
+    chat_handler=lambda **kw: iter([
         {"choices": [{"delta": {"content": "Hi."}}]},
     ])
 )

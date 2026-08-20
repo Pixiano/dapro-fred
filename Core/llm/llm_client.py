@@ -24,7 +24,7 @@ from config.settings import (
     TIER_ROUTING_ENABLED,
     CHAT_FORMAT_BY_TIER,
     TIER_PROMPT_MARKERS,
-    TIER_TEMPLATE_KWARGS,
+    THINKING_LENGTH_THRESHOLD,
     MMPROJ_PATH_BY_TIER,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
@@ -385,18 +385,9 @@ class LLMClient:
             local_messages = self._apply_thinking(messages, chosen_tier)
             try:
                 model = self._get_model(chosen_tier)
-                if chosen_tier in TIER_TEMPLATE_KWARGS:
-                    stream = self._native_call(
-                        model, chosen_tier, local_messages, stream=True
-                    )
-                else:
-                    stream = model.create_chat_completion(
-                        messages=local_messages,
-                        temperature=self.temperature,
-                        top_p=self.top_p,
-                        max_tokens=self.max_tokens,
-                        stream=True,
-                    )
+                stream = self._native_call(
+                    model, chosen_tier, local_messages, stream=True
+                )
             except Exception as error:
                 print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
                 yield self.generate(messages, tier=chosen_tier, local_only=local_only)
@@ -554,20 +545,10 @@ class LLMClient:
         try:
             model = self._get_model(chosen_tier)
 
-            if chosen_tier in TIER_TEMPLATE_KWARGS:
-                response = self._native_call(
-                    model, chosen_tier, local_messages,
-                    tools=tools, tool_choice="auto", max_tokens=self.max_tokens,
-                )
-            else:
-                response = model.create_chat_completion(
-                    messages=local_messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    max_tokens=self.max_tokens,
-                )
+            response = self._native_call(
+                model, chosen_tier, local_messages,
+                tools=tools, tool_choice="auto", max_tokens=self.max_tokens,
+            )
 
             message = response["choices"][0]["message"]
 
@@ -880,10 +861,16 @@ class LLMClient:
         """
         Bypass create_chat_completion()'s fixed signature (no **kwargs
         passthrough — confirmed by reading its source) and call the
-        tier's own handler directly, so TIER_TEMPLATE_KWARGS[tier] (e.g.
-        enable_thinking=False) reaches the jinja render the way the old
-        TIER_PROMPT_MARKERS text injection never could — that guard
-        checks the real jinja variable, not anything in the prompt text.
+        tier's own handler directly, so enable_thinking reaches the
+        jinja render the way the old TIER_PROMPT_MARKERS text injection
+        never could — that guard checks the real jinja variable, not
+        anything in the prompt text. enable_thinking is computed fresh
+        per call from THINKING_LENGTH_THRESHOLD (settings.py) rather than
+        looked up per-tier: TEMPORARY 2026-08-20, every text tier is the
+        same Qwen3.5-4B checkpoint right now (see MODEL_TIERS), so
+        there's no per-tier distinction left to make — thinking toggles
+        on the query itself instead. Always called now regardless of
+        tier, for the same reason.
 
         Vision already has model.chat_handler set (Gemma4ChatHandler,
         from _get_model) — reusing it here keeps its existing
@@ -922,6 +909,13 @@ class LLMClient:
                 handler = chat_formatter_to_chat_completion_handler(formatter)
                 model._fred_native_handler = handler
 
+        last_user_text = ""
+        for m in reversed(messages):
+            if m.get("role") == "user" and isinstance(m.get("content"), str):
+                last_user_text = m["content"]
+                break
+        enable_thinking = len(last_user_text) > THINKING_LENGTH_THRESHOLD
+
         return handler(
             llama=model,
             messages=messages,
@@ -931,21 +925,12 @@ class LLMClient:
             top_p=self.top_p,
             max_tokens=max_tokens or self.max_tokens,
             stream=stream,
-            **TIER_TEMPLATE_KWARGS.get(tier, {}),
+            enable_thinking=enable_thinking,
         )
 
     def _generate(self, model: Llama, tier: str, messages: list, max_tokens: int = None) -> str:
 
-        if tier in TIER_TEMPLATE_KWARGS:
-            response = self._native_call(model, tier, messages, max_tokens=max_tokens)
-        else:
-            response = model.create_chat_completion(
-                messages=messages,
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_tokens=max_tokens or self.max_tokens,
-            )
-
+        response = self._native_call(model, tier, messages, max_tokens=max_tokens)
         return self._finish_response(response)
 
     @staticmethod

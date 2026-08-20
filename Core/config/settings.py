@@ -426,14 +426,28 @@ MODEL_TIERS = {
     # planning, long/heavy requests. Also the vault-ingest converter's
     # model (see Core/web/vault_ingest.py — update that reference if
     # this key ever changes again).
-    "Deep": MODELS_DIR / "lmstudio-community" / "Qwen3-14B-GGUF"
-            / "Qwen3-14B-Q4_K_M.gguf",
+    #
+    # TEMPORARILY repointed to Qwen3.5-4B 2026-08-20, per Vatsal's direct
+    # call: "one tier only, the 4B for everything." Original path
+    # commented below, not deleted — trivial one-line revert. Since
+    # TIER_ROUTING_ENABLED is False (below) this key is normally
+    # unreachable anyway EXCEPT tools/smart_search.py's find_file_smart,
+    # which can request "Deep" directly — that call now also gets the 4B.
+    # "Deep": MODELS_DIR / "lmstudio-community" / "Qwen3-14B-GGUF"
+    #         / "Qwen3-14B-Q4_K_M.gguf",
+    "Deep": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "Qwen3.5-4B-Q6_K.gguf",
 
     # gpt-oss-20b — 11.28GB on disk, the largest configured tier. Rare/
     # heavy use only. VRAM math has not been done for this one the way
     # it has for Standard/Backup/Deep, so treat as unverified until it is.
-    "Extreme": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
-            / "gpt-oss-20b.gguf",
+    #
+    # TEMPORARILY repointed to Qwen3.5-4B 2026-08-20 — see "Deep" above,
+    # same reasoning, same easy revert.
+    # "Extreme": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
+    #         / "gpt-oss-20b.gguf",
+    "Extreme": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
+            / "Qwen3.5-4B-Q6_K.gguf",
 
     # Bonsai-27B: NOT added. Only mmproj-Bonsai-27B-BF16.gguf (0.87GB,
     # the vision projector) has downloaded so far — the actual model
@@ -639,26 +653,28 @@ TIER_PROMPT_MARKERS = {
     "Extreme": "Reasoning: high",
 }
 
-# Tiers whose chat template needs a jinja kwarg TIER_PROMPT_MARKERS'
-# text-injection can't reach — create_chat_completion() has a fixed
-# keyword signature with no **kwargs passthrough (confirmed by reading
-# its source), so there's no way to set enable_thinking through it. The
-# handler underneath it (Jinja2ChatFormatter/MTMDChatHandler) DOES accept
-# arbitrary kwargs and forwards them into the jinja render — see
-# llm_client._native_call, which calls that handler directly instead.
-# Bonsai's own <think> guard only closes when enable_thinking is
-# explicitly False, confirmed by reading its real embedded template.
-TIER_TEMPLATE_KWARGS = {
-    # "Standard" entry removed 2026-08-19 alongside the Bonsai->Qwen3.5-4B
-    # swap above: 4B's own template pre-closes <think></think>
-    # unconditionally with no kwarg needed (confirmed live, no leakage),
-    # unlike Bonsai which required this. Kept empty rather than deleted —
-    # every tier here goes through plain create_chat_completion() again.
-    # "Vision" removed 2026-08-19 — reverted to gemma-4-12B (see
-    # MODEL_TIERS above), which never needed this and goes back through
-    # plain create_chat_completion(), untouched, exactly as before
-    # last night's Bonsai swap.
-}
+# TEMPORARY 2026-08-20, per Vatsal's direct call: with every text tier
+# now the same Qwen3.5-4B (see MODEL_TIERS above), thinking is off by
+# default (fast) but turns on for a query that looks like it needs more
+# than a quick answer — proxied by the latest user message's raw
+# character length, since there's no cheaper signal than that without an
+# extra classification call. describe_image() (llm/vision_server.py)
+# applies the identical threshold to its prompt argument, so text and
+# vision use the same rule. Revert: delete this and the dynamic
+# enable_thinking computation in llm_client._native_call, which is the
+# only place that reads it.
+THINKING_LENGTH_THRESHOLD = 75
+
+# create_chat_completion() has a fixed keyword signature with no
+# **kwargs passthrough (confirmed by reading its source), so there's no
+# way to set enable_thinking through it. The handler underneath it
+# (Jinja2ChatFormatter/MTMDChatHandler) DOES accept arbitrary kwargs and
+# forwards them into the jinja render — see llm_client._native_call,
+# which calls that handler directly and now ALWAYS does (every text tier
+# is the same 4B checkpoint as of 2026-08-20, so there's no longer a
+# per-tier reason to branch). enable_thinking is computed dynamically
+# per call from THINKING_LENGTH_THRESHOLD above, not looked up from a
+# static per-tier dict — this dict is gone, not just emptied.
 
 # Per-tier chat_format override. None means "use the template embedded in
 # the GGUF". The global default (chatml-function-calling) exists because
