@@ -108,7 +108,7 @@ def ensure_running(startup_timeout: float = 30.0) -> bool:
 
 
 def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
-                    timeout: float = 60.0) -> str:
+                    timeout: float = 60.0, thinking_signal_text: str = None) -> str:
     """
     Same call shape as the old in-process describe_image() local
     fallback: one-shot image + prompt, plain string back.
@@ -118,18 +118,27 @@ def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
     max_tokens budget before ever answering.
 
     TEMPORARY 2026-08-20, per Vatsal's direct call: thinking now toggles
-    on THINKING_LENGTH_THRESHOLD applied to `prompt`, the same rule
-    llm_client._native_call applies to text. When thinking turns on, the
-    token budget is bumped to a floor of 800 — confirmed live earlier
-    tonight that 300 wasn't enough (finish_reason="length", empty
-    content, the whole budget spent inside <think>) — a caller-supplied
-    max_tokens above that floor is still respected.
+    on THINKING_LENGTH_THRESHOLD applied to thinking_signal_text if given,
+    else `prompt` — the same rule llm_client._native_call applies to
+    text. Measuring `prompt` alone was the actual bug here:
+    screen_watcher.py's real prompts are always a long templated wrapper
+    (_prompt_for()) regardless of the user's real question, so thinking
+    was turning on for nearly every call and blowing past
+    capture_now()'s 12s timeout — llm_client.describe_image() now passes
+    the raw question through as thinking_signal_text instead. When
+    thinking turns on, the token budget is bumped to a floor of 800 and
+    the HTTP timeout to a floor of 120s — confirmed live earlier tonight
+    that 300 tokens/60s wasn't enough (finish_reason="length", empty
+    content, the whole budget spent inside <think>) — caller-supplied
+    values above those floors are still respected.
     """
     if not ensure_running():
         raise RuntimeError("vision server failed to start")
 
-    enable_thinking = len(prompt) > THINKING_LENGTH_THRESHOLD
+    signal_text = prompt if thinking_signal_text is None else thinking_signal_text
+    enable_thinking = len(signal_text) > THINKING_LENGTH_THRESHOLD
     effective_max_tokens = max(max_tokens, 800) if enable_thinking else max_tokens
+    effective_timeout = max(timeout, 120.0) if enable_thinking else timeout
 
     payload = {
         "messages": [{
@@ -148,7 +157,7 @@ def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=effective_timeout) as resp:
         data = json.loads(resp.read())
     return data["choices"][0]["message"]["content"] or ""
 

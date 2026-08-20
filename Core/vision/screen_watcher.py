@@ -150,6 +150,7 @@ def _run_one_cycle(llm, force_local: bool = False, question: str = "") -> bool:
         description = llm.describe_image(
             image_uri, _prompt_for(question), max_tokens=500,
             allow_local_fallback=local_ok, skip_cloud=force_local,
+            thinking_signal_text=question,
         )
     except Exception as e:
         if local_ok:

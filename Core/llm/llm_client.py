@@ -570,12 +570,24 @@ class LLMClient:
             }
 
     def describe_image(self, image_b64_data_uri: str, prompt: str, max_tokens: int = 200,
-                        allow_local_fallback: bool = True, skip_cloud: bool = False) -> str:
+                        allow_local_fallback: bool = True, skip_cloud: bool = False,
+                        thinking_signal_text: str = None) -> str:
         """
         One-shot image description. Takes a data-URI-encoded image
         (base64, with the "data:image/..." prefix), the same
         OpenAI-compatible image_url content-part shape either the cloud
         API or llama-cpp-python's multimodal handler expects.
+
+        thinking_signal_text: what THINKING_LENGTH_THRESHOLD measures,
+        if not `prompt` itself. screen_watcher.py's real prompts are
+        always a long templated wrapper (_prompt_for()) regardless of
+        whether the user asked anything specific — measuring `prompt`'s
+        own length made thinking turn on for nearly every real call,
+        confirmed live 2026-08-20: capture_now()'s 12s timeout is far
+        shorter than a thinking-mode generation (60-110s measured), so
+        "vision's unavailable right now" fired on ordinary short
+        questions. Pass the RAW user question here instead so the
+        threshold measures what it's meant to.
 
         Cloud (CLOUD_VISION_PROVIDER, gemma-4-31b) tried first — the
         local Vision tier shares this process's one GPU with whatever
@@ -644,7 +656,10 @@ class LLMClient:
         # vision_server.py's module docstring and the MODEL_TIERS["Vision"]
         # comment in settings.py for the full story.
         from llm.vision_server import describe_image as _server_describe_image
-        content = _server_describe_image(image_b64_data_uri, prompt, max_tokens=max_tokens)
+        content = _server_describe_image(
+            image_b64_data_uri, prompt, max_tokens=max_tokens,
+            thinking_signal_text=thinking_signal_text,
+        )
         return self._strip_thinking(content) or content
 
     # =========================================================
