@@ -663,7 +663,16 @@ TIER_PROMPT_MARKERS = {
 # vision use the same rule. Revert: delete this and the dynamic
 # enable_thinking computation in llm_client._native_call, which is the
 # only place that reads it.
-THINKING_LENGTH_THRESHOLD = 75
+THINKING_LENGTH_THRESHOLD = 175
+
+# Raised 75 -> 175 same day: generate_stream() withholds the entire
+# <think></think> block from the caller by design (llm_client.py's own
+# docstring — "the fix for dead air"), so a thinking-mode turn is total
+# silence for the whole reasoning phase (60-110+s measured), then the
+# full answer at once. At 75 that engaged on nearly every normal
+# message; 175 keeps ordinary conversation on the fast, actually-
+# streamed path and reserves reasoning for messages that look like they
+# genuinely need it.
 
 # create_chat_completion() has a fixed keyword signature with no
 # **kwargs passthrough (confirmed by reading its source), so there's no
