@@ -128,6 +128,15 @@ async def _run() -> int:
     if not region:
         print("error: no region given", file=sys.stderr)
         return 2
+    if not region.isdigit():
+        # Confirmed live 2026-08-20: entering the country NAME ("india")
+        # instead of its dialling code ("91") isn't rejected here or by
+        # the server at login -- zoneInfo just silently scopes every
+        # later call (including the device list) to an unrecognized
+        # region, which looks exactly like "this account has no
+        # appliances" for an account that has one. Catch it here instead.
+        print(f"error: '{region}' isn't a dialling code — give the number (e.g. 91), not the country name.", file=sys.stderr)
+        return 2
 
     print("\nSigning in...")
     try:
