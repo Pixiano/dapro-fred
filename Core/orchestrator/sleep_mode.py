@@ -13,7 +13,7 @@
 # STATE_PATH/_save_state pattern.
 
 from config.settings import PRESENCE_ABSENT_DEBOUNCE
-from orchestrator import consolidation
+from orchestrator import consolidation, reflection
 from utils import event_log
 
 _streak = 0  # consecutive absent polls
@@ -42,6 +42,10 @@ def on_presence_poll(present: bool):
         _sleeping = True
         event_log.log("sleep_mode_enter", streak=_streak)
         consolidation.on_sleep_enter()
+        # Own trigger gate (accumulated new material, not sleep-mode
+        # entry itself) — most sleep windows are a no-op here. See
+        # reflection.py's module docstring for the full story.
+        consolidation.append_pending(reflection.run_if_due())
 
 
 def wake(reason: str):

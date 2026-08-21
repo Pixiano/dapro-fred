@@ -39,6 +39,7 @@ from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import proactive_checks
 from orchestrator import consolidation
+from orchestrator import reflection
 from orchestrator import intent
 from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
@@ -99,6 +100,7 @@ TOOL_LABELS = {
     "preview_missing_map_entries": "Checking MAP.md",
     "add_missing_map_entries": "Updating MAP.md",
     "recall_recent_conversation": "Checking what we just said",
+    "review_pending_reflection": "Opening staged notes",
     "ask_about_myself": "Checking my own docs",
     "git_status": "Checking git status",
     "git_log": "Checking git history",
@@ -351,6 +353,7 @@ class FREDOrchestrator:
             self.scheduler, llm=self.llm, on_agenda_ask=self._prime_carry
         )
         consolidation.configure(self.llm)
+        reflection.configure(self.llm, prime_carry=self._prime_carry)
 
         self.tools = ToolRegistry()
         self._register_tools()
@@ -1940,6 +1943,19 @@ class FREDOrchestrator:
                     "count": {"type": "integer", "description": "How many recent lines to pull back. Default 20."}
                 },
             },
+        )
+
+        self.tools.register(
+            name="review_pending_reflection",
+            function=reflection.review_pending,
+            description=(
+                "Open the oldest un-reviewed self-observation draft "
+                "staged by the sleep-mode reflection pass, and mark it "
+                "reviewed. Call this ONLY after FRED has just offered "
+                "to review pending notes and the user said yes/review "
+                "them — never on a generic 'open my notes' request."
+            ),
+            parameters={"type": "object", "properties": {}},
         )
 
         self.tools.register(

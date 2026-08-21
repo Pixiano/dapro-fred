@@ -303,6 +303,26 @@ ROLLOVER_IDLE_HOURS = 2
 PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 
 # =========================================================
+# SLEEP-MODE REFLECTION — orchestrator/reflection.py
+# =========================================================
+#
+# A background reasoning pass that runs while asleep, gated on
+# accumulated new material rather than on sleep-mode entry itself. See
+# reflection.py's module docstring for the full trigger/write-path story.
+
+REFLECTION_STATE_PATH = DATA_DIR / "reflection_state.json"
+
+# Vatsal's explicit number — how many new user_speech/tool_call events
+# must have accrued since the last pass before another one runs.
+REFLECTION_MIN_NEW_EVENTS = 30
+
+# Staged self-fact drafts land here, not in profile.md directly — see
+# reflection.py's write-path-2 docstring. Chosen over inventing a name:
+# personal/ is already the sensitive, Vatsal-about-himself folder
+# (README.md above), and "pending-review" reads as exactly what it is.
+REFLECTION_PENDING_DIR = VAULT_DIR / "personal" / "pending-review"
+
+# =========================================================
 # SCREEN WATCHER — 2026-08-02 feedback session
 # =========================================================
 #
@@ -459,6 +479,31 @@ MODEL_TIERS = {
     #         / "gpt-oss-20b.gguf",
     "Extreme": MODELS_DIR / "unsloth" / "Qwen3.5-4B-GGUF"
             / "Qwen3.5-4B-Q6_K.gguf",
+
+    # Reflect — orchestrator/reflection.py's sleep-mode reasoning pass
+    # only (friend-file + self-fact extraction over recent session logs),
+    # never the conversation pipeline. Same gpt-oss-20b GGUF as the real
+    # "Extreme" path above (currently repointed to the 4B, see its
+    # comment) — Vatsal's direct call 2026-08-21: gpt-oss-20b over
+    # Qwen3-14B for this tier, since it's the stronger reasoning model of
+    # the two and the 14B would be slower anyway. Confirmed present on
+    # disk (11.28GB).
+    #
+    # VRAM: Vatsal reported ~26-35GB usage from his own measurement of
+    # this model. Flagged here rather than accepted quietly — that figure
+    # does not fit this machine's card (nvidia-smi confirms 16311 MiB
+    # total, same number CONTEXT_WINDOW's own comment above cites), so
+    # either it was measured on different hardware, at a much larger
+    # n_ctx/quant than this GGUF, or is simply wrong. NOT re-measured
+    # live for this change either (only ~600 MiB free at the time, main
+    # process + vision server both already resident — loading an 11GB
+    # model into that would risk the VRAM-exhaustion crash this machine
+    # has a documented history of). Treat this tier as unverified on THIS
+    # card until someone actually runs
+    # LLMClient().ensure_loaded("Reflect") with everything else closed
+    # and reads nvidia-smi — don't trust either number blind.
+    "Reflect": MODELS_DIR / "lmstudio-community" / "gpt-oss-20b-GGUF"
+            / "gpt-oss-20b.gguf",
 
     # Bonsai-27B: NOT added. Only mmproj-Bonsai-27B-BF16.gguf (0.87GB,
     # the vision projector) has downloaded so far — the actual model
@@ -662,6 +707,12 @@ TIER_PROMPT_MARKERS = {
     # injected "Reasoning: high" over its own auto-generated "Reasoning:
     # medium", since both may end up present in the same prompt.
     "Extreme": "Reasoning: high",
+    # Reflect (gpt-oss-20b) wants MEDIUM effort, Vatsal's explicit call —
+    # same best-effort text-injection mechanism as Extreme above, not a
+    # new one. Redundant with the template's own undefined-kwarg default
+    # ("medium") but written explicitly so the setting doesn't silently
+    # depend on that default never changing.
+    "Reflect": "Reasoning: medium",
 }
 
 # TEMPORARY 2026-08-20, per Vatsal's direct call: with every text tier
@@ -794,6 +845,16 @@ CONTEXT_WINDOW_BY_TIER = {
     "Backup": 16384,
     "Deep": 16384,     # native 32768 (Qwen3-14B) — capped, VRAM-bound
     "Extreme": 16384,
+    # Raised past Extreme's 16384 on Vatsal's own report of a ~36K
+    # native context for this model (exact figure unconfirmed here — see
+    # MODEL_TIERS["Reflect"]'s comment on why the VRAM side of that same
+    # report doesn't reconcile with this card). Reasonable to want more
+    # room than Extreme anyway: this tier reads whole session-log
+    # stretches plus the people/*.md corpus in one call, not one turn's
+    # reply. Rounded to a clean value rather than 36864 exactly, since
+    # neither number has been measured on this machine — re-check VRAM
+    # at this n_ctx during the same manual load test before trusting it.
+    "Reflect": 32768,
     # Small on purpose — a screen description is a sentence or two, not
     # a conversation. Keeping this tight also keeps the tier's VRAM
     # footprint down, which matters more here than anywhere else: this

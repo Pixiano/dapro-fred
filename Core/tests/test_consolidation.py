@@ -11,6 +11,10 @@ def _reset(monkeypatch):
     consolidation._pending = None
     calls = []
     monkeypatch.setattr(consolidation, "notify", lambda msg, title="F.R.E.D.": calls.append((msg, title)))
+    # No staged reflection draft in any of these tests — on_sleep_exit
+    # now checks this too, and without stubbing it real tests would hit
+    # the real vault path.
+    monkeypatch.setattr(consolidation.reflection, "has_pending_review", lambda: False)
     return calls
 
 

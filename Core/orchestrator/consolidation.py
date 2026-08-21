@@ -19,6 +19,7 @@
 # regardless — utils.notifier.notify is called directly instead, the
 # same underlying function proactive_checks.py itself wraps.
 
+from orchestrator import reflection
 from tools import session_summary, vault_map
 from utils.notifier import notify
 
@@ -44,17 +45,48 @@ def on_sleep_enter():
         _pending = None
 
 
-def on_sleep_exit():
-    """Speak the bundled recap once, then clear it — fire-once, not
-    re-spoken on a later wake with nothing new pending."""
+def append_pending(text: str):
+    """
+    Fold another module's own audit line into the same bundled recap,
+    rather than competing with it as a second proactive announcement.
+    reflection.py's sleep_mode.py hook calls this with its own short
+    audit line ("Updated people/x.md ...") right after on_sleep_enter()
+    runs, same call site, same cycle.
+    """
     global _pending
-    if not _pending:
+    if not text:
+        return
+    _pending = f"{_pending} {text}" if _pending else text
+
+
+def on_sleep_exit():
+    """
+    Speak the bundled recap once, then clear it — fire-once, not
+    re-spoken on a later wake with nothing new pending.
+
+    Also offers reflection's staged self-fact review right alongside
+    it, same wake moment, same single notify call — not a second,
+    competing proactive announcement. This can fire even when there's
+    no `_pending` recap at all (an unreviewed draft can be sitting
+    there from days ago, long after the cycle that staged it).
+    """
+    global _pending
+    message = _pending
+
+    try:
+        if reflection.has_pending_review():
+            offer = reflection.offer_review_text()
+            message = f"{message} {offer}" if message else offer
+    except Exception as e:
+        print(f"[consolidation] reflection review-offer failed: {e}")
+
+    _pending = None
+    if not message:
         return
     try:
-        notify(_pending, title="Welcome back")
+        notify(message, title="Welcome back")
     except Exception as e:
         print(f"[consolidation] sleep-exit notify failed: {e}")
-    _pending = None
 
 
 if __name__ == "__main__":
@@ -62,11 +94,13 @@ if __name__ == "__main__":
     # out (no LLM, no real vault needed to prove enter->exit->cleared).
     import tools.session_summary as _ss
     import tools.vault_map as _vm
+    from orchestrator import reflection as _refl
 
     calls = []
     globals()["notify"] = lambda msg, title="F.R.E.D.": calls.append((msg, title))
     _ss.preview_session_summary = lambda day=None, llm=None: "3 requests today."
     _vm.preview_missing = lambda: "2 vault files aren't mapped yet: a.md, b.md."
+    _refl.has_pending_review = lambda: False
 
     assert _pending is None
     on_sleep_exit()  # nothing pending yet — must be a no-op

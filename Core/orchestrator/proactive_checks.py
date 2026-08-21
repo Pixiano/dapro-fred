@@ -36,7 +36,7 @@ from config.settings import (
     PRESENCE_POLL_SECONDS,
 )
 from input import presence
-from orchestrator import focus_checkin, sleep_mode
+from orchestrator import focus_checkin, reflection, sleep_mode
 from tools import agenda, daily_tasks, session_summary
 from utils import event_log
 from utils.notifier import notify as _real_notify
@@ -590,6 +590,37 @@ def check_day_rollover(llm=None):
 
 
 # =========================================================
+# 9. REFLECTION REVIEW REMINDER (declined-review nudge)
+# =========================================================
+
+def check_reflection_review_pending():
+    """
+    Re-offers reflection's staged self-observation review while it sits
+    un-reviewed — the "he said no, so keep reminding" half of the
+    review flow. consolidation.on_sleep_exit() already offers it once
+    at the wake moment; this is the ongoing nudge for whenever he just
+    never answers, or the offer lands mid-sleep-mode and gets missed.
+
+    Dedup is once per calendar day (not once ever, not every interval
+    tick) — same "second reminder is fine, a third is nagging" line
+    every other check in this file holds to, applied per-day since
+    "still not reviewed" can legitimately span many days.
+    """
+    if not reflection.has_pending_review():
+        return
+
+    state = _load_state()
+    notified = state.setdefault("reflection_review_offered", {})
+    today = datetime.now().strftime(_DATE_FMT)
+    if notified.get(today):
+        return
+
+    notify(reflection.offer_review_text(), title="Review pending")
+    notified[today] = True
+    _save_state(state)
+
+
+# =========================================================
 # WIRING
 # =========================================================
 
@@ -750,4 +781,8 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     scheduler.add_periodic(
         lambda: focus_checkin.check(notify),
         PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_focus_checkin",
+    )
+    scheduler.add_periodic(
+        check_reflection_review_pending,
+        PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_reflection_review",
     )
