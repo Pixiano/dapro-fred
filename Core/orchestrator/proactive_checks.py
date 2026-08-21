@@ -35,10 +35,23 @@ from config.settings import (
     PRESENCE_POLL_SECONDS,
 )
 from input import presence
+from orchestrator import sleep_mode
 from tools import agenda, daily_tasks, session_summary
 from utils import event_log
-from utils.notifier import notify
+from utils.notifier import notify as _real_notify
 from utils.vault_md import parse_frontmatter
+
+def notify(*args, **kwargs):
+    """Gate on sleep-mode: every proactive nudge in this file funnels
+    through here (this module's own `notify` shadows utils.notifier.notify,
+    imported above as _real_notify) rather than each check function
+    checking sleep_mode.is_sleeping() individually. Sleep mode just skips
+    a gated nudge — no queue/replay, matches reminders' own precedent of
+    "fire once or not at all"."""
+    if sleep_mode.is_sleeping():
+        return
+    _real_notify(*args, **kwargs)
+
 
 _DATE_FMT = "%Y-%m-%d"
 
@@ -639,9 +652,11 @@ def check_presence():
     scheduler, log it and move on.
     """
     try:
-        presence.poll_once()
+        present = presence.poll_once()
     except Exception as e:
         event_log.log_error("proactive_presence", e)
+        return
+    sleep_mode.on_presence_poll(present)
 
 
 def register(scheduler, llm=None, on_agenda_ask=None):

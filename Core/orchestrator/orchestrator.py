@@ -29,6 +29,7 @@ from tools import file_index
 from tools import self_docs
 from tools import otp_tools
 from tools import haismart_tools
+from tools import sleep_mode_tools
 from audio import device_info
 from utils import confidence, sensitive
 from orchestrator import canned_replies
@@ -1426,6 +1427,18 @@ class FREDOrchestrator:
                 "required": [],
             },
             destructive=True,
+        )
+
+        self.tools.register(
+            name="cancel_sleep_mode",
+            function=sleep_mode_tools.cancel_sleep_mode,
+            description=(
+                "Force FRED out of sleep mode right now — use for an explicit "
+                "'cancel sleep mode' / 'wake up FRED' style request. Presence "
+                "returning or a hotkey press already exit sleep mode on their "
+                "own; this is only for when the user asks directly."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
         )
 
         self.tools.register(

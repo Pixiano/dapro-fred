@@ -1155,6 +1155,16 @@ PRESENCE_POLL_SECONDS = 15
 PRESENCE_ENROLLMENT_SHOTS = 5
 PRESENCE_ENROLLMENT_INTERVAL_SECONDS = 5
 
+# Ongoing accumulation cap, DISTINCT from PRESENCE_ENROLLMENT_SHOTS above
+# (that's the one-time seed). presence.py appends a live frame's embedding
+# to face_enrollment.json whenever a poll produces a CONFIRMED positive
+# match (high-confidence direct match, or the ambiguous-band vision
+# fallback resolving to a match) — never on a non-match or an unresolved
+# ambiguous result — so accuracy keeps improving across more lighting/
+# angles over time. Capped here, no eviction once full: Vatsal's call
+# 2026-08-21, "up to 50, only the positive".
+PRESENCE_MAX_EMBEDDINGS = 50
+
 # ArcFace/buffalo_l cosine-similarity match threshold. NOT a measured
 # constant — this repo had never run the model as of 2026-08-21, so
 # these are starting guesses (typical same-person ArcFace similarity
@@ -1170,6 +1180,12 @@ PRESENCE_ENROLLMENT_INTERVAL_SECONDS = 5
 # instead of depending on LM Studio at runtime.
 PRESENCE_MATCH_THRESHOLD_LOW = 0.30
 PRESENCE_MATCH_THRESHOLD_HIGH = 0.45
+
+# Consecutive absent polls (at PRESENCE_POLL_SECONDS each) required before
+# orchestrator/sleep_mode.py declares actual absence and enters sleep
+# mode — debounces someone briefly stepping out of frame. 3 * 15s ≈
+# 45-60s. Vatsal's call 2026-08-21.
+PRESENCE_ABSENT_DEBOUNCE = 3
 
 # =========================================================
 # TOOL SETTINGS

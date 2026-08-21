@@ -458,6 +458,13 @@ class PillApp:
         # be competing for the GPU when that happens.
         self.screen_watcher.touch()
 
+        # A hotkey press (or a wake-word detection, which also routes
+        # through here — see _on_wake_detected) is "the user manually did
+        # something," same signal that ends sleep mode as presence
+        # returning. Cheap no-op when not currently sleeping.
+        from orchestrator import sleep_mode
+        sleep_mode.wake("hotkey")
+
         # Default for every activation; _on_wake_detected overrides this
         # to True right after calling this method, so a hotkey press
         # (which calls this directly) is never mistaken for a wake one.

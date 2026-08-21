@@ -35,6 +35,7 @@ from config.settings import (
     PRESENCE_CAMERA_INDEX,
     PRESENCE_MATCH_THRESHOLD_HIGH,
     PRESENCE_MATCH_THRESHOLD_LOW,
+    PRESENCE_MAX_EMBEDDINGS,
 )
 from utils import event_log
 
@@ -194,6 +195,26 @@ def _vision_fallback_is_match(current_frame) -> bool | None:
     return None
 
 
+def _accumulate_embedding(face):
+    """Ongoing accuracy improvement: append this face's embedding to
+    face_enrollment.json, the same file/format enroll_face.py seeds.
+    ONLY ever called on a CONFIRMED positive match (see call sites below)
+    — never on a non-match or an unresolved ambiguous result. Capped at
+    PRESENCE_MAX_EMBEDDINGS, no eviction once full — Vatsal's call
+    2026-08-21, "up to 50, only the positive".
+
+    Reuses enroll_face.py's own load/append helpers rather than
+    reinventing the same JSON read-modify-write (scripts/ is already
+    importable from here — see test_tool_call_report.py's identical
+    `from scripts import ...` pattern). Cheap to read+parse on every poll
+    (every PRESENCE_POLL_SECONDS) at this scale, no caching needed."""
+    from scripts.enroll_face import _append_embeddings, _load_existing_embeddings
+
+    if len(_load_existing_embeddings()) >= PRESENCE_MAX_EMBEDDINGS:
+        return
+    _append_embeddings([face.normed_embedding.tolist()])
+
+
 def _frame_matches_enrollment(frame) -> bool:
     """Runtime multi-face handling, DELIBERATELY different from
     enroll_face.py's single-largest-face heuristic: present (True) if
@@ -211,6 +232,7 @@ def _frame_matches_enrollment(frame) -> bool:
     for face in faces:
         similarity = _best_similarity(face.normed_embedding, enrollment_embeddings)
         if similarity >= PRESENCE_MATCH_THRESHOLD_HIGH:
+            _accumulate_embedding(face)
             return True
         if similarity < PRESENCE_MATCH_THRESHOLD_LOW:
             continue  # confident non-match for this face, check the next one
@@ -219,6 +241,7 @@ def _frame_matches_enrollment(frame) -> bool:
         # any single face is enough to report present.
         verdict = _vision_fallback_is_match(frame)
         if verdict is True:
+            _accumulate_embedding(face)
             return True
         if verdict is False:
             continue
