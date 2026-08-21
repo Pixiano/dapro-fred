@@ -20,6 +20,7 @@ from tools import phone_tools
 from tools import whatsapp_tools
 from tools import smart_search
 from tools import session_summary
+from tools import vault_map
 from tools import vision_tools
 from tools import daily_tasks
 from tools import agenda
@@ -36,6 +37,7 @@ from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
 from orchestrator import proactive_checks
+from orchestrator import consolidation
 from orchestrator import intent
 from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
@@ -93,6 +95,8 @@ TOOL_LABELS = {
     "whats_on_screen": "Checking the screen",
     "summarise_today": "Reviewing today",
     "save_today_summary": "Saving to vault",
+    "preview_missing_map_entries": "Checking MAP.md",
+    "add_missing_map_entries": "Updating MAP.md",
     "recall_recent_conversation": "Checking what we just said",
     "ask_about_myself": "Checking my own docs",
     "git_status": "Checking git status",
@@ -345,6 +349,7 @@ class FREDOrchestrator:
         proactive_checks.register(
             self.scheduler, llm=self.llm, on_agenda_ask=self._prime_carry
         )
+        consolidation.configure(self.llm)
 
         self.tools = ToolRegistry()
         self._register_tools()
@@ -1881,6 +1886,27 @@ class FREDOrchestrator:
         )
 
         self.tools.register(
+            name="preview_missing_map_entries",
+            function=self._preview_missing_map_entries,
+            description=(
+                "Check which vault files aren't listed in MAP.md yet. "
+                "Does NOT write anything."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
+            name="add_missing_map_entries",
+            function=self._add_missing_map_entries,
+            description=(
+                "Add placeholder MAP.md entries for the vault files found "
+                "missing by preview_missing_map_entries. Only call after "
+                "the user has explicitly confirmed."
+            ),
+            parameters={"type": "object", "properties": {}},
+        )
+
+        self.tools.register(
             name="recall_recent_conversation",
             function=session_summary.recall_recent_conversation,
             description=(
@@ -3137,6 +3163,17 @@ class FREDOrchestrator:
         """Writes to the vault — reached only when the user has said
         yes to the preview, per rules.md's propose-before-write."""
         return session_summary.save_session_summary(llm=self.llm)
+
+    def _preview_missing_map_entries(self) -> str:
+        """Which vault files aren't listed in MAP.md yet. Read-only —
+        see tools/vault_map.py's propose/write split."""
+        return vault_map.preview_missing() or "MAP.md is already current, sir."
+
+    def _add_missing_map_entries(self) -> str:
+        """Writes placeholder rows to MAP.md — reached only when the
+        user has said yes to the preview, per rules.md's
+        propose-before-write (MAP.md is one of the sensitive files)."""
+        return vault_map.append_missing()
 
     def _find_file_smart(self, description: str, directory: str = "") -> str:
         """

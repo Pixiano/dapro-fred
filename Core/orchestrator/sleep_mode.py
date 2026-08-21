@@ -13,6 +13,7 @@
 # STATE_PATH/_save_state pattern.
 
 from config.settings import PRESENCE_ABSENT_DEBOUNCE
+from orchestrator import consolidation
 from utils import event_log
 
 _streak = 0  # consecutive absent polls
@@ -33,12 +34,14 @@ def on_presence_poll(present: bool):
         if _sleeping:
             _sleeping = False
             event_log.log("sleep_mode_exit", reason="presence_returned")
+            consolidation.on_sleep_exit()
         return
 
     _streak += 1
     if not _sleeping and _streak >= PRESENCE_ABSENT_DEBOUNCE:
         _sleeping = True
         event_log.log("sleep_mode_enter", streak=_streak)
+        consolidation.on_sleep_enter()
 
 
 def wake(reason: str):
@@ -49,3 +52,4 @@ def wake(reason: str):
     if _sleeping:
         _sleeping = False
         event_log.log("sleep_mode_exit", reason=reason)
+        consolidation.on_sleep_exit()

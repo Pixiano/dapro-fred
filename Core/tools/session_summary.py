@@ -211,7 +211,11 @@ def summarise_today(day: str = None, llm=None) -> str:
     ]
 
     try:
-        return llm.generate(prompt)
+        # local_only=True — same as _judge_carryover in proactive_checks.py
+        # (check_day_rollover), and for the same reason: this reads raw
+        # conversation/session content, unattended, and that shouldn't
+        # leave the device on its own.
+        return llm.generate(prompt, local_only=True)
     except Exception as e:
         return f"Couldn't summarise today: {e}"
 
