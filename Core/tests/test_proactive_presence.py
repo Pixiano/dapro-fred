@@ -33,6 +33,7 @@ print("ok")
 
 def _reset(monkeypatch):
     monkeypatch.setattr(pc.sleep_mode, "_streak", 0)
+    monkeypatch.setattr(pc.sleep_mode, "_present_streak", 0)
     monkeypatch.setattr(pc.sleep_mode, "_sleeping", False)
 
 
@@ -61,8 +62,10 @@ def test_continued_presence_does_not_regreet(monkeypatch):
 
 def test_absent_to_present_edge_greets_once(monkeypatch):
     """Cross the real debounce threshold (3 consecutive absent polls)
-    before returning, so sleep_mode actually enters sleep — then verify
-    the greeting fires on waking and not again while staying present."""
+    before returning, so sleep_mode actually enters sleep — then cross
+    the present-debounce threshold (2 consecutive present polls) before
+    verifying the greeting fires on waking and not again while staying
+    present."""
     _reset(monkeypatch)
     calls = []
     monkeypatch.setattr(pc, "notify", lambda *a, **k: calls.append(a))
@@ -73,7 +76,12 @@ def test_absent_to_present_edge_greets_once(monkeypatch):
     assert pc.sleep_mode.is_sleeping() is True
 
     monkeypatch.setattr(presence, "poll_once", lambda: True)
-    pc.check_presence()  # wakes from real sleep mode -> greets
+    for _ in range(pc.sleep_mode.PRESENCE_PRESENT_DEBOUNCE - 1):
+        pc.check_presence()  # still under the present-debounce -> no greet yet
+        assert pc.sleep_mode.is_sleeping() is True
+        assert calls == []
+
+    pc.check_presence()  # crosses the present-debounce -> wakes, greets
 
     pc.check_presence()  # stays present: must not fire again
 

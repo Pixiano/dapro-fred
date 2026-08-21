@@ -1240,13 +1240,29 @@ PRESENCE_MAX_EMBEDDINGS = 50
 # into this codebase's own already-working vision_server.py pipeline
 # instead of depending on LM Studio at runtime.
 PRESENCE_MATCH_THRESHOLD_LOW = 0.30
-PRESENCE_MATCH_THRESHOLD_HIGH = 0.45
+# Raised from the original 0.45 starting guess, 2026-08-21: live use
+# showed a single high-confidence-but-wrong frame was enough to flip
+# present, exit sleep mode, fire the wake greeting, and accumulate a bad
+# embedding — "the notifications are appearing like every false match
+# from the face recog." A stricter single-frame bar, plus the present-
+# debounce below, are the two-part fix; LOW is untouched, it only gates
+# the ambiguous-vision-fallback band, a separate concern.
+PRESENCE_MATCH_THRESHOLD_HIGH = 0.58
 
 # Consecutive absent polls (at PRESENCE_POLL_SECONDS each) required before
 # orchestrator/sleep_mode.py declares actual absence and enters sleep
 # mode — debounces someone briefly stepping out of frame. 3 * 15s ≈
 # 45-60s. Vatsal's call 2026-08-21.
 PRESENCE_ABSENT_DEBOUNCE = 3
+
+# Symmetrical debounce for the return trip: consecutive present/match
+# polls required before treating a return as real — i.e. before
+# sleep_mode.py exits sleep mode / fires the wake greeting, and before
+# presence.py accumulates a new enrollment embedding. Smaller than
+# PRESENCE_ABSENT_DEBOUNCE (2 vs 3): a false-negative-then-correct costs
+# one missed exit, whereas repeatedly firing the greeting on noise is the
+# actual complaint being fixed here. 2026-08-21.
+PRESENCE_PRESENT_DEBOUNCE = 2
 
 # Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible
 # once he's been present but hasn't had a real turn/tool-call with FRED for

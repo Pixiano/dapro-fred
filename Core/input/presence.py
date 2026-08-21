@@ -36,6 +36,7 @@ from config.settings import (
     PRESENCE_MATCH_THRESHOLD_HIGH,
     PRESENCE_MATCH_THRESHOLD_LOW,
     PRESENCE_MAX_EMBEDDINGS,
+    PRESENCE_PRESENT_DEBOUNCE,
 )
 from input import presence_log
 from utils import event_log
@@ -48,6 +49,16 @@ _analyzer = None  # lazy, load-once-keep-warm — same pattern as llm_client._ge
 _enrollment_embeddings = None  # lazy-loaded list[np.ndarray], cached after first read
 
 _state_cache = None  # in-memory mirror of STATE_PATH, simplest correct approach per phone_tools' CALL_SEEN_PATH pattern
+
+# Consecutive present/match polls, in-memory only — mirrors
+# orchestrator/sleep_mode.py's own absent/present streak counters (same
+# "a restart is a real event" reasoning as that module's docstring).
+# Gates _accumulate_embedding: a match on a single frame that hasn't
+# cleared this debounce yet must not get written into the enrollment
+# set, same false-positive window sleep_mode.py's own present-debounce
+# closes for the greeting/sleep-exit path. See PRESENCE_PRESENT_DEBOUNCE's
+# comment in settings.py.
+_present_streak = 0
 
 
 def _get_analyzer():
@@ -216,16 +227,25 @@ def _accumulate_embedding(face):
     _append_embeddings([face.normed_embedding.tolist()])
 
 
-def _frame_matches_enrollment(frame) -> bool:
+def _frame_matches_enrollment(frame):
     """Runtime multi-face handling, DELIBERATELY different from
     enroll_face.py's single-largest-face heuristic: present (True) if
     ANY detected face matches, regardless of how many other people are
     also in frame. Family visiting must never cause a false absent —
     that asymmetry with enrollment (which picks just the largest face)
-    is intentional, not an inconsistency."""
+    is intentional, not an inconsistency.
+
+    Returns (present, matched_face): matched_face is the face object
+    behind a CONFIRMED positive match (high-confidence direct match, or
+    the ambiguous-band vision fallback resolving to a match) — the
+    caller accumulates its embedding, but only once the present-streak
+    debounce has cleared (see poll_once). None when present is True via
+    the ambiguous-fallback-failed/last-known-state path, since that's
+    not a confirmed match and must never be accumulated regardless of
+    debounce, or when present is False."""
     faces = _get_analyzer().get(frame)
     if not faces:
-        return False
+        return False, None
 
     enrollment_embeddings = _get_enrollment_embeddings()
     last_state = is_present()
@@ -233,8 +253,7 @@ def _frame_matches_enrollment(frame) -> bool:
     for face in faces:
         similarity = _best_similarity(face.normed_embedding, enrollment_embeddings)
         if similarity >= PRESENCE_MATCH_THRESHOLD_HIGH:
-            _accumulate_embedding(face)
-            return True
+            return True, face
         if similarity < PRESENCE_MATCH_THRESHOLD_LOW:
             continue  # confident non-match for this face, check the next one
 
@@ -242,8 +261,7 @@ def _frame_matches_enrollment(frame) -> bool:
         # any single face is enough to report present.
         verdict = _vision_fallback_is_match(frame)
         if verdict is True:
-            _accumulate_embedding(face)
-            return True
+            return True, face
         if verdict is False:
             continue
         # Vision fallback also couldn't produce a clear signal: fail
@@ -251,9 +269,9 @@ def _frame_matches_enrollment(frame) -> bool:
         event_log.log("presence_ambiguous_fallback_failed", similarity=round(similarity, 3),
                        fallback_to_last_state=last_state)
         if last_state:
-            return True
+            return True, None
 
-    return False
+    return False, None
 
 
 def poll_once() -> bool:
@@ -261,6 +279,8 @@ def poll_once() -> bool:
 
     Camera-in-use failure mode (e.g. the iBall claimed by a video call):
     fails soft, returns the last-known persisted state, never raises."""
+    global _present_streak
+
     now = datetime.now()
     state = _load_state()
 
@@ -282,7 +302,17 @@ def poll_once() -> bool:
         _save_state(state)
         return state.get("present", False)
 
-    present = _frame_matches_enrollment(frame)
+    present, matched_face = _frame_matches_enrollment(frame)
+
+    if present:
+        _present_streak += 1
+        # Same debounce sleep_mode.py applies before exiting sleep mode /
+        # firing the wake greeting — a confirmed match on a frame that
+        # hasn't cleared it yet must not pollute the enrollment set.
+        if matched_face is not None and _present_streak >= PRESENCE_PRESENT_DEBOUNCE:
+            _accumulate_embedding(matched_face)
+    else:
+        _present_streak = 0
 
     state["present"] = present
     state["last_checked"] = now.isoformat()

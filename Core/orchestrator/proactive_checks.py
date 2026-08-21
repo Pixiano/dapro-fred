@@ -696,10 +696,14 @@ def check_presence():
     Greets only on a REAL sleep-mode wake — sleep_mode.py's own
     PRESENCE_ABSENT_DEBOUNCE (3 consecutive absent polls) is what
     distinguishes actual absence from a single missed poll (camera
-    hiccup, reaching for something), so the greeting piggybacks on that
-    rather than tracking its own separate present/absent edge. Sleep
-    state is read BEFORE on_presence_poll() mutates it, since that call
-    is what would flip is_sleeping() False again for this same poll.
+    hiccup, reaching for something), and PRESENCE_PRESENT_DEBOUNCE (2
+    consecutive present polls) does the same for the return trip — a
+    single high-confidence-but-wrong frame must not fire the greeting.
+    So the greeting fires on the actual is_sleeping() True->False edge,
+    not on "this one poll came back present" — sleep state is read
+    BEFORE on_presence_poll() mutates it, and compared against the
+    state AFTER, since with the present-debounce in place a single
+    present poll no longer necessarily flips it.
     """
     try:
         present = presence.poll_once()
@@ -710,7 +714,7 @@ def check_presence():
     was_sleeping = sleep_mode.is_sleeping()
     sleep_mode.on_presence_poll(present)
 
-    if present and was_sleeping:
+    if was_sleeping and not sleep_mode.is_sleeping():
         notify(random.choice(_PRESENCE_GREETINGS), title="Welcome back")
 
 
