@@ -10,7 +10,7 @@ import multiprocessing
 import threading
 import time
 
-from config.settings import SCREEN_WATCHER_IDLE_MINUTES
+from config.settings import SCREEN_WATCHER_IDLE_MINUTES, SCREEN_WATCHER_ENABLED
 
 
 class ScreenWatcherManager:
@@ -55,7 +55,15 @@ class ScreenWatcherManager:
             self._kill_locked()
 
     def start(self):
-        """Begin the idle-watch thread. Call once at app boot."""
+        """Begin the idle-watch thread. Call once at app boot.
+
+        No-ops entirely when SCREEN_WATCHER_ENABLED is False — the
+        automatic idle-loop capture stays off, but capture_now()
+        (on-demand "what's on my screen") is a separate method and still
+        works regardless, since it's requested, not periodic.
+        """
+        if not SCREEN_WATCHER_ENABLED:
+            return
         if self._running:
             return
         self._running = True

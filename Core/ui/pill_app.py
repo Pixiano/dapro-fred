@@ -953,7 +953,21 @@ class PillApp:
                 self.window.show()
                 print(f"[PillApp] speaking proactively: {message!r}")
                 event_log.log("fred_speech", text=message, spoken=True, proactive=True)
-                spoken = self.tts.speak(message, on_level=self.window.set_level)
+                # Paused for the same reason a real turn already pauses it
+                # (see _on_hold_start) — the mic stays live otherwise, and
+                # speaker-to-mic bleed of FRED's OWN voice can false-fire
+                # the wake word and get captured as if it were a real
+                # follow-up. Confirmed live: two captures in the wake-word
+                # training set are FRED's own startup greeting, picked up
+                # and transcribed as user speech. Every proactive
+                # utterance (greeting, reminders, timers, proactive
+                # checks) routes through this one function, so pausing
+                # here covers all of them at once.
+                self.wakeword.pause()
+                try:
+                    spoken = self.tts.speak(message, on_level=self.window.set_level)
+                finally:
+                    self.wakeword.resume()
                 print(f"[PillApp] proactive speech done ({len(spoken)}/{len(message)} chars spoken)")
             except Exception as e:
                 print(f"[PillApp] proactive speech failed: {e}")
