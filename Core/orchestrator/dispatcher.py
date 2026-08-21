@@ -37,16 +37,26 @@ class Dispatcher:
                 self._route_repeat_last,
             ),
             (
-                # "open it" / "open that one" / "open the second one" —
-                # a follow-up to a search whose spoken result carried no
-                # filename to repeat back. Must sit above the generic
-                # open-a-website and open-an-app rules, both of which
-                # would otherwise swallow the pronoun and try to launch
-                # an application literally called "it".
+                # "open it" / "open that one" / "open the second one" /
+                # "open that folder" — a follow-up to a search or a
+                # create_text_file/create_folder call whose spoken result
+                # carried no path to repeat back. Must sit above the
+                # generic open-a-website and open-an-app rules, both of
+                # which would otherwise swallow the pronoun and try to
+                # launch an application literally called "that folder".
+                # Confirmed bug (session_2026-08-22.jsonl): "Open that
+                # folder." right after FRED created a file fell through
+                # to launch_application with app_name="that folder.",
+                # which burned ~27s exhaustively searching PATH/registry/
+                # Start Menu before failing. "that folder"/"folder" (the
+                # latter catches "the folder", since "the " is already
+                # stripped above) added alongside the existing pronouns,
+                # routed the same way. Trailing period tolerated (`\.?`)
+                # since STT punctuates sentence-final phrases.
                 re.compile(
                     r"^open\s+(?:up\s+)?(?:the\s+)?"
                     r"(?:(?P<ordinal>first|second|third|1st|2nd|3rd)\s+)?"
-                    r"(?:it|that|that one|one|file|result)$",
+                    r"(?:it|that|that one|one|file|result|folder|that folder|this folder)\.?$",
                     re.IGNORECASE,
                 ),
                 self._route_open_last_found,
@@ -444,6 +454,22 @@ class Dispatcher:
 
         target = match.group("target").strip()
         if cls._COMPOUND_CONNECTOR.search(target):
+            return None
+
+        # Same guard as _route_web_search below, for the same reason:
+        # a pronoun-led fragment ("that folder.", "her file", "it for me
+        # please") has no real app name in it, just a referent this
+        # regex-only path can't resolve. Confirmed recurring bug across
+        # 5+ sessions (2026-08-03 through 2026-08-22, e.g. "open that
+        # folder." dispatched with app_name="that folder." and burned
+        # ~27s exhaustively searching PATH/registry/Start Menu/install
+        # dirs before failing) — declining sends it to the LLM tool path
+        # instead, which has conversation history to resolve the pronoun
+        # against (or the pronoun-specific route above, for the "open
+        # it"/"open that one"/"open that folder" phrasings that route
+        # matches directly).
+        first_word = re.sub(r"[^\w]", "", target.split()[0].lower()) if target else ""
+        if first_word in cls._PRONOUN_LEAD:
             return None
 
         return {

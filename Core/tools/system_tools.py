@@ -330,6 +330,14 @@ def create_text_file(
     from tools.file_index import add_entry
     add_entry(path)  # so it's findable via search_index before the next reindex_drive
 
+    # "Open that folder" right after this has nothing else to point at —
+    # reuses the same found_cache slot open_last_found already reads for
+    # "open it"/"open that one" after a search, rather than inventing a
+    # second last-thing tracker. Points at the containing folder, since
+    # that's what "open that folder" literally asks for.
+    from tools import found_cache
+    found_cache.set_last([path.parent])
+
     return f"Created file: {path}"
 
 
@@ -348,6 +356,12 @@ def create_folder(folder_name: str, directory: str = "") -> str:
         path.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         return f"Couldn't create {path.name}: {e}"
+
+    # Same last-thing referent as create_text_file above, so "open that
+    # folder" right after finds this one, not whatever an older search
+    # left behind.
+    from tools import found_cache
+    found_cache.set_last([path])
 
     from tools.file_index import add_entry
     add_entry(path)  # so it's findable via search_index before the next reindex_drive

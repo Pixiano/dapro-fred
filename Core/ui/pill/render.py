@@ -210,6 +210,15 @@ def render_pill(
 
     # --- transcript
     if transcript:
+        # draw.textlength() (used by _truncate and just below) raises
+        # ValueError("can't measure length of multiline text") on any
+        # embedded "\n" — confirmed live (session_2026-08-22.jsonl):
+        # a multiline proactive message hit this inside window.show()'s
+        # synchronous _blit(), logged as a "proactive_speech" error even
+        # though the message still spoke fine. The pill is a single-line
+        # caption anyway, so collapsing whitespace here is correct, not
+        # just a workaround.
+        transcript = " ".join(transcript.split())
         text = _truncate(draw, transcript, _FONT, CANVAS_W - 40)
         w = draw.textlength(text, font=_FONT)
         tx = (CANVAS_W - w) / 2.0
