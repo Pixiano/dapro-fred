@@ -84,8 +84,21 @@ def whats_on_screen(question: str = "") -> str:
 
 def look_through_camera(question: str = "") -> str:
     """
-    Captures whatever the paired phone's camera is pointed at right now
-    and describes it — "what am I looking at", "read this for me", etc.
+    Captures whatever the desk webcam is pointed at right now and
+    describes it — "what am I looking at", "read this for me", etc.
+
+    Vatsal's explicit call 2026-08-21: this must use the local webcam
+    (input/presence.py's PRESENCE_CAMERA_INDEX), not the paired phone's
+    camera over ADB — the two are physically different cameras pointed
+    at different things, and "look through the camera" meant the one on
+    the desk. phone_tools.capture_camera_photo() is untouched and still
+    used elsewhere for actual phone-camera requests.
+
+    Capture pattern lifted from presence.py's poll_once() (open, grab
+    one frame, release immediately) rather than imported — same reason
+    focus_checkin.py's own _capture_frame() lifts it instead of
+    importing: poll_once() also does face-matching and mutates
+    presence_state.json, neither of which this needs.
 
     Purely on-demand, no cache, no background process: unlike the screen
     watcher (a separate OS process specifically because it polls
@@ -101,14 +114,24 @@ def look_through_camera(question: str = "") -> str:
     """
     import base64
 
-    from tools.phone_tools import capture_camera_photo
+    import cv2
 
-    local_path = capture_camera_photo()
-    if not local_path.lower().endswith(".png"):
-        # capture_camera_photo() returns a plain error sentence (no
-        # file extension) on failure, a real path on success — cheaper
-        # than adding a second return value every caller has to unpack.
-        return local_path
+    from config.settings import PRESENCE_CAMERA_INDEX
+
+    cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
+    try:
+        if not cap.isOpened():
+            return "I couldn't open the webcam just now."
+        ok, frame = cap.read()
+    finally:
+        cap.release()
+
+    if not ok:
+        return "I couldn't grab a frame from the webcam just now."
+
+    ok, buf = cv2.imencode(".jpg", frame)
+    if not ok:
+        return "Captured a webcam frame but couldn't encode it."
 
     from ui.pill_app import get_current_app
 
@@ -116,9 +139,8 @@ def look_through_camera(question: str = "") -> str:
     if app is None:
         return "Camera captured, but there's no running app to describe it with."
 
-    with open(local_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("ascii")
-    data_uri = f"data:image/png;base64,{b64}"
+    b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+    data_uri = f"data:image/jpeg;base64,{b64}"
 
     prompt = (
         f"Looking through this camera, answer this question as directly "
