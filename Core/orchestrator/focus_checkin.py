@@ -42,10 +42,14 @@ from utils import event_log
 
 # Where captured frames live — never the git repo, kept indefinitely, no
 # pruning (Vatsal's explicit call: the simple "just keep appending"
-# version). No existing vault convention for photos (checked rules.md and
-# the vault's top-level folders), so this is a new subfolder under
-# personal/ — same folder the vault already treats as its most sensitive.
-FOCUS_PHOTO_DIR = VAULT_DIR / "personal" / "focus-checkins"
+# version). 2026-08-22: moved under personal/images/, one subfolder per
+# calendar day named "YYYY-MM-DD_Weekday" (date + weekday name), journal-
+# style rather than the old flat focus-checkins/ folder. Only this
+# module's journal/observation captures live here — face_reference.jpg
+# (Core/data/, enroll_face.py/presence.py's functional vision-fallback
+# reference photo) is deliberately NOT here, it needs a stable fixed path
+# code reads, not a dated journal entry.
+FOCUS_PHOTO_BASE_DIR = VAULT_DIR / "personal" / "images"
 
 _NO_OBSERVATION = "NO_OBSERVATION"
 
@@ -110,8 +114,10 @@ def _capture_frame():
 def _save_frame(frame):
     import cv2
 
-    FOCUS_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-    path = FOCUS_PHOTO_DIR / f"{datetime.now():%Y-%m-%d_%H%M%S}.jpg"
+    now = datetime.now()
+    day_dir = FOCUS_PHOTO_BASE_DIR / f"{now:%Y-%m-%d_%A}"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    path = day_dir / f"{now:%Y-%m-%d_%H%M%S}.jpg"
     cv2.imwrite(str(path), frame)
     return path
 

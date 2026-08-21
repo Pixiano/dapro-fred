@@ -124,6 +124,33 @@ def test_below_threshold_does_not_fire(monkeypatch):
     assert calls == []
 
 
+# =========================================================
+# DAILY-FOLDER-WITH-WEEKDAY PATH CONSTRUCTION -- _save_frame() now saves
+# under FOCUS_PHOTO_BASE_DIR/YYYY-MM-DD_Weekday/, one subfolder per
+# calendar day, instead of the old flat focus-checkins/ folder.
+# =========================================================
+
+def test_save_frame_uses_daily_weekday_subfolder(tmp_path, monkeypatch):
+    monkeypatch.setattr(fc, "FOCUS_PHOTO_BASE_DIR", tmp_path)
+
+    saved = {}
+
+    def _fake_imwrite(path, frame):
+        saved["path"] = path
+        return True
+
+    import cv2
+    monkeypatch.setattr(cv2, "imwrite", _fake_imwrite)
+
+    path = fc._save_frame(object())
+
+    today = datetime.now()
+    expected_dir = tmp_path / f"{today:%Y-%m-%d_%A}"
+    assert path.parent == expected_dir
+    assert expected_dir.is_dir()
+    assert path.name.startswith(f"{today:%Y-%m-%d}_") and path.suffix == ".jpg"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__, "-v"]))

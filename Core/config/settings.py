@@ -1216,15 +1216,24 @@ PRESENCE_POLL_SECONDS = 15
 PRESENCE_ENROLLMENT_SHOTS = 5
 PRESENCE_ENROLLMENT_INTERVAL_SECONDS = 5
 
-# Ongoing accumulation cap, DISTINCT from PRESENCE_ENROLLMENT_SHOTS above
-# (that's the one-time seed). presence.py appends a live frame's embedding
-# to face_enrollment.json whenever a poll produces a CONFIRMED positive
-# match (high-confidence direct match, or the ambiguous-band vision
-# fallback resolving to a match) — never on a non-match or an unresolved
-# ambiguous result — so accuracy keeps improving across more lighting/
-# angles over time. Capped here, no eviction once full: Vatsal's call
-# 2026-08-21, "up to 50, only the positive".
-PRESENCE_MAX_EMBEDDINGS = 50
+# Three-tier embedding pool, replacing the old flat PRESENCE_MAX_EMBEDDINGS
+# cap (2026-08-22). face_enrollment.json now tags every entry "base",
+# "hard", or "dynamic":
+#   base    — deliberate initial enrollment (live 5-shot + seed-from-photo,
+#             scripts/enroll_face.py's default flow). Protected: never
+#             evicted, never auto-added-to outside that script.
+#   hard    — deliberate captures under adverse conditions (dim light,
+#             turned away, angled/partial view), scripts/enroll_face.py
+#             --hard. Also protected, same reason.
+#   dynamic — rolling FIFO window, auto-populated by presence.py's ongoing
+#             confident-match accumulation. THIS is the only tier with an
+#             actively-enforced cap: base/hard only ever grow via the
+#             deliberate enroll_face.py flows above, never automatically,
+#             so they have no eviction logic and these targets are just
+#             enrollment-script guidance, not caps presence.py enforces.
+PRESENCE_BASE_EMBEDDINGS_TARGET = 20
+PRESENCE_HARD_EMBEDDINGS_TARGET = 15
+PRESENCE_DYNAMIC_EMBEDDINGS_CAP = 15
 
 # ArcFace/buffalo_l cosine-similarity match threshold. NOT a measured
 # constant — this repo had never run the model as of 2026-08-21, so

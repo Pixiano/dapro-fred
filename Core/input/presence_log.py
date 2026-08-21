@@ -22,8 +22,10 @@ LOG_PATH = DATA_DIR / "presence_log.jsonl"
 _lock = threading.Lock()
 
 
-def log_poll(present: bool):
+def log_poll(present: bool, matched_tier: str | None = None):
     record = {"ts": datetime.now().isoformat(), "present": bool(present)}
+    if matched_tier is not None:
+        record["matched_tier"] = matched_tier
     try:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with _lock:

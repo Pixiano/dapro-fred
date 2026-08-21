@@ -33,9 +33,9 @@ import cv2
 from config.settings import (
     DATA_DIR,
     PRESENCE_CAMERA_INDEX,
+    PRESENCE_DYNAMIC_EMBEDDINGS_CAP,
     PRESENCE_MATCH_THRESHOLD_HIGH,
     PRESENCE_MATCH_THRESHOLD_LOW,
-    PRESENCE_MAX_EMBEDDINGS,
     PRESENCE_PRESENT_DEBOUNCE,
 )
 from input import presence_log
@@ -70,18 +70,28 @@ def _get_analyzer():
     return _analyzer
 
 
-def _get_enrollment_embeddings():
-    """List of stored embeddings (5 separate shots, not averaged — per
-    the enrollment design decision, kept for robustness across lighting/
+def _get_enrollment_embeddings() -> dict:
+    """{"base": [...], "hard": [...], "dynamic": [...]} of np.ndarray
+    embeddings (5+ separate shots per tier, not averaged — per the
+    enrollment design decision, kept for robustness across lighting/
     angle). Cached after first successful load; re-read never happens
     automatically, matching every other lazy-load-once pattern here —
     rerun enroll_face.py and restart the process to pick up a re-
-    enrollment."""
+    enrollment.
+
+    Loads via scripts.enroll_face's own loader so old flat-format
+    face_enrollment.json (pre-2026-08-22) is migrated to the tagged
+    {"embedding", "kind", "ts"} format the same way, whichever module
+    touches the file first."""
     global _enrollment_embeddings
     if _enrollment_embeddings is None:
         import numpy as np
-        data = json.loads(ENROLLMENT_PATH.read_text(encoding="utf-8"))
-        _enrollment_embeddings = [np.array(e) for e in data["embeddings"]]
+        from scripts.enroll_face import _load_existing_embeddings
+
+        by_tier = {"base": [], "hard": [], "dynamic": []}
+        for entry in _load_existing_embeddings():
+            by_tier.setdefault(entry["kind"], []).append(np.array(entry["embedding"]))
+        _enrollment_embeddings = by_tier
     return _enrollment_embeddings
 
 
@@ -124,8 +134,20 @@ def _cosine_similarity(a, b) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-def _best_similarity(face_embedding, enrollment_embeddings) -> float:
-    return max(_cosine_similarity(face_embedding, e) for e in enrollment_embeddings)
+def _best_similarity(face_embedding, embeddings_by_tier: dict) -> tuple[float, str | None]:
+    """Best cosine similarity across ALL tiers (a match against any tier
+    counts, same as the old flat-pool behaviour) plus which tier produced
+    it — MVP keeps a single threshold for all tiers (no per-tier
+    threshold yet, per Vatsal's 2026-08-21 precision-risk call), the tier
+    is tracked only so a match is diagnosable later if false-accepts
+    increase."""
+    best_sim, best_tier = -1.0, None
+    for tier, embeddings in embeddings_by_tier.items():
+        for e in embeddings:
+            sim = _cosine_similarity(face_embedding, e)
+            if sim > best_sim:
+                best_sim, best_tier = sim, tier
+    return best_sim, best_tier
 
 
 def _vision_fallback_is_match(current_frame) -> bool | None:
@@ -209,22 +231,41 @@ def _vision_fallback_is_match(current_frame) -> bool | None:
 
 def _accumulate_embedding(face):
     """Ongoing accuracy improvement: append this face's embedding to
-    face_enrollment.json, the same file/format enroll_face.py seeds.
-    ONLY ever called on a CONFIRMED positive match (see call sites below)
-    — never on a non-match or an unresolved ambiguous result. Capped at
-    PRESENCE_MAX_EMBEDDINGS, no eviction once full — Vatsal's call
-    2026-08-21, "up to 50, only the positive".
+    face_enrollment.json's "dynamic" tier ONLY — base/hard are protected,
+    populated exclusively by the deliberate enroll_face.py flows, never
+    by this automatic path. ONLY ever called on a CONFIRMED positive
+    match (see call sites below) — never on a non-match or an unresolved
+    ambiguous result.
+
+    FIFO eviction once PRESENCE_DYNAMIC_EMBEDDINGS_CAP is reached: the
+    oldest dynamic entry (by file order, which is insertion order) is
+    dropped before the new one is appended — Vatsal's 2026-08-21 tier
+    redesign, replacing the old flat "stop once full" cap.
 
     Reuses enroll_face.py's own load/append helpers rather than
     reinventing the same JSON read-modify-write (scripts/ is already
     importable from here — see test_tool_call_report.py's identical
     `from scripts import ...` pattern). Cheap to read+parse on every poll
     (every PRESENCE_POLL_SECONDS) at this scale, no caching needed."""
-    from scripts.enroll_face import _append_embeddings, _load_existing_embeddings
+    from scripts.enroll_face import EMBEDDINGS_PATH, _append_embeddings, _load_existing_embeddings
 
-    if len(_load_existing_embeddings()) >= PRESENCE_MAX_EMBEDDINGS:
-        return
-    _append_embeddings([face.normed_embedding.tolist()])
+    all_entries = _load_existing_embeddings()
+    dynamic_entries = [e for e in all_entries if e["kind"] == "dynamic"]
+    new_entry = {
+        "embedding": face.normed_embedding.tolist(),
+        "kind": "dynamic",
+        "ts": datetime.now().isoformat(),
+    }
+
+    if len(dynamic_entries) >= PRESENCE_DYNAMIC_EMBEDDINGS_CAP:
+        # Evict the oldest dynamic entry (first one in file order) —
+        # base/hard entries are never touched by this.
+        oldest = dynamic_entries[0]
+        kept = [e for e in all_entries if e is not oldest]
+        kept.append(new_entry)
+        EMBEDDINGS_PATH.write_text(json.dumps({"embeddings": kept}), encoding="utf-8")
+    else:
+        _append_embeddings([new_entry])
 
 
 def _frame_matches_enrollment(frame):
@@ -235,25 +276,31 @@ def _frame_matches_enrollment(frame):
     that asymmetry with enrollment (which picks just the largest face)
     is intentional, not an inconsistency.
 
-    Returns (present, matched_face): matched_face is the face object
-    behind a CONFIRMED positive match (high-confidence direct match, or
-    the ambiguous-band vision fallback resolving to a match) — the
-    caller accumulates its embedding, but only once the present-streak
-    debounce has cleared (see poll_once). None when present is True via
-    the ambiguous-fallback-failed/last-known-state path, since that's
-    not a confirmed match and must never be accumulated regardless of
-    debounce, or when present is False."""
+    Returns (present, matched_face, matched_tier): matched_face is the
+    face object behind a CONFIRMED positive match (high-confidence direct
+    match, or the ambiguous-band vision fallback resolving to a match) —
+    the caller accumulates its embedding, but only once the present-
+    streak debounce has cleared (see poll_once). matched_tier is which
+    tier ("base"/"hard"/"dynamic") produced that match's best similarity
+    score, logged for diagnosability — no per-tier threshold yet, a
+    match against ANY tier still counts the same (Vatsal's 2026-08-21
+    precision-risk call, MVP keeps one threshold). matched_face/
+    matched_tier are None when present is True via the ambiguous-
+    fallback-failed/last-known-state path, since that's not a confirmed
+    match and must never be accumulated regardless of debounce, or when
+    present is False."""
     faces = _get_analyzer().get(frame)
     if not faces:
-        return False, None
+        return False, None, None
 
-    enrollment_embeddings = _get_enrollment_embeddings()
+    embeddings_by_tier = _get_enrollment_embeddings()
     last_state = is_present()
 
     for face in faces:
-        similarity = _best_similarity(face.normed_embedding, enrollment_embeddings)
+        similarity, tier = _best_similarity(face.normed_embedding, embeddings_by_tier)
         if similarity >= PRESENCE_MATCH_THRESHOLD_HIGH:
-            return True, face
+            event_log.log("presence_match", similarity=round(similarity, 3), tier=tier)
+            return True, face, tier
         if similarity < PRESENCE_MATCH_THRESHOLD_LOW:
             continue  # confident non-match for this face, check the next one
 
@@ -261,7 +308,9 @@ def _frame_matches_enrollment(frame):
         # any single face is enough to report present.
         verdict = _vision_fallback_is_match(frame)
         if verdict is True:
-            return True, face
+            event_log.log("presence_match", similarity=round(similarity, 3), tier=tier,
+                           via_vision_fallback=True)
+            return True, face, tier
         if verdict is False:
             continue
         # Vision fallback also couldn't produce a clear signal: fail
@@ -269,9 +318,9 @@ def _frame_matches_enrollment(frame):
         event_log.log("presence_ambiguous_fallback_failed", similarity=round(similarity, 3),
                        fallback_to_last_state=last_state)
         if last_state:
-            return True, None
+            return True, None, None
 
-    return False, None
+    return False, None, None
 
 
 def poll_once() -> bool:
@@ -302,7 +351,7 @@ def poll_once() -> bool:
         _save_state(state)
         return state.get("present", False)
 
-    present, matched_face = _frame_matches_enrollment(frame)
+    present, matched_face, matched_tier = _frame_matches_enrollment(frame)
 
     if present:
         _present_streak += 1
@@ -319,7 +368,8 @@ def poll_once() -> bool:
     if present:
         state["last_seen"] = now.isoformat()
     _save_state(state)
-    presence_log.log_poll(present)  # camera-failure early-returns above are
-    # skipped on purpose — those report stale last-known state, not a real
-    # observation, and would pollute active-hours aggregation.
+    presence_log.log_poll(present, matched_tier=matched_tier)  # camera-failure
+    # early-returns above are skipped on purpose — those report stale
+    # last-known state, not a real observation, and would pollute
+    # active-hours aggregation.
     return present

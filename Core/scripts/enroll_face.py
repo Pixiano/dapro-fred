@@ -24,6 +24,7 @@ import argparse
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -32,12 +33,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.settings import (
     DATA_DIR,
+    PRESENCE_BASE_EMBEDDINGS_TARGET,
     PRESENCE_CAMERA_INDEX,
     PRESENCE_ENROLLMENT_INTERVAL_SECONDS,
     PRESENCE_ENROLLMENT_SHOTS,
 )
 
 EMBEDDINGS_PATH = DATA_DIR / "face_enrollment.json"
+
+# Guided --hard capture sequence: a small fixed set of adverse conditions,
+# one prompt per shot, same count/spacing as the default base flow
+# (PRESENCE_ENROLLMENT_SHOTS/INTERVAL) — just a different prompt and a
+# "hard" tag per entry instead of "base". 2026-08-22.
+HARD_CONDITIONS = [
+    "sit in dim/low light",
+    "turn your head away at an angle",
+    "partially obscure your face (hand, hair, angled away)",
+    "look down or away from the camera",
+    "sit at a side angle to the camera, not facing straight on",
+]
 
 # Deliberate, narrow exception to "never persist raw frames" (see
 # presence.py's module docstring for the general rule): the ambiguous-
@@ -53,17 +67,57 @@ def _largest_face(faces):
     return max(faces, key=area)
 
 
+def _migrate_embeddings(raw: list) -> list:
+    """Old format stored bare embedding vectors ([[...], [...]]); new
+    format stores tagged dicts ({"embedding": [...], "kind": ..., "ts":
+    ...}). Idempotent and defensive: already-migrated dict entries pass
+    through unchanged; only bare-list (legacy) entries get tagged.
+
+    Vatsal's call 2026-08-22: NOTHING existing gets dropped by this
+    migration, including everything auto-accumulated earlier the same
+    day — the old flat format kept no per-entry timestamp/order marker
+    to tell "original deliberate enrollment" from "later auto-
+    accumulated" apart, so legacy entries are split by position (file
+    order = capture order): the first PRESENCE_BASE_EMBEDDINGS_TARGET
+    legacy entries are tagged "base" (that range covers the original
+    5-shot+seed live enrollment), anything beyond that came from the
+    same automatic confident-match accumulation the new "dynamic" tier
+    formalizes, so it's tagged "dynamic" instead — subject to that
+    tier's own cap/eviction from this point forward, but not dropped by
+    this migration step itself."""
+    migrated = []
+    legacy_index = 0
+    for e in raw:
+        if isinstance(e, dict):
+            migrated.append(e)
+            continue
+        kind = "base" if legacy_index < PRESENCE_BASE_EMBEDDINGS_TARGET else "dynamic"
+        migrated.append({"embedding": e, "kind": kind, "ts": None})
+        legacy_index += 1
+    return migrated
+
+
 def _load_existing_embeddings() -> list:
+    """Returns the full list of tagged embedding entries (dicts), migrating
+    old flat-vector entries in place and writing the migrated format back
+    to disk so every other reader/writer of this file sees it already
+    tagged from then on."""
     try:
         data = json.loads(EMBEDDINGS_PATH.read_text(encoding="utf-8"))
-        return data["embeddings"]
+        raw = data["embeddings"]
     except (OSError, ValueError, KeyError):
         return []
 
+    migrated = _migrate_embeddings(raw)
+    if migrated != raw:
+        EMBEDDINGS_PATH.write_text(json.dumps({"embeddings": migrated}), encoding="utf-8")
+    return migrated
 
-def _append_embeddings(new_embeddings: list):
+
+def _append_embeddings(new_entries: list):
+    """new_entries: list of tagged dicts ({"embedding", "kind", "ts"})."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    embeddings = _load_existing_embeddings() + new_embeddings
+    embeddings = _load_existing_embeddings() + new_entries
     EMBEDDINGS_PATH.write_text(json.dumps({"embeddings": embeddings}), encoding="utf-8")
     return embeddings
 
@@ -101,7 +155,8 @@ def seed_from_photo(analyzer, photo_path: Path):
     if len(faces) > 1:
         print(f"{len(faces)} faces detected, picked largest at bbox={face.bbox.tolist()}")
 
-    embeddings = _append_embeddings([face.normed_embedding.tolist()])
+    entry = {"embedding": face.normed_embedding.tolist(), "kind": "base", "ts": datetime.now().isoformat()}
+    embeddings = _append_embeddings([entry])
     print(f"Seeded 1 embedding from {photo_path} ({len(embeddings)} total now in {EMBEDDINGS_PATH})")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -112,17 +167,28 @@ def seed_from_photo(analyzer, photo_path: Path):
         print(f"Reference photo already exists at {REFERENCE_PHOTO_PATH}, left unchanged.")
 
 
-def _run_live_capture(analyzer):
+def _run_capture_session(analyzer, kind: str, conditions: list | None = None):
+    """Shared live-capture loop for both the default "base" flow (plain
+    countdown between shots) and the --hard flow (conditions is a list of
+    one prompt string per shot, e.g. "turn away slightly" — printed before
+    that shot's countdown). Reference-photo seeding only happens for
+    "base": a hard-condition frame (dim light, turned away, ...) is
+    deliberately not representative and must never become the reference
+    photo used for the vision-fallback comparison."""
+    shots = len(conditions) if conditions else PRESENCE_ENROLLMENT_SHOTS
+
     cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
     if not cap.isOpened():
         print(f"Could not open camera index {PRESENCE_CAMERA_INDEX}.")
         sys.exit(1)
 
-    embeddings = []
+    entries = []
     reference_frame = None
 
     try:
-        for shot_num in range(1, PRESENCE_ENROLLMENT_SHOTS + 1):
+        for shot_num in range(1, shots + 1):
+            if conditions:
+                print(f"Shot {shot_num}/{shots}: {conditions[shot_num - 1]}, then continue.")
             if shot_num > 1:
                 print(f"Next shot in {PRESENCE_ENROLLMENT_INTERVAL_SECONDS}s...")
                 time.sleep(PRESENCE_ENROLLMENT_INTERVAL_SECONDS)
@@ -145,32 +211,37 @@ def _run_live_capture(analyzer):
             else:
                 print(f"Shot {shot_num}: 1 face detected, bbox={face.bbox.tolist()}")
 
-            embeddings.append(face.normed_embedding.tolist())
+            entries.append({
+                "embedding": face.normed_embedding.tolist(),
+                "kind": kind,
+                "ts": datetime.now().isoformat(),
+            })
             if reference_frame is None:
                 reference_frame = frame
     finally:
         cap.release()
 
-    if not embeddings:
+    if not entries:
         print("No usable shots captured — nothing saved. Rerun the script.")
         sys.exit(1)
 
     # Appended, not overwritten: a --seed run and a live run can both
     # contribute embeddings to the same face_enrollment.json.
-    all_embeddings = _append_embeddings(embeddings)
+    all_embeddings = _append_embeddings(entries)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Same "never overwrite an existing reference photo" rule as
-    # seed_from_photo() — this was previously asymmetric (this path
-    # always overwrote, seeding never did), so seeding then later
-    # running a live capture would silently replace the seeded photo.
-    if not REFERENCE_PHOTO_PATH.exists():
-        cv2.imwrite(str(REFERENCE_PHOTO_PATH), reference_frame)
-        print(f"Saved reference photo to {REFERENCE_PHOTO_PATH}")
-    else:
-        print(f"Reference photo already exists at {REFERENCE_PHOTO_PATH}, left unchanged.")
+    if kind == "base":
+        # Same "never overwrite an existing reference photo" rule as
+        # seed_from_photo() — this was previously asymmetric (this path
+        # always overwrote, seeding never did), so seeding then later
+        # running a live capture would silently replace the seeded photo.
+        if not REFERENCE_PHOTO_PATH.exists():
+            cv2.imwrite(str(REFERENCE_PHOTO_PATH), reference_frame)
+            print(f"Saved reference photo to {REFERENCE_PHOTO_PATH}")
+        else:
+            print(f"Reference photo already exists at {REFERENCE_PHOTO_PATH}, left unchanged.")
 
-    print(f"Saved {len(embeddings)}/{PRESENCE_ENROLLMENT_SHOTS} new embeddings "
+    print(f"Saved {len(entries)}/{shots} new '{kind}' embeddings "
           f"({len(all_embeddings)} total) to {EMBEDDINGS_PATH}")
 
 
@@ -182,6 +253,12 @@ def main():
         "photo). Standalone path, separate from the live capture flow "
         "below — can be run before or after it, both contribute to the "
         "same face_enrollment.json."
+    ))
+    parser.add_argument("--hard", action="store_true", help=(
+        "Guided capture under adverse conditions (dim light, turned away, "
+        "angled/partial view) instead of the default base 5-shot flow — "
+        "tags each captured embedding kind=\"hard\". Mutually exclusive "
+        "with --seed."
     ))
     args = parser.parse_args()
 
@@ -195,7 +272,11 @@ def main():
         seed_from_photo(analyzer, Path(args.seed))
         return
 
-    _run_live_capture(analyzer)
+    if args.hard:
+        _run_capture_session(analyzer, kind="hard", conditions=HARD_CONDITIONS)
+        return
+
+    _run_capture_session(analyzer, kind="base")
 
 
 if __name__ == "__main__":

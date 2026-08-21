@@ -50,31 +50,87 @@ class _FakeFace:
         self.normed_embedding = _np.array([value, value, value])
 
 
-def test_accumulate_embedding_appends_and_stops_at_cap(tmp_path, monkeypatch):
+def _write_entries(path, entries):
+    path.write_text(_json.dumps({"embeddings": entries}), encoding="utf-8")
+
+
+def _kinds(path):
+    return [e["kind"] for e in _json.loads(path.read_text(encoding="utf-8"))["embeddings"]]
+
+
+def test_accumulate_embedding_writes_dynamic_tier_only(tmp_path, monkeypatch):
     enrollment_path = tmp_path / "face_enrollment.json"
+    _write_entries(enrollment_path, [])
     monkeypatch.setattr("scripts.enroll_face.EMBEDDINGS_PATH", enrollment_path)
-    monkeypatch.setattr(presence, "PRESENCE_MAX_EMBEDDINGS", 2)
+    monkeypatch.setattr(presence, "PRESENCE_DYNAMIC_EMBEDDINGS_CAP", 5)
 
     presence._accumulate_embedding(_FakeFace(0.1))
     presence._accumulate_embedding(_FakeFace(0.2))
-    presence._accumulate_embedding(_FakeFace(0.3))  # cap already hit, must not append
 
-    saved = _json.loads(enrollment_path.read_text(encoding="utf-8"))
-    assert saved["embeddings"] == [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
+    saved = _json.loads(enrollment_path.read_text(encoding="utf-8"))["embeddings"]
+    assert [e["embedding"] for e in saved] == [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]
+    assert all(e["kind"] == "dynamic" for e in saved)
 
 
-def test_accumulate_embedding_noop_when_already_at_cap(tmp_path, monkeypatch):
+def test_accumulate_embedding_fifo_evicts_oldest_dynamic_only(tmp_path, monkeypatch):
     enrollment_path = tmp_path / "face_enrollment.json"
-    enrollment_path.write_text(
-        _json.dumps({"embeddings": [[0.9, 0.9, 0.9]]}), encoding="utf-8"
-    )
+    _write_entries(enrollment_path, [
+        {"embedding": [9.0, 9.0, 9.0], "kind": "base", "ts": None},
+        {"embedding": [8.0, 8.0, 8.0], "kind": "hard", "ts": None},
+        {"embedding": [0.1, 0.1, 0.1], "kind": "dynamic", "ts": None},
+        {"embedding": [0.2, 0.2, 0.2], "kind": "dynamic", "ts": None},
+    ])
     monkeypatch.setattr("scripts.enroll_face.EMBEDDINGS_PATH", enrollment_path)
-    monkeypatch.setattr(presence, "PRESENCE_MAX_EMBEDDINGS", 1)
+    monkeypatch.setattr(presence, "PRESENCE_DYNAMIC_EMBEDDINGS_CAP", 2)
 
-    presence._accumulate_embedding(_FakeFace(0.5))
+    presence._accumulate_embedding(_FakeFace(0.3))  # cap already at 2 dynamic -> evict oldest (0.1)
 
-    saved = _json.loads(enrollment_path.read_text(encoding="utf-8"))
-    assert saved["embeddings"] == [[0.9, 0.9, 0.9]]  # unchanged
+    saved = _json.loads(enrollment_path.read_text(encoding="utf-8"))["embeddings"]
+    # base/hard entries untouched, oldest dynamic (0.1) evicted, new one appended
+    assert {"embedding": [9.0, 9.0, 9.0], "kind": "base", "ts": None} in saved
+    assert {"embedding": [8.0, 8.0, 8.0], "kind": "hard", "ts": None} in saved
+    dynamic = [e for e in saved if e["kind"] == "dynamic"]
+    assert [e["embedding"] for e in dynamic] == [[0.2, 0.2, 0.2], [0.3, 0.3, 0.3]]
+
+
+# =========================================================
+# FLAT-FORMAT MIGRATION -- old face_enrollment.json was {"embeddings":
+# [[...], [...]]}, no per-entry tagging. First load must migrate it to
+# the tagged {"embedding", "kind", "ts"} format without dropping
+# anything, splitting legacy entries by position: the first
+# PRESENCE_BASE_EMBEDDINGS_TARGET are "base", the rest "dynamic"
+# (Vatsal's 2026-08-22 call — nothing existing gets silently dropped).
+# =========================================================
+
+from scripts import enroll_face as _enroll_face
+
+
+def test_migration_from_old_flat_format_splits_by_position(tmp_path, monkeypatch):
+    enrollment_path = tmp_path / "face_enrollment.json"
+    old_flat = [[float(i)] * 3 for i in range(5)]
+    monkeypatch.setattr(_enroll_face, "EMBEDDINGS_PATH", enrollment_path)
+    monkeypatch.setattr(_enroll_face, "PRESENCE_BASE_EMBEDDINGS_TARGET", 3)
+    _write_entries(enrollment_path, old_flat)
+
+    migrated = _enroll_face._load_existing_embeddings()
+
+    assert [e["embedding"] for e in migrated] == old_flat  # nothing dropped
+    assert [e["kind"] for e in migrated] == ["base", "base", "base", "dynamic", "dynamic"]
+
+    # Write-back happened: re-reading the file directly shows tagged dicts now.
+    on_disk = _json.loads(enrollment_path.read_text(encoding="utf-8"))["embeddings"]
+    assert all(isinstance(e, dict) for e in on_disk)
+
+
+def test_migration_is_a_noop_on_already_tagged_format(tmp_path, monkeypatch):
+    enrollment_path = tmp_path / "face_enrollment.json"
+    tagged = [{"embedding": [1.0, 1.0, 1.0], "kind": "hard", "ts": "2026-08-22T00:00:00"}]
+    monkeypatch.setattr(_enroll_face, "EMBEDDINGS_PATH", enrollment_path)
+    _write_entries(enrollment_path, tagged)
+
+    migrated = _enroll_face._load_existing_embeddings()
+
+    assert migrated == tagged
 
 
 # =========================================================
@@ -91,12 +147,12 @@ def test_poll_once_does_not_accumulate_until_present_debounce_clears(tmp_path, m
     enrollment_path = tmp_path / "face_enrollment.json"
     enrollment_path.write_text(_json.dumps({"embeddings": []}), encoding="utf-8")
     monkeypatch.setattr("scripts.enroll_face.EMBEDDINGS_PATH", enrollment_path)
-    monkeypatch.setattr(presence, "PRESENCE_MAX_EMBEDDINGS", 50)
+    monkeypatch.setattr(presence, "PRESENCE_DYNAMIC_EMBEDDINGS_CAP", 50)
     monkeypatch.setattr(presence, "PRESENCE_PRESENT_DEBOUNCE", 2)
     monkeypatch.setattr(presence, "_present_streak", 0)
     monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
     monkeypatch.setattr(presence, "_save_state", lambda state: None)
-    monkeypatch.setattr(presence.presence_log, "log_poll", lambda present: None)
+    monkeypatch.setattr(presence.presence_log, "log_poll", lambda present, matched_tier=None: None)
 
     face = _FakeFace(0.7)
     monkeypatch.setattr(
@@ -116,7 +172,7 @@ def test_poll_once_does_not_accumulate_until_present_debounce_clears(tmp_path, m
 
     monkeypatch.setattr(presence.cv2, "VideoCapture", lambda index: _FakeCap())
     monkeypatch.setattr(
-        presence, "_frame_matches_enrollment", lambda frame: (True, face)
+        presence, "_frame_matches_enrollment", lambda frame: (True, face, "dynamic")
     )
 
     presence.poll_once()  # 1st consecutive match: below debounce, no accumulate
@@ -125,4 +181,5 @@ def test_poll_once_does_not_accumulate_until_present_debounce_clears(tmp_path, m
 
     presence.poll_once()  # 2nd consecutive match: clears debounce, accumulates
     saved = _json.loads(enrollment_path.read_text(encoding="utf-8"))
-    assert saved["embeddings"] == [[0.7, 0.7, 0.7]]
+    assert [e["embedding"] for e in saved["embeddings"]] == [[0.7, 0.7, 0.7]]
+    assert saved["embeddings"][0]["kind"] == "dynamic"
