@@ -1,12 +1,25 @@
 # 05 — Presence Detection & Sleep Mode
 
-Newest subsystem in FRED, built 2026-08-21 (same day as this doc). This
-covers `Core/input/presence.py`, `Core/orchestrator/sleep_mode.py`,
+**Updated 2026-08-22** — this file was originally written 2026-08-21, the
+day the subsystem was born, and at that point sleep mode was a bare
+absence/presence state machine with no consolidation or reasoning behind
+it. In the day since, four real pieces landed on top of it: sleep-mode
+**consolidation** (a bundled day-summary + vault-gap recap spoken on wake),
+a deep **reflection** job (a sleep-time reasoning pass over recent session
+logs that writes to `people/*.md` and stages self-facts for review), a
+**three-tier embedding system** replacing the old flat 50-embedding cap,
+and a round of **false-positive fixes** (raised match threshold, a new
+symmetrical present-side debounce). The "Plan vs. built" section (§6, old)
+is folded into this rewrite rather than kept as a separate stale snapshot —
+consolidation is no longer "not built," it's real, and this file says so.
+
+This covers `Core/input/presence.py`, `Core/orchestrator/sleep_mode.py`,
+`Core/orchestrator/consolidation.py`, `Core/orchestrator/reflection.py`,
 `Core/tools/sleep_mode_tools.py`, `Core/scripts/enroll_face.py`, and the
 presence hook inside `Core/orchestrator/proactive_checks.py`. It was built
 against the design doc `fred-presence-sleep-mode-plan_2026-08-18.md`
-(repo root) — that doc is broader than what actually got built; see
-"Plan vs. built" at the end of this file for the exact delta.
+(repo root) — that doc is broader than what actually got built; see §6 for
+the current delta.
 
 ## 0. Why this exists
 
@@ -82,23 +95,37 @@ Constants (`Core/config/settings.py`, "PRESENCE DETECTION" block):
 
 ```
 PRESENCE_MATCH_THRESHOLD_LOW  = 0.30
-PRESENCE_MATCH_THRESHOLD_HIGH = 0.45
+PRESENCE_MATCH_THRESHOLD_HIGH = 0.58   # raised from 0.45, 2026-08-21
 ```
 
 Cosine similarity (`presence._cosine_similarity`, plain
 `np.dot(a,b)/(||a||·||b||)`) between a detected face's `normed_embedding`
-and every stored enrollment embedding; `_best_similarity` takes the max
-across all stored embeddings for that one detected face.
+and every stored enrollment embedding; `_best_similarity` now scans across
+all three embedding tiers (base/hard/dynamic — see §3.1) and returns both
+the best score and which tier produced it, for diagnosability. There is
+still only one threshold shared across all tiers — no per-tier threshold
+exists (Vatsal's explicit 2026-08-21 precision-risk call).
 
 Per detected face in `_frame_matches_enrollment(frame)`:
-- similarity ≥ `PRESENCE_MATCH_THRESHOLD_HIGH` (0.45) → confident match.
-  Accumulate this embedding (see §3) and report present immediately.
+- similarity ≥ `PRESENCE_MATCH_THRESHOLD_HIGH` (0.58) → confident match.
+  Logged (`presence_match`, similarity + tier). Reports present
+  immediately, but embedding accumulation (§3.1) is gated separately by
+  the present-debounce below, not by this match alone.
 - similarity < `PRESENCE_MATCH_THRESHOLD_LOW` (0.30) → confident
   non-match for this face; move on and check the next detected face (if
   any) rather than immediately reporting absent — a frame can have
   multiple faces.
-- otherwise (the 0.30–0.45 band) → **ambiguous**, falls back to a real
+- otherwise (the 0.30–0.58 band) → **ambiguous**, falls back to a real
   vision-model comparison, `_vision_fallback_is_match(frame)`.
+
+**HIGH was raised from 0.45 to 0.58 on 2026-08-21** after live use showed a
+single high-confidence-but-wrong frame was enough to flip present, exit
+sleep mode, fire the wake greeting, and pollute the enrollment set with a
+bad embedding — Vatsal's own words, "the notifications are appearing like
+every false match from the face recog." LOW is untouched; it only gates
+the ambiguous-vision-fallback band, a separate concern. The stricter
+single-frame bar plus the new present-debounce (below) are the two-part
+fix — see §5 for the false-positive story end to end.
 
 **Runtime multi-face handling is deliberately asymmetric with enrollment.**
 At runtime, ANY detected face matching is enough to report present — family
@@ -173,6 +200,41 @@ follows.
 
 ## 3. Enrollment flow (`Core/scripts/enroll_face.py`)
 
+### 3.1 Three-tier embedding pool (2026-08-22, replaces the old flat cap)
+
+`face_enrollment.json` used to be one flat list, capped at
+`PRESENCE_MAX_EMBEDDINGS = 50` with no eviction once full — that constant
+**no longer exists**. As of 2026-08-22 every stored entry is a tagged dict
+(`{"embedding": [...], "kind": "base"|"hard"|"dynamic", "ts": iso|None}`,
+old flat-list files migrated in place on first read by
+`enroll_face._load_existing_embeddings`/`_migrate_embeddings` — legacy
+entries are split by file-order position: the first
+`PRESENCE_BASE_EMBEDDINGS_TARGET` become `"base"`, everything after that
+becomes `"dynamic"`, since the old format had no per-entry marker to tell
+deliberate enrollment from auto-accumulated apart, and nothing existing
+gets dropped by the migration).
+
+Three tiers (`Core/config/settings.py`):
+
+| Tier | Target/cap | Populated by | Eviction |
+|---|---|---|---|
+| `base` | `PRESENCE_BASE_EMBEDDINGS_TARGET = 20` | Deliberate live 5-shot enrollment or `--seed`, `enroll_face.py`'s default flow | **Protected** — never auto-evicted, never auto-added-to |
+| `hard` | `PRESENCE_HARD_EMBEDDINGS_TARGET = 15` | Deliberate adverse-condition capture, `enroll_face.py --hard` (dim light, turned away, angled/partial, looking down, side angle — a fixed 5-prompt guided sequence, `HARD_CONDITIONS`) | **Protected**, same reason |
+| `dynamic` | `PRESENCE_DYNAMIC_EMBEDDINGS_CAP = 15` | `presence.py`'s ongoing confident-match accumulation, automatic | **FIFO** — oldest dynamic entry evicted before a new one is appended once the cap is hit |
+
+The base/hard targets are enrollment-script *guidance*, not caps
+`presence.py` enforces — those two tiers only ever grow through the
+deliberate scripted flows, never automatically, so there's no runtime
+eviction logic for them. `dynamic` is the only tier with active,
+enforced eviction, since it's the only one that grows unattended.
+
+A match against **any** tier counts the same at runtime (§2's single
+shared threshold) — the tier is tracked only so a match is diagnosable
+later (`presence_match` event log entries include `tier`), not because
+match behavior differs by tier yet.
+
+### 3.2 The rest of the enrollment flow
+
 One-time, run-by-hand setup script — not wired into FRED's voice/turn flow,
 same "run manually" convention as `tools/haismart_setup.py`. Not CI-safe
 (needs a real camera and a real face in front of it); no automated test,
@@ -228,23 +290,34 @@ that file is manually deleted.
 ### Ongoing accumulation (post-enrollment)
 
 `presence.py._accumulate_embedding(face)` appends a live-polled face's
-embedding to the SAME `face_enrollment.json` file `enroll_face.py` seeds,
-reusing `enroll_face.py`'s own `_load_existing_embeddings`/
-`_append_embeddings` helpers directly (imported via `from
-scripts.enroll_face import ...`) rather than reimplementing the
-read-modify-write. This only ever fires on a **confirmed positive match**:
-either a direct similarity ≥ `PRESENCE_MATCH_THRESHOLD_HIGH`, or an
-ambiguous-band result the vision fallback resolved to `True`. Never on a
-non-match, and never on an unresolved ambiguous result. Capped at
-`PRESENCE_MAX_EMBEDDINGS = 50` with **no eviction once full** — Vatsal's
-explicit 2026-08-21 call: "up to 50, only the positive." Once the cap is
-hit, `_accumulate_embedding` is a silent no-op (checks `len(...) >=
-PRESENCE_MAX_EMBEDDINGS` before appending). The embeddings list is
-re-read+reparsed from disk on every single confirmed-match poll (every
-`PRESENCE_POLL_SECONDS`) — deliberately not cached beyond the
-module-level `_enrollment_embeddings` lazy-cache used for the match
-comparison itself, since a re-enrollment requires restarting the process
-anyway (see next paragraph).
+embedding, tagged `kind="dynamic"`, to the SAME `face_enrollment.json`
+file `enroll_face.py` seeds, reusing `enroll_face.py`'s own
+`_load_existing_embeddings`/`_append_embeddings` helpers directly
+(imported via `from scripts.enroll_face import ...`) rather than
+reimplementing the read-modify-write. This only ever fires on a
+**confirmed positive match**: either a direct similarity ≥
+`PRESENCE_MATCH_THRESHOLD_HIGH`, or an ambiguous-band result the vision
+fallback resolved to `True`. Never on a non-match, and never on an
+unresolved ambiguous result.
+
+**Also gated on the present-debounce (2026-08-21 fix, see §5):** a
+confirmed match on a frame that hasn't yet cleared
+`PRESENCE_PRESENT_DEBOUNCE` (2 consecutive present polls) does not get
+accumulated — closes the same false-positive window the wake-greeting
+debounce closes, so a single wrong-but-confident frame can't pollute the
+enrollment set even though it clears the match threshold.
+
+**Capped at `PRESENCE_DYNAMIC_EMBEDDINGS_CAP = 15` (dynamic tier only)
+with FIFO eviction** — replaces the old flat `PRESENCE_MAX_EMBEDDINGS = 50`
+/ "stop once full" behavior (2026-08-22 tier redesign, §3.1). Once the
+dynamic tier is at cap, the oldest dynamic entry (by file order /
+insertion order) is dropped before the new one is appended; `base`/`hard`
+entries are never touched by this path regardless of dynamic-tier size.
+The embeddings list is re-read+reparsed from disk on every single
+confirmed-match poll (every `PRESENCE_POLL_SECONDS`) — deliberately not
+cached beyond the module-level `_enrollment_embeddings` lazy-cache used
+for the match comparison itself, since a re-enrollment requires
+restarting the process anyway (see next paragraph).
 
 `presence.py`'s own `_get_enrollment_embeddings()` (used for match
 comparisons, distinct from the accumulation helper above) is cached after
@@ -449,19 +522,22 @@ except Exception as e:
 was_sleeping = sleep_mode.is_sleeping()
 sleep_mode.on_presence_poll(present)
 
-if present and was_sleeping:
+if was_sleeping and not sleep_mode.is_sleeping():
     notify(random.choice(_PRESENCE_GREETINGS), title="Welcome back")
 ```
 
 Order matters and is commented explicitly: `was_sleeping` is captured
 **before** `on_presence_poll()` mutates state, because that call is what
 would flip `is_sleeping()` back to `False` for this very poll — reading
-after would always see `False` and the greeting would never fire.
-Greeting fires "only on a REAL sleep-mode wake" — i.e. only after the
-3-poll debounce actually engaged sleep mode, not on every single
-present-poll (so a person who never triggered the debounce, e.g. someone
-who only stepped away for one 15s poll, never hears a greeting — there was
-nothing to wake from).
+after would always see `False` and the greeting would never fire. The
+condition is now the actual `is_sleeping()` `True → False` edge (compared
+before vs. after), not "this one poll came back present" — since
+`PRESENCE_PRESENT_DEBOUNCE` means a single present poll no longer
+necessarily flips the flag. Greeting fires "only on a REAL sleep-mode
+wake" — i.e. only after both the absence debounce actually engaged sleep
+mode AND the return debounce (2 consecutive present polls) actually
+cleared it — not on every single present-poll and not on a single
+high-confidence-but-wrong frame.
 
 `_PRESENCE_GREETINGS` is a 6-phrase pool (`"You there, sir?"`, `"Welcome
 back, sir."`, etc.), same "sir-suffixed short-phrase-pool" style as
@@ -470,6 +546,18 @@ goes through the same sleep-mode-gated `notify()` wrapper described
 above, though by the time it fires `is_sleeping()` has already been
 flipped back to `False` by the `on_presence_poll()` call two lines earlier,
 so the gate is a pass-through here, not a blocker.
+
+**Two separate notifications can now fire on the same wake.**
+`sleep_mode.on_presence_poll()` (called two lines above the greeting
+check) already invoked `consolidation.on_sleep_exit()` internally, which
+speaks the bundled day-summary/vault-gap recap (and/or the reflection
+review offer) via `utils.notifier.notify` directly, title `"Welcome
+back"` — a **separate** call from this greeting's own `notify()`. Both
+share the same title by coincidence, not by one calling the other.
+Nothing in either module currently suppresses one when the other also
+has something to say — this is current, verified behavior, not
+necessarily the intended long-term UX; flagged for whoever next touches
+either module.
 
 Never raises into the scheduler: both `presence.poll_once()` and the whole
 block are wrapped so a camera hiccup or vision-model failure gets logged
@@ -549,11 +637,14 @@ tool/phrases all DO exist in source, contradicting the "nothing downstream
 yet" framing. Read the actual state, not that comment, when rebuilding.
 What's confirmed built vs. NOT, precisely:
 
-**Built and confirmed in source:**
-- Presence detection itself: enrollment, polling, ArcFace matching,
-  vision-model ambiguous-band fallback, ongoing embedding accumulation.
+**Built and confirmed in source, as of 2026-08-22:**
+- Presence detection itself: enrollment (now three-tier, §3.1), polling,
+  ArcFace matching (now with the raised threshold + present-debounce,
+  §2/§5), vision-model ambiguous-band fallback, ongoing dynamic-tier
+  embedding accumulation.
 - `sleep_mode.py`'s streak/debounce state machine
-  (`on_presence_poll`/`wake`/`is_sleeping`).
+  (`on_presence_poll`/`wake`/`is_sleeping`), now symmetrical
+  (absent-debounce and present-debounce both exist).
 - Presence-gated proactive notifications (the `notify()` wrapper in
   `proactive_checks.py`) — this covers the plan's "reminder-gating" item,
   just implemented as a blanket gate rather than a per-reminder
@@ -563,20 +654,20 @@ What's confirmed built vs. NOT, precisely:
 - Background poller/scheduler wiring: `check_presence` registered via
   `proactive_checks.register()` on FRED's existing `ReminderScheduler`,
   polling every `PRESENCE_POLL_SECONDS` (15s).
+- **Consolidation on sleep entry/exit** (§4.2) — day-summary preview +
+  `MAP.md` gap-scan preview, bundled and spoken as one recap on wake.
+  Propose-only: nothing is written to the vault by this path itself.
+- **Deep reflection** (§4.3) — a sleep-time reasoning pass over recent
+  session logs, volume-gated (not sleep-entry-gated), writing directly to
+  `people/*.md` and staging self-facts for review.
 
-**NOT built (plan-only, verified absent from source):**
-- **Consolidation on sleep entry** — the plan's core original motivation
-  (day-summary generation via `session_summary`, and scanning the vault
-  for files missing from `map.md` and appending them) has no code path
-  anywhere. `sleep_mode.py` only flips a boolean and logs an event; it
-  does not invoke `session_summary`, does not touch `map.md`, does not
-  start or manage any "small, independently resumable" consolidation
-  chunks as the plan's "Open decision #1" resolution described.
+**Still NOT built (plan-only, verified absent from source):**
 - **Pausing pill/wake-word during sleep mode** — not found; `pill_app.py`'s
   only sleep_mode touchpoint is the hotkey's `wake()` call.
-- **Unprompted wake-time task/agenda recap** — not implemented; only the
-  generic 6-phrase greeting pool fires, no `list_tasks`/`list_agenda_items`
-  call is triggered by `sleep_mode.wake()` or by `check_presence()`.
+- **Unprompted wake-time task/agenda recap** — the consolidation recap
+  covers day-summary + vault-gaps, not a `list_tasks`/`list_agenda_items`
+  reading; no such call is triggered by `sleep_mode.wake()` or by
+  `check_presence()`.
 - **Reminder hold-and-recheck-until-a-cap semantics** — the plan specified
   reminders should hold while absent and re-check every ~60-90s "until
   presence returns or a cap (e.g. 2 hours) is hit — never silently
@@ -586,42 +677,58 @@ What's confirmed built vs. NOT, precisely:
   same check, but there's no re-check/cap loop specifically for
   presence-absence).
 - **Threshold-varies-by-time-of-day curve** — the plan's original
-  `threshold(hour)` idea was explicitly abandoned in the plan doc itself
-  (superseded by the incremental-start idea, which was itself not built —
-  see above); the actual shipped mechanism is the flat, time-of-day-blind
-  3-poll debounce (`PRESENCE_ABSENT_DEBOUNCE`).
+  `threshold(hour)` idea was explicitly abandoned in the plan doc itself;
+  the actual shipped mechanism is the flat, time-of-day-blind 3-poll
+  absence debounce / 2-poll present debounce.
 - **`Core/orchestrator/dispatcher.py` changes** the plan proposed (5
   hardcoded phrases + HUD wiring) — the actual cancel-phrase fast-path
   lives in `orchestrator/intent.py` instead, with 6 phrases, not
   `dispatcher.py`.
 
-In short: **presence detection is fully built and is the mature part of
-this subsystem. Sleep mode is a real, working, but intentionally minimal
-state machine — it only gates proactive notifications and exposes
-wake/cancel; the consolidation/day-summary/map.md-scanning work that
-motivated building this in the first place was never implemented.**
+In short: **presence detection is mature and now tuned once against real
+false-positive reports, not just launched. Sleep mode is a real, working
+state machine with two real jobs riding on its wake/sleep edges —
+consolidation (propose-only recap) and deep reflection (unattended
+friend-file writes + staged self-fact review). The one piece of the
+original plan still genuinely unbuilt is the reminder hold-and-recheck-
+until-cap behavior; everything else the plan named either shipped or was
+explicitly superseded.**
 
 ## 7. Known gaps to carry into a rebuild
 
-- **Match thresholds are uncalibrated guesses**, not measured values —
-  `PRESENCE_MATCH_THRESHOLD_LOW = 0.30` / `_HIGH = 0.45` were chosen from
-  general ArcFace literature ("typical same-person similarity clusters
-  0.35-0.45 in the wild"), not from this specific enrollment. Before
-  relying on this in production, run real enrollment + real live polls and
-  look at actual similarity scores to retune.
+- **Match thresholds are still not fully calibrated, though HIGH has now
+  been tuned once against a real false-positive report.**
+  `PRESENCE_MATCH_THRESHOLD_LOW = 0.30` is still an unmeasured starting
+  guess; `_HIGH` was raised 0.45 → 0.58 on 2026-08-21 in direct response
+  to live false-positive greetings/notifications, but that's a reactive
+  bump, not a systematic recalibration against real enrolled-vs-live-frame
+  similarity distributions. Don't treat 0.58 as final either.
 - **Camera index is a physical-setup fact, not portable config** — index 1
   only holds on the current desktop with its current camera app mix; a
   rebuild on different hardware must redo the per-index capture-and-
   inspect check, not assume `PRESENCE_CAMERA_INDEX = 1`.
 - **`sleep_mode.py` has zero persistence** — a process restart silently
-  resets `_streak`/`_sleeping`, which is a stated deliberate choice, not
-  an oversight, but worth knowing before assuming sleep-mode state
-  survives a crash/restart.
-- **No consolidation logic exists** — if the original vault-consolidation
-  motivation still matters, that's still greenfield work, not something to
-  find partially built somewhere else in the repo.
+  resets `_streak`/`_present_streak`/`_sleeping`, which is a stated
+  deliberate choice, not an oversight, but worth knowing before assuming
+  sleep-mode state survives a crash/restart. `consolidation.py` and
+  `reflection.py`'s in-memory `_pending` state is similarly lost on
+  restart (reflection's `reflection_state.json` watermark is the one
+  exception — that one does persist).
+- **The "Reflect" tier's VRAM footprint is unverified on this machine.**
+  gpt-oss-20b is configured for it, but `settings.py`'s own comment flags
+  a reported 26-35GB figure that doesn't fit this card's 16GB — not
+  re-measured live as of this doc because there wasn't enough free VRAM
+  to safely test it. Don't trust either number until someone actually
+  runs it with everything else closed and reads `nvidia-smi`.
+- **The two "Welcome back" notifications on the same wake are unreconciled**
+  (§4, end) — the greeting and the consolidation recap can both fire,
+  neither suppresses the other. Not confirmed to be an intentional design
+  choice.
 - Do not read/quote `Core/data/face_enrollment.json` or
   `Core/data/face_reference.jpg` in future docs or commits — biometric,
   personal, stays out of anything that leaves the machine, per the
   no-personal-info-in-commits convention already in force elsewhere in
-  this codebase.
+  this codebase. The same applies to anything under
+  `VAULT_DIR/personal/pending-review/` or `VAULT_DIR/personal/images/`
+  (focus-checkin captures, `06_proactive_and_memory.md`) — personal,
+  stays local.

@@ -40,10 +40,15 @@ Core/data/
                                  modules read/write
   call_log_seen.json            phone_tools.py's watermark for "missed calls since FRED last checked"
   audio_device_prefs.json       remembered input/output device selection
-  face_enrollment.json          presence.py's stored face embeddings (biometric — never read/quoted anywhere
-                                 in this doc set; see 05_presence_and_sleep_mode.md for the *mechanism*, not
-                                 the contents)
+  face_enrollment.json          presence.py's stored face embeddings, now three-tier tagged (base/hard/dynamic —
+                                 biometric, never read/quoted anywhere in this doc set; see
+                                 05_presence_and_sleep_mode.md §3.1 for the *mechanism*, not the contents)
   face_reference.jpg, camera_capture.png   presence/enrollment-adjacent captured images
+  presence_state.json           presence.py's own {"present", "last_seen", "last_checked"} snapshot
+  presence_log.jsonl            NEW 2026-08-22 — one line per presence poll (not just transitions), backing
+                                 the "active hours" tool (see 06_proactive_and_memory.md §2.10a)
+  reflection_state.json         NEW 2026-08-22 — orchestrator/reflection.py's {"last_run_ts", ...} watermark
+                                 for the sleep-mode deep reflection pass (see 05_presence_and_sleep_mode.md §4.3)
   file_index.db                 tools/file_index.py's filesystem index (SQLite) backing fast/fuzzy file search
   found_cache.json (naming approximate — see found_cache.py)   the (directory, query) -> resolved-path cache
                                  built to fix "file search is one deterministic pass" (see 07's resolved-bugs list)
@@ -56,7 +61,7 @@ Core/data/
 
 ## Two other data roots, deliberately kept outside `Core/data/` and outside git entirely
 
-- **`VAULT_DIR`** (`Core/config/settings.py`) — Vatsal's personal memory vault, an entirely separate directory tree outside `Project_FRED`. Holds `persona.md`/`profile.md`/`rules.md`/`active-priorities.md` (read directly, hardcoded) plus arbitrary other `.md`/`.pdf` files (indexed for semantic retrieval — see `04a_orchestrator_core.md`). Its own `vectors/` subfolder holds the vault router's generated embedding index, deliberately stored *with* the vault rather than with this repo, so the index "travels with what it describes" and survives a fresh repo checkout without a full re-embed.
+- **`VAULT_DIR`** (`Core/config/settings.py`) — Vatsal's personal memory vault, an entirely separate directory tree outside `Project_FRED`. Holds `persona.md`/`profile.md`/`rules.md`/`active-priorities.md` (read directly, hardcoded) plus arbitrary other `.md`/`.pdf` files (indexed for semantic retrieval — see `04a_orchestrator_core.md`). Its own `vectors/` subfolder holds the vault router's generated embedding index, deliberately stored *with* the vault rather than with this repo, so the index "travels with what it describes" and survives a fresh repo checkout without a full re-embed. Two new subtrees landed here 2026-08-22, both personal/never-read-or-quoted in this doc set: `personal/pending-review/` (staged self-observation drafts from the sleep-mode reflection pass, moved into a `reviewed/` subfolder once opened — `05_presence_and_sleep_mode.md` §4.3) and `personal/images/{YYYY-MM-DD}_{Weekday}/` (focus-awareness check-in webcam captures, journal-style, kept indefinitely — `06_proactive_and_memory.md` §2.10b).
 - **`MODELS_DIR`** (LM Studio's model folder) and **`LLAMACPP_BIN_DIR`** — see `01_environment_and_setup.md`. Neither is under `Project_FRED` at all.
 
 This separation is a deliberate design pattern worth preserving in a rebuild: **anything that outlives one project checkout, or that must never touch git for privacy/size reasons, lives outside the repo tree entirely**, referenced only by absolute path from `Core/config/settings.py`. Runtime state that's cheap to regenerate and repo-scoped lives under `Core/data/`, gitignored but inside the tree.

@@ -2,9 +2,14 @@
 
 Scope of this file: `Core/memory/memory_manager.py`, `Core/orchestrator/proactive_checks.py`
 (excluding deep presence/sleep-mode internals — see `05_presence_and_sleep_mode.md`),
-`Core/utils/notifier.py`, `Core/tools/agenda.py`, `Core/tools/daily_tasks.py`,
-`Core/tools/session_summary.py`, and the `PROACTIVE CHECKS` / `MEMORY SETTINGS`
-sections of `Core/config/settings.py`.
+`Core/orchestrator/focus_checkin.py`, `Core/input/presence_log.py`,
+`Core/tools/presence_tools.py`, `Core/utils/notifier.py`, `Core/tools/agenda.py`,
+`Core/tools/daily_tasks.py`, `Core/tools/session_summary.py`, and the
+`PROACTIVE CHECKS` / `MEMORY SETTINGS` sections of `Core/config/settings.py`.
+
+**Updated 2026-08-22** — added §2.10a (active-hours tracking) and §2.10b
+(focus-awareness check-in), both new proactive-check-shaped features
+built on top of presence detection since this file was last written.
 
 ---
 
@@ -400,6 +405,114 @@ absent polls) and the rest of sleep-mode's state machine live in `orchestrator/s
 and are covered in `05_presence_and_sleep_mode.md`. Camera/vision-model failures are
 caught and logged, never allowed to crash the scheduler.
 
+### 2.10a Active-hours tracking (`Core/input/presence_log.py`, `Core/tools/presence_tools.py`)
+
+**New since this file's last update.** Every single presence poll —not
+just transitions— is now logged, separately from `05_presence_and_sleep_mode.md`'s
+main presence-detection story: `presence.poll_once()` calls
+`presence_log.log_poll(present, matched_tier)` unconditionally as its last
+step (camera-failure early-returns are deliberately skipped — those
+report stale last-known state, not a real observation, and would pollute
+this aggregation). One JSONL line per poll
+(`Core/data/presence_log.jsonl`, `{"ts": iso, "present": bool,
+"matched_tier": "base"|"hard"|"dynamic"|omitted}`), same "small per-poll
+log, no rotation" precedent as `wakeword_log.jsonl` — at 15s/poll that's
+~5760 lines/day, small enough that an ever-growing file isn't a real
+problem at this scale.
+
+`tools/presence_tools.py` aggregates this into a tool-facing answer:
+
+- `active_hours_summary(days=7)`: per-hour-of-day presence ratio
+  (0.0-1.0) over the trailing window — reads the log fresh on every call
+  (small file, infrequent ask) rather than caching. Shape:
+  `{"days": N, "hours": {0: 0.0, ..., 23: 0.0}, "total_polls": N}` — every
+  hour of day reports a ratio even with zero polls (`0.0`, not
+  missing/`None`), simplest shape for a histogram-style caller.
+- `describe_active_hours(days=7)`: the actual registered tool
+  (`get_active_hours_summary`) — turns the ratio table into a short
+  spoken sentence naming the hour-spans where presence ratio was ≥ 0.5,
+  merging adjacent hours into a range (e.g. "typically active around
+  9 AM-1 PM, 6 PM-9 PM, sir"). Two honest-empty fallbacks: not enough
+  poll data yet, or no hour cleared the 0.5 bar in the window.
+
+Not wired into `proactive_checks.py` as a periodic check — it's a
+pull-only tool ("when am I usually active", "what are my active hours"),
+not something FRED volunteers unprompted.
+
+### 2.10b Focus-awareness check-in (`Core/orchestrator/focus_checkin.py`)
+
+**New since this file's last update.** A different proactive shape than
+everything else in this section: instead of watching a file/deadline, it
+watches for *presence with no real interaction* — Vatsal at the desk but
+not actually talking to FRED for a while — and, only then, takes one
+webcam frame and asks the **local** vision model whether anything about
+it (plus recent session context) is worth a short spoken remark.
+
+**Hard privacy constraint, stated directly in the module docstring and
+worth repeating here:** this captures Vatsal's face/room, categorically
+more sensitive than text-based `personal/` vault content. The vision call
+goes through `llm/vision_server.py` (the same local `llama-server.exe`
+subprocess `05_presence_and_sleep_mode.md`'s vision fallback uses)
+**unconditionally** — never gated behind `SENSITIVE_LOCAL_ONLY`, never
+configurable, never a cloud model, by explicit design ("do not change
+this").
+
+**"Last real interaction" is read from the session log, not OS idle
+time** — `_last_interaction_at()` reads the most recent `user_speech` or
+`tool_call` event from today's session log via
+`session_summary._read_events`. Deliberately not reusing
+`proactive_state.json`'s existing idle tracker: that one is OS-level
+keyboard/mouse idle (`GetLastInputInfo`), a different signal — someone can
+be present and idle-at-OS-level-zero while never actually talking to
+FRED (e.g. reading, or on a call). The session log is the actual record
+of interaction with FRED specifically.
+
+**Growing threshold, same shape as `agenda.py`'s dedup precedent but its
+own state key:** `FOCUS_CHECKIN_BASE_MINUTES = 60` — first eligible once
+present but no real turn for 60 minutes. Each time it actually fires
+(speaks a remark), the threshold grows by `FOCUS_CHECKIN_STEP_MINUTES =
+10` before it can fire again, so it doesn't nag at a fixed cadence all
+day. A silent tick (the vision model returned `NO_OBSERVATION`, its exact
+verbatim "nothing worth saying" signal) does **not** grow the threshold —
+it may try again at the next poll, still gated on presence and no new
+interaction. The threshold resets to the base the moment a real
+interaction happens, tracked by comparing the last-interaction timestamp
+against what's stored. State lives under `PROACTIVE_STATE_PATH`'s own
+`"focus_checkin"` key — same shared dedup-state file every other check in
+this module uses (§2.2), not a separate file, despite `focus_checkin.py`
+being its own module specifically to avoid an import cycle with
+`proactive_checks.py` (which imports it to register the check).
+
+**Sleep-mode gating is implicit, not re-checked.** `presence.is_present()`
+is a hard prerequisite before this ever fires, and sleep mode only enters
+on a debounced run of *absent* polls — `on_presence_poll(True)` exits
+sleep mode immediately (see `05_presence_and_sleep_mode.md`). So
+"present" and "sleeping" can never both be true at once; the `notify`
+callback this module is handed (`proactive_checks.notify`, already gated
+on `sleep_mode.is_sleeping()`) is sufficient on its own.
+
+**What actually happens on a fire:** captures one frame
+(open/read/release immediately, same pattern as `presence.poll_once()`,
+lifted rather than imported since `poll_once()` also does face-matching
+and mutates `presence_state.json`, neither needed here), saves it, builds
+a short digest (this week's day-summaries via `session_summary`, today's
+tail transcript, open tasks, agenda), and sends both to
+`vision_server.describe_image()` with a prompt that explicitly permits
+declining ("if nothing... is genuinely worth a short spoken remark,
+respond with exactly `NO_OBSERVATION`"). A real reply is spoken via
+`notify(reply, title="Focus check-in")`.
+
+**Photo storage — moved 2026-08-22.** Captures now save to the vault at
+`VAULT_DIR/personal/images/{YYYY-MM-DD}_{Weekday}/{YYYY-MM-DD}_{HHMMSS}.jpg`
+— a journal-style, one-subfolder-per-day layout — replacing the old flat
+`personal/focus-checkins/` folder. Kept indefinitely, no pruning
+(Vatsal's explicit call: "just keep appending"). This is **only** for
+this module's own journal/observation captures —
+`Core/data/face_reference.jpg` (the presence-detection vision-fallback
+reference photo, `05_presence_and_sleep_mode.md` §2) deliberately stays
+at its original fixed path, since code reads it by that exact path, not
+as a dated journal entry.
+
 ### 2.11 Constants table (from `config/settings.py`, `PROACTIVE CHECKS` section)
 
 | Constant | Value | Documented rationale |
@@ -417,6 +530,8 @@ caught and logged, never allowed to crash the scheduler.
 | `MEMORY_TOP_K` | 5 | Default semantic-recall breadth (see caveat in §1.3 — call sites currently hardcode `5` rather than importing this). |
 | `SHORT_TERM_MEMORY_LIMIT` | 10 | Declared but unused (see §1.7) — the actual short-term window is a hardcoded `10` at each call site and in `ConversationState`'s own default. |
 | `EMBEDDING_MODEL_PATH` | `Qwen3-Embedding-4B-Q4_K_M.gguf` | See §1.4 for the full 0.6B→4B, Q8_0→Q4_K_M swap history. |
+| `FOCUS_CHECKIN_BASE_MINUTES` | 60 | First eligible fire once present-but-no-real-turn for this long (§2.10b). |
+| `FOCUS_CHECKIN_STEP_MINUTES` | 10 | Growth added to the threshold each time the check-in actually fires (§2.10b). |
 
 ---
 

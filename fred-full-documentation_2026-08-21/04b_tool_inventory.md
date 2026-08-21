@@ -98,7 +98,8 @@ where the real registry disagrees.
 | Tool name | Implemented in | Purpose |
 |---|---|---|
 | `whats_on_screen` | `vision_tools.whats_on_screen` | Always attempts a fresh on-demand capture first (`watcher_manager.capture_now()`); if the main model is resident and cloud vision fails, it force-unloads the main model and retries local-only before falling back to the last cached description with an honest staleness hedge |
-| `look_through_camera` | `vision_tools.look_through_camera` | Captures the paired phone's camera view (via `phone_tools.capture_camera_photo`) and describes it with the vision model, on-demand, no cache |
+| `look_through_camera` | `vision_tools.look_through_camera` | **Corrected 2026-08-21** — this is now the DESK WEBCAM (`PRESENCE_CAMERA_INDEX`), the general/default camera tool for "what am I looking at" / "look through the camera" with no mention of the phone. It previously called `phone_tools.capture_camera_photo()` (the phone's camera) by mistake — that behavior is now `take_phone_photo` below. Captures one frame (open/read/release immediately, same pattern as `presence.poll_once()`), describes via `app.orchestrator.llm.describe_image()`, on-demand, no cache. |
+| `take_phone_photo` | `vision_tools.take_phone_photo` | **New 2026-08-21**, split out of the `look_through_camera` fix above — captures the paired PHONE's camera view specifically (over adb, reuses `phone_tools.capture_camera_photo()`) and describes it. Only for explicit phone-camera requests ("take a pic from my phone"); a bare "look through the camera" means the webcam tool above. |
 
 ### Windows
 
@@ -162,10 +163,12 @@ where the real registry disagrees.
 | `sync_contacts` | `phone_tools.sync_contacts` | Append-only pull of phone contacts, ranked by call frequency, into the vault | |
 | `use_phone` | `phone_tools.use_phone` | Choose which configured phone (`FRED_PHONES` env var) commands target | |
 | `find_otp` | `otp_tools.find_otp` | Gated OTP finder — see §4 | **yes** |
-| `look_through_camera` | (listed under Vision above) | — | |
+| `take_phone_photo` | (listed under Vision above) | — | |
 
 Note: `capture_camera_photo` (in `phone_tools.py`) is not itself a registered
-tool — it's an internal helper called by `vision_tools.look_through_camera`.
+tool — it's an internal helper, now called by `vision_tools.take_phone_photo`
+(not `look_through_camera` — that was corrected 2026-08-21 to be the desk
+webcam, see Vision above).
 
 ### Messaging (WhatsApp — see §3 for full detail)
 
@@ -252,11 +255,13 @@ None of these five are `destructive=True` in the registry, despite
 controlling physical hardware — worth flagging as a possible gap, not
 something this doc should silently "fix" by re-describing it as gated.
 
-### Sleep mode
+### Sleep mode / presence / reflection
 
 | Tool name | Implemented in | Purpose |
 |---|---|---|
 | `cancel_sleep_mode` | `sleep_mode_tools.cancel_sleep_mode` | Force-exit sleep mode on explicit command — see §9 |
+| `get_active_hours_summary` | `presence_tools.describe_active_hours` | **New 2026-08-22.** "When am I usually active" — per-hour presence-poll ratio over the trailing N days (default 7), turned into a spoken hour-range sentence. See `06_proactive_and_memory.md` §2.10a. |
+| `review_pending_reflection` | `reflection.review_pending` | **New 2026-08-22.** Opens the oldest un-reviewed self-observation draft staged by the sleep-mode deep reflection pass and marks it reviewed. Only meant to be called right after FRED has offered a review and the user said yes — see `05_presence_and_sleep_mode.md` §4.3. |
 
 ## 3. phone_tools.py in full
 

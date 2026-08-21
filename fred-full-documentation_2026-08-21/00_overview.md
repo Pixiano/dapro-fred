@@ -30,6 +30,8 @@ FRED has **two independent entry points** into the same orchestrator, not one un
 
 Both entry points construct a `Core/orchestrator/orchestrator.py::FREDOrchestrator` and call `.process(user_input)` (text in, reply text out). Everything downstream — intent classification, tool routing, tool execution, vault retrieval, memory, LLM calls — is entry-point-agnostic; CLI and GUI are just different front doors onto the identical orchestrator.
 
+**Sleep mode is no longer just a state flag.** As of 2026-08-22, FRED's camera-driven presence detection (webcam face matching, `Core/input/presence.py`) drives a real sleep-mode state machine (`Core/orchestrator/sleep_mode.py`) with two real jobs riding its wake/sleep edges: **consolidation** (`Core/orchestrator/consolidation.py`, a propose-only day-summary + vault-gap recap bundled and spoken on wake) and a deep **reflection** pass (`Core/orchestrator/reflection.py`, a sleep-time reasoning job on a dedicated `"Reflect"` model tier that writes friend facts unattended to `people/*.md` and stages self-facts about Vatsal for review). See `05_presence_and_sleep_mode.md` for the full story — it's the most actively-changing subsystem in the codebase right now.
+
 ### A spoken turn, end to end (GUI mode)
 
 1. User holds the hotkey (`input/hotkey.py`, a low-level Windows keyboard hook). `ModelLifecycle.preload()` (`Core/utils/model_lifecycle.py`) fires immediately and asynchronously — it starts warming Whisper (and the LLM, only if currently offline — see rationale below) *while* the user is still talking, not after.
