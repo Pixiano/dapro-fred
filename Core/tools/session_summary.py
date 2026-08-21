@@ -204,10 +204,19 @@ def summarise_today(day: str = None, llm=None) -> str:
                 "assistant today. Three to five short bullet points, "
                 "grouped by theme, describing what he was working on. "
                 "No preamble, no closing offer. Do not invent anything "
-                "that isn't in the list."
+                "that isn't in the list. Do not just restate tool names "
+                "or counts — describe what he was actually doing."
             ),
         },
-        {"role": "user", "content": f"Requests today:\n{asked}\n\nTools used: {tools_text}"},
+        # Deliberately NOT including tools_text (the "X (n), Y (n)" tool
+        # tally) here — confirmed 2026-08-21 that handing it to a local
+        # model alongside the asks list invites it to just echo the tool
+        # tally back verbatim as its "summary" instead of writing real
+        # prose from the asks, exactly the dumb output this prompt is
+        # supposed to avoid. tools_text is still used below in the
+        # no-llm fallback, where a bare tally is the honest, intended
+        # output rather than a degraded one.
+        {"role": "user", "content": f"Requests today:\n{asked}"},
     ]
 
     try:

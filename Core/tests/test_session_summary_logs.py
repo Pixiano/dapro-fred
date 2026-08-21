@@ -46,6 +46,30 @@ def test_a_genuinely_empty_day_still_says_so(tmp_path, monkeypatch):
     assert session_summary.summarise_today("2026-08-04") == "Nothing logged today yet, sir."
 
 
+def test_llm_prose_prompt_does_not_leak_the_tool_tally(tmp_path, monkeypatch):
+    """Confirmed 2026-08-21: handing the raw "Tools used: X (n), Y (n)"
+    tally to a local model alongside the asks list invited it to just
+    echo the tally back as its "summary" instead of writing real prose —
+    exactly the "just lists tool names" complaint. The tool tally must
+    only reach the no-llm fallback text, never the LLM prompt."""
+    monkeypatch.setattr(session_summary, "SESSIONS_DIR", tmp_path)
+    _write(tmp_path, "session_2026-08-04.jsonl", EVENTS)
+
+    seen = {}
+
+    class _FakeLLM:
+        def generate(self, messages, local_only=False):
+            seen["messages"] = messages
+            return "Worked through today's tasks."
+
+    result = session_summary.summarise_today("2026-08-04", llm=_FakeLLM())
+
+    assert result == "Worked through today's tasks."
+    user_content = seen["messages"][1]["content"]
+    assert "Tools used" not in user_content
+    assert "list_tasks" not in user_content
+
+
 def test_start_daily_session_is_once_per_day_not_per_launch(tmp_path, monkeypatch):
     monkeypatch.setattr(session_summary, "VAULT_DIR", tmp_path)
 
