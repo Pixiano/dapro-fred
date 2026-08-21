@@ -269,26 +269,40 @@ comment says to follow presence.py's own `STATE_PATH`/`_save_state`
 pattern — not done as of this doc.
 
 ```
-PRESENCE_ABSENT_DEBOUNCE = 3   # Core/config/settings.py
+PRESENCE_ABSENT_DEBOUNCE  = 3   # Core/config/settings.py
+PRESENCE_PRESENT_DEBOUNCE = 2   # added 2026-08-21, symmetrical return-trip debounce
 ```
 
 `on_presence_poll(present: bool)` — called once per poll, right after
 every `presence.poll_once()` call, from
 `proactive_checks.check_presence()`:
-- `present=True`: resets `_streak = 0`. If it was sleeping, flips
-  `_sleeping = False` and logs `sleep_mode_exit` with
-  `reason="presence_returned"`.
-- `present=False`: increments `_streak`. Once `_streak >=
-  PRESENCE_ABSENT_DEBOUNCE` (3) AND not already sleeping, flips
-  `_sleeping = True` and logs `sleep_mode_enter` with the streak count.
+- `present=True`: resets `_streak = 0`, increments `_present_streak`. Once
+  `_present_streak >= PRESENCE_PRESENT_DEBOUNCE` (2) **and** it was
+  sleeping, flips `_sleeping = False`, logs `sleep_mode_exit` with
+  `reason="presence_returned"`, and calls `consolidation.on_sleep_exit()`
+  (§4.2) to speak the bundled recap.
+- `present=False`: resets `_present_streak = 0`, increments `_streak`.
+  Once `_streak >= PRESENCE_ABSENT_DEBOUNCE` (3) and not already sleeping,
+  flips `_sleeping = True`, logs `sleep_mode_enter` with the streak count,
+  calls `consolidation.on_sleep_enter()` to start building the recap
+  (§4.2), then calls `consolidation.append_pending(reflection.run_if_due())`
+  to fold in the deep reflection pass's own audit line if that pass
+  actually ran (§4.3).
 
-At `PRESENCE_POLL_SECONDS = 15` per poll, 3 consecutive absences is
-**45–60s** of continuous absence before sleep mode actually engages (the
-comment in settings.py phrases it as "3 * 15s ≈ 45-60s").
+At `PRESENCE_POLL_SECONDS = 15` per poll: 3 consecutive absences is
+**45–60s** before sleep mode engages; 2 consecutive presences is **30s**
+before it exits / the wake greeting fires / a confirmed match gets
+accumulated into the dynamic embedding tier (§3.3). The present-side
+debounce is deliberately smaller than the absent-side one — a
+false-negative-then-correct only costs one missed exit, whereas the
+actual complaint being fixed (§5) was the greeting/notification firing
+repeatedly on noise, which needed the stricter bar on the return trip.
 
-`wake(reason: str)` — unconditional force-exit: zeroes `_streak`, and if
-currently sleeping, flips to awake and logs `sleep_mode_exit` with the
-given reason string. Two confirmed callers:
+`wake(reason: str)` — unconditional force-exit: zeroes both `_streak` and
+`_present_streak`, and if currently sleeping, flips to awake, logs
+`sleep_mode_exit` with the given reason string, and calls
+`consolidation.on_sleep_exit()` same as the debounced path above. Two
+confirmed callers:
 - `Core/ui/pill_app.py` (~line 465-466): the hotkey handler calls
   `sleep_mode.wake("hotkey")` — comment there frames it as "the user
   manually did something," the same signal class as presence returning.
