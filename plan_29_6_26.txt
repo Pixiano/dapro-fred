@@ -1,0 +1,159 @@
+# FRED UI Overhaul — Plan (29 June 2026)
+
+## Objective
+Replace the Tkinter-based HUD + blob GUI with a Siri iOS 17-style web-based UI using pywebview (Edge WebView2), featuring a glassmorphic, neon-green/cyan animated orb with audio-reactive pulsing, dual-mode window (compact overlay ↹ fullscreen), and efficient GPU-accelerated rendering.
+
+---
+
+## Tech Stack
+- **Window**: `pywebview` (Edge WebView2 — built into Windows 11, ~40KB dep)
+- **Rendering**: HTML5 Canvas (GPU-accelerated, requestAnimationFrame)
+- **Glass effects**: CSS `backdrop-filter: blur()`, `rgba()`, `radial-gradient()`
+- **Animation**: requestAnimationFrame + CSS transitions (all GPU-composited)
+- **System tray**: `pystray` + `PIL`
+- **Audio**: `sounddevice` RMS capture (10 Hz, only during listening/speaking)
+- **No new Python rendering** — zero numpy/PIL per-frame compute
+
+---
+
+## Visual Identity
+- **Neon green**: `#00ff88` — primary accent, idle glow, active borders
+- **Neon cyan**: `#00e5ff` — listening state, secondary gradient
+- **Orb gradient sweep**: HSL 140° (green) → 190° (cyan) — not full rainbow
+- **Dark glass**: `rgba(8, 10, 14, 0.5)` + `backdrop-filter: blur(24px)`
+- **Borders**: `rgba(255, 255, 255, 0.06)` subtle glass edge
+- **FRED reply text**: tinted with `rgba(0, 255, 136, 0.5)` glow
+
+## State Colors
+| State | Hue | Effect |
+|---|---|---|
+| idle | 160° | Soft teal pulse |
+| listening | 190° | Bright cyan expand |
+| thinking | 140° | Neon green swirl |
+| speaking | 170° | Green-cyan animated freq bars |
+
+---
+
+## Window Behavior
+1. **App starts → minimized to system tray** (green "F" icon)
+2. Click tray icon → **compact overlay** (380×320, bottom-center)
+3. Hover on glass panel → subtle `scale(1.01)` + brighter border
+4. **Click overlay background** → expands to **fullscreen** (600×700, centered)
+5. Click overlay again or press `Escape` → collapses to compact
+6. Press `Escape` in compact → **minimizes to tray** (does NOT exit)
+7. Right-click tray icon → context menu: *Open FRED / Exit*
+
+## Text Input
+- **Compact mode**: 1-line glass input below orb, arrow key history
+- **Fullscreen mode**: 4-line visible, slightly bigger font, scroll, arrow key history
+- **ArrowUp**: cycle back through history (last 50 entries)
+- **ArrowDown**: cycle forward through history
+- **Hover on input**: `scale(1.02)` + cyan border highlight
+
+## Voice Button
+- Mic icon next to text input
+- Click → activates voice mode (wake word detection already in config)
+- Orb enters "listening" state, mic level drives animation
+
+---
+
+## File Structure (what will be created/modified)
+
+```
+FRED/
+├── fred_gui.py                        ← UPDATE: import from fred_orb
+├── requirements.txt                   ← ADD: pywebview, pystray
+├── plan_29_6_26.txt                   ← THIS FILE
+├── Core/
+│   └── ui/
+│       ├── __init__.py                ← unchanged
+│       ├── phase16_old/               ← NEW archive
+│       │   ├── __init__.py
+│       │   ├── hud.py                 ← moved from Core/ui/hud.py
+│       │   └── gui_app.py             ← moved from Core/ui/gui_app.py
+│       ├── fred_orb.py                ← NEW: Python controller
+│       │   (FREDOrbApp, JSAPI, AudioMonitor, SystemTrayManager)
+│       └── orb_ui/                    ← NEW: web assets
+│           ├── index.html
+│           ├── style.css
+│           └── script.js
+```
+
+---
+
+## Component Details
+
+### `fred_orb.py` — Python Controller
+- **FREDOrbApp**: window lifecycle, orchestrator bridge, response queue polling
+- **JSAPI** (exposed to JS via `pywebview.api`):
+  - `set_state(state)` — idle/listening/thinking/speaking
+  - `set_transcript(user_text, fred_reply)`
+  - `set_audio_level(level)` — 0.0–1.0 normalized RMS
+  - `on_submit(text)` — user typed → `orchestrator.process(text)`
+  - `on_voice_toggle()` — start/stop voice capture
+  - `on_mode_toggle()` — expand/collapse window
+- **AudioMonitor**: background thread, sounddevice RMS at 10Hz → JS bridge
+- **SystemTrayManager**: pystray icon (green "F"), Open/Exit menu
+
+### `index.html` — Layout
+- Fixed-position app container with CSS class toggle (compact/fullscreen)
+- Glass backdrop panel (pointer-events: none)
+- Transcript text above orb (user) + below orb (FRED)
+- Canvas element for orb rendering
+- Glass input field + voice button
+- Expand/collapse toggle button (appears on hover)
+
+### `style.css` — Glassmorphism Theme
+- Root variables for neon green (`#00ff88`), neon cyan (`#00e5ff`)
+- Two layout modes via `.mode-compact` / `.mode-fullscreen`
+- `backdrop-filter: blur(24px) saturate(1.2)` on glass panel
+- Smooth CSS transitions on mode switch (0.35s cubic-bezier)
+- Hover: `scale(1.02)` on input, `scale(1.05)` on voice btn, border glow
+- State-based data attributes for dynamic theming
+
+### `script.js` — Orb Renderer + App Controller
+- **OrbRenderer**:
+  - Canvas 2D context, DPR-aware
+  - Green-cyan HSL hue cycling (140°–190°)
+  - Layered glow aura (outer → inner), core sphere, specular highlight
+  - State-based decorations: orbit particles (thinking), ripples (listening), frequency bars (speaking)
+  - Audio level input modulates pulse amplitude + frequency
+  - requestAnimationFrame with auto-throttle (idle: 30fps, active: 60fps)
+- **AppController**:
+  - Mode toggle (compact/fullscreen)
+  - Input history (ArrowUp/Down, last 50 entries)
+  - Keyboard: Enter → submit, Escape → collapse/minimize
+  - Voice button → calls Python API
+  - Transcript update with fade-in animation
+
+---
+
+## Audio Reactivity Pipeline
+| State | Python | JS |
+|---|---|---|
+| Listening | sounddevice → RMS → 10Hz → `set_audio_level(x)` | Orb pulse = base + audio × 14px |
+| Speaking | synthetic envelope from TTS duration | Same pipeline |
+| Idle/Thinking | Monitor stopped | Time-based subtle pulse only |
+
+---
+
+## Compute Budget
+| Metric | Current (Tkinter+numpy) | New (WebView+Canvas GPU) |
+|---|---|---|
+| Idle CPU | ~2–4% | ~0.1% (RAF pauses when hidden) |
+| Active CPU | ~8–15% | ~1–2% (GPU composited) |
+| Memory | ~80–120 MB | ~60–90 MB |
+| Frame time | 3–8 ms (Python CPU) | <0.5 ms (GPU) |
+
+---
+
+## Implementation Order
+1. Create `phase16_old/`, move `hud.py` + `gui_app.py`
+2. Create `orb_ui/` directory
+3. Write `style.css`
+4. Write `index.html`
+5. Write `script.js`
+6. Write `fred_orb.py`
+7. Update `fred_gui.py` entry point
+8. Add `pywebview` + `pystray` to `requirements.txt`
+9. Write plan file (done)
