@@ -23,12 +23,51 @@
 # whole sentence. This module's job is turning those arguments into one
 # deterministic line and back, never guessing at prose.
 
+import difflib
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from config.settings import VAULT_DIR
 from orchestrator.scheduler import parse_when, describe_when
+
+
+def _find_candidates(match: str, items: list) -> list:
+    """
+    Substring match first — cheap, and exactly right for the common
+    case of a short distinguishing phrase ("geography", "SEA"). Falls
+    back to a difflib fuzzy match against subject+detail COMBINED, only
+    when the substring pass finds nothing.
+
+    Confirmed live 2026-08-21: the LLM sometimes re-passes an item's
+    ENTIRE subject AND detail concatenated as `match` (e.g. reading it
+    back from list_agenda_items' own "subject — detail" display format
+    earlier in the same turn) — a real agenda item ("English, Subject
+    Enrichment Activity (SEA) — speak for 1 minute on: \"Would you like
+    to become invisible?...\"") failed to match this way. Two compounding
+    problems, not one: a punctuation/quote-style difference between what
+    got echoed and what's stored breaks a substring check outright, AND
+    the substring check (and an earlier version of this fuzzy fallback)
+    compared against subject and detail SEPARATELY — a long combined
+    echo is neither field's substring, and scores badly against either
+    field alone in a length-sensitive ratio comparison, even though it's
+    unmistakably the same item to a human. Comparing against the two
+    fields joined fixes both at once. Same layered fallback
+    phone_tools.find_contact already uses for the same reason (exact ->
+    substring -> difflib), same 0.7 cutoff — not tuned separately here,
+    reused as the established precedent rather than guessed fresh.
+    """
+    def combined(i):
+        return f"{i['subject']} {i.get('detail', '')}".strip().lower()
+
+    substring_hits = [i for i in items if match in combined(i)]
+    if substring_hits:
+        return substring_hits
+
+    close = difflib.get_close_matches(
+        match, [combined(i) for i in items], n=3, cutoff=0.7,
+    )
+    return [i for i in items if combined(i) in close]
 
 _ITEMS_HEADING = "## Items"
 _KINDS = ("homework", "project", "event")
@@ -466,10 +505,7 @@ def update_item(match: str, done: bool = None, add_progress: int = None,
         return "I need something to match the item by, sir."
 
     items = _load_items()
-    candidates = [
-        i for i in items
-        if match in i["subject"].lower() or match in i.get("detail", "").lower()
-    ]
+    candidates = _find_candidates(match, items)
     if not candidates:
         return f"Nothing matching \"{match}\", sir."
 
@@ -537,10 +573,7 @@ def delete_item(match: str) -> str:
         return "I need something to match the item by, sir."
 
     items = _load_items()
-    candidates = [
-        i for i in items
-        if match in i["subject"].lower() or match in i.get("detail", "").lower()
-    ]
+    candidates = _find_candidates(match, items)
 
     if not candidates:
         return f"Nothing matching \"{match}\", sir."

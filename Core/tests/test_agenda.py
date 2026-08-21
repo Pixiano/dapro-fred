@@ -573,3 +573,48 @@ def test_carryover_candidates_excludes_already_done(tmp_path, monkeypatch):
     agenda.update_item("today thing", done=True)
 
     assert agenda.carryover_candidates() == []
+
+
+# =========================================================
+# FUZZY MATCH FALLBACK — confirmed live 2026-08-21: the LLM re-passed an
+# item's entire subject verbatim (echoed from an earlier list_agenda_items
+# read-back) as `match`, and a punctuation/quote-style difference between
+# what it echoed and what's actually stored made a pure substring check
+# find nothing for an item that was unmistakably the same one to a human.
+# =========================================================
+
+def test_update_item_falls_back_to_fuzzy_match_on_punctuation_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(agenda, "VAULT_DIR", tmp_path)
+    agenda.add_item(
+        "event", "English, Subject Enrichment Activity (SEA)",
+        detail="speak for 1 minute on: Would you like to become invisible? "
+               "What advantages and disadvantages do you foresee if you did",
+        due="today", time="6pm",
+    )
+
+    # Same text, minor wording/punctuation drift -- exactly the kind of
+    # difference between what an LLM echoes back (e.g. from an earlier
+    # list_agenda_items read-back) and what got stored verbatim. A pure
+    # substring check finds nothing for this; the fuzzy fallback should
+    # still find the real item. ASCII only here on purpose -- this test
+    # is about matching logic, not encoding, and curly quotes/em dashes
+    # have their own separate failure mode in this codebase's tooling.
+    result = agenda.update_item(
+        "English Subject Enrichment Activity SEA speak for 1 minute on "
+        "would you like to become invisible what advantages and "
+        "disadvantages do you foresee if you did",
+        done=True,
+    )
+
+    assert "Nothing matching" not in result
+    assert agenda.carryover_candidates() == []  # done -> no longer a carryover candidate
+
+
+def test_update_item_exact_substring_still_works_unchanged(tmp_path, monkeypatch):
+    monkeypatch.setattr(agenda, "VAULT_DIR", tmp_path)
+    agenda.add_item("homework", "Geography", detail="3 questions", due="tomorrow")
+
+    result = agenda.update_item("geography", add_progress=1)
+
+    assert "Nothing matching" not in result
+    assert "Geography" in result
