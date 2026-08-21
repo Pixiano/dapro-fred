@@ -32,7 +32,9 @@ from config.settings import (
     PROACTIVE_STATE_PATH,
     VIP_MESSAGE_CHECK_MINUTES,
     CALL_LOG_CHECK_MINUTES,
+    PRESENCE_POLL_SECONDS,
 )
+from input import presence
 from tools import agenda, daily_tasks, session_summary
 from utils import event_log
 from utils.notifier import notify
@@ -629,6 +631,19 @@ def check_recent_calls():
         notify(summary, title="Call")
 
 
+def check_presence():
+    """
+    Polls the camera for who's in frame — see input/presence.py's
+    poll_once(). Same reasoning as check_vip_messages above: never let a
+    camera hiccup or a transient vision-model failure crash the
+    scheduler, log it and move on.
+    """
+    try:
+        presence.poll_once()
+    except Exception as e:
+        event_log.log_error("proactive_presence", e)
+
+
 def register(scheduler, llm=None, on_agenda_ask=None):
     """
     Call once at orchestrator startup — see orchestrator.py's __init__.
@@ -679,4 +694,13 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     # instead of WhatsApp — see CALL_LOG_CHECK_MINUTES's comment.
     scheduler.add_periodic(
         check_recent_calls, CALL_LOG_CHECK_MINUTES, "proactive_recent_calls"
+    )
+    # add_periodic takes minutes, PRESENCE_POLL_SECONDS is defined in
+    # seconds (Vatsal's explicit "15 seconds" call) — dividing by 60
+    # feeds add_periodic's IntervalTrigger a fractional-minute float
+    # (15 / 60 == 0.25 exactly, no rounding), which APScheduler turns
+    # straight into timedelta(seconds=15). No need for a seconds-native
+    # variant of add_periodic just for this.
+    scheduler.add_periodic(
+        check_presence, PRESENCE_POLL_SECONDS / 60, "proactive_presence"
     )
