@@ -228,45 +228,55 @@ class WakewordListener:
                 return
             self._ensure_model()
             from audio import device_info
-            stream = sd.InputStream(
-                samplerate=SR, channels=1, dtype="float32",
-                blocksize=CHUNK, callback=self._callback,
-                extra_settings=device_info.input_extra_settings(),
-            )
-            try:
+
+            def _open_stream():
+                stream = sd.InputStream(
+                    samplerate=SR, channels=1, dtype="float32",
+                    blocksize=CHUNK, callback=self._callback,
+                    extra_settings=device_info.input_extra_settings(),
+                )
                 stream.start()
-            except Exception as e:
-                # Must not leave self._stream pointing at a constructed-
-                # but-never-started stream: resume()'s own guard above
-                # ("if self._stream is not None: return") would then
-                # silently no-op every future call forever, since it
-                # only checks the reference exists, not that it's
-                # actually running — the listener would look paused
-                # permanently after one transient failure, with nothing
-                # visibly wrong. self._stream stays None here so the
-                # next resume() call gets a real retry instead.
-                wakeword_log.log_event("resume_failed", message=str(e))
-                # Re-resolve the mic by NAME before the next retry.
-                # PortAudio indices are per-process, so a device
-                # appearing or vanishing (a phone plugged in over USB,
-                # a Bluetooth headset connecting) shifts them underneath
-                # a long-running FRED and sd.default.device can end up
-                # pointing at an index that no longer opens. Confirmed
-                # 2026-08-15: a USB plug/unplug left every retry failing
-                # on the same dead index with PaErrorCode -9999, and
-                # FRED sat deaf for an hour with only a log line to say
-                # so. apply_saved_devices() looks the remembered name up
-                # among the devices present RIGHT NOW, which is exactly
-                # what a retry after a topology change needs.
-                try:
-                    device_info.apply_saved_devices()
-                except Exception as reselect_error:
-                    wakeword_log.log_event(
-                        "reselect_failed", message=str(reselect_error)
-                    )
+                return stream
+
+            try:
+                self._stream = _open_stream()
+                wakeword_log.log_event("resumed")
                 return
-            self._stream = stream
-            wakeword_log.log_event("resumed")
+            except Exception as e:
+                wakeword_log.log_event("resume_failed", message=str(e))
+
+            # Self-heal, immediately, in the same call — not just log and
+            # wait for whoever calls resume() next. Re-resolve the mic by
+            # NAME first: PortAudio indices are per-process, so a device
+            # appearing or vanishing (a phone plugged in over USB, a
+            # Bluetooth headset connecting) shifts them underneath a
+            # long-running FRED and sd.default.device can end up pointing
+            # at an index that no longer opens. Confirmed 2026-08-15: a
+            # USB plug/unplug left every retry failing on the same dead
+            # index with PaErrorCode -9999, and FRED sat deaf for an hour
+            # with only a log line to say so — that hour is exactly what
+            # this retry closes. apply_saved_devices() looks the
+            # remembered name up among the devices present RIGHT NOW,
+            # which is what a retry after a topology change needs.
+            try:
+                device_info.apply_saved_devices()
+            except Exception as reselect_error:
+                wakeword_log.log_event(
+                    "reselect_failed", message=str(reselect_error)
+                )
+                # self._stream stays None so a future resume() call still
+                # gets a real retry instead of silently no-op'ing forever
+                # (see the guard at the top of this method).
+                return
+
+            # Bounded to exactly one retry, not a loop: a device that's
+            # genuinely gone (unplugged, driver crashed) must fail fast
+            # and leave a clear log line, not spin.
+            try:
+                self._stream = _open_stream()
+                wakeword_log.log_event("resumed_after_reselect")
+            except Exception as e:
+                wakeword_log.log_event("resume_retry_failed", message=str(e))
 
     def pause(self):
         """Release the mic device — call before a real turn's own STT
