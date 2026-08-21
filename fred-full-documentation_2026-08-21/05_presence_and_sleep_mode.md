@@ -313,31 +313,126 @@ confirmed callers:
 `is_sleeping() -> bool` — trivial getter, reads the module-level
 `_sleeping` flag.
 
-### What sleep mode actually changes in FRED's behavior — verified narrow
+### What sleep mode actually changes in FRED's behavior
 
-**Confirmed from source: sleep mode currently gates exactly one thing —
-proactive notifications routed through `proactive_checks.notify()`.**
-That wrapper (`proactive_checks.py` lines ~45-54) shadows
-`utils.notifier.notify` (imported there as `_real_notify`): every proactive
-check in the file (vault staleness, long session, deadlines, task
-deadlines, agenda deadlines/prep/upcoming/carryover, VIP messages, recent
-calls, the presence-wake greeting itself) funnels through this one
-`notify()`, which checks `sleep_mode.is_sleeping()` first and silently
-drops the nudge if true — "no queue/replay, matches reminders' own
-precedent of 'fire once or not at all'."
+Sleep mode gates proactive notifications (`proactive_checks.notify()`,
+same mechanism as before — see `06_proactive_and_memory.md` §2.1). **As of
+2026-08-22, entering and exiting sleep mode also triggers real work**:
+consolidation (§4.2) and, when there's enough new material, the deep
+reflection pass (§4.3) — both run on the `on_presence_poll`/`wake` edges
+described above. Pausing the pill UI / wake-word listening during sleep
+mode is still **not** built — the only sleep_mode-related code in
+`pill_app.py` is the hotkey's `wake()` call.
 
-**Nothing else was found gated on sleep mode in this codebase as of this
-doc.** Specifically NOT confirmed/NOT present in source, despite being in
-the plan doc:
-- No pause of the pill UI / wake-word listening during sleep mode (grepped
-  `Core/ui/pill_app.py` and `Core/orchestrator/orchestrator.py` — the only
-  sleep_mode-related code in `pill_app.py` is the hotkey's `wake()` call).
-- No consolidation job (day-summary generation, `map.md` vault-scan/append)
-  triggered by entering sleep mode.
-- No unprompted "here's what's still open" recap spoken automatically on
-  camera-driven wake (`sleep_mode.wake()` itself does not speak or invoke
-  any task/agenda listing — the only speech tied to a real debounced wake
-  is the presence-check greeting described next).
+### 4.2 Consolidation (`Core/orchestrator/consolidation.py`)
+
+The piece the plan doc originally motivated this whole subsystem with —
+"run vault consolidation while Vatsal is away from the desk" — is now
+real. Small, in-memory, fire-once module, same "a restart is a real
+event, not a crash to recover from" reasoning `sleep_mode.py` itself
+holds (no persistence file, deliberately).
+
+- **`on_sleep_enter()`** — called from `sleep_mode.on_presence_poll()`
+  the instant absence debounces into real sleep. Builds a **preview**
+  (never writes) of two things and bundles them into one pending string:
+  `tools.session_summary.preview_session_summary(llm=...)` (today's
+  day-summary) and `tools.vault_map.preview_missing()` (a scan for vault
+  files not yet listed in `MAP.md`). Both are read-only previews, same
+  propose-then-write split those two tools already followed before this
+  module existed. Never raises — a failure here must not block sleep-mode
+  entry itself, caught and logged, `_pending` set to `None` on failure.
+- **`append_pending(text)`** — lets `reflection.run_if_due()`'s own short
+  audit line ("Updated people/x.md ...") fold into the *same* bundled
+  recap rather than compete as a second proactive announcement.
+  `sleep_mode.py` calls this immediately after `on_sleep_enter()`, same
+  call site, same cycle.
+- **`on_sleep_exit()`** — called from both the debounced
+  `on_presence_poll` return-trip and the unconditional `wake()`. Speaks
+  the bundled recap **once** via `utils.notifier.notify` directly (title
+  `"Welcome back"`) — deliberately **not** through
+  `proactive_checks.notify()`'s sleep-mode gate, since by the time this
+  runs `is_sleeping()` has already gone `False`, so that gate would pass
+  through anyway; going direct also sidesteps a real import cycle
+  (`sleep_mode.py` imports `consolidation.py`, so `consolidation.py`
+  importing `proactive_checks` — which itself would need `sleep_mode` —
+  would cycle back). Also offers reflection's staged self-fact review
+  right alongside the recap in the **same** notify call, if
+  `reflection.has_pending_review()` — an unreviewed draft can be sitting
+  from days ago, so this offer can fire even when there's no fresh
+  `_pending` recap at all. Clears `_pending` before checking whether
+  there's anything to say, so a later wake with nothing new never
+  re-speaks the same recap.
+
+Deliberately does **not** import `orchestrator.sleep_mode` at module
+level (see the module's own docstring) — `sleep_mode.py` imports this
+module, not the reverse, so a top-level back-import would cycle.
+
+**This is genuinely new since the original write-up of this file**: the
+old version of this doc stated flatly "no code path anywhere" for
+consolidation. That is no longer true.
+
+### 4.3 Deep reflection (`Core/orchestrator/reflection.py`)
+
+A second, separate sleep-time job — deliberately its own module rather
+than folded into `consolidation.py`, because `consolidation.py`'s own
+docstring is explicit that it *never* writes anything, and reflection
+does; keeping them apart keeps that "never writes" property visibly true
+rather than something you have to go verify.
+
+**What it does:** re-reads recent session-log events (plus the existing
+`people/*.md` corpus, so the model knows who already has a file) with the
+new **`"Reflect"` model tier** (gpt-oss-20b, medium reasoning effort — see
+`02_llm_and_model_tiers.md`) and extracts two kinds of durable facts:
+
+1. **Friend-file facts** — something learned about a specific named
+   person Vatsal talks about (not Vatsal himself). Written **directly,
+   unattended** to `people/*.md` — Vatsal's own explicit ask, the concrete
+   mechanic he named by name. New file (from a template with a
+   "recorded by FRED's sleep-mode reflection pass, correct if wrong"
+   disclaimer) or an appended bullet to an existing one, chosen by the
+   model's own `file_action` ("new"/"update") judgment against the
+   corpus it was shown.
+2. **Self facts** — a durable observation about Vatsal himself. **Staged
+   only**, never written unattended: appended to a dated markdown file
+   under `VAULT_DIR/personal/pending-review/`, offered for review on the
+   next wake ("Sir, I made a few notes about you while you were away —
+   review them, or keep working?"), and re-offered on every subsequent
+   wake until Vatsal says yes.
+
+**Trigger gate: accumulated new material, not sleep-mode entry itself.**
+Checked every time `sleep_mode.py` calls `run_if_due()` on entry — below
+`REFLECTION_MIN_NEW_EVENTS = 30` new `user_speech`/`tool_call` events
+since the last pass, this is a silent no-op that does **not** touch
+`reflection_state.json`, so a quiet stretch keeps accumulating toward the
+threshold instead of resetting it. State (`REFLECTION_STATE_PATH`,
+`Core/data/reflection_state.json`) tracks `last_run_ts`; the very first
+run ever bootstraps the watermark to "now" without ingesting any
+pre-existing log history.
+
+**Interrupt safety, at chunk granularity.** A single `llm.generate()` call
+can't be interrupted mid-generation (no `stopping_criteria` hook on that
+path — see `02_llm_and_model_tiers.md`'s cancellation section), so
+interruption granularity here is "between chunks," where one chunk = one
+session-log file. Before starting each chunk, `sleep_mode.is_sleeping()`
+is checked; the instant it's gone `False` (Vatsal's back), everything
+buffered for the run is discarded — no writes, no state update — so the
+same unprocessed material is picked up whole on the next qualifying
+window rather than half-credited. A second check runs after the loop
+finishes, in case presence returned in the exact instant the final chunk
+completed.
+
+**Privacy:** the reflection LLM call passes `local_only=True` — not
+optional, since it reads `people/`- and `personal/`-shaped content,
+exactly what `rules.md` forbids sending anywhere but a local model.
+
+**Review flow (`review_pending_reflection` tool, wired to
+`reflection.review_pending`):** opens the oldest un-reviewed staged draft
+with its default program (`os.startfile`) and moves it into
+`REFLECTION_PENDING_DIR/reviewed/`, so the periodic wake-offer stops
+re-offering it. The offer primes the orchestrator's tool-carry-forward
+mechanism (same `_prime_carry` plumbing `proactive_checks.py`'s
+`on_agenda_ask` uses) so a bare "yes" on the next turn routes straight to
+this tool instead of falling through to chat.
 
 ### The wake greeting (lives in `proactive_checks.py`, not `sleep_mode.py`)
 
