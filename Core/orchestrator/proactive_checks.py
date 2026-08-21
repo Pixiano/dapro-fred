@@ -36,7 +36,7 @@ from config.settings import (
     PRESENCE_POLL_SECONDS,
 )
 from input import presence
-from orchestrator import sleep_mode
+from orchestrator import focus_checkin, sleep_mode
 from tools import agenda, daily_tasks, session_summary
 from utils import event_log
 from utils.notifier import notify as _real_notify
@@ -742,4 +742,12 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     # variant of add_periodic just for this.
     scheduler.add_periodic(
         check_presence, PRESENCE_POLL_SECONDS / 60, "proactive_presence"
+    )
+    # Focus-awareness check-in — see orchestrator/focus_checkin.py. Fires
+    # through this module's own notify() so sleep-mode gating is automatic
+    # (no redundant separate gate — see that module's docstring for why
+    # that's actually sufficient here).
+    scheduler.add_periodic(
+        lambda: focus_checkin.check(notify),
+        PROACTIVE_CHECK_INTERVAL_MINUTES, "proactive_focus_checkin",
     )

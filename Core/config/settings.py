@@ -1187,6 +1187,14 @@ PRESENCE_MATCH_THRESHOLD_HIGH = 0.45
 # 45-60s. Vatsal's call 2026-08-21.
 PRESENCE_ABSENT_DEBOUNCE = 3
 
+# Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible
+# once he's been present but hasn't had a real turn/tool-call with FRED for
+# this many minutes; grows by the step below each time it actually speaks,
+# resets to the base the moment a real interaction happens. Vatsal's own
+# numbers, 2026-08-21.
+FOCUS_CHECKIN_BASE_MINUTES = 60
+FOCUS_CHECKIN_STEP_MINUTES = 10
+
 # =========================================================
 # TOOL SETTINGS
 # =========================================================
