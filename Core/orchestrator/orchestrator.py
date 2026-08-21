@@ -31,6 +31,7 @@ from tools import self_docs
 from tools import otp_tools
 from tools import haismart_tools
 from tools import sleep_mode_tools
+from tools import presence_tools
 from audio import device_info
 from utils import confidence, sensitive
 from orchestrator import canned_replies
@@ -1444,6 +1445,24 @@ class FREDOrchestrator:
                 "own; this is only for when the user asks directly."
             ),
             parameters={"type": "object", "properties": {}, "required": []},
+        )
+
+        self.tools.register(
+            name="get_active_hours_summary",
+            function=presence_tools.describe_active_hours,
+            description=(
+                "Report the user's typical active hours (when presence was "
+                "detected most) based on camera-presence poll history — use "
+                "for 'when am I usually active', 'what are my active hours', "
+                "'when do I usually work' style questions."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "How many past days to summarise. Defaults to 7."},
+                },
+                "required": [],
+            },
         )
 
         self.tools.register(

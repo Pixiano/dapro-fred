@@ -37,6 +37,7 @@ from config.settings import (
     PRESENCE_MATCH_THRESHOLD_LOW,
     PRESENCE_MAX_EMBEDDINGS,
 )
+from input import presence_log
 from utils import event_log
 
 STATE_PATH = DATA_DIR / "presence_state.json"
@@ -288,4 +289,7 @@ def poll_once() -> bool:
     if present:
         state["last_seen"] = now.isoformat()
     _save_state(state)
+    presence_log.log_poll(present)  # camera-failure early-returns above are
+    # skipped on purpose — those report stale last-known state, not a real
+    # observation, and would pollute active-hours aggregation.
     return present

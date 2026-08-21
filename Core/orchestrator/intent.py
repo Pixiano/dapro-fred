@@ -132,6 +132,7 @@ TOOL_CATEGORIES = {
     ),
     "otp": ("find_otp",),
     "sleep_mode": ("cancel_sleep_mode",),
+    "active_hours": ("get_active_hours_summary",),
     "ac": (
         "get_ac_status", "set_ac_power", "set_ac_temperature",
         "set_ac_mode", "set_ac_fan_speed",
@@ -417,6 +418,11 @@ CATEGORY_CUES = {
     "sleep_mode": (
         "cancel sleep mode", "wake up fred", "wake fred up", "exit sleep mode",
         "stop sleeping", "sleep mode",
+    ),
+    "active_hours": (
+        "active hours", "when am i usually active", "when am i active",
+        "when do i usually work", "when do i work", "usually at my desk",
+        "when am i at my desk", "typical hours", "when am i around",
     ),
     "ac": (
         "ac", "a/c", "air conditioner", "air conditioning", "aircon",

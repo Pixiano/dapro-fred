@@ -82,6 +82,10 @@ Core/data/tool_call_log.jsonl
 # Wake-word detection log (runtime data — see Core/input/wakeword_log.py)
 Core/data/wakeword_log.jsonl
 
+# Presence poll history (personal activity data, same treatment as the
+# rest of presence.py's state — see Core/input/presence_log.py)
+Core/data/presence_log.jsonl
+
 # Overlay window position/palette (runtime-mutable user state, written
 # by the tray settings UI - regenerates from defaults if missing)
 Core/config/overlay_settings.json
