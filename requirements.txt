@@ -71,3 +71,11 @@ pywin32>=312
 # indexer reads them via vault_router._chunk_pdf (see
 # VAULT_INDEXED_SUFFIXES in config/settings.py).
 pypdf>=6.0.0
+
+# Presence detection (Core/input/presence.py) — iBall PHOCUS 40A webcam +
+# insightface's buffalo_l ArcFace model, CPU-only onnxruntime (already a
+# dependency via openwakeword/kokoro-onnx above). Confirmed 2026-08-21:
+# both install as pure-Python wheels on this machine, no compiler step,
+# matching the design doc's researched claim.
+opencv-python>=4.9.0
+insightface>=1.0.1

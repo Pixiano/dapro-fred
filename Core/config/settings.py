@@ -1120,6 +1120,58 @@ WAKEWORD_MODEL_PATH = BASE_DIR / "models" / "wakeword" / "hey_fred.onnx"
 WAKEWORD_THRESHOLD = 0.35
 
 # =========================================================
+# PRESENCE DETECTION — Core/input/presence.py
+# =========================================================
+#
+# MVP scope only, per fred-presence-sleep-mode-plan_2026-08-18.md and
+# Vatsal's own scoping call 2026-08-21: presence detection alone
+# (is_present()/last_seen()/last_checked()), nothing downstream yet
+# (sleep-mode, reminder-gating, cancel phrases are later, separate work
+# that depends on this being proven reliable first).
+
+# Confirmed live 2026-08-21 by capturing a frame from every index and
+# looking at it: index 0 is Canon's EOS Webcam Utility (virtual, shows
+# an idle placeholder), index 2 is OBS Virtual Camera (also virtual),
+# index 1 is the only real hardware — the iBall PHOCUS 40A, confirmed
+# by a real captured photo. This is a desktop with no built-in webcam,
+# so "the only real camera besides two virtual ones" is a solid
+# identification, not a guess — but if the camera setup ever changes
+# (a new virtual cam app installed, the iBall unplugged and replaced),
+# re-run the same per-index capture check rather than assuming this
+# index still holds.
+PRESENCE_CAMERA_INDEX = 1
+
+# Raw camera poll interval — Vatsal's call 2026-08-21, resolving the
+# design doc's own inconsistency (it separately said "~15s" for the
+# absence-detection consolidation-start check and "~30-60s" for the
+# raw camera poll cost/frequency tradeoff — two different numbers for
+# two different things, not a real conflict, but only this one matters
+# for the MVP since sleep-mode/consolidation isn't built yet).
+PRESENCE_POLL_SECONDS = 15
+
+# Enrollment: 5 reference photos, 5s apart, fully automatic (no
+# per-shot keypress) — Vatsal's call 2026-08-21. See
+# Core/scripts/enroll_face.py.
+PRESENCE_ENROLLMENT_SHOTS = 5
+PRESENCE_ENROLLMENT_INTERVAL_SECONDS = 5
+
+# ArcFace/buffalo_l cosine-similarity match threshold. NOT a measured
+# constant — this repo had never run the model as of 2026-08-21, so
+# these are starting guesses (typical same-person ArcFace similarity
+# clusters 0.35-0.45 in the wild) to verify/retune against real
+# enrollment + real live frames, not settled numbers. Two thresholds,
+# not one: below the low mark is a confident non-match, above the high
+# mark is a confident match, and the band between them is genuinely
+# ambiguous — see presence.py's fallback to a real vision-model
+# comparison for that band, proven live 2026-08-21 via Bonsai-27B
+# through LM Studio (verdict: correctly identified the same person
+# across a hard side-angle shot, high confidence) before being wired
+# into this codebase's own already-working vision_server.py pipeline
+# instead of depending on LM Studio at runtime.
+PRESENCE_MATCH_THRESHOLD_LOW = 0.30
+PRESENCE_MATCH_THRESHOLD_HIGH = 0.45
+
+# =========================================================
 # TOOL SETTINGS
 # =========================================================
 

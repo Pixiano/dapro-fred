@@ -26,6 +26,13 @@ Core/data/call_log_seen.json
 # overwritten every call, never source.
 Core/data/camera_capture.png
 
+# Face embeddings + reference photo (Core/scripts/enroll_face.py) and
+# presence poll state (Core/input/presence.py) — biometric/personal data,
+# same treatment as personal/ vault content. Never something to commit.
+Core/data/face_enrollment.json
+Core/data/face_reference.jpg
+Core/data/presence_state.json
+
 # Python
 __pycache__/
 *.pyc
