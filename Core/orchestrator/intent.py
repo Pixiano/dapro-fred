@@ -124,7 +124,7 @@ TOOL_CATEGORIES = {
     # between "repeat your last line" and "what was said a minute ago",
     # so both tools are offered and the model's descriptions disambiguate.
     "recall_recent": ("recall_recent_conversation", "repeat_last"),
-    "vision": ("whats_on_screen", "look_through_camera"),
+    "vision": ("whats_on_screen", "look_through_camera", "take_phone_photo"),
     "tasks": ("add_task", "list_tasks", "complete_task"),
     "agenda": (
         "add_agenda_item", "list_agenda_items", "update_agenda_item",
@@ -410,6 +410,12 @@ CATEGORY_CUES = {
         "looking at",
         "camera", "through the camera", "point the camera",
         "what am i holding", "what is this", "read this for me",
+        # Phone-camera specific — kept distinct from the webcam cues above
+        # so both tools stay reachable; category routing just offers both
+        # of vision's tools when either set fires, and the model's own
+        # tool descriptions (see orchestrator.py) pick the right one.
+        "my phone's camera", "phone camera", "pic from my phone",
+        "photo from my phone", "photo with my phone", "picture with my phone",
     ),
     "otp": (
         "otp", "one time password", "one-time password", "verification code",

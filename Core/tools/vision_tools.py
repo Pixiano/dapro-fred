@@ -84,15 +84,17 @@ def whats_on_screen(question: str = "") -> str:
 
 def look_through_camera(question: str = "") -> str:
     """
-    Captures whatever the desk webcam is pointed at right now and
-    describes it — "what am I looking at", "read this for me", etc.
+    THE DESK WEBCAM, general/default camera tool — captures whatever it's
+    pointed at right now and describes it. "what am I looking at", "read
+    this for me", etc. all mean this one unless the user explicitly says
+    "phone" — that's take_phone_photo() instead, a separate tool.
 
     Vatsal's explicit call 2026-08-21: this must use the local webcam
     (input/presence.py's PRESENCE_CAMERA_INDEX), not the paired phone's
     camera over ADB — the two are physically different cameras pointed
     at different things, and "look through the camera" meant the one on
     the desk. phone_tools.capture_camera_photo() is untouched and still
-    used elsewhere for actual phone-camera requests.
+    used by take_phone_photo() below for actual phone-camera requests.
 
     Capture pattern lifted from presence.py's poll_once() (open, grab
     one frame, release immediately) rather than imported — same reason
@@ -154,3 +156,49 @@ def look_through_camera(question: str = "") -> str:
         return app.orchestrator.llm.describe_image(data_uri, prompt, max_tokens=300)
     except Exception as e:
         return f"I captured the camera view but couldn't describe it: {e}"
+
+
+def take_phone_photo(question: str = "") -> str:
+    """
+    Captures whatever the PAIRED PHONE's camera is pointed at right now
+    (over ADB) and describes it. Only for explicit phone-camera requests
+    ("take a pic from my phone") — the desk webcam is look_through_camera(),
+    the default/general one, and is what "look through the camera" /
+    "what am I looking at" mean on their own.
+
+    Reuses phone_tools.capture_camera_photo() for the actual capture
+    (screenshots the live viewfinder over adb, see that function's
+    docstring) rather than duplicating it — that's the only capture path
+    for the phone's camera, unchanged by today's webcam fix.
+    """
+    import base64
+
+    from tools import phone_tools
+
+    path = phone_tools.capture_camera_photo()
+    if not path.lower().endswith((".png", ".jpg", ".jpeg")):
+        return path  # capture_camera_photo() returned an error string, not a path
+
+    from ui.pill_app import get_current_app
+
+    app = get_current_app()
+    if app is None:
+        return "Photo captured, but there's no running app to describe it with."
+
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    data_uri = f"data:image/png;base64,{b64}"
+
+    prompt = (
+        f"Looking through this phone camera, answer this question as "
+        f"directly and specifically as possible: {question}"
+        if question else
+        "Describe what this phone's camera is pointed at right now — the "
+        "general scene and any specific text, objects, or people that "
+        "stand out."
+    )
+
+    try:
+        return app.orchestrator.llm.describe_image(data_uri, prompt, max_tokens=300)
+    except Exception as e:
+        return f"I captured the phone's camera view but couldn't describe it: {e}"

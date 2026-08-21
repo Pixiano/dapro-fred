@@ -1792,13 +1792,14 @@ class FREDOrchestrator:
             name="look_through_camera",
             function=vision_tools.look_through_camera,
             description=(
-                "Capture whatever the paired phone's CAMERA is pointed at "
-                "right now and describe or answer questions about it — use "
-                "this for 'what am I looking at' / 'read this for me' / "
-                "'what is this' when the user means their surroundings or "
-                "something physical in front of the phone, NOT the screen. "
-                "For the phone or PC's own screen content, use "
-                "whats_on_screen instead."
+                "Capture whatever the DESK WEBCAM is pointed at right now "
+                "and describe or answer questions about it — this is the "
+                "general/default camera tool, use it for 'what am I "
+                "looking at' / 'read this for me' / 'what is this' / "
+                "'through the camera' whenever the user doesn't say "
+                "'phone'. For the phone's camera specifically, use "
+                "take_phone_photo instead. For the phone or PC's own "
+                "screen content, use whats_on_screen instead."
             ),
             parameters={
                 "type": "object",
@@ -1806,6 +1807,29 @@ class FREDOrchestrator:
                     "question": {
                         "type": "string",
                         "description": "What to find out about what the camera sees. Optional.",
+                    },
+                },
+            },
+        )
+
+        self.tools.register(
+            name="take_phone_photo",
+            function=vision_tools.take_phone_photo,
+            description=(
+                "Takes a photo using the paired PHONE's camera specifically "
+                "(over ADB) — use only when the user explicitly asks about "
+                "the phone's camera, e.g. 'take a pic from my phone' / 'use "
+                "my phone's camera' / 'take a photo with my phone'. For the "
+                "general/default camera request ('what am I looking at', "
+                "'look through the camera' with no mention of the phone), "
+                "use look_through_camera instead — that's the desk webcam."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "What to find out about what the phone's camera sees. Optional.",
                     },
                 },
             },

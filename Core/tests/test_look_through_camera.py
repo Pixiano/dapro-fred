@@ -69,6 +69,46 @@ def test_look_through_camera_uses_webcam_not_phone(monkeypatch):
     assert "what's on the desk?" in calls["describe_prompt"]
 
 
+def test_take_phone_photo_uses_phone_not_webcam(monkeypatch, tmp_path):
+    calls = {"webcam": 0, "phone": 0, "describe_prompt": None}
+
+    def _boom(*a, **k):
+        calls["webcam"] += 1
+        raise AssertionError("must not touch the webcam")
+
+    monkeypatch.setattr(cv2, "VideoCapture", _boom)
+
+    fake_photo = tmp_path / "fake_phone_capture.png"
+    fake_photo.write_bytes(b"fake-png-bytes")
+
+    def _fake_capture_camera_photo():
+        calls["phone"] += 1
+        return str(fake_photo)
+
+    monkeypatch.setattr(
+        "tools.phone_tools.capture_camera_photo", _fake_capture_camera_photo
+    )
+
+    def _fake_describe_image(data_uri, prompt, max_tokens=300):
+        calls["describe_prompt"] = prompt
+        assert data_uri.startswith("data:image/png;base64,")
+        return "a hallway"
+
+    fake_app = types.SimpleNamespace(
+        orchestrator=types.SimpleNamespace(
+            llm=types.SimpleNamespace(describe_image=_fake_describe_image)
+        )
+    )
+    monkeypatch.setattr("ui.pill_app.get_current_app", lambda: fake_app)
+
+    result = vision_tools.take_phone_photo("what's down the hall?")
+
+    assert result == "a hallway"
+    assert calls["phone"] == 1
+    assert calls["webcam"] == 0
+    assert "what's down the hall?" in calls["describe_prompt"]
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 
