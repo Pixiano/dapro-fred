@@ -195,7 +195,6 @@ Core/data/http_shortcuts_*.png
 Core/training/
 
 
-# Wispr Flow demo-video raw footage - past GitHub's 100MB
-# per-file hard limit (1.6GB / 838MB). Source footage, kept locally.
-Wispr/fred_vid.mp4
-Wispr/IMG_2698.MOV
+# Wispr Flow demo-video project folder - kept out of the repo entirely
+# per Vatsal's call (2026-08-21), not just the oversized raw footage.
+Wispr/
