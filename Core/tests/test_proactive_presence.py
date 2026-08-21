@@ -26,12 +26,12 @@ print("ok")
 
 
 # =========================================================
-# WAKE GREETING — absent->present edge fires it exactly once;
-# staying present, and the first-ever poll, must not fire it.
+# WAKE GREETING — fires only on waking from a REAL debounced sleep-mode
+# absence (sleep_mode.PRESENCE_ABSENT_DEBOUNCE consecutive absent polls),
+# not on a single-poll blip that never crosses that threshold.
 # =========================================================
 
 def _reset(monkeypatch):
-    monkeypatch.setattr(pc, "_was_present", None)
     monkeypatch.setattr(pc.sleep_mode, "_streak", 0)
     monkeypatch.setattr(pc.sleep_mode, "_sleeping", False)
 
@@ -45,7 +45,6 @@ def test_first_poll_ever_does_not_greet(monkeypatch):
     pc.check_presence()
 
     assert calls == []
-    assert pc._was_present is True
 
 
 def test_continued_presence_does_not_regreet(monkeypatch):
@@ -61,17 +60,42 @@ def test_continued_presence_does_not_regreet(monkeypatch):
 
 
 def test_absent_to_present_edge_greets_once(monkeypatch):
+    """Cross the real debounce threshold (3 consecutive absent polls)
+    before returning, so sleep_mode actually enters sleep — then verify
+    the greeting fires on waking and not again while staying present."""
     _reset(monkeypatch)
     calls = []
     monkeypatch.setattr(pc, "notify", lambda *a, **k: calls.append(a))
 
     monkeypatch.setattr(presence, "poll_once", lambda: False)
-    pc.check_presence()  # establishes "absent" as the prior state
+    for _ in range(pc.sleep_mode.PRESENCE_ABSENT_DEBOUNCE):
+        pc.check_presence()
+    assert pc.sleep_mode.is_sleeping() is True
 
     monkeypatch.setattr(presence, "poll_once", lambda: True)
-    pc.check_presence()  # absent -> present edge
+    pc.check_presence()  # wakes from real sleep mode -> greets
 
     pc.check_presence()  # stays present: must not fire again
 
     assert len(calls) == 1
     assert calls[0][0] in pc._PRESENCE_GREETINGS
+
+
+def test_single_poll_blip_does_not_greet(monkeypatch):
+    """One missed poll followed by present again never crosses the
+    debounce threshold, so sleep mode never actually engages — no
+    greeting should fire."""
+    _reset(monkeypatch)
+    calls = []
+    monkeypatch.setattr(pc, "notify", lambda *a, **k: calls.append(a))
+
+    monkeypatch.setattr(presence, "poll_once", lambda: True)
+    pc.check_presence()  # establishes "present" as the prior state
+
+    monkeypatch.setattr(presence, "poll_once", lambda: False)
+    pc.check_presence()  # single absent poll — not enough to sleep
+
+    monkeypatch.setattr(presence, "poll_once", lambda: True)
+    pc.check_presence()  # back to present, but never really slept
+
+    assert calls == []

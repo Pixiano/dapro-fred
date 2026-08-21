@@ -645,15 +645,10 @@ def check_recent_calls():
         notify(summary, title="Call")
 
 
-# Module-level, not persisted — mirrors sleep_mode._streak/_sleeping's own
-# "restart is a real event" reasoning. None means "no poll yet this run",
-# distinct from False, so the very first poll after launch never reads as
-# a False->True edge just because it's the first True.
-_was_present = None
-
 # Wake-awareness greeting, same sir-suffixed short-phrase-pool style as
-# canned_replies.py's "presence_check" category — fires once, on the
-# absent->present edge only (see check_presence below).
+# canned_replies.py's "presence_check" category — fires once, only when
+# waking from a real debounced sleep-mode absence (see check_presence
+# below), not on every single-poll blip.
 _PRESENCE_GREETINGS = (
     "You there, sir?", "Welcome back, sir.", "Good to see you again, sir.",
     "Ah, there you are, sir.", "Back with us, sir?", "Good to have you back, sir.",
@@ -667,26 +662,25 @@ def check_presence():
     camera hiccup or a transient vision-model failure crash the
     scheduler, log it and move on.
 
-    Also detects an absent->present edge (module-level _was_present, not
-    presence.py's own persisted state — that survives restarts and can't
-    distinguish "never polled" from "was absent", which matters for not
-    firing on the very first poll) and speaks one hardcoded wake greeting
-    on that edge. sleep_mode.on_presence_poll(present) runs first, so by
-    the time notify()'s sleep-mode gate checks is_sleeping() it has
-    already flipped False for this poll — the greeting is never
-    swallowed by the gate that's about to open for it.
+    Greets only on a REAL sleep-mode wake — sleep_mode.py's own
+    PRESENCE_ABSENT_DEBOUNCE (3 consecutive absent polls) is what
+    distinguishes actual absence from a single missed poll (camera
+    hiccup, reaching for something), so the greeting piggybacks on that
+    rather than tracking its own separate present/absent edge. Sleep
+    state is read BEFORE on_presence_poll() mutates it, since that call
+    is what would flip is_sleeping() False again for this same poll.
     """
-    global _was_present
     try:
         present = presence.poll_once()
     except Exception as e:
         event_log.log_error("proactive_presence", e)
         return
+
+    was_sleeping = sleep_mode.is_sleeping()
     sleep_mode.on_presence_poll(present)
 
-    if present and _was_present is False:
+    if present and was_sleeping:
         notify(random.choice(_PRESENCE_GREETINGS), title="Welcome back")
-    _was_present = present
 
 
 def register(scheduler, llm=None, on_agenda_ask=None):
