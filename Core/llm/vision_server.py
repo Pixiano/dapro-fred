@@ -97,6 +97,7 @@ def ensure_running(startup_timeout: float = 30.0) -> bool:
             cwd=str(LLAMACPP_BIN_DIR),
             stdout=log_file,
             stderr=subprocess.STDOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
     deadline = time.monotonic() + startup_timeout

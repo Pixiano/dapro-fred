@@ -196,6 +196,7 @@ def _adb(*args, target: str = None, timeout: int = 15) -> subprocess.CompletedPr
     return subprocess.run(
         ["adb", *prefix, *args], capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 
@@ -205,6 +206,7 @@ def _attached() -> dict:
         out = subprocess.run(
             ["adb", "devices"], capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=15,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         ).stdout
     except (FileNotFoundError, subprocess.SubprocessError):
         return {}

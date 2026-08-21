@@ -57,6 +57,7 @@ def _run_git(repo: Path, args: list) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=15,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 

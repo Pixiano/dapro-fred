@@ -102,6 +102,7 @@ def _adb(*args, timeout: int = 15) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["adb", *args], capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 
@@ -293,7 +294,8 @@ def main():
         _adb("-s", serial, "exec-out", "screencap", "-p", timeout=15)  # warm the codec path
         with open(screenshot, "wb") as f:
             proc = subprocess.run(["adb", "-s", serial, "exec-out", "screencap", "-p"],
-                                   stdout=f, timeout=15)
+                                   stdout=f, timeout=15,
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         print(f"[http_shortcuts_setup] pre-confirm screenshot: {screenshot}")
 
         confirmed = _tap_import_confirm(serial)
@@ -302,7 +304,8 @@ def main():
             after = DATA_DIR / "http_shortcuts_after_import.png"
             with open(after, "wb") as f:
                 subprocess.run(["adb", "-s", serial, "exec-out", "screencap", "-p"],
-                                stdout=f, timeout=15)
+                                stdout=f, timeout=15,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             print(f"[http_shortcuts_setup] tapped Import — post-import screenshot: {after}")
         else:
             print("[http_shortcuts_setup] could not find/tap an Import confirm button — "
