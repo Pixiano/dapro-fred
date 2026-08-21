@@ -174,3 +174,18 @@ Core/data/phrase_cache/
 
 # Dev-session working notes (not meant for the public repo)
 session_2026-08-12_wakeword_changes.md
+
+# Maintained filesystem index for Core/tools/file_index.py's search_index
+# — real file paths off this machine's home folder, and fully
+# regeneratable via reindex_drive(). Same rationale as found_files.json.
+Core/data/file_index.db
+
+# Screenshots from setting up the HTTP Shortcuts phone integration
+# (Core/tools/http_shortcuts_setup.py) — real phone-screen content, same
+# treatment as the screenshot_*.png rule above.
+Core/data/http_shortcuts_*.png
+
+# Raw wake-word voice recordings (Core/training/Recordings/) — personal
+# voice data staged for a future training pass, not source. Same
+# rationale/precedent as Core/data/wakeword_training/ below.
+Core/training/
