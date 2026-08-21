@@ -948,6 +948,17 @@ class PillApp:
                 print("[PillApp] proactive speech skipped: a turn is already running")
                 return
             try:
+                # Same reasoning as _run_turn's clear right after acquiring
+                # _turn_lock: a hotkey press during an EARLIER turn or
+                # proactive utterance leaves self._cancel set, and nothing
+                # clears it until whoever holds the lock next does. Without
+                # this, a stale cancel from three interactions ago would
+                # make tts.speak() below (cancel=self._cancel) abort this
+                # utterance before a single word plays. Safe here
+                # specifically because the lock (just acquired,
+                # non-blocking, above) guarantees nothing else is speaking
+                # or about to speak concurrently.
+                self._cancel.clear()
                 self.window.set_transcript(message, ttl=6.0)
                 self.window.set_state("speaking")
                 self.window.show()
@@ -965,7 +976,9 @@ class PillApp:
                 # here covers all of them at once.
                 self.wakeword.pause()
                 try:
-                    spoken = self.tts.speak(message, on_level=self.window.set_level)
+                    spoken = self.tts.speak(
+                        message, on_level=self.window.set_level, cancel=self._cancel,
+                    )
                 finally:
                     self.wakeword.resume()
                 print(f"[PillApp] proactive speech done ({len(spoken)}/{len(message)} chars spoken)")
@@ -1107,6 +1120,11 @@ class PillApp:
         event_log.log("user_speech", text=text, source="hud")
 
         with self._turn_lock:
+            # Same clear _run_turn does right after acquiring _turn_lock
+            # (see its comment there) — otherwise a cancel left set by an
+            # earlier interrupted turn would make tts.speak() below abort
+            # this reply on arrival instead of speaking it.
+            self._cancel.clear()
             self.window.set_state("thinking")
             try:
                 reply = self.orchestrator.process(text)
@@ -1124,7 +1142,7 @@ class PillApp:
             if self.tts and reply:
                 self.window.set_state("speaking")
                 try:
-                    self.tts.speak(reply, on_level=self.window.set_level)
+                    self.tts.speak(reply, on_level=self.window.set_level, cancel=self._cancel)
                 except Exception as e:
                     print(f"[PillApp] hud command speech failed: {e}")
                     event_log.log_error("hud_command_speech", e)
