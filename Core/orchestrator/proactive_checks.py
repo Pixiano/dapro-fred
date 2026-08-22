@@ -134,9 +134,11 @@ class _LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
 
-def _idle_seconds() -> float:
+def idle_seconds() -> float:
     """Seconds since the last keyboard/mouse input, system-wide —
-    Windows' own idle-time API, not FRED-specific activity."""
+    Windows' own idle-time API, not FRED-specific activity. Public
+    (no leading underscore) since orchestrator/security_watch.py also
+    needs this as a live "is input happening right now" check."""
     info = _LASTINPUTINFO()
     info.cbSize = ctypes.sizeof(_LASTINPUTINFO)
     ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info))
@@ -155,7 +157,7 @@ def check_long_session():
     session = state.setdefault("long_session", {})
     now = datetime.now()
 
-    idle = _idle_seconds()
+    idle = idle_seconds()
     if idle >= PROACTIVE_BREAK_IDLE_MINUTES * 60:
         # A real break — reset the clock and the notified flag, so the
         # NEXT long stretch can notify again.
@@ -564,7 +566,7 @@ def check_day_rollover(llm=None):
     inside the same day does nothing: the date has to have turned over
     since the last rollover for there to be a new day to write.
     """
-    if _idle_seconds() < ROLLOVER_IDLE_HOURS * 3600:
+    if idle_seconds() < ROLLOVER_IDLE_HOURS * 3600:
         return
 
     today = datetime.now().strftime(_DATE_FMT)

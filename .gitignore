@@ -33,6 +33,10 @@ Core/data/face_enrollment.json
 Core/data/face_reference.jpg
 Core/data/presence_state.json
 
+# Family/friend face embeddings (Core/scripts/enroll_face.py --person) —
+# biometric data for other real people, same treatment as above.
+Core/data/family_enrollment.json
+
 # Python
 __pycache__/
 *.pyc

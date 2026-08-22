@@ -1281,6 +1281,15 @@ PRESENCE_PRESENT_DEBOUNCE = 2
 FOCUS_CHECKIN_BASE_MINUTES = 60
 FOCUS_CHECKIN_STEP_MINUTES = 10
 
+# Stranger-detection loop (orchestrator/security_watch.py): its own
+# separate 5s poll, deliberately NOT the shared 15s presence poll (see
+# that module's docstring for the accepted camera-contention tradeoff).
+# Debounce is consecutive qualifying 5s ticks before lockdown engages —
+# 5 * 5s = 25s of a genuinely unrecognized person actively at the desk
+# while Vatsal's away, not a single frame's false read.
+SECURITY_WATCH_POLL_SECONDS = 5
+SECURITY_STRANGER_DEBOUNCE = 5
+
 # =========================================================
 # TOOL SETTINGS
 # =========================================================

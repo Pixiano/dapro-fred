@@ -45,10 +45,26 @@ STATE_PATH = DATA_DIR / "presence_state.json"
 ENROLLMENT_PATH = DATA_DIR / "face_enrollment.json"
 REFERENCE_PHOTO_PATH = DATA_DIR / "face_reference.jpg"
 
+# Family/friend enrollment, strictly additive to Vatsal's own presence
+# tracking above — never read/written by is_present()'s own matching.
+# Deliberately flat, NOT Vatsal's own base/hard/dynamic tiering: this
+# only powers a binary known/unknown gate for
+# orchestrator/security_watch.py, not a debounced presence signal, so
+# that complexity isn't earning its keep here. Format:
+#   {"people": {"Mom": {"greet": true, "embeddings": [{"embedding": [...], "ts": "..."}]}}}
+# No settings UI for MVP — hand-edit "greet" to turn a person's
+# wake-greeting off. Populated via scripts/enroll_face.py --person NAME.
+FAMILY_ENROLLMENT_PATH = DATA_DIR / "family_enrollment.json"
+
 _analyzer = None  # lazy, load-once-keep-warm — same pattern as llm_client._get_model
 _enrollment_embeddings = None  # lazy-loaded list[np.ndarray], cached after first read
+_family_embeddings = None  # lazy-loaded {name: [np.ndarray, ...]}, cached after first read
 
 _state_cache = None  # in-memory mirror of STATE_PATH, simplest correct approach per phone_tools' CALL_SEEN_PATH pattern
+
+# Last per-poll family classification, updated by _frame_matches_enrollment
+# every poll_once() — see last_classification() below.
+_last_classification = {"known_people": [], "unrecognized": False}
 
 # Consecutive present/match polls, in-memory only — mirrors
 # orchestrator/sleep_mode.py's own absent/present streak counters (same
@@ -95,6 +111,27 @@ def _get_enrollment_embeddings() -> dict:
     return _enrollment_embeddings
 
 
+def _get_family_embeddings() -> dict:
+    """{"Mom": [np.ndarray, ...], ...} — cached after first successful
+    load, same lazy-load-once convention as _get_enrollment_embeddings
+    above (rerun enroll_face.py --person NAME and restart to pick up a
+    re-enrollment or a new person). Missing/corrupt file -> empty dict,
+    same as face_enrollment.json's own missing-file handling."""
+    global _family_embeddings
+    if _family_embeddings is None:
+        import numpy as np
+        try:
+            data = json.loads(FAMILY_ENROLLMENT_PATH.read_text(encoding="utf-8"))
+            people = data.get("people", {})
+        except (OSError, ValueError):
+            people = {}
+        _family_embeddings = {
+            name: [np.array(e["embedding"]) for e in info.get("embeddings", [])]
+            for name, info in people.items()
+        }
+    return _family_embeddings
+
+
 def _load_state() -> dict:
     global _state_cache
     if _state_cache is not None:
@@ -127,6 +164,14 @@ def last_seen():
 def last_checked():
     ts = _load_state().get("last_checked")
     return datetime.fromisoformat(ts) if ts else None
+
+
+def last_classification() -> dict:
+    """{"known_people": [name, ...], "unrecognized": bool} from the most
+    recent poll_once() — see _classify_family below. Never affects
+    is_present()'s own Vatsal-only result; this is a sibling read for
+    orchestrator/security_watch.py's stranger-detection loop."""
+    return _last_classification
 
 
 def _cosine_similarity(a, b) -> float:
@@ -268,6 +313,48 @@ def _accumulate_embedding(face):
         _append_embeddings([new_entry])
 
 
+def _classify_family(faces) -> dict:
+    """Sibling classification pass over the SAME already-detected faces
+    from _frame_matches_enrollment's own analyzer.get(frame) call below
+    — no second face-detection run. Binary known/unknown per face
+    against family_enrollment.json (see FAMILY_ENROLLMENT_PATH's format
+    comment above); completely separate from Vatsal's own base/hard/
+    dynamic matching and never affects it.
+
+    A face that matches VATSAL himself (checked against his own
+    enrollment, same PRESENCE_MATCH_THRESHOLD_HIGH bar) is excluded
+    entirely — he isn't in family_enrollment.json, so without this a
+    frame containing only Vatsal would misreport as "unrecognized".
+
+    unrecognized=True means at least one remaining face is neither
+    Vatsal nor a known family member — the signal
+    orchestrator/security_watch.py's stranger-detection loop consumes."""
+    vatsal_tiers = _get_enrollment_embeddings()
+    family = _get_family_embeddings()
+    known = []
+    unrecognized = False
+
+    for face in faces:
+        vatsal_sim, _ = _best_similarity(face.normed_embedding, vatsal_tiers)
+        if vatsal_sim >= PRESENCE_MATCH_THRESHOLD_HIGH:
+            continue  # this is Vatsal, not a family/stranger classification target
+
+        best_name, best_sim = None, -1.0
+        for name, embeddings in family.items():
+            for e in embeddings:
+                sim = _cosine_similarity(face.normed_embedding, e)
+                if sim > best_sim:
+                    best_sim, best_name = sim, name
+
+        if best_name is not None and best_sim >= PRESENCE_MATCH_THRESHOLD_HIGH:
+            if best_name not in known:
+                known.append(best_name)
+        else:
+            unrecognized = True
+
+    return {"known_people": known, "unrecognized": unrecognized}
+
+
 def _frame_matches_enrollment(frame):
     """Runtime multi-face handling, DELIBERATELY different from
     enroll_face.py's single-largest-face heuristic: present (True) if
@@ -290,6 +377,10 @@ def _frame_matches_enrollment(frame):
     match and must never be accumulated regardless of debounce, or when
     present is False."""
     faces = _get_analyzer().get(frame)
+
+    global _last_classification
+    _last_classification = _classify_family(faces)
+
     if not faces:
         return False, None, None
 

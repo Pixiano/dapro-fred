@@ -68,7 +68,13 @@ class ToolRegistry:
         # where lockdown mode actually refuses things, rather than a
         # guard duplicated in every tool. The lockdown tools themselves
         # are always exempt, or there'd be no way to ever unlock again.
-        if tool_name not in ("lockdown_engage", "lockdown_disengage") and lockdown_state.is_locked():
+        # confirm_lockdown_lift is exempt for the same reason
+        # lockdown_disengage is: the entire point of security_watch.py's
+        # stranger-detection lockdown is that it's answerable while
+        # still locked (the primed "lift lockdown?" ask), not a second
+        # thing that gets refused until the PIN is used first.
+        _LOCKDOWN_EXEMPT = ("lockdown_engage", "lockdown_disengage", "confirm_lockdown_lift")
+        if tool_name not in _LOCKDOWN_EXEMPT and lockdown_state.is_locked():
             lockdown_log.log_event("blocked", detail=tool_name)
             return "FRED is in lockdown mode, sir — say 'unlock fred' to restore access."
 

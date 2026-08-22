@@ -183,3 +183,79 @@ def test_poll_once_does_not_accumulate_until_present_debounce_clears(tmp_path, m
     saved = _json.loads(enrollment_path.read_text(encoding="utf-8"))
     assert [e["embedding"] for e in saved["embeddings"]] == [[0.7, 0.7, 0.7]]
     assert saved["embeddings"][0]["kind"] == "dynamic"
+
+
+# =========================================================
+# FAMILY CLASSIFICATION -- last_classification() accessor. Mock a
+# multi-face/single-face frame and assert family matching never affects
+# is_present()'s own Vatsal-only result (_frame_matches_enrollment's
+# return value here is that same Vatsal-only present bool).
+# =========================================================
+
+def test_family_classification_does_not_affect_vatsal_match(monkeypatch):
+    stranger_face = _FakeFace(-0.5)  # matches neither Vatsal nor any family member
+
+    monkeypatch.setattr(
+        presence, "_get_analyzer",
+        lambda: _types.SimpleNamespace(get=lambda frame: [stranger_face]),
+    )
+    monkeypatch.setattr(
+        presence, "_get_enrollment_embeddings",
+        lambda: {"base": [], "hard": [], "dynamic": []},
+    )
+    monkeypatch.setattr(presence, "_get_family_embeddings", lambda: {})
+    monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
+
+    present, matched_face, matched_tier = presence._frame_matches_enrollment("frame")
+
+    assert present is False  # Vatsal-only matching untouched, no match at all
+    classification = presence.last_classification()
+    assert classification["known_people"] == []
+    assert classification["unrecognized"] is True
+
+
+def test_family_classification_recognizes_family_member(monkeypatch):
+    mom_face = _FakeFace(0.9)
+
+    monkeypatch.setattr(
+        presence, "_get_analyzer",
+        lambda: _types.SimpleNamespace(get=lambda frame: [mom_face]),
+    )
+    monkeypatch.setattr(
+        presence, "_get_enrollment_embeddings",
+        lambda: {"base": [], "hard": [], "dynamic": []},
+    )
+    monkeypatch.setattr(presence, "_get_family_embeddings", lambda: {"Mom": [_np.array([0.9, 0.9, 0.9])]})
+    monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
+
+    present, _, _ = presence._frame_matches_enrollment("frame")
+
+    assert present is False  # this face is Mom, not Vatsal -> is_present() stays False
+    classification = presence.last_classification()
+    assert classification["known_people"] == ["Mom"]
+    assert classification["unrecognized"] is False
+
+
+def test_family_classification_excludes_vatsals_own_face(monkeypatch):
+    """A frame containing ONLY Vatsal (who is never in family_enrollment.json)
+    must not report as unrecognized -- his own face is excluded from
+    family classification before the known/unknown check runs."""
+    vatsal_face = _FakeFace(0.9)
+
+    monkeypatch.setattr(
+        presence, "_get_analyzer",
+        lambda: _types.SimpleNamespace(get=lambda frame: [vatsal_face]),
+    )
+    monkeypatch.setattr(
+        presence, "_get_enrollment_embeddings",
+        lambda: {"base": [_np.array([0.9, 0.9, 0.9])], "hard": [], "dynamic": []},
+    )
+    monkeypatch.setattr(presence, "_get_family_embeddings", lambda: {})
+    monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
+
+    present, _, _ = presence._frame_matches_enrollment("frame")
+
+    assert present is True  # real Vatsal match
+    classification = presence.last_classification()
+    assert classification["known_people"] == []
+    assert classification["unrecognized"] is False  # excluded, not a stranger

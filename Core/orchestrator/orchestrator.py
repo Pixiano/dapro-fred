@@ -32,6 +32,7 @@ from tools import otp_tools
 from tools import haismart_tools
 from tools import sleep_mode_tools
 from tools import presence_tools
+from tools import security_tools
 from audio import device_info
 from utils import confidence, sensitive
 from orchestrator import canned_replies
@@ -50,6 +51,7 @@ from config.settings import (
     TOOLS_ENABLED,
     VAULT_CHUNK_INJECT_CHARS,
     SENSITIVE_LOCAL_ONLY,
+    SECURITY_WATCH_POLL_SECONDS,
 )
 
 
@@ -355,6 +357,10 @@ class FREDOrchestrator:
         )
         consolidation.configure(self.llm)
         reflection.configure(self.llm, prime_carry=self._prime_carry)
+        security_watch.configure(prime_carry=self._prime_carry)
+        self.scheduler.add_periodic(
+            security_watch.check, SECURITY_WATCH_POLL_SECONDS / 60, "security_watch"
+        )
 
         self.tools = ToolRegistry()
         self._register_tools()
@@ -1053,6 +1059,24 @@ class FREDOrchestrator:
                 "properties": {
                     "pin": {"type": "string", "description": "The PIN spoken along with the trigger phrase."}
                 },
+            },
+        )
+
+        self.tools.register(
+            name="confirm_lockdown_lift",
+            function=security_tools.confirm_lockdown_lift,
+            description=(
+                "Answer FRED's own 'Welcome back, sir — lift lockdown?' ask after a "
+                "stranger-detection auto-lockdown. Only call this in direct response "
+                "to that specific question, never on a bare 'unlock fred' request — "
+                "that still goes through lockdown_disengage with the PIN."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "confirmed": {"type": "boolean", "description": "True if he said yes, false if no."}
+                },
+                "required": ["confirmed"],
             },
         )
 

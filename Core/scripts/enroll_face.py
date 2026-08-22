@@ -41,6 +41,13 @@ from config.settings import (
 
 EMBEDDINGS_PATH = DATA_DIR / "face_enrollment.json"
 
+# Family/friend enrollment — see input/presence.py's own
+# FAMILY_ENROLLMENT_PATH comment for the flat {"people": {name: {...}}}
+# format. Populated by --person NAME below, deliberately NOT Vatsal's
+# own base/hard/dynamic tiering (that complexity isn't earning its keep
+# for a binary known/unknown gate — see orchestrator/security_watch.py).
+FAMILY_EMBEDDINGS_PATH = DATA_DIR / "family_enrollment.json"
+
 # Guided --hard capture sequence: a small fixed set of adverse conditions,
 # one prompt per shot, same count/spacing as the default base flow
 # (PRESENCE_ENROLLMENT_SHOTS/INTERVAL) — just a different prompt and a
@@ -167,14 +174,38 @@ def seed_from_photo(analyzer, photo_path: Path):
         print(f"Reference photo already exists at {REFERENCE_PHOTO_PATH}, left unchanged.")
 
 
-def _run_capture_session(analyzer, kind: str, conditions: list | None = None):
-    """Shared live-capture loop for both the default "base" flow (plain
-    countdown between shots) and the --hard flow (conditions is a list of
+def _load_family_data() -> dict:
+    try:
+        data = json.loads(FAMILY_EMBEDDINGS_PATH.read_text(encoding="utf-8"))
+        people = data.get("people")
+        return {"people": people} if isinstance(people, dict) else {"people": {}}
+    except (OSError, ValueError):
+        return {"people": {}}
+
+
+def _append_family_embeddings(person: str, new_entries: list) -> list:
+    """Appends into family_enrollment.json["people"][person]["embeddings"].
+    `greet` defaults True on first enrollment for a person — no settings
+    UI for MVP, hand-edit the file to turn a person's wake-greeting off."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data = _load_family_data()
+    entry = data["people"].setdefault(person, {"greet": True, "embeddings": []})
+    entry["embeddings"].extend(new_entries)
+    FAMILY_EMBEDDINGS_PATH.write_text(json.dumps(data), encoding="utf-8")
+    return entry["embeddings"]
+
+
+def _run_capture_session(analyzer, kind: str = "base", conditions: list | None = None, person: str | None = None):
+    """Shared live-capture loop for the default "base" flow (plain
+    countdown between shots), the --hard flow (conditions is a list of
     one prompt string per shot, e.g. "turn away slightly" — printed before
-    that shot's countdown). Reference-photo seeding only happens for
-    "base": a hard-condition frame (dim light, turned away, ...) is
-    deliberately not representative and must never become the reference
-    photo used for the vision-fallback comparison."""
+    that shot's countdown), and the --person NAME flow (person given):
+    same shot count/interval, same largest-face pick, same skip-on-no-face
+    behavior as the other two, just written into family_enrollment.json
+    instead. Reference-photo seeding only happens for "base": a
+    hard-condition or family-member frame is deliberately not Vatsal's own
+    representative photo and must never become the reference photo used
+    for the vision-fallback comparison."""
     shots = len(conditions) if conditions else PRESENCE_ENROLLMENT_SHOTS
 
     cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
@@ -211,11 +242,10 @@ def _run_capture_session(analyzer, kind: str, conditions: list | None = None):
             else:
                 print(f"Shot {shot_num}: 1 face detected, bbox={face.bbox.tolist()}")
 
-            entries.append({
-                "embedding": face.normed_embedding.tolist(),
-                "kind": kind,
-                "ts": datetime.now().isoformat(),
-            })
+            entry = {"embedding": face.normed_embedding.tolist(), "ts": datetime.now().isoformat()}
+            if person is None:
+                entry["kind"] = kind
+            entries.append(entry)
             if reference_frame is None:
                 reference_frame = frame
     finally:
@@ -224,6 +254,12 @@ def _run_capture_session(analyzer, kind: str, conditions: list | None = None):
     if not entries:
         print("No usable shots captured — nothing saved. Rerun the script.")
         sys.exit(1)
+
+    if person is not None:
+        all_embeddings = _append_family_embeddings(person, entries)
+        print(f"Saved {len(entries)}/{shots} new embeddings for {person} "
+              f"({len(all_embeddings)} total) to {FAMILY_EMBEDDINGS_PATH}")
+        return
 
     # Appended, not overwritten: a --seed run and a live run can both
     # contribute embeddings to the same face_enrollment.json.
@@ -258,7 +294,15 @@ def main():
         "Guided capture under adverse conditions (dim light, turned away, "
         "angled/partial view) instead of the default base 5-shot flow — "
         "tags each captured embedding kind=\"hard\". Mutually exclusive "
-        "with --seed."
+        "with --seed and --person."
+    ))
+    parser.add_argument("--person", metavar="NAME", help=(
+        "Enroll a family/friend member instead of Vatsal himself — same "
+        "5-shot live capture, written to family_enrollment.json under "
+        "NAME instead of face_enrollment.json. Powers the binary "
+        "known/unknown gate in orchestrator/security_watch.py only, not "
+        "presence detection. No --hard tiering offered for this path "
+        "(MVP simplification)."
     ))
     args = parser.parse_args()
 
@@ -270,6 +314,13 @@ def main():
 
     if args.seed:
         seed_from_photo(analyzer, Path(args.seed))
+        return
+
+    if args.person:
+        if args.hard:
+            print("--hard tiering isn't offered for --person captures.")
+            sys.exit(1)
+        _run_capture_session(analyzer, person=args.person)
         return
 
     if args.hard:
