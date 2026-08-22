@@ -120,9 +120,10 @@ def test_sleep_enter_polishes_recap_with_llm(monkeypatch):
     seen = {}
 
     class _FakeLLM:
-        def generate(self, messages, local_only=False):
+        def generate(self, messages, local_only=False, max_tokens=None):
             seen["messages"] = messages
             seen["local_only"] = local_only
+            seen["max_tokens"] = max_tokens
             return "While you were away, I saved today's summary and logged a new file to MAP.md."
 
     consolidation.configure(_FakeLLM())
@@ -133,6 +134,11 @@ def test_sleep_enter_polishes_recap_with_llm(monkeypatch):
 
     assert seen["local_only"] is True
     assert seen["messages"][0]["role"] == "system"
+    system_prompt = seen["messages"][0]["content"]
+    assert "ONE short spoken sentence" in system_prompt
+    assert "not a paragraph" in system_prompt
+    assert "combine them into that one sentence" in system_prompt
+    assert seen["max_tokens"] == consolidation._POLISH_MAX_TOKENS
     assert consolidation._pending == (
         "While you were away, I saved today's summary and logged a new file to MAP.md."
     )

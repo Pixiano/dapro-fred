@@ -39,13 +39,20 @@ _llm = None
 _pending = None  # str | None — the bundled recap, waiting to be spoken
 
 _POLISH_SYSTEM_PROMPT = (
-    "Turn this into ONE short, natural, spoken paragraph for a voice "
-    "assistant's welcome-back recap. Informational tone — you're "
-    "reporting things that were already done automatically, not asking "
-    "for confirmation. No markdown, no bullet points, no headings, no "
+    "Turn this into ONE short spoken sentence for a voice assistant's "
+    "welcome-back recap — a single line, not a paragraph. If there are "
+    "multiple things (e.g. a summary saved and files logged to "
+    "MAP.md), combine them into that one sentence rather than listing "
+    "them separately. Informational tone — you're reporting things "
+    "that were already done automatically, not asking for "
+    "confirmation. No markdown, no bullet points, no headings, no "
     "instructions to say anything back. Do not invent anything that "
-    "isn't in the source material. Two or three sentences at most."
+    "isn't in the source material. Example of the target length: "
+    "'While you were away, I saved today's summary and logged 2 new "
+    "files to MAP.md.'"
 )
+
+_POLISH_MAX_TOKENS = 60  # one short sentence, not a paragraph
 
 
 def configure(llm):
@@ -69,6 +76,7 @@ def _polish_recap(parts: list) -> str:
                     {"role": "user", "content": raw},
                 ],
                 local_only=True,
+                max_tokens=_POLISH_MAX_TOKENS,
             )
         except Exception as e:
             print(f"[consolidation] recap polish failed: {e}")
