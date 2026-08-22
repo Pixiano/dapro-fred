@@ -37,6 +37,7 @@ from utils.notifier import notify
 
 _llm = None
 _pending = None  # str | None — the bundled recap, waiting to be spoken
+_last_spoken = None  # str | None — last recap actually spoken, so an unchanged stretch doesn't repeat it
 
 _POLISH_SYSTEM_PROMPT = (
     "Turn this into ONE short spoken sentence for a voice assistant's "
@@ -157,8 +158,18 @@ def on_sleep_exit(greeting: str = None):
     no `_pending` recap at all (an unreviewed draft can be sitting
     there from days ago, long after the cycle that staged it).
     """
-    global _pending
-    message = _pending
+    global _pending, _last_spoken
+    recap = _pending
+    if recap and recap == _last_spoken:
+        # Same stretch, nothing new since it was already reported — see
+        # session_summary.py's own _LAST_RECAP_RE for the same exact-text
+        # dedup applied to the written note; this is the spoken half of
+        # that same "don't repeat what's already been said" rule.
+        recap = None
+    elif recap:
+        _last_spoken = recap
+
+    message = recap
     if greeting:
         message = f"{greeting} {message}" if message else greeting
 
@@ -211,5 +222,12 @@ if __name__ == "__main__":
 
     on_sleep_exit()  # already cleared — still a no-op
     assert len(calls) == 1
+
+    # Next sleep cycle, nothing changed (same stubbed recap text) — must
+    # not repeat the same recap, per Vatsal's 2026-08-22 request.
+    on_sleep_enter()
+    assert _pending is not None
+    on_sleep_exit()
+    assert len(calls) == 1  # no new notify call — unchanged recap suppressed
 
     print("consolidation self-check: all passed")

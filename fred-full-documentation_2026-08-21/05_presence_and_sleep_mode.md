@@ -435,6 +435,15 @@ holds (no persistence file, deliberately).
   `_pending` recap at all. Clears `_pending` before checking whether
   there's anything to say, so a later wake with nothing new never
   re-speaks the same recap.
+  **2026-08-22 fix:** "nothing new" wasn't actually true before this —
+  `on_sleep_enter()` rebuilt and re-spoke the full recap on *every*
+  sleep cycle regardless of whether anything changed (the no-LLM
+  fallback in particular is a deterministic day-count sentence, always
+  identical for an unchanged day). A module-level `_last_spoken` now
+  tracks the last recap text actually spoken; `on_sleep_exit()` skips
+  re-speaking it if unchanged — same exact-text dedup
+  `tools/session_summary.py`'s `_LAST_RECAP_RE` already applies to the
+  *written* note, now applied to the *spoken* half too.
 
 Deliberately does **not** import `orchestrator.sleep_mode` at module
 level (see the module's own docstring) — `sleep_mode.py` imports this
