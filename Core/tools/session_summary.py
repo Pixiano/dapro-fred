@@ -238,7 +238,15 @@ def summarise_today(day: str = None, llm=None, existing_note: str = None) -> str
         # (check_day_rollover), and for the same reason: this reads raw
         # conversation/session content, unattended, and that shouldn't
         # leave the device on its own.
-        return llm.generate(prompt, local_only=True)
+        #
+        # force_no_thinking=True — the user message here is a bulk data
+        # dump (up to 40 asks, plus a whole existing note), routinely
+        # over THINKING_LENGTH_THRESHOLD, so the length-based heuristic
+        # in llm_client._native_call turns thinking ON for this every
+        # time even though "summarise this list" never needs reasoning.
+        # Confirmed live 2026-08-22: the model's reasoning preamble
+        # ("Thinking Process: ...") was spoken to Vatsal verbatim.
+        return llm.generate(prompt, local_only=True, force_no_thinking=True)
     except Exception as e:
         return f"Couldn't summarise today: {e}"
 

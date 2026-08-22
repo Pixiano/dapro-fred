@@ -58,8 +58,9 @@ def test_llm_prose_prompt_does_not_leak_the_tool_tally(tmp_path, monkeypatch):
     seen = {}
 
     class _FakeLLM:
-        def generate(self, messages, local_only=False):
+        def generate(self, messages, local_only=False, force_no_thinking=False):
             seen["messages"] = messages
+            seen["force_no_thinking"] = force_no_thinking
             return "Worked through today's tasks."
 
     result = session_summary.summarise_today("2026-08-04", llm=_FakeLLM())
@@ -68,6 +69,9 @@ def test_llm_prose_prompt_does_not_leak_the_tool_tally(tmp_path, monkeypatch):
     user_content = seen["messages"][1]["content"]
     assert "Tools used" not in user_content
     assert "list_tasks" not in user_content
+    # force_no_thinking=True: the asks list is a bulk data dump, not a
+    # question needing reasoning — see llm_client.generate's docstring.
+    assert seen["force_no_thinking"] is True
 
 
 def test_start_daily_session_is_once_per_day_not_per_launch(tmp_path, monkeypatch):

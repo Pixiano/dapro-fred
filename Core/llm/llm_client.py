@@ -227,7 +227,7 @@ class LLMClient:
         return None
 
     def generate(self, messages: list, tier: str = None, max_tokens: int = None,
-                 local_only: bool = False) -> str:
+                 local_only: bool = False, force_no_thinking: bool = False) -> str:
         """
         Unified generation interface.
 
@@ -250,6 +250,22 @@ class LLMClient:
         rules.md ("Never send personal/ or people/ anywhere. No hosted
         model, no API"), not a preference: the cascade would otherwise
         POST health and identity details about a minor to Groq.
+
+        force_no_thinking: skip THINKING_LENGTH_THRESHOLD's length-based
+        enable_thinking guess and pin it to False. That guess proxies
+        "does this need reasoning" with raw character count of the last
+        user message, which is wrong for a call whose user message is a
+        bulk data dump (a day's worth of requests, a raw recap to
+        polish) rather than an actual question — the dump is long, so
+        the heuristic turns thinking ON for a mechanical
+        summarise/rewrite task that never needed it. Confirmed live
+        2026-08-22: session_summary.summarise_today's prompt tripped
+        this and the model's reasoning preamble ("Thinking Process:
+        ...") was spoken verbatim, because unlike <think>/<|channel>
+        this model didn't wrap it in a tag _strip_thinking recognises.
+        Same fix shape as describe_image's thinking_signal_text param —
+        the length-based signal is wrong for this caller, so the caller
+        overrides it instead of the heuristic being made smarter.
         """
 
         if not local_only:
@@ -278,7 +294,10 @@ class LLMClient:
             # said nothing at all. Thinking-on Qwen3-8B makes this
             # reachable on any turn whose reasoning overruns max_tokens.
             # Say something honest instead of nothing.
-            return self._generate(model, chosen_tier, messages, max_tokens=max_tokens) or (
+            return self._generate(
+                model, chosen_tier, messages, max_tokens=max_tokens,
+                force_no_thinking=force_no_thinking,
+            ) or (
                 "I ran out of room thinking that one through, sir. "
                 "Ask me again, or narrow it down a little."
             )
@@ -291,7 +310,8 @@ class LLMClient:
                 try:
                     model = self._get_model(self.default_tier)
                     return self._generate(
-                        model, self.default_tier, messages, max_tokens=max_tokens
+                        model, self.default_tier, messages, max_tokens=max_tokens,
+                        force_no_thinking=force_no_thinking,
                     ) or (
                         "I ran out of room thinking that one through, sir. "
                         "Ask me again, or narrow it down a little."
@@ -872,7 +892,8 @@ class LLMClient:
     # =========================================================
 
     def _native_call(self, model, tier: str, messages: list, tools=None,
-                      tool_choice=None, max_tokens: int = None, stream: bool = False):
+                      tool_choice=None, max_tokens: int = None, stream: bool = False,
+                      force_no_thinking: bool = False):
         """
         Bypass create_chat_completion()'s fixed signature (no **kwargs
         passthrough — confirmed by reading its source) and call the
@@ -929,7 +950,10 @@ class LLMClient:
             if m.get("role") == "user" and isinstance(m.get("content"), str):
                 last_user_text = m["content"]
                 break
-        enable_thinking = len(last_user_text) > THINKING_LENGTH_THRESHOLD
+        enable_thinking = (
+            False if force_no_thinking
+            else len(last_user_text) > THINKING_LENGTH_THRESHOLD
+        )
 
         return handler(
             llama=model,
@@ -943,9 +967,13 @@ class LLMClient:
             enable_thinking=enable_thinking,
         )
 
-    def _generate(self, model: Llama, tier: str, messages: list, max_tokens: int = None) -> str:
+    def _generate(self, model: Llama, tier: str, messages: list, max_tokens: int = None,
+                   force_no_thinking: bool = False) -> str:
 
-        response = self._native_call(model, tier, messages, max_tokens=max_tokens)
+        response = self._native_call(
+            model, tier, messages, max_tokens=max_tokens,
+            force_no_thinking=force_no_thinking,
+        )
         return self._finish_response(response)
 
     @staticmethod
@@ -1140,6 +1168,16 @@ class LLMClient:
         if "<think>" in content and "</think>" not in content:
             return ""
         if re.search(r"<\|channel>\s*thought\b", content) and "<channel|>" not in content:
+            return ""
+        # Belt-and-suspenders for force_no_thinking callers (generate()'s
+        # own param): some models reason in plain prose with no tag at
+        # all, just a "Thinking Process:" prefix — confirmed live
+        # 2026-08-22, session_summary.summarise_today spoke one verbatim.
+        # No closing marker exists to cut at, so — same as an unclosed
+        # <think> block above — treat the whole thing as unfinished
+        # reasoning with no real answer to extract, rather than guess
+        # where it ends.
+        if re.match(r"^\s*thinking process\s*:", content, re.IGNORECASE):
             return ""
 
         # <think> style

@@ -70,6 +70,13 @@ def _polish_recap(parts: list) -> str:
             # local_only=True — same reasoning as summarise_today's own
             # llm.generate call: this reads a summary of session/vault
             # content, unattended, same sensitivity class.
+            #
+            # force_no_thinking=True — same fix as summarise_today's own
+            # call (session_summary.py): `raw` is a data dump (an
+            # already-built summary plus MAP.md lines), often over
+            # THINKING_LENGTH_THRESHOLD, so the length-based heuristic
+            # would turn thinking on for a one-sentence rewrite that
+            # never needs it.
             return _llm.generate(
                 [
                     {"role": "system", "content": _POLISH_SYSTEM_PROMPT},
@@ -77,6 +84,7 @@ def _polish_recap(parts: list) -> str:
                 ],
                 local_only=True,
                 max_tokens=_POLISH_MAX_TOKENS,
+                force_no_thinking=True,
             )
         except Exception as e:
             print(f"[consolidation] recap polish failed: {e}")

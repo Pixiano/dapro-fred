@@ -256,7 +256,7 @@ def _bare_client(monkeypatch, cloud_calls):
     monkeypatch.setattr(client, "_get_model", lambda tier: _FakeModel())
     monkeypatch.setattr(
         client, "_generate",
-        lambda model, tier, messages, max_tokens=None: "local reply"
+        lambda model, tier, messages, max_tokens=None, force_no_thinking=False: "local reply"
     )
     return client
 
