@@ -435,15 +435,22 @@ holds (no persistence file, deliberately).
   `_pending` recap at all. Clears `_pending` before checking whether
   there's anything to say, so a later wake with nothing new never
   re-speaks the same recap.
-  **2026-08-22 fix:** "nothing new" wasn't actually true before this —
+  **2026-08-22/23 fix:** "nothing new" wasn't actually true before this —
   `on_sleep_enter()` rebuilt and re-spoke the full recap on *every*
-  sleep cycle regardless of whether anything changed (the no-LLM
-  fallback in particular is a deterministic day-count sentence, always
-  identical for an unchanged day). A module-level `_last_spoken` now
-  tracks the last recap text actually spoken; `on_sleep_exit()` skips
-  re-speaking it if unchanged — same exact-text dedup
-  `tools/session_summary.py`'s `_LAST_RECAP_RE` already applies to the
-  *written* note, now applied to the *spoken* half too.
+  sleep cycle regardless of whether anything changed. First attempt
+  (08-22) compared the polished recap TEXT against the last one spoken
+  and skipped a repeat — worked for the no-LLM fallback (a deterministic
+  day-count sentence) but not with a real local model configured: it
+  rephrases an unchanged day differently on every call, so the exact-text
+  compare never matched and the recap kept repeating in practice
+  (confirmed live 2026-08-23, Vatsal: "still speaking the same summaries
+  I have already listened to"). Fixed properly by gating on the actual
+  underlying signal instead of the LLM's wording: `on_sleep_enter()` now
+  compares `session_summary.collect_today()`'s ask COUNT against the
+  count as of the last cycle that had something to report
+  (`_last_ask_count`), and skips calling `summarise_today`/
+  `save_session_summary` entirely — no LLM call, no recap text, nothing
+  to (mis)compare — when nothing new was asked since then.
 
 Deliberately does **not** import `orchestrator.sleep_mode` at module
 level (see the module's own docstring) — `sleep_mode.py` imports this

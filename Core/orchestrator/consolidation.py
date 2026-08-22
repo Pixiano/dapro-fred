@@ -37,7 +37,7 @@ from utils.notifier import notify
 
 _llm = None
 _pending = None  # str | None — the bundled recap, waiting to be spoken
-_last_spoken = None  # str | None — last recap actually spoken, so an unchanged stretch doesn't repeat it
+_last_ask_count = 0  # session_summary asks-count as of the last cycle that had something to report
 
 _POLISH_SYSTEM_PROMPT = (
     "Turn this into ONE short spoken sentence for a voice assistant's "
@@ -96,16 +96,23 @@ def on_sleep_enter():
     """Auto-write the day summary and any MAP.md gap entries while
     Vatsal's away, then stash one polished recap to speak on wake.
     Never raises — a failure here must not block sleep-mode entry."""
-    global _pending
+    global _pending, _last_ask_count
     parts = []
 
     try:
         day = datetime.now().strftime("%Y-%m-%d")
-        note_path = session_summary._daily_note_path(day)
-        existing_note = note_path.read_text(encoding="utf-8") if note_path.exists() else None
-        summary_text = session_summary.summarise_today(day, llm=_llm, existing_note=existing_note)
-        session_summary.save_session_summary(day, llm=_llm, summary=summary_text, auto=True)
-        parts.append(summary_text)
+        ask_count = len(session_summary.collect_today(day)["asks"])
+        # Skip re-summarising (and re-speaking) when nothing new was asked
+        # since the last cycle — the LLM rephrases an unchanged day
+        # differently every call, so comparing its wording can't catch a
+        # repeat; the ask count is the actual signal for "anything new."
+        if ask_count != _last_ask_count:
+            note_path = session_summary._daily_note_path(day)
+            existing_note = note_path.read_text(encoding="utf-8") if note_path.exists() else None
+            summary_text = session_summary.summarise_today(day, llm=_llm, existing_note=existing_note)
+            session_summary.save_session_summary(day, llm=_llm, summary=summary_text, auto=True)
+            parts.append(summary_text)
+            _last_ask_count = ask_count
     except Exception as e:
         print(f"[consolidation] day-summary auto-write failed: {e}")
 
@@ -158,18 +165,8 @@ def on_sleep_exit(greeting: str = None):
     no `_pending` recap at all (an unreviewed draft can be sitting
     there from days ago, long after the cycle that staged it).
     """
-    global _pending, _last_spoken
-    recap = _pending
-    if recap and recap == _last_spoken:
-        # Same stretch, nothing new since it was already reported — see
-        # session_summary.py's own _LAST_RECAP_RE for the same exact-text
-        # dedup applied to the written note; this is the spoken half of
-        # that same "don't repeat what's already been said" rule.
-        recap = None
-    elif recap:
-        _last_spoken = recap
-
-    message = recap
+    global _pending
+    message = _pending
     if greeting:
         message = f"{greeting} {message}" if message else greeting
 
@@ -198,12 +195,18 @@ if __name__ == "__main__":
 
     written = []
     calls = []
+    asks = ["what's the weather", "add a task", "read my email"]  # 3 asks
+    map_missing = ["a.md", "b.md"]  # cleared once "logged", like the real scan_missing/append_missing pair
     globals()["notify"] = lambda msg, title="F.R.E.D.": calls.append((msg, title))
     _ss._daily_note_path = lambda day=None: type("P", (), {"exists": lambda self: False})()
-    _ss.summarise_today = lambda day=None, llm=None, existing_note=None: "3 requests today."
+    _ss.collect_today = lambda day=None: {"asks": asks}
+    # LLM-free rephrasing stand-in: real local-model output varies wording
+    # call to call even for unchanged content, so the fixture varies too —
+    # proves the dedup below can't be relying on exact-text matching.
+    _ss.summarise_today = lambda day=None, llm=None, existing_note=None: f"{len(asks)} requests today (call {len(written) + 1})."
     _ss.save_session_summary = lambda day=None, llm=None, summary="", auto=False: written.append(summary)
-    _vm.scan_missing = lambda: ["a.md", "b.md"]
-    _vm.append_missing = lambda auto=False: written.append(("map", auto))
+    _vm.scan_missing = lambda: list(map_missing)
+    _vm.append_missing = lambda auto=False: (map_missing.clear(), written.append(("map", auto)))[-1]
     _refl.has_pending_review = lambda: False
 
     assert _pending is None
@@ -212,22 +215,34 @@ if __name__ == "__main__":
 
     on_sleep_enter()  # no llm configured — polish falls back to a plain join
     assert _pending is not None
-    assert "3 requests today." in _pending
+    assert "3 requests today" in _pending
     assert "a.md" in _pending and "b.md" in _pending
-    assert written == ["3 requests today.", ("map", True)]  # both auto-written
+    assert len(written) == 2  # summary + map, both auto-written
 
     on_sleep_exit()
-    assert calls and "3 requests today." in calls[0][0]
+    assert calls and "3 requests today" in calls[0][0]
     assert _pending is None  # fire-once
 
     on_sleep_exit()  # already cleared — still a no-op
     assert len(calls) == 1
 
-    # Next sleep cycle, nothing changed (same stubbed recap text) — must
-    # not repeat the same recap, per Vatsal's 2026-08-22 request.
+    # Next sleep cycle, same asks count (nothing new) — must not
+    # re-summarise or re-speak, per Vatsal's 2026-08-22/23 request. This
+    # is checked via the ask-count gate, not by comparing the (variable)
+    # LLM wording, since that's what silently failed to catch a repeat
+    # before.
+    on_sleep_enter()
+    assert _pending is None  # asks unchanged, MAP.md already caught up — nothing to report
+    assert len(written) == 2  # no new writes either
+    on_sleep_exit()
+    assert len(calls) == 1  # no new notify call
+
+    # A genuinely new ask arrives — must summarise and speak again.
+    asks.append("one more thing")
     on_sleep_enter()
     assert _pending is not None
+    assert "4 requests today" in _pending
     on_sleep_exit()
-    assert len(calls) == 1  # no new notify call — unchanged recap suppressed
+    assert len(calls) == 2
 
     print("consolidation self-check: all passed")
