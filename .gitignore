@@ -198,3 +198,7 @@ Core/training/
 # Wispr Flow demo-video project folder - kept out of the repo entirely
 # per Vatsal's call (2026-08-21), not just the oversized raw footage.
 Wispr/
+
+# Single-instance PID lock (Core/utils/single_instance.py) — runtime
+# state written fresh on every launch, not source.
+Core/data/fred.lock

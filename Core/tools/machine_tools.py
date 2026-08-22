@@ -89,6 +89,16 @@ def restart_fred() -> str:
     if not _POPUP_SCRIPT.is_file():
         return "Can't restart — fred_popup.py isn't where I expected it."
 
+    # Deliberately overlaps with the current process: the new instance is
+    # spawned here, on the spot, while this one keeps running until
+    # _wait_then_exit tears it down after the reply finishes speaking.
+    # single_instance's PID lock would otherwise see this (still-alive)
+    # process's PID and refuse to let the new one start — release it
+    # first, since this restart IS the intended hand-off, not a rogue
+    # second launch.
+    from utils.single_instance import release as _release_instance_lock
+    _release_instance_lock()
+
     python = str(_VENV_PYTHONW) if _VENV_PYTHONW.is_file() else sys.executable
     try:
         subprocess.Popen(

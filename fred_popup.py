@@ -115,6 +115,14 @@ def main():
     crash_log = _enable_crash_dump()
     print(f"[fred_popup] crash traces -> {crash_log}")
 
+    # Refuse to start a second FRED alongside a live one — see
+    # utils/single_instance.py for why this matters beyond wasted
+    # resources (a port-binding race between two HUD/phone-API servers).
+    # Must run before anything below binds a port or spawns a child.
+    from utils.single_instance import acquire_or_exit, release
+    acquire_or_exit()
+    atexit.register(release)
+
     # Before anything spawns a child (screen_watcher's multiprocessing
     # workers, hud/server.py, phone_api.py): a hard kill of THIS process
     # (Stop-Process -Force, a crash, Task Manager) otherwise orphans them
