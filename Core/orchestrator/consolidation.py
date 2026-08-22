@@ -1,11 +1,21 @@
 # Core/orchestrator/consolidation.py
 #
-# Sleep-mode consolidation: build a day-summary + MAP.md-gap preview
-# while Vatsal's away (on_sleep_enter), then speak one bundled recap
-# the moment he's back (on_sleep_exit). Both previews are read-only —
-# nothing is written to the vault until Vatsal explicitly says yes
-# afterward, same propose-then-write split tools/session_summary.py and
-# tools/vault_map.py already follow.
+# Sleep-mode consolidation: while Vatsal's away, AUTO-WRITE the day
+# summary (session_summary.save_session_summary) and any MAP.md gap
+# entries (vault_map.append_missing), then speak one bundled,
+# LLM-polished recap the moment he's back (on_sleep_exit). Changed
+# 2026-08-22 per Vatsal's explicit request: this used to be
+# propose-only, requiring "save it" / "add them" afterward, but since
+# this can fire on every sleep-mode cycle (potentially several times an
+# hour) that got repetitive fast. Both writes carry an auto-logged
+# marker (see save_session_summary/append_missing's `auto` param) so
+# it's clear later which entries were unattended.
+#
+# Deep-reflection self-facts (reflection.py's personal/pending-review/
+# staged-review flow) are DELIBERATELY NOT part of this — that's the
+# one thing Vatsal explicitly excluded ("everything other than the
+# gpt-oss deep work"), and it still requires his explicit review before
+# anything about him personally gets written anywhere permanent.
 #
 # In-memory only, fire-once, lost on restart — same reasoning as
 # sleep_mode.py's own state: a restart is a real event, not a crash to
@@ -19,6 +29,8 @@
 # regardless — utils.notifier.notify is called directly instead, the
 # same underlying function proactive_checks.py itself wraps.
 
+from datetime import datetime
+
 from orchestrator import reflection
 from tools import session_summary, vault_map
 from utils.notifier import notify
@@ -26,23 +38,71 @@ from utils.notifier import notify
 _llm = None
 _pending = None  # str | None — the bundled recap, waiting to be spoken
 
+_POLISH_SYSTEM_PROMPT = (
+    "Turn this into ONE short, natural, spoken paragraph for a voice "
+    "assistant's welcome-back recap. Informational tone — you're "
+    "reporting things that were already done automatically, not asking "
+    "for confirmation. No markdown, no bullet points, no headings, no "
+    "instructions to say anything back. Do not invent anything that "
+    "isn't in the source material. Two or three sentences at most."
+)
+
 
 def configure(llm):
     global _llm
     _llm = llm
 
 
+def _polish_recap(parts: list) -> str:
+    """Combine the raw auto-write material into one smooth spoken
+    paragraph. Falls back to a plain join without an llm handle or on
+    any generation failure — never blocks the recap on this."""
+    raw = "\n".join(parts)
+    if _llm is not None:
+        try:
+            # local_only=True — same reasoning as summarise_today's own
+            # llm.generate call: this reads a summary of session/vault
+            # content, unattended, same sensitivity class.
+            return _llm.generate(
+                [
+                    {"role": "system", "content": _POLISH_SYSTEM_PROMPT},
+                    {"role": "user", "content": raw},
+                ],
+                local_only=True,
+            )
+        except Exception as e:
+            print(f"[consolidation] recap polish failed: {e}")
+    return f"While you were away: {raw}"
+
+
 def on_sleep_enter():
-    """Build the recap while Vatsal's away. Read-only, and never
-    raises — a failure here must not block sleep-mode entry itself."""
+    """Auto-write the day summary and any MAP.md gap entries while
+    Vatsal's away, then stash one polished recap to speak on wake.
+    Never raises — a failure here must not block sleep-mode entry."""
     global _pending
+    parts = []
+
     try:
-        summary = session_summary.preview_session_summary(llm=_llm)
-        gap = vault_map.preview_missing()
-        _pending = f"While you were away: {summary}" + (f" Also, {gap}" if gap else "")
+        day = datetime.now().strftime("%Y-%m-%d")
+        note_path = session_summary._daily_note_path(day)
+        existing_note = note_path.read_text(encoding="utf-8") if note_path.exists() else None
+        summary_text = session_summary.summarise_today(day, llm=_llm, existing_note=existing_note)
+        session_summary.save_session_summary(day, llm=_llm, summary=summary_text, auto=True)
+        parts.append(summary_text)
     except Exception as e:
-        print(f"[consolidation] sleep-entry build failed: {e}")
-        _pending = None
+        print(f"[consolidation] day-summary auto-write failed: {e}")
+
+    try:
+        missing = vault_map.scan_missing()
+        if missing:
+            vault_map.append_missing(auto=True)
+            names = ", ".join(missing[:8])
+            more = f" (+{len(missing) - 8} more)" if len(missing) > 8 else ""
+            parts.append(f"Logged {len(missing)} new vault file(s) to MAP.md: {names}{more}.")
+    except Exception as e:
+        print(f"[consolidation] MAP.md auto-write failed: {e}")
+
+    _pending = _polish_recap(parts) if parts else None
 
 
 def append_pending(text: str):
@@ -109,20 +169,25 @@ if __name__ == "__main__":
     import tools.vault_map as _vm
     from orchestrator import reflection as _refl
 
+    written = []
     calls = []
     globals()["notify"] = lambda msg, title="F.R.E.D.": calls.append((msg, title))
-    _ss.preview_session_summary = lambda day=None, llm=None: "3 requests today."
-    _vm.preview_missing = lambda: "2 vault files aren't mapped yet: a.md, b.md."
+    _ss._daily_note_path = lambda day=None: type("P", (), {"exists": lambda self: False})()
+    _ss.summarise_today = lambda day=None, llm=None, existing_note=None: "3 requests today."
+    _ss.save_session_summary = lambda day=None, llm=None, summary="", auto=False: written.append(summary)
+    _vm.scan_missing = lambda: ["a.md", "b.md"]
+    _vm.append_missing = lambda auto=False: written.append(("map", auto))
     _refl.has_pending_review = lambda: False
 
     assert _pending is None
     on_sleep_exit()  # nothing pending yet — must be a no-op
     assert calls == []
 
-    on_sleep_enter()
+    on_sleep_enter()  # no llm configured — polish falls back to a plain join
     assert _pending is not None
     assert "3 requests today." in _pending
-    assert "2 vault files" in _pending
+    assert "a.md" in _pending and "b.md" in _pending
+    assert written == ["3 requests today.", ("map", True)]  # both auto-written
 
     on_sleep_exit()
     assert calls and "3 requests today." in calls[0][0]

@@ -80,15 +80,23 @@ def _guess_holds(path: Path) -> str:
     return title or "TBD"
 
 
-def append_missing() -> str:
+def append_missing(auto: bool = False) -> str:
     """
     Appends one placeholder row per currently-missing file under a flat
     'Unfiled — pending categorization' section (created once, appended
     under thereafter) — no attempt at correct-table placement, that's a
     human/FRED-in-conversation job, not this function's.
 
-    The only function in this module that writes. Only ever called
-    after Vatsal has explicitly said yes to preview_missing()'s text.
+    The only function in this module that writes. Reads MAP.md's own
+    current text first (`text` below) both to find/create the Unfiled
+    section and, via scan_missing(), to skip files already listed — so
+    a second auto-write the same day never re-adds the same row.
+
+    auto: True when called unattended from consolidation.on_sleep_enter()
+    (no spoken "add them" confirmation first, per Vatsal's 2026-08-22
+    request) — tags each new row's "Read when" cell so it's clear later
+    which entries were unattended vs. added via the manual
+    _add_missing_map_entries tool (auto=False, its default).
 
     # ponytail: always appends at end-of-file once the Unfiled section
     # exists, on the assumption nothing else follows it. Fine while this
@@ -102,8 +110,9 @@ def append_missing() -> str:
     map_path = VAULT_DIR / "MAP.md"
     text = map_path.read_text(encoding="utf-8")
 
+    read_when = "TBD — auto-logged" if auto else "TBD"
     rows = "\n".join(
-        f"| [{rel}]({rel}) | {_guess_holds(VAULT_DIR / rel)} | TBD |"
+        f"| [{rel}]({rel}) | {_guess_holds(VAULT_DIR / rel)} | {read_when} |"
         for rel in missing
     )
 

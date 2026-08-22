@@ -175,11 +175,17 @@ if __name__ == "__main__":
     print("session_summary.recall_recent_conversation self-check: all passed")
 
 
-def summarise_today(day: str = None, llm=None) -> str:
+def summarise_today(day: str = None, llm=None, existing_note: str = None) -> str:
     """
     A spoken-length recap of the day. With an `llm` handle it writes
     real prose from the day's actual requests; without one it falls back
     to counts, which is still true and still useful.
+
+    existing_note: the target daily note's current content, if any —
+    passed by save_session_summary (which is about to write into that
+    same file) so the model can avoid re-describing what's already
+    logged there instead of writing blind. Purely additive context;
+    omit it and behavior is unchanged.
     """
     data = collect_today(day)
 
@@ -205,7 +211,9 @@ def summarise_today(day: str = None, llm=None) -> str:
                 "grouped by theme, describing what he was working on. "
                 "No preamble, no closing offer. Do not invent anything "
                 "that isn't in the list. Do not just restate tool names "
-                "or counts — describe what he was actually doing."
+                "or counts — describe what he was actually doing. If "
+                "EXISTING NOTE CONTENT is given below, don't repeat what "
+                "it already covers — describe only what's new."
             ),
         },
         # Deliberately NOT including tools_text (the "X (n), Y (n)" tool
@@ -216,7 +224,13 @@ def summarise_today(day: str = None, llm=None) -> str:
         # supposed to avoid. tools_text is still used below in the
         # no-llm fallback, where a bare tally is the honest, intended
         # output rather than a degraded one.
-        {"role": "user", "content": f"Requests today:\n{asked}"},
+        {
+            "role": "user",
+            "content": (
+                f"Requests today:\n{asked}"
+                + (f"\n\nExisting note content:\n{existing_note}" if existing_note else "")
+            ),
+        },
     ]
 
     try:
@@ -308,13 +322,24 @@ def preview_session_summary(day: str = None, llm=None) -> str:
     )
 
 
-def save_session_summary(day: str = None, llm=None, summary: str = "") -> str:
+def save_session_summary(day: str = None, llm=None, summary: str = "", auto: bool = False) -> str:
     """
     Log the summary into *today's* auto-created vault session block
     (start_daily_session) rather than appending a separate top-level
     block — one place per day for everything FRED logs, not a scattered
-    "## FRED session recap" per save. Only ever called after an explicit
-    confirmation — see preview_session_summary.
+    "## FRED session recap" per save.
+
+    auto: True when called unattended from consolidation.on_sleep_enter()
+    (no spoken "save it" confirmation first, per Vatsal's 2026-08-22
+    request) — tags the recap line with a short marker so it's clear
+    later which entries were unattended vs. manually confirmed via the
+    _save_today_summary tool (auto=False, its default).
+
+    If `summary` isn't given, it's built here rather than by the caller
+    — that lets this read the note's own EXISTING content first and
+    hand it to summarise_today as context, so a summary written on a
+    second sleep-mode cycle the same day doesn't blindly re-describe
+    what an earlier cycle already logged.
 
     If today's session block doesn't exist yet for some reason (e.g.
     this is called from a context that skipped fred_popup.py's startup
@@ -323,9 +348,11 @@ def save_session_summary(day: str = None, llm=None, summary: str = "") -> str:
     """
     day = day or datetime.now().strftime("%Y-%m-%d")
     path = _daily_note_path(day)
-    text = summary or summarise_today(day, llm=llm)
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    text = summary or summarise_today(day, llm=llm, existing_note=existing)
     stamp = datetime.now().strftime("%H:%M")
-    recap = f"\n**Recap — {stamp}:** {text}\n"
+    tag = " _(auto-logged by FRED)_" if auto else ""
+    recap = f"\n**Recap — {stamp}:**{tag} {text}\n"
     marker = _auto_session_marker(day)
 
     try:
