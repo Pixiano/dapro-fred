@@ -25,9 +25,15 @@ def is_sleeping() -> bool:
     return _sleeping
 
 
-def on_presence_poll(present: bool):
+def on_presence_poll(present: bool, greeting: str = None):
     """Feed one presence.poll_once() result in. Called right after every
-    poll in proactive_checks.check_presence()."""
+    poll in proactive_checks.check_presence().
+
+    greeting: optional wake-greeting text, forwarded to
+    consolidation.on_sleep_exit() so it's folded into the same bundled
+    notify() call instead of firing as a second, competing one — see
+    on_sleep_exit's docstring. Only used on the actual presence-return
+    edge below; ignored otherwise."""
     global _streak, _present_streak, _sleeping
 
     if present:
@@ -39,7 +45,7 @@ def on_presence_poll(present: bool):
         if _sleeping and _present_streak >= PRESENCE_PRESENT_DEBOUNCE:
             _sleeping = False
             event_log.log("sleep_mode_exit", reason="presence_returned")
-            consolidation.on_sleep_exit()
+            consolidation.on_sleep_exit(greeting=greeting)
         return
 
     _present_streak = 0

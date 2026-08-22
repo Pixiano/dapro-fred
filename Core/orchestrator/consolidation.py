@@ -59,10 +59,21 @@ def append_pending(text: str):
     _pending = f"{_pending} {text}" if _pending else text
 
 
-def on_sleep_exit():
+def on_sleep_exit(greeting: str = None):
     """
     Speak the bundled recap once, then clear it — fire-once, not
     re-spoken on a later wake with nothing new pending.
+
+    greeting: an optional short wake-greeting (e.g. "Welcome back,
+    sir.") to prefix onto the same message, passed in by
+    sleep_mode.on_presence_poll on a real presence-triggered wake.
+    Confirmed live 2026-08-22: proactive_checks.check_presence used to
+    fire its own separate notify() for this right after this function's
+    notify() call — both landed in the same tick, competing for
+    pill_app._speak_proactive's turn_lock, and the second one silently
+    lost the race and never spoke. Folded in here instead, same fix
+    this function already applies to reflection's review-offer below:
+    one bundled message, not competing proactive announcements.
 
     Also offers reflection's staged self-fact review right alongside
     it, same wake moment, same single notify call — not a second,
@@ -72,6 +83,8 @@ def on_sleep_exit():
     """
     global _pending
     message = _pending
+    if greeting:
+        message = f"{greeting} {message}" if message else greeting
 
     try:
         if reflection.has_pending_review():

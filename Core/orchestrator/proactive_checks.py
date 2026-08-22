@@ -699,11 +699,22 @@ def check_presence():
     hiccup, reaching for something), and PRESENCE_PRESENT_DEBOUNCE (2
     consecutive present polls) does the same for the return trip — a
     single high-confidence-but-wrong frame must not fire the greeting.
-    So the greeting fires on the actual is_sleeping() True->False edge,
-    not on "this one poll came back present" — sleep state is read
-    BEFORE on_presence_poll() mutates it, and compared against the
-    state AFTER, since with the present-debounce in place a single
-    present poll no longer necessarily flips it.
+    So the greeting fires only on the actual is_sleeping() True->False
+    edge, which is why the choice of greeting text is just handed to
+    on_presence_poll() — it's the one that knows whether that edge is
+    being crossed this poll, and only uses it then.
+
+    The greeting text is passed IN to on_presence_poll() rather than
+    this function firing its own notify() after the fact — confirmed
+    live 2026-08-22: a real wake fired consolidation's bundled-recap
+    notify() (inside on_presence_poll(), via sleep_mode's own
+    on_sleep_exit hook) and then this function's separate greeting
+    notify() moments later, and only the first was ever heard. Both
+    routed through pill_app._speak_proactive, which runs on its own
+    thread and skips itself entirely if another proactive utterance
+    already holds the turn lock — so the second notify() call didn't
+    error, it just silently never spoke. See consolidation.on_sleep_exit's
+    docstring: one bundled message, not two competing ones.
     """
     try:
         present = presence.poll_once()
@@ -711,11 +722,7 @@ def check_presence():
         event_log.log_error("proactive_presence", e)
         return
 
-    was_sleeping = sleep_mode.is_sleeping()
-    sleep_mode.on_presence_poll(present)
-
-    if was_sleeping and not sleep_mode.is_sleeping():
-        notify(random.choice(_PRESENCE_GREETINGS), title="Welcome back")
+    sleep_mode.on_presence_poll(present, greeting=random.choice(_PRESENCE_GREETINGS))
 
 
 def register(scheduler, llm=None, on_agenda_ask=None):
