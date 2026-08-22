@@ -205,3 +205,23 @@ def test_outfit_check_offers_look_through_camera():
         assert "vision" in categories, phrase
         tools = intent.tools_for_categories(categories)
         assert "look_through_camera" in tools, phrase
+
+
+def test_save_it_offers_save_today_summary_not_just_files():
+    """
+    Real transcript, session_2026-08-22.jsonl 00:15 and 00:58:
+    preview_session_summary tells the user to say "Say save it to
+    confirm," but "Save it." only matched the "files" category (bare
+    "save" cue) — save_today_summary was never in the offered menu, so
+    the model picked create_text_file from the files menu instead and
+    overwrote the real daily note with a fabricated one. "save it" is
+    now also a "recap" cue, additive alongside "files".
+    """
+    categories = intent.match_categories("Save it.")
+    assert "recap" in categories
+    tools = intent.tools_for_categories(categories)
+    assert "save_today_summary" in tools
+
+    # Additive, not a replacement — an unrelated "save it" about a file
+    # still offers the file tools too.
+    assert "files" in categories

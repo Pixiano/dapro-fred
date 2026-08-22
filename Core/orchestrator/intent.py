@@ -372,6 +372,15 @@ CATEGORY_CUES = {
         "summarize today", "today's summary", "wrap up", "sum up today",
         "log today", "save today", "session log", "daily log", "daily note",
         "today's log", "log for today", "logged today",
+        # "save it" added after a confirmed misroute (session_2026-08-22.jsonl,
+        # 00:15 and 00:58): preview_session_summary's own output tells the
+        # user to say "Say save it to confirm," but "Save it." only matched
+        # the "files" category (bare "save" cue there) — save_today_summary
+        # was never in the offered menu, so the model picked create_text_file
+        # from the files menu instead and wrote a fabricated/empty daily
+        # note over the real one. Unions with "files", doesn't replace it —
+        # same over-inclusive-is-cheap tradeoff as every other cue here.
+        "save it",
     ),
     "recall_recent": (
         "what did we just talk about", "what did i just say",

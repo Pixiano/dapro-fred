@@ -106,3 +106,31 @@ def test_save_session_summary_logs_into_the_days_session_block(tmp_path, monkeyp
     heading_pos = note.find(session_summary._AUTO_SESSION_HEADING)
     recap_pos = note.find("did a thing")
     assert heading_pos < recap_pos
+
+
+def test_repeated_identical_recap_is_not_duplicated(tmp_path, monkeypatch):
+    """
+    Confirmed live 2026-08-22: consolidation.on_sleep_enter() can call
+    save_session_summary(auto=True) on every qualifying sleep-mode cycle
+    — potentially several times an hour — and a quiet stretch of the day
+    regenerates the exact same recap text each time. Without a dedupe
+    check that piled up identical "**Recap — HH:MM:**" lines back to
+    back in the same daily note (one real note had the same line 4x in
+    a row). A call with unchanged text must be a no-op; a call with
+    genuinely new text must still append normally.
+    """
+    monkeypatch.setattr(session_summary, "VAULT_DIR", tmp_path)
+
+    session_summary.start_daily_session("2026-08-16")
+    session_summary.save_session_summary("2026-08-16", summary="3 requests today.")
+    result = session_summary.save_session_summary("2026-08-16", summary="3 requests today.")
+
+    note = session_summary._daily_note_path("2026-08-16").read_text(encoding="utf-8")
+    assert note.count("3 requests today.") == 1
+    assert "already up to date" in result.lower()
+
+    # New text still appends a fresh recap line rather than being swallowed.
+    session_summary.save_session_summary("2026-08-16", summary="5 requests today.")
+    note = session_summary._daily_note_path("2026-08-16").read_text(encoding="utf-8")
+    assert note.count("**Recap") == 2
+    assert "5 requests today." in note

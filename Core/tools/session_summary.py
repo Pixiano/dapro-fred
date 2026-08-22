@@ -19,6 +19,7 @@
 # explicit second step.
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -259,6 +260,16 @@ def _daily_note_path(day: str = None) -> Path:
 
 _AUTO_SESSION_HEADING = "## FRED session — "
 
+# Matches the recap block save_session_summary always inserts right after
+# the heading line, capturing its text so a repeat call can compare
+# against it. Non-greedy up to the first blank line, same assumption the
+# insertion format itself relies on (recap text is a short paragraph with
+# no internal blank line).
+_LAST_RECAP_RE = re.compile(
+    r"\n\*\*Recap — \d{2}:\d{2}:\*\*(?: _\(auto-logged by FRED\)_)? (.*?)\n(?=\n|\Z)",
+    re.DOTALL,
+)
+
 
 def _auto_session_marker(day: str) -> str:
     return f"<!-- fred-session:{day} -->"
@@ -378,6 +389,21 @@ def save_session_summary(day: str = None, llm=None, summary: str = "", auto: boo
 
         marker_line_end = content.find("\n", marker_start) + 1
         heading_line_end = content.find("\n", marker_line_end) + 1
+
+        # on_sleep_enter can fire several times an hour (consolidation.py),
+        # and summarise_today regenerates from the same day's asks each
+        # time — on a quiet cycle that's word-for-word the same text as
+        # last time. Without this check every cycle piled on another
+        # identical "**Recap — HH:MM:**" line (confirmed live 2026-08-22:
+        # the same recap repeated 4x back to back in one daily note).
+        # Comparing against only the most recent recap (right after the
+        # heading, since inserts always go there) is enough — an
+        # unchanged day produces an unchanged recap on every consecutive
+        # cycle, not just some.
+        existing_recap = _LAST_RECAP_RE.match(content[heading_line_end:])
+        if existing_recap and existing_recap.group(1).strip() == text.strip():
+            return f"Today's recap already up to date in {path.name}."
+
         new_content = content[:heading_line_end] + recap + content[heading_line_end:]
         path.write_text(new_content, encoding="utf-8")
         return f"Logged today's recap into the session block in {path.name}."
