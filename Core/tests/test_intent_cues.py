@@ -183,3 +183,25 @@ def test_looking_at_variant_offers_whats_on_screen():
     # replacement, so "find spotify.exe" still offers the file tools too.
     tools = intent.tools_for_categories(intent.match_categories("find spotify.exe"))
     assert "find_file_smart" in tools or "search_files" in tools
+
+
+def test_outfit_check_offers_look_through_camera():
+    """
+    2026-08-22, Vatsal's explicit ask: "do I look good" / "how's my
+    outfit" style phrases are a specific USE of the existing desk-webcam
+    tool (look_through_camera), not a new capability — same "vision"
+    category, same tool, just routed by new cues.
+    """
+    for phrase in (
+        "do I look good?",
+        "how do I look?",
+        "how's my outfit?",
+        "how's my fit today",
+        "check my outfit",
+        "rate my outfit",
+        "how does my outfit look",
+    ):
+        categories = intent.match_categories(phrase)
+        assert "vision" in categories, phrase
+        tools = intent.tools_for_categories(categories)
+        assert "look_through_camera" in tools, phrase

@@ -416,6 +416,13 @@ CATEGORY_CUES = {
         # tool descriptions (see orchestrator.py) pick the right one.
         "my phone's camera", "phone camera", "pic from my phone",
         "photo from my phone", "photo with my phone", "picture with my phone",
+        # Outfit/appearance checks — same desk-webcam tool
+        # (look_through_camera), just a specific use of it rather than a
+        # separate capability. 2026-08-22, Vatsal's explicit ask.
+        "do i look good", "how do i look", "how's my outfit", "hows my outfit",
+        "how's my fit", "hows my fit", "check my outfit", "rate my outfit",
+        "how does my outfit look", "how does this outfit look",
+        "my outfit", "how do i look today",
     ),
     "otp": (
         "otp", "one time password", "one-time password", "verification code",

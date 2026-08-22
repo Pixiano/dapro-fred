@@ -40,6 +40,7 @@ from orchestrator.scheduler import ReminderScheduler
 from orchestrator import proactive_checks
 from orchestrator import consolidation
 from orchestrator import reflection
+from orchestrator import security_watch
 from orchestrator import intent
 from orchestrator import tool_call_log
 from orchestrator.vault_router import VaultRouter
@@ -1797,9 +1798,16 @@ class FREDOrchestrator:
                 "general/default camera tool, use it for 'what am I "
                 "looking at' / 'read this for me' / 'what is this' / "
                 "'through the camera' whenever the user doesn't say "
-                "'phone'. For the phone's camera specifically, use "
-                "take_phone_photo instead. For the phone or PC's own "
-                "screen content, use whats_on_screen instead."
+                "'phone'. Also the right tool for appearance/outfit checks "
+                "('do I look good', 'how's my outfit', 'rate my fit') — "
+                "when the user's ask is this specific, pass their actual "
+                "question through as the `question` argument (e.g. 'How "
+                "does my outfit look?') instead of calling with no "
+                "question, so the vision model answers what was actually "
+                "asked rather than giving a generic scene description. For "
+                "the phone's camera specifically, use take_phone_photo "
+                "instead. For the phone or PC's own screen content, use "
+                "whats_on_screen instead."
             ),
             parameters={
                 "type": "object",

@@ -144,13 +144,26 @@ def look_through_camera(question: str = "") -> str:
     b64 = base64.b64encode(buf.tobytes()).decode("ascii")
     data_uri = f"data:image/jpeg;base64,{b64}"
 
-    prompt = (
-        f"Looking through this camera, answer this question as directly "
-        f"and specifically as possible: {question}"
-        if question else
-        "Describe what this camera is pointed at right now — the general "
-        "scene and any specific text, objects, or people that stand out."
-    )
+    outfit_words = ("outfit", "look good", "how do i look", "my fit", "wearing")
+    if question and any(w in question.lower() for w in outfit_words):
+        # Appearance checks need more than a bare scene description — a
+        # short, direct verdict on clothing/coordination, not a fashion
+        # essay. 2026-08-22, Vatsal's explicit ask ("do I look good").
+        prompt = (
+            f"Looking through this camera at the person in frame, answer "
+            f"this as a quick, direct appearance check: {question} Comment "
+            f"on their outfit/clothing coherence, color coordination, and "
+            f"anything obviously off, in a couple of short sentences — not "
+            f"a full fashion critique."
+        )
+    else:
+        prompt = (
+            f"Looking through this camera, answer this question as directly "
+            f"and specifically as possible: {question}"
+            if question else
+            "Describe what this camera is pointed at right now — the general "
+            "scene and any specific text, objects, or people that stand out."
+        )
 
     try:
         return app.orchestrator.llm.describe_image(data_uri, prompt, max_tokens=300)
