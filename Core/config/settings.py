@@ -1260,9 +1260,9 @@ PRESENCE_MATCH_THRESHOLD_HIGH = 0.58
 
 # Consecutive absent polls (at PRESENCE_POLL_SECONDS each) required before
 # orchestrator/sleep_mode.py declares actual absence and enters sleep
-# mode — debounces someone briefly stepping out of frame. 3 * 15s ≈
-# 45-60s. Vatsal's call 2026-08-21.
-PRESENCE_ABSENT_DEBOUNCE = 3
+# mode — debounces someone briefly stepping out of frame. 4 * 15s ≈
+# 60-75s (~1 min). Raised from 3 (45-60s), Vatsal's call 2026-08-22.
+PRESENCE_ABSENT_DEBOUNCE = 4
 
 # Symmetrical debounce for the return trip: consecutive present/match
 # polls required before treating a return as real — i.e. before

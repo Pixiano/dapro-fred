@@ -342,7 +342,7 @@ comment says to follow presence.py's own `STATE_PATH`/`_save_state`
 pattern — not done as of this doc.
 
 ```
-PRESENCE_ABSENT_DEBOUNCE  = 3   # Core/config/settings.py
+PRESENCE_ABSENT_DEBOUNCE  = 4   # Core/config/settings.py — raised from 3, 2026-08-22
 PRESENCE_PRESENT_DEBOUNCE = 2   # added 2026-08-21, symmetrical return-trip debounce
 ```
 
@@ -355,15 +355,15 @@ every `presence.poll_once()` call, from
   `reason="presence_returned"`, and calls `consolidation.on_sleep_exit()`
   (§4.2) to speak the bundled recap.
 - `present=False`: resets `_present_streak = 0`, increments `_streak`.
-  Once `_streak >= PRESENCE_ABSENT_DEBOUNCE` (3) and not already sleeping,
+  Once `_streak >= PRESENCE_ABSENT_DEBOUNCE` (4) and not already sleeping,
   flips `_sleeping = True`, logs `sleep_mode_enter` with the streak count,
   calls `consolidation.on_sleep_enter()` to start building the recap
   (§4.2), then calls `consolidation.append_pending(reflection.run_if_due())`
   to fold in the deep reflection pass's own audit line if that pass
   actually ran (§4.3).
 
-At `PRESENCE_POLL_SECONDS = 15` per poll: 3 consecutive absences is
-**45–60s** before sleep mode engages; 2 consecutive presences is **30s**
+At `PRESENCE_POLL_SECONDS = 15` per poll: 4 consecutive absences is
+**60–75s** (~1 min) before sleep mode engages; 2 consecutive presences is **30s**
 before it exits / the wake greeting fires / a confirmed match gets
 accumulated into the dynamic embedding tier (§3.3). The present-side
 debounce is deliberately smaller than the absent-side one — a
