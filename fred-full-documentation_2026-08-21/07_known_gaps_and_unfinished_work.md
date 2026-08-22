@@ -17,6 +17,16 @@ The plan doc (`fred-presence-sleep-mode-plan_2026-08-18.md`) scoped four pieces:
 
 **New known gap: "Save it" after a spoken summary offer mis-routes.** Confirmed via log investigation, not yet fixed. Saying "Save it" (or similar) right after FRED offers to save a session/day summary currently routes to `create_text_file` instead of the actual `save_today_summary` propose→save flow, producing an essentially empty daily note rather than the previewed summary content. Root cause not yet isolated to a specific line — flagged here as a reproduced, known bug for whoever picks it up next.
 
+## Family/stranger recognition — built, but unpopulated
+
+`Core/orchestrator/security_watch.py` (commit `1125959`, 2026-08-22) built multi-person recognition (family members) plus a stranger-at-desktop detection/auto-lockdown pipeline. The CODE is complete and tested, but **no family member has actually been enrolled** — `Core/data/family_enrollment.json` is empty/absent, so every face other than Vatsal's currently reads as "unrecognized," including actual family members. This is not a bug, just an unfinished manual step: for each family member, with them physically at the desk, run:
+
+```
+python Core/scripts/enroll_face.py --person "Name"
+```
+
+(same live 5-shot capture flow as Vatsal's own enrollment, just tagged under their name instead of his). Until this is done, the stranger-detection/lockdown path will trigger on family members too, not just genuine strangers.
+
 ## Haismart AC / appliance control — known broken/unstable
 
 Per the recent commit history (`Print list_devices_v2's raw response, not just "no appliances"`, `Validate haismart_setup.py's region prompt is a dialling code, not a country name`), this vendored LAN-protocol integration (`Core/tools/haismart_tools.py`, `Core/tools/haismart_setup.py`, `Core/tools/haismart/vendor/`) has had real, recent bugs around device discovery — a "no appliances found" failure mode that the most recent commit made more diagnosable (print the raw API response) rather than fixed outright. Treat this integration as **not confirmed reliable** — see `04b_tool_inventory.md` for what the current code actually does, and re-verify device discovery against a real account/region before depending on it.

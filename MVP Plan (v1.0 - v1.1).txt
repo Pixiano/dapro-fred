@@ -96,6 +96,76 @@ in voice mode without nagging you for the wake word every turn. Not
 
 
 =================================================================
+v1.2 — Pre-freeze hardening pass, target: tomorrow night (2026-08-23)
+=================================================================
+
+Logged 2026-08-22, Vatsal's call. A large amount of real feature work
+(presence detection, sleep mode, consolidation, deep reflection,
+phone integration, camera tooling, dispatcher fixes, and more) has
+shipped in the sessions since v1.0, well beyond what's listed above —
+this section is the deliberate pass BEFORE the fine-tuning tool-
+surface freeze, not new feature scope. Nothing here should add
+features; everything here should make what already exists correct,
+lean, and legible before it gets locked in.
+
+Ordering matters — do these in sequence, not in parallel, since item
+2 needs to audit the real, current, post-migration architecture:
+
+1. Local-first pass, Pi migration where plausible (DO THIS FIRST)
+   Move everything that can reasonably run local to local. Separately,
+   revisit the Raspberry Pi migration question (see the Pi survey
+   done 2026-08-22 — presence/face-recognition was identified as the
+   strongest candidate: no GPU dependency, already CPU-only, but not
+   currently isolated from the rest of FRED's single-process
+   architecture, and buffalo_l's real performance on Pi-class ARM is
+   unverified, not just unoptimized). Do whatever is actually
+   plausible now; log what isn't yet (e.g. genuinely needs real
+   benchmarking on target hardware first) rather than forcing it.
+
+2. Full subagent-team audit -> this is what makes it "FRED v1.2"
+   A dedicated team of subagents goes through the ENTIRE codebase
+   (post-migration, so it's auditing what's actually going to ship,
+   not a moving target) and:
+     - Finds and fixes real errors/bugs (same standard as this
+       session's live bug-hunting — read logs, confirm root cause,
+       don't guess).
+     - Makes the system more robust generally (fail-soft where it
+       isn't already, no silent swallowed exceptions).
+     - Makes error logging genuinely verbose — every failure mode
+       should be diagnosable from the session log alone, the way
+       today's real bugs (dispatcher misroutes, thinking-leaks, the
+       dropped wake-greeting) all got root-caused FROM the log, not
+       guessed at.
+     - Looks for opportunities to lower total lines of code where it
+       doesn't cost clarity — deletion over addition, this project's
+       own established convention.
+     - Evaluates alternatives for things currently in use (a
+       dependency, a pattern, a library) where a simpler or better-
+       fitting option might exist now that wasn't obvious when it was
+       first chosen.
+     - Refactors into properly modular code where today's shape has
+       drifted (a lot of today's session added functionality fast;
+       this is the deliberate pass to make sure it's still organized
+       well, not just working).
+   Also: document everything produced by this pass — both locally
+   (this repo's own doc conventions, e.g. fred-full-documentation_*)
+   AND on the actual GitHub repo (README, code comments), so the
+   frozen state is fully legible to anyone (including a future
+   fine-tuning run reading this code as training signal).
+
+3. Bonus: a handoff file for future agents
+   A document explicitly written for whichever agent (human or AI,
+   including a future instance of whoever's reading this) picks up
+   FRED next, covering: that the tool surface is frozen, why it's
+   frozen (fine-tuning needs a stable target), how it got frozen
+   (this v1.2 pass), and what's next (where to pick back up once
+   fine-tuning is done — presumably back into v1.1's backlog, or
+   wherever this document points by then).
+
+Deadline: ready to freeze by tomorrow night, 2026-08-23.
+
+
+=================================================================
 v1.1 — Full backlog, due January 31, 2027 (~7 months after v1.0)
 =================================================================
 
