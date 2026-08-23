@@ -1385,7 +1385,16 @@ HEADPHONES_OFF_PATHS = [
 # of its own (was 30s) — Vatsal's own call 2026-08-23: this rides
 # presence.py's own PRESENCE_POLL_SECONDS cadence and gates on
 # presence.is_present(), not an independent schedule.
-HEADPHONE_CHECK_STREAK = 2
+#
+# Raised from 2 to 3 the same day, after a live false-positive switch:
+# headphone_watch.py's own classifier (see its module docstring for the
+# full accuracy history) measured 10/12 on its own reference photos,
+# not 12/12 — a single wrong read clearing a 2-poll debounce was
+# plausible. 3 consecutive wrong reads in a row is a materially lower-
+# probability event than 2, at the cost of ~15s more confirmation delay
+# before a real switch — worth it for something this disruptive to get
+# wrong.
+HEADPHONE_CHECK_STREAK = 3
 
 # Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible
 # once he's been present but hasn't had a real turn/tool-call with FRED for

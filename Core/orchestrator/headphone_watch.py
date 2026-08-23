@@ -16,39 +16,52 @@
 # default changing underneath it. Vatsal's explicit call: only touch
 # what the HUD already touches, not system-wide settings.
 #
-# Classical CV, not a vision-LLM call: presence.py's face detector
-# (insightface, already loaded in-process for identity matching) locates
-# the head, a region above/around the bbox — where headphone ear-cups
-# sit — is cropped and colour-histogram-compared against the same crop
-# from two reference photos (scripts/enroll_headphones.py, which takes
-# two shots per state — one with glasses, one without — this only reads
-# the first of each pair). Vatsal's own call: the vision-LLM round trip
-# first tried here (presence.py's own ambiguous-match fallback pattern)
-# turned out to be pointless for a binary head-region classification —
-# confirmed live 2026-08-23 it was also silently failing outright,
-# CONTEXT_WINDOW_BY_TIER["Vision"] (4096) being too small for even a
-# 2-image request (~7200 tokens needed), a real separate bug fixed in
-# settings.py but irrelevant to this feature now that it doesn't touch
-# that pipeline at all. This path is faster, needs no GPU/LLM
-# contention with the conversation model, and is exactly what the
-# already-loaded face detector is suited for.
+# CLASSIFICATION METHOD, second revision 2026-08-23 — read this before
+# touching _wearing_headphones again, the history matters:
 #
-# Deliberately its own module rather than folded into presence.py or
-# proactive_checks.py — reuses presence.py's face analyzer and
-# camera-index resolver, but its own concern (audio routing) is
-# unrelated to either module's job.
+#   1. Vision-LLM, full-resolution 3-image compare (on-reference,
+#      off-reference, live frame) via llm/vision_server.py. Worked
+#      accuracy-wise once CONTEXT_WINDOW_BY_TIER["Vision"] (was 4096,
+#      too small for even a 2-image request) was raised to 16384 — but
+#      each call took 10-20s at full ~2560px resolution (~3600 prompt
+#      tokens per image), too slow for a check that should run on
+#      presence's own 15s poll.
+#   2. Classical CV: presence.py's face detector locates the head, a
+#      region above/around the bbox is cropped and colour-histogram-
+#      compared (cv2.compareHist) against reference photos. Fast, but
+#      confirmed live 2026-08-23 to misfire in practice (a real false
+#      "headphones on" switch) — self-classification against all 12
+#      reference photos only scored 9/12, and critically the
+#      correlation GAP between the two candidate scores did NOT track
+#      with correctness (a wrong answer could have a LARGER gap than a
+#      right one), so no debounce/margin tweak on top of this signal
+#      could have fixed it. The underlying feature (whole-head-region
+#      colour histogram) is just too diluted by hair/skin/background/
+#      clothing variance to isolate "is there a white plastic object on
+#      this head" reliably.
+#   3. THIS — vision-LLM again, but with the reference AND live images
+#      downscaled to 512px on the long edge before encoding (was full
+#      resolution). Confirmed live 2026-08-23: prompt cost drops from
+#      ~10800 tokens/call to ~1450, latency from 10-20s to ~0.4-0.5s,
+#      and self-classification accuracy against all 12 reference photos
+#      is 10/12 — better than approach 2, at a fraction of approach 1's
+#      cost. (256px was tried first and was too degraded — the model's
+#      answers became biased toward one class, the discriminating
+#      detail was gone; 512px is the point that keeps enough of the
+#      headphones themselves visible.) This is genuinely the best of
+#      the three found so far on "cheap, quick, and accurate" — not
+#      claimed to be perfect, 10/12 is a real number, not 12/12.
 #
 # Gated on presence.is_present() (Vatsal's own call 2026-08-23): runs
 # on presence.py's own 15s poll cadence and skips entirely — no camera
-# open, no face detection — the instant presence's own last-known state
-# says nobody's there. Originally this had its own independent 30s
-# schedule with its own separate camera capture + face-detection call,
-# duplicating presence.py's work on a different cadence and only
-# "cancelling" implicitly when its own detection happened to find no
-# face. Reading presence's already-computed state instead of re-running
-# detection is strictly cheaper and matches what was actually asked for.
+# open — the instant presence's own last-known state says nobody's
+# there.
 
+import base64
+import json as _json
 import random
+import urllib.error
+import urllib.request
 
 import cv2
 
@@ -63,6 +76,14 @@ from audio import device_info
 from input import presence
 from utils import event_log
 
+# Long edge in pixels for both the reference photos and the live frame
+# before they're sent to the vision model — see this module's own
+# docstring (revision 3) for the accuracy/latency numbers behind this
+# specific value. Not "smaller is always better": 256 was tried and
+# lost too much discriminating detail.
+_ENCODE_SIZE = 512
+_JPEG_QUALITY = 80
+
 # None = never checked yet / unknown. True = headphones last confirmed
 # on, False = confirmed off. In-memory only, same "a restart is a real
 # event" reasoning sleep_mode.py's own streak state holds to — on
@@ -71,8 +92,6 @@ from utils import event_log
 _last_state = None
 _streak = 0
 _pending_state = None  # the state the current streak is confirming
-
-_ref_histograms = None  # (on_hist, off_hist), computed once and cached
 
 # Short, varied heads-up on an actual switch — same "sir-suffixed
 # short-phrase-pool" style as proactive_checks.py's own
@@ -107,97 +126,81 @@ def _capture_frame():
     return frame if ok else None
 
 
-def _head_region(frame):
-    """Crop around the largest detected face, expanded upward and
-    outward — where over-ear headphones and their band actually sit,
-    which a plain face bbox doesn't cover. None if no face detected.
-    Resized to a fixed size so the histogram comparison isn't sensitive
-    to how close to the camera the face happens to be this frame."""
-    faces = presence._get_analyzer().get(frame)
-    if not faces:
+def _encode_small(image) -> str | None:
+    """`image` is either a frame (numpy array, from the live camera) or
+    a path (a reference photo on disk). Downscaled to _ENCODE_SIZE on
+    the long edge before JPEG-encoding — see this module's own
+    docstring for why."""
+    frame = cv2.imread(str(image)) if not hasattr(image, "shape") else image
+    if frame is None:
         return None
-
-    face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
-    x1, y1, x2, y2 = face.bbox.astype(int)
-    w, h = x2 - x1, y2 - y1
-
-    top = max(0, y1 - int(h * 0.6))
-    left = max(0, x1 - int(w * 0.3))
-    right = min(frame.shape[1], x2 + int(w * 0.3))
-    bottom = min(frame.shape[0], y2)
-
-    crop = frame[top:bottom, left:right]
-    if crop.size == 0:
+    h, w = frame.shape[:2]
+    scale = _ENCODE_SIZE / max(h, w)
+    if scale < 1:
+        frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+    ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, _JPEG_QUALITY])
+    if not ok:
         return None
-    return cv2.resize(crop, (128, 128))
-
-
-def _histogram(crop):
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    hist = cv2.calcHist([hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
-    cv2.normalize(hist, hist)
-    return hist
-
-
-def _average_histogram(paths):
-    """Mean histogram across every path in `paths` that exists on disk
-    and has a detectable face — not just the first. More reference
-    shots (Vatsal's own call 2026-08-23, 4 per state now instead of 2)
-    genuinely improves the comparison this way instead of the extras
-    sitting on disk unused as spares."""
-    hists = []
-    for path in paths:
-        if not path.exists():
-            continue
-        crop = _head_region(cv2.imread(str(path)))
-        if crop is not None:
-            hists.append(_histogram(crop))
-    if not hists:
-        return None
-    avg = sum(hists) / len(hists)
-    cv2.normalize(avg, avg)
-    return avg
-
-
-def _reference_histograms():
-    """Cached after first successful computation — same lazy-load-once
-    convention as presence.py's own _get_enrollment_embeddings. Rerun
-    enroll_headphones.py and restart the process to pick up new
-    reference photos, same as re-enrollment for faces."""
-    global _ref_histograms
-    if _ref_histograms is not None:
-        return _ref_histograms
-
-    on_hist = _average_histogram(HEADPHONES_ON_PATHS)
-    off_hist = _average_histogram(HEADPHONES_OFF_PATHS)
-    if on_hist is None or off_hist is None:
-        return None
-
-    _ref_histograms = (on_hist, off_hist)
-    return _ref_histograms
+    return "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
 
 
 def _wearing_headphones(frame) -> bool | None:
-    """True/False on a clear signal (one reference correlates more
-    strongly than the other), None if no face was detected, the
-    reference photos aren't ready, or the two scores are exactly tied
-    (caller keeps the last known state rather than guessing)."""
-    refs = _reference_histograms()
-    if refs is None:
+    """True/False on a clear signal, None if the reference photos
+    aren't ready, encoding failed, or the model/network genuinely
+    couldn't produce a clear signal (caller keeps the last known state
+    rather than guessing)."""
+    from llm import vision_server
+
+    on_path, off_path = HEADPHONES_ON_PATHS[0], HEADPHONES_OFF_PATHS[0]
+    if not (on_path.exists() and off_path.exists()):
         return None
-    on_hist, off_hist = refs
 
-    crop = _head_region(frame)
-    if crop is None:
+    if not vision_server.ensure_running():
+        event_log.log("headphone_watch", note="vision server unavailable")
         return None
-    hist = _histogram(crop)
 
-    on_score = cv2.compareHist(hist, on_hist, cv2.HISTCMP_CORREL)
-    off_score = cv2.compareHist(hist, off_hist, cv2.HISTCMP_CORREL)
+    on_uri, off_uri = _encode_small(on_path), _encode_small(off_path)
+    cur_uri = _encode_small(frame)
+    if on_uri is None or off_uri is None or cur_uri is None:
+        return None
 
-    if on_score > off_score:
+    prompt = (
+        "Image1 shows headphones worn. Image2 shows no headphones. Does "
+        "Image3 match Image1 or Image2? Answer with ONLY the single word "
+        "WEARING or NOT, no explanation."
+    )
+    payload = {
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": on_uri}},
+                {"type": "image_url", "image_url": {"url": off_uri}},
+                {"type": "image_url", "image_url": {"url": cur_uri}},
+            ],
+        }],
+        "max_tokens": 60,
+        "temperature": 0.1,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    req = urllib.request.Request(
+        f"{vision_server._BASE_URL}/v1/chat/completions",
+        data=_json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30.0) as resp:
+            data = _json.loads(resp.read())
+        reply = (data["choices"][0]["message"]["content"] or "").strip().lower()
+    except (urllib.error.URLError, KeyError, IndexError, ValueError) as e:
+        event_log.log_error("headphone_watch", e)
+        return None
+
+    has_wearing = "wearing" in reply
+    has_not = reply.startswith("not") or " not" in f" {reply}"
+    if has_wearing and not has_not:
         return True
-    if off_score > on_score:
+    if has_not and not has_wearing:
         return False
     return None
 
@@ -229,7 +232,7 @@ def check_and_switch(notify=None):
 
         result = _wearing_headphones(frame)
         if result is None:
-            return  # no face / ambiguous — keep the last known state
+            return  # ambiguous/unavailable — keep the last known state
 
         if result != _pending_state:
             _pending_state = result
