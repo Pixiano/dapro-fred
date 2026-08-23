@@ -33,7 +33,6 @@ from datetime import datetime
 from config.settings import (
     FOCUS_CHECKIN_BASE_MINUTES,
     FOCUS_CHECKIN_STEP_MINUTES,
-    PRESENCE_CAMERA_INDEX,
     PROACTIVE_STATE_PATH,
     VAULT_DIR,
 )
@@ -101,7 +100,7 @@ def _capture_frame():
     neither of which this needs."""
     import cv2
 
-    cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
+    cap = cv2.VideoCapture(presence.resolve_camera_index())
     try:
         if not cap.isOpened():
             return None

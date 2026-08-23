@@ -34,10 +34,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config.settings import (
     DATA_DIR,
     PRESENCE_BASE_EMBEDDINGS_TARGET,
-    PRESENCE_CAMERA_INDEX,
     PRESENCE_ENROLLMENT_INTERVAL_SECONDS,
     PRESENCE_ENROLLMENT_SHOTS,
 )
+from input.presence import resolve_camera_index
 
 EMBEDDINGS_PATH = DATA_DIR / "face_enrollment.json"
 
@@ -208,9 +208,10 @@ def _run_capture_session(analyzer, kind: str = "base", conditions: list | None =
     for the vision-fallback comparison."""
     shots = len(conditions) if conditions else PRESENCE_ENROLLMENT_SHOTS
 
-    cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
+    camera_index = resolve_camera_index()
+    cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
-        print(f"Could not open camera index {PRESENCE_CAMERA_INDEX}.")
+        print(f"Could not open camera index {camera_index}.")
         sys.exit(1)
 
     entries = []

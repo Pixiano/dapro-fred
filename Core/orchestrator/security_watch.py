@@ -109,7 +109,7 @@ def _burst_save_photos() -> int:
     open/read/release-per-shot pattern as everywhere else in this
     codebase (presence.py's poll_once, focus_checkin._capture_frame)."""
     import cv2
-    from config.settings import PRESENCE_CAMERA_INDEX, VAULT_DIR
+    from config.settings import VAULT_DIR
 
     now = datetime.now()
     day_dir = VAULT_DIR / "personal" / "security-events" / f"{now:%Y-%m-%d_%A}"
@@ -117,7 +117,7 @@ def _burst_save_photos() -> int:
 
     saved = 0
     for i in range(_BURST_PHOTO_COUNT):
-        cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
+        cap = cv2.VideoCapture(presence.resolve_camera_index())
         try:
             if not cap.isOpened():
                 continue
