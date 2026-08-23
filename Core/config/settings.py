@@ -879,14 +879,25 @@ CONTEXT_WINDOW_BY_TIER = {
     # neither number has been measured on this machine — re-check VRAM
     # at this n_ctx during the same manual load test before trusting it.
     "Reflect": 32768,
-    # Small on purpose — a screen description is a sentence or two, not
-    # a conversation. Keeping this tight also keeps the tier's VRAM
-    # footprint down, which matters more here than anywhere else: this
-    # is the one tier that can be resident in a SEPARATE process from
-    # the conversation model (see vision/screen_watcher.py), so unlike
-    # every other tier its footprint doesn't automatically get the
-    # single-process eviction guarantee below.
-    "Vision": 4096,
+    # Was 4096, sized only for describe_image()'s single-image "sentence
+    # or two" case. Confirmed broken 2026-08-23: this same tier is also
+    # what the multi-image comparison calls use (presence.py's
+    # ambiguous-match vision fallback, 2 images; headphone_watch.py's
+    # on/off/live compare, 3) — each image alone costs ~3600 prompt
+    # tokens, so even 2 images (~7200) already exceeded 4096 and always
+    # 400'd with "exceed_context_size_error", silently. This is why
+    # presence's vision fallback kept logging "HTTP Error 400: Bad
+    # Request" instead of ever actually resolving an ambiguous frame —
+    # it structurally could not have worked since that fallback was
+    # built. 16384 covers 3 images (~10800) with real headroom, and
+    # matches Backup/Extreme's own already-proven-safe size on this
+    # card rather than a new unmeasured number. Still the one tier that
+    # can be resident in a SEPARATE process from the conversation model
+    # (see vision/screen_watcher.py), so its footprint doesn't get the
+    # single-process eviction guarantee below — worth re-checking VRAM
+    # headroom if Vision and a large conversation tier are ever
+    # resident at the same time.
+    "Vision": 16384,
 }
 
 # Genuinely active: the venv's llama-cpp-python 0.3.31 is a CUDA build
@@ -1348,7 +1359,14 @@ PROACTIVE_CAMERA_OBSTRUCTION_STREAK = 3
 HEADPHONE_OUTPUT_DEVICE_NAME = "Da Pro's Rockerz (Rockerz 512 ANC)"
 SPEAKER_OUTPUT_DEVICE_NAME = "Speakers (Realtek(R) Audio)"
 
-HEADPHONES_REFERENCE_PATH = DATA_DIR / "headphones_reference.jpg"
+# Two shots each state (Vatsal's own call 2026-08-23 — one with glasses,
+# one without, so a glasses-day frame isn't compared against a
+# glasses-less reference or vice versa). The live runtime check
+# (headphone_watch.py) uses the first of each pair; the second is a
+# spare on disk, not currently read by anything — swap the list order
+# by hand if the first shot turns out to be the worse comparison photo.
+HEADPHONES_ON_PATHS = [DATA_DIR / "headphones_on_1.jpg", DATA_DIR / "headphones_on_2.jpg"]
+HEADPHONES_OFF_PATHS = [DATA_DIR / "headphones_off_1.jpg", DATA_DIR / "headphones_off_2.jpg"]
 
 # How often to check, and how many consecutive same-answer checks
 # before actually switching the output device — audio switching mid-

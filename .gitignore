@@ -33,6 +33,13 @@ Core/data/face_enrollment.json
 Core/data/face_reference.jpg
 Core/data/presence_state.json
 
+# Headphone-detection reference photos (Core/scripts/enroll_headphones.py)
+# — same treatment as face_reference.jpg above.
+Core/data/headphones_on_1.jpg
+Core/data/headphones_on_2.jpg
+Core/data/headphones_off_1.jpg
+Core/data/headphones_off_2.jpg
+
 # Family/friend face embeddings (Core/scripts/enroll_face.py --person) —
 # biometric data for other real people, same treatment as above.
 Core/data/family_enrollment.json
