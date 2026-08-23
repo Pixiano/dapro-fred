@@ -1368,11 +1368,13 @@ SPEAKER_OUTPUT_DEVICE_NAME = "Speakers (Realtek(R) Audio)"
 HEADPHONES_ON_PATHS = [DATA_DIR / "headphones_on_1.jpg", DATA_DIR / "headphones_on_2.jpg"]
 HEADPHONES_OFF_PATHS = [DATA_DIR / "headphones_off_1.jpg", DATA_DIR / "headphones_off_2.jpg"]
 
-# How often to check, and how many consecutive same-answer checks
-# before actually switching the output device — audio switching mid-
-# word is more jarring than a delayed presence greeting, so this trades
-# responsiveness for not flapping on a single bad/ambiguous frame.
-HEADPHONE_CHECK_SECONDS = 30
+# How many consecutive same-answer checks before actually switching the
+# output device — audio switching mid-word is more jarring than a
+# delayed presence greeting, so this trades responsiveness for not
+# flapping on a single bad/ambiguous frame. No separate poll interval
+# of its own (was 30s) — Vatsal's own call 2026-08-23: this rides
+# presence.py's own PRESENCE_POLL_SECONDS cadence and gates on
+# presence.is_present(), not an independent schedule.
 HEADPHONE_CHECK_STREAK = 2
 
 # Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible

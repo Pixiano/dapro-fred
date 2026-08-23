@@ -37,6 +37,16 @@
 # proactive_checks.py — reuses presence.py's face analyzer and
 # camera-index resolver, but its own concern (audio routing) is
 # unrelated to either module's job.
+#
+# Gated on presence.is_present() (Vatsal's own call 2026-08-23): runs
+# on presence.py's own 15s poll cadence and skips entirely — no camera
+# open, no face detection — the instant presence's own last-known state
+# says nobody's there. Originally this had its own independent 30s
+# schedule with its own separate camera capture + face-detection call,
+# duplicating presence.py's work on a different cadence and only
+# "cancelling" implicitly when its own detection happened to find no
+# face. Reading presence's already-computed state instead of re-running
+# detection is strictly cheaper and matches what was actually asked for.
 
 import random
 
@@ -50,7 +60,7 @@ from config.settings import (
     SPEAKER_OUTPUT_DEVICE_NAME,
 )
 from audio import device_info
-from input.presence import _get_analyzer, resolve_camera_index
+from input import presence
 from utils import event_log
 
 # None = never checked yet / unknown. True = headphones last confirmed
@@ -87,7 +97,7 @@ def _capture_frame():
     else in this codebase (presence.py's poll_once, vision_tools.py's
     look_through_camera). Returns None on any camera failure — this
     check just skips a cycle rather than raising."""
-    cap = cv2.VideoCapture(resolve_camera_index())
+    cap = cv2.VideoCapture(presence.resolve_camera_index())
     try:
         if not cap.isOpened():
             return None
@@ -103,7 +113,7 @@ def _head_region(frame):
     which a plain face bbox doesn't cover. None if no face detected.
     Resized to a fixed size so the histogram comparison isn't sensitive
     to how close to the camera the face happens to be this frame."""
-    faces = _get_analyzer().get(frame)
+    faces = presence._get_analyzer().get(frame)
     if not faces:
         return None
 
@@ -192,6 +202,9 @@ def check_and_switch(notify=None):
 
     if not (HEADPHONES_ON_PATHS[0].exists() and HEADPHONES_OFF_PATHS[0].exists()):
         return  # not enrolled yet — see scripts/enroll_headphones.py
+
+    if not presence.is_present():
+        return  # presence.py's own poll already says nobody's there — no camera capture needed
 
     try:
         frame = _capture_frame()

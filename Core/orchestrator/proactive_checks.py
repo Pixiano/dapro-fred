@@ -37,7 +37,6 @@ from config.settings import (
     PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_STREAK,
-    HEADPHONE_CHECK_SECONDS,
 )
 from input import presence
 from orchestrator import focus_checkin, headphone_watch, reflection, sleep_mode
@@ -881,14 +880,18 @@ def register(scheduler, llm=None, on_agenda_ask=None):
         "proactive_camera_obstruction",
     )
     # Headphone-detection -> audio-output switching — see
-    # orchestrator/headphone_watch.py's own module docstring. A no-op
-    # every tick until scripts/enroll_headphones.py has been run once.
-    # Fires through this module's own notify() (passed in, not imported
-    # back — same reason focus_checkin.check(notify) takes it as a
-    # parameter below) so sleep-mode gating is automatic.
+    # orchestrator/headphone_watch.py's own module docstring. Rides
+    # presence polling's own 15s cadence rather than a separate
+    # schedule (Vatsal's own call 2026-08-23) — it gates on
+    # presence.is_present() as its first check, so this is cheap on
+    # every tick nobody's there. A no-op every tick until
+    # scripts/enroll_headphones.py has been run once. Fires through
+    # this module's own notify() (passed in, not imported back — same
+    # reason focus_checkin.check(notify) takes it as a parameter below)
+    # so sleep-mode gating is automatic.
     scheduler.add_periodic(
         lambda: headphone_watch.check_and_switch(notify),
-        HEADPHONE_CHECK_SECONDS / 60,
+        PRESENCE_POLL_SECONDS / 60,
         "proactive_headphone_watch",
     )
     # Focus-awareness check-in — see orchestrator/focus_checkin.py. Fires
