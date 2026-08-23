@@ -392,19 +392,28 @@ def save_session_summary(day: str = None, llm=None, summary: str = "", auto: boo
 
         # on_sleep_enter can fire several times an hour (consolidation.py),
         # and summarise_today regenerates from the same day's asks each
-        # time — on a quiet cycle that's word-for-word the same text as
-        # last time. Without this check every cycle piled on another
-        # identical "**Recap — HH:MM:**" line (confirmed live 2026-08-22:
-        # the same recap repeated 4x back to back in one daily note).
-        # Comparing against only the most recent recap (right after the
-        # heading, since inserts always go there) is enough — an
-        # unchanged day produces an unchanged recap on every consecutive
-        # cycle, not just some.
-        existing_recap = _LAST_RECAP_RE.match(content[heading_line_end:])
+        # time. Comparing against only the most recent recap (right after
+        # the heading, since it's always the one right there) catches an
+        # unchanged day on every consecutive cycle, not just some.
+        after_heading = content[heading_line_end:]
+        existing_recap = _LAST_RECAP_RE.match(after_heading)
         if existing_recap and existing_recap.group(1).strip() == text.strip():
             return f"Today's recap already up to date in {path.name}."
 
-        new_content = content[:heading_line_end] + recap + content[heading_line_end:]
+        if existing_recap:
+            # UPDATE today's recap in place rather than inserting a new
+            # block above it. Originally this always inserted, so a day
+            # with many FRED restarts/sleep-wake cycles piled up a
+            # separate "**Recap — HH:MM:**" line per call — confirmed
+            # live 2026-08-23: one real daily note had 7 of these, each
+            # restating overlapping ground, while the note's own
+            # What-Got-Done/In-Progress/etc. sections sat empty below
+            # them. One evolving recap per day is the fix; a genuinely
+            # new day still gets a fresh block via start_daily_session.
+            tail = after_heading[existing_recap.end():]
+            new_content = content[:heading_line_end] + recap + tail
+        else:
+            new_content = content[:heading_line_end] + recap + after_heading
         path.write_text(new_content, encoding="utf-8")
         return f"Logged today's recap into the session block in {path.name}."
     except OSError as e:

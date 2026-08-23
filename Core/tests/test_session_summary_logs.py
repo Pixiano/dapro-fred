@@ -116,8 +116,7 @@ def test_repeated_identical_recap_is_not_duplicated(tmp_path, monkeypatch):
     regenerates the exact same recap text each time. Without a dedupe
     check that piled up identical "**Recap — HH:MM:**" lines back to
     back in the same daily note (one real note had the same line 4x in
-    a row). A call with unchanged text must be a no-op; a call with
-    genuinely new text must still append normally.
+    a row). A call with unchanged text must be a no-op.
     """
     monkeypatch.setattr(session_summary, "VAULT_DIR", tmp_path)
 
@@ -129,8 +128,23 @@ def test_repeated_identical_recap_is_not_duplicated(tmp_path, monkeypatch):
     assert note.count("3 requests today.") == 1
     assert "already up to date" in result.lower()
 
-    # New text still appends a fresh recap line rather than being swallowed.
+
+def test_second_same_day_call_with_new_text_updates_in_place(tmp_path, monkeypatch):
+    """
+    Root-cause fix, confirmed live 2026-08-23: before this, a call with
+    genuinely NEW content still INSERTED a second "**Recap — HH:MM:**"
+    block above the first rather than replacing it — over a day with many
+    FRED restarts/sleep-wake cycles that piled up N near-duplicate blocks
+    (one real note had 7). A second same-day call must instead UPDATE the
+    existing recap in place: one evolving recap per day, never two.
+    """
+    monkeypatch.setattr(session_summary, "VAULT_DIR", tmp_path)
+
+    session_summary.start_daily_session("2026-08-16")
+    session_summary.save_session_summary("2026-08-16", summary="3 requests today.")
     session_summary.save_session_summary("2026-08-16", summary="5 requests today.")
+
     note = session_summary._daily_note_path("2026-08-16").read_text(encoding="utf-8")
-    assert note.count("**Recap") == 2
+    assert note.count("**Recap") == 1
     assert "5 requests today." in note
+    assert "3 requests today." not in note
