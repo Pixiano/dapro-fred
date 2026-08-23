@@ -37,8 +37,16 @@ Core/data/presence_state.json
 # — same treatment as face_reference.jpg above.
 Core/data/headphones_on_1.jpg
 Core/data/headphones_on_2.jpg
+Core/data/headphones_on_3.jpg
+Core/data/headphones_on_4.jpg
+Core/data/headphones_on_5.jpg
+Core/data/headphones_on_6.jpg
 Core/data/headphones_off_1.jpg
 Core/data/headphones_off_2.jpg
+Core/data/headphones_off_3.jpg
+Core/data/headphones_off_4.jpg
+Core/data/headphones_off_5.jpg
+Core/data/headphones_off_6.jpg
 
 # Family/friend face embeddings (Core/scripts/enroll_face.py --person) —
 # biometric data for other real people, same treatment as above.

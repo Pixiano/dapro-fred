@@ -1,18 +1,17 @@
 # Core/scripts/enroll_headphones.py
 #
-# ONE-TIME setup for orchestrator/headphone_watch.py: captures 4
-# reference photos of Vatsal — two wearing the headphones (one with
-# glasses, one without) and two not (same), saved to
-# HEADPHONES_ON_PATHS / HEADPHONES_OFF_PATHS. Same "run by hand
-# whenever it needs (re)doing" convention as scripts/enroll_face.py —
-# not wired into FRED's voice/turn flow.
+# ONE-TIME setup for orchestrator/headphone_watch.py: captures 8
+# reference photos of Vatsal — four wearing the headphones and four not
+# — saved to HEADPHONES_ON_PATHS / HEADPHONES_OFF_PATHS. Same "run by
+# hand whenever it needs (re)doing" convention as scripts/enroll_face.py
+# — not wired into FRED's voice/turn flow.
 #
-# The glasses variation is Vatsal's own call 2026-08-23: a glasses-day
-# frame compared only against a glasses-less reference (or vice versa)
-# is a needless extra source of mismatch, so one reference of each
-# combination goes on disk. headphone_watch.py's live check only reads
-# the first of each pair; the second is a spare, not currently read by
-# anything.
+# Raised from 2 shots per state to 4 (Vatsal's own call 2026-08-23),
+# mainly for more glasses-combination coverage: a glasses-day frame
+# compared only against a glasses-less reference (or vice versa) is a
+# needless extra source of mismatch. headphone_watch.py's live check
+# averages the histogram across every shot that exists per state, not
+# just the first — more shots genuinely improve the comparison now.
 #
 # NOT CI-safe: needs a real camera and Vatsal actually present, midway
 # switching the headphones on/off on cue. No automated test — the only
@@ -34,8 +33,12 @@ from input.presence import resolve_camera_index
 _SHOTS = [
     (HEADPHONES_ON_PATHS[0], 10, "Wearing the headphones, shot 1."),
     (HEADPHONES_ON_PATHS[1], 10, "Wearing the headphones, shot 2 — swap glasses on/off from shot 1."),
-    (HEADPHONES_OFF_PATHS[0], 10, "Take the headphones OFF now. Shot 3 (no headphones)."),
-    (HEADPHONES_OFF_PATHS[1], 10, "No headphones, shot 4 — swap glasses on/off from shot 3."),
+    (HEADPHONES_ON_PATHS[2], 10, "Wearing the headphones, shot 3 — new angle/pose, glasses as you like."),
+    (HEADPHONES_ON_PATHS[3], 10, "Wearing the headphones, shot 4 — swap glasses on/off from shot 3."),
+    (HEADPHONES_OFF_PATHS[0], 10, "Take the headphones OFF now. Shot 5 (no headphones)."),
+    (HEADPHONES_OFF_PATHS[1], 10, "No headphones, shot 6 — swap glasses on/off from shot 5."),
+    (HEADPHONES_OFF_PATHS[2], 10, "No headphones, shot 7 — new angle/pose, glasses as you like."),
+    (HEADPHONES_OFF_PATHS[3], 10, "No headphones, shot 8 — swap glasses on/off from shot 7."),
 ]
 
 
@@ -52,7 +55,11 @@ def _capture(index: int):
 
 _SLOT_PATHS = {
     "on1": HEADPHONES_ON_PATHS[0], "on2": HEADPHONES_ON_PATHS[1],
+    "on3": HEADPHONES_ON_PATHS[2], "on4": HEADPHONES_ON_PATHS[3],
+    "on5": HEADPHONES_ON_PATHS[4], "on6": HEADPHONES_ON_PATHS[5],
     "off1": HEADPHONES_OFF_PATHS[0], "off2": HEADPHONES_OFF_PATHS[1],
+    "off3": HEADPHONES_OFF_PATHS[2], "off4": HEADPHONES_OFF_PATHS[3],
+    "off5": HEADPHONES_OFF_PATHS[4], "off6": HEADPHONES_OFF_PATHS[5],
 }
 
 
@@ -96,7 +103,7 @@ def main():
         if not capture_one(path, countdown):
             sys.exit(1)
 
-    print("Done — 4 reference photos saved.")
+    print("Done — 8 reference photos saved.")
 
 
 if __name__ == "__main__":

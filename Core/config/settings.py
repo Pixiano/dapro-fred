@@ -1359,14 +1359,24 @@ PROACTIVE_CAMERA_OBSTRUCTION_STREAK = 3
 HEADPHONE_OUTPUT_DEVICE_NAME = "Da Pro's Rockerz (Rockerz 512 ANC)"
 SPEAKER_OUTPUT_DEVICE_NAME = "Speakers (Realtek(R) Audio)"
 
-# Two shots each state (Vatsal's own call 2026-08-23 — one with glasses,
-# one without, so a glasses-day frame isn't compared against a
-# glasses-less reference or vice versa). The live runtime check
-# (headphone_watch.py) uses the first of each pair; the second is a
-# spare on disk, not currently read by anything — swap the list order
-# by hand if the first shot turns out to be the worse comparison photo.
-HEADPHONES_ON_PATHS = [DATA_DIR / "headphones_on_1.jpg", DATA_DIR / "headphones_on_2.jpg"]
-HEADPHONES_OFF_PATHS = [DATA_DIR / "headphones_off_1.jpg", DATA_DIR / "headphones_off_2.jpg"]
+# Four shots each state (raised from two, Vatsal's own call 2026-08-23,
+# for more robustness on the glasses dimension specifically — a
+# glasses-day frame compared only against a glasses-less reference, or
+# vice versa, is a needless extra source of mismatch). The live runtime
+# check (headphone_watch.py's _reference_histograms) averages the
+# histogram across every path in each list that actually exists on
+# disk, not just the first — more reference shots genuinely improves
+# the comparison instead of sitting unused as spares.
+HEADPHONES_ON_PATHS = [
+    DATA_DIR / "headphones_on_1.jpg", DATA_DIR / "headphones_on_2.jpg",
+    DATA_DIR / "headphones_on_3.jpg", DATA_DIR / "headphones_on_4.jpg",
+    DATA_DIR / "headphones_on_5.jpg", DATA_DIR / "headphones_on_6.jpg",
+]
+HEADPHONES_OFF_PATHS = [
+    DATA_DIR / "headphones_off_1.jpg", DATA_DIR / "headphones_off_2.jpg",
+    DATA_DIR / "headphones_off_3.jpg", DATA_DIR / "headphones_off_4.jpg",
+    DATA_DIR / "headphones_off_5.jpg", DATA_DIR / "headphones_off_6.jpg",
+]
 
 # How many consecutive same-answer checks before actually switching the
 # output device — audio switching mid-word is more jarring than a

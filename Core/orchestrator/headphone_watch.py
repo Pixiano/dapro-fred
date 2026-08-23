@@ -139,6 +139,26 @@ def _histogram(crop):
     return hist
 
 
+def _average_histogram(paths):
+    """Mean histogram across every path in `paths` that exists on disk
+    and has a detectable face — not just the first. More reference
+    shots (Vatsal's own call 2026-08-23, 4 per state now instead of 2)
+    genuinely improves the comparison this way instead of the extras
+    sitting on disk unused as spares."""
+    hists = []
+    for path in paths:
+        if not path.exists():
+            continue
+        crop = _head_region(cv2.imread(str(path)))
+        if crop is not None:
+            hists.append(_histogram(crop))
+    if not hists:
+        return None
+    avg = sum(hists) / len(hists)
+    cv2.normalize(avg, avg)
+    return avg
+
+
 def _reference_histograms():
     """Cached after first successful computation — same lazy-load-once
     convention as presence.py's own _get_enrollment_embeddings. Rerun
@@ -148,16 +168,12 @@ def _reference_histograms():
     if _ref_histograms is not None:
         return _ref_histograms
 
-    on_path, off_path = HEADPHONES_ON_PATHS[0], HEADPHONES_OFF_PATHS[0]
-    if not (on_path.exists() and off_path.exists()):
+    on_hist = _average_histogram(HEADPHONES_ON_PATHS)
+    off_hist = _average_histogram(HEADPHONES_OFF_PATHS)
+    if on_hist is None or off_hist is None:
         return None
 
-    on_crop = _head_region(cv2.imread(str(on_path)))
-    off_crop = _head_region(cv2.imread(str(off_path)))
-    if on_crop is None or off_crop is None:
-        return None
-
-    _ref_histograms = (_histogram(on_crop), _histogram(off_crop))
+    _ref_histograms = (on_hist, off_hist)
     return _ref_histograms
 
 
