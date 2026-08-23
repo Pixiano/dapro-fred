@@ -17,9 +17,13 @@
 # gpt-oss deep work"), and it still requires his explicit review before
 # anything about him personally gets written anywhere permanent.
 #
-# In-memory only, fire-once, lost on restart — same reasoning as
-# sleep_mode.py's own state: a restart is a real event, not a crash to
-# recover from.
+# _pending (the not-yet-spoken recap) is in-memory only, fire-once,
+# lost on restart — same reasoning as sleep_mode.py's own state: a
+# restart is a real event, not a crash to recover from. The ask-count
+# DEDUP WATERMARK is the one exception, persisted to
+# CONSOLIDATION_STATE_PATH (see that constant's own comment) — a
+# restart must not make FRED forget it already reported today's asks,
+# or the exact same recap gets rebuilt and re-spoken from scratch.
 #
 # Deliberately does NOT import orchestrator.sleep_mode — sleep_mode.py
 # imports this module (not the other way), so importing it back here
@@ -29,15 +33,32 @@
 # regardless — utils.notifier.notify is called directly instead, the
 # same underlying function proactive_checks.py itself wraps.
 
+import json
 from datetime import datetime
 
+from config.settings import CONSOLIDATION_STATE_PATH
 from orchestrator import reflection
 from tools import session_summary, vault_map
 from utils.notifier import notify
 
 _llm = None
 _pending = None  # str | None — the bundled recap, waiting to be spoken
-_last_ask_count = 0  # session_summary asks-count as of the last cycle that had something to report
+
+
+def _load_ask_count_state() -> dict:
+    if not CONSOLIDATION_STATE_PATH.exists():
+        return {}
+    try:
+        return json.loads(CONSOLIDATION_STATE_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_ask_count_state(state: dict):
+    CONSOLIDATION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONSOLIDATION_STATE_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(state), encoding="utf-8")
+    tmp.replace(CONSOLIDATION_STATE_PATH)
 
 _POLISH_SYSTEM_PROMPT = (
     "Turn this into ONE short spoken sentence for a voice assistant's "
@@ -63,9 +84,16 @@ def configure(llm):
 
 def _polish_recap(parts: list) -> str:
     """Combine the raw auto-write material into one smooth spoken
-    paragraph. Falls back to a plain join without an llm handle or on
-    any generation failure — never blocks the recap on this."""
-    raw = "\n".join(parts)
+    sentence. Falls back to a plain join without an llm handle or on any
+    generation failure — never blocks the recap on this.
+
+    Joined with a space, not a newline: Vatsal's explicit call
+    2026-08-23, the spoken recap must be one line, never several — the
+    LLM-polish path is already told this in _POLISH_SYSTEM_PROMPT, but
+    the no-LLM fallback below used to join with "\n", which could
+    produce a literal multi-line message if both a day-summary and a
+    MAP.md-gap part were pending in the same cycle."""
+    raw = " ".join(parts)
     if _llm is not None:
         try:
             # local_only=True — same reasoning as summarise_today's own
@@ -96,7 +124,7 @@ def on_sleep_enter():
     """Auto-write the day summary and any MAP.md gap entries while
     Vatsal's away, then stash one polished recap to speak on wake.
     Never raises — a failure here must not block sleep-mode entry."""
-    global _pending, _last_ask_count
+    global _pending
     parts = []
 
     try:
@@ -106,13 +134,17 @@ def on_sleep_enter():
         # since the last cycle — the LLM rephrases an unchanged day
         # differently every call, so comparing its wording can't catch a
         # repeat; the ask count is the actual signal for "anything new."
-        if ask_count != _last_ask_count:
+        # Persisted (not a module-level int) so a restart mid-day doesn't
+        # reset this to 0 and cause the whole day's recap to rebuild and
+        # re-speak from scratch — confirmed live 2026-08-23.
+        ask_state = _load_ask_count_state()
+        if ask_state.get("day") != day or ask_state.get("ask_count") != ask_count:
             note_path = session_summary._daily_note_path(day)
             existing_note = note_path.read_text(encoding="utf-8") if note_path.exists() else None
             summary_text = session_summary.summarise_today(day, llm=_llm, existing_note=existing_note)
             session_summary.save_session_summary(day, llm=_llm, summary=summary_text, auto=True)
             parts.append(summary_text)
-            _last_ask_count = ask_count
+            _save_ask_count_state({"day": day, "ask_count": ask_count})
     except Exception as e:
         print(f"[consolidation] day-summary auto-write failed: {e}")
 
@@ -180,6 +212,11 @@ def on_sleep_exit(greeting: str = None):
     _pending = None
     if not message:
         return
+    # Defensive one-line collapse (Vatsal's explicit call 2026-08-23):
+    # _POLISH_SYSTEM_PROMPT already asks the LLM for a single sentence,
+    # but a local model doesn't always follow that, and this is the last
+    # point before speaking regardless of which path produced `message`.
+    message = " ".join(message.split())
     try:
         notify(message, title="Welcome back")
     except Exception as e:
@@ -189,9 +226,14 @@ def on_sleep_exit(greeting: str = None):
 if __name__ == "__main__":
     # Self-check: pending-state lifecycle with the real tools stubbed
     # out (no LLM, no real vault needed to prove enter->exit->cleared).
+    import tempfile
+    from pathlib import Path
+
     import tools.session_summary as _ss
     import tools.vault_map as _vm
     from orchestrator import reflection as _refl
+
+    globals()["CONSOLIDATION_STATE_PATH"] = Path(tempfile.mkdtemp()) / "consolidation_state.json"
 
     written = []
     calls = []
@@ -218,6 +260,14 @@ if __name__ == "__main__":
     assert "3 requests today" in _pending
     assert "a.md" in _pending and "b.md" in _pending
     assert len(written) == 2  # summary + map, both auto-written
+    assert "\n" not in _pending  # one line, per Vatsal's 2026-08-23 call
+
+    # The dedup watermark landed on disk, not just in memory — this is
+    # what makes it survive a restart (confirmed live 2026-08-23: without
+    # this, several same-day FRED restarts each re-triggered the
+    # identical recap from scratch).
+    on_disk = json.loads(CONSOLIDATION_STATE_PATH.read_text(encoding="utf-8"))
+    assert on_disk["ask_count"] == 3
 
     on_sleep_exit()
     assert calls and "3 requests today" in calls[0][0]
@@ -236,6 +286,16 @@ if __name__ == "__main__":
     assert len(written) == 2  # no new writes either
     on_sleep_exit()
     assert len(calls) == 1  # no new notify call
+
+    # Simulate a restart: reset everything that would actually reset on
+    # one (module-level _pending, per this module's own docstring) while
+    # leaving the on-disk watermark alone. Same asks as before must
+    # still not re-trigger — this is the actual bug being fixed here.
+    globals()["_pending"] = None
+    on_sleep_enter()
+    assert _pending is None
+    on_sleep_exit()
+    assert len(calls) == 1  # still no new notify call, post-"restart"
 
     # A genuinely new ask arrives — must summarise and speak again.
     asks.append("one more thing")

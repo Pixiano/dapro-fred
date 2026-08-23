@@ -312,6 +312,17 @@ PROACTIVE_STATE_PATH = DATA_DIR / "proactive_state.json"
 
 REFLECTION_STATE_PATH = DATA_DIR / "reflection_state.json"
 
+# orchestrator/consolidation.py's ask-count dedup watermark (which day,
+# how many asks as of the last recap that had something to report) —
+# persisted, not in-memory, because FRED restarting mid-day (a crash, a
+# manual restart) used to reset the in-memory counter to 0 and cause the
+# exact same day's recap to be rebuilt and re-spoken from scratch.
+# Confirmed live 2026-08-23: several FRED restarts in one day each
+# re-triggered the identical "while you were away" recap. Small and
+# restart-survives-by-design, unlike sleep_mode.py's own in-memory
+# streak counters (Vatsal's explicit call — see consolidation.py).
+CONSOLIDATION_STATE_PATH = DATA_DIR / "consolidation_state.json"
+
 # Vatsal's explicit number — how many new user_speech/tool_call events
 # must have accrued since the last pass before another one runs.
 REFLECTION_MIN_NEW_EVENTS = 30
