@@ -229,6 +229,45 @@ def close_window(title: str) -> str:
 
 
 # =========================================================
+# OUTPUT DEVICE
+# =========================================================
+
+def set_audio_output(device_name: str) -> str:
+    """
+    Switch the default Windows playback device by friendly name (as
+    shown in AudioUtilities.GetAllDevices() — Windows Sound settings'
+    device list, e.g. "Speakers (Realtek(R) Audio)"). Used by
+    orchestrator/headphone_watch.py to auto-switch between speakers and
+    Bluetooth headphones based on camera detection, Vatsal's own idea
+    2026-08-23.
+
+    Sets all three roles (console/multimedia/communications) so it's
+    genuinely the default everywhere, not just for one app class —
+    AudioUtilities.SetDefaultDevice defaults to eConsole only if `roles`
+    isn't passed, which would leave media apps still pointed at the old
+    device.
+
+    Matching is exact-name, not substring/fuzzy — a Bluetooth device's
+    friendly name can collide in confusing ways (this machine has both
+    "Speakers (...)" and "Headset (...)" entries for the same physical
+    Rockerz headphones), so silently picking "closest match" risks
+    switching to the wrong endpoint. Raises if no device with that exact
+    name is currently present (unplugged/out of range), same "don't
+    guess" reasoning.
+    """
+    from pycaw.pycaw import ERole
+
+    for device in AudioUtilities.GetAllDevices():
+        if device.FriendlyName == device_name:
+            AudioUtilities.SetDefaultDevice(
+                device.id, roles=[ERole.eConsole, ERole.eMultimedia, ERole.eCommunications]
+            )
+            return f"Audio output switched to {device_name}"
+
+    raise OSError(f"No audio device named {device_name!r} is currently present")
+
+
+# =========================================================
 # VOLUME
 # =========================================================
 

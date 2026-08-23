@@ -1328,6 +1328,35 @@ PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS = 20
 PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS = 5
 PROACTIVE_CAMERA_OBSTRUCTION_STREAK = 3
 
+# =========================================================
+# HEADPHONE DETECTION -> AUDIO OUTPUT SWITCHING
+# =========================================================
+# Vatsal's own idea, 2026-08-23: detect via camera whether he's wearing
+# headphones and switch the default Windows playback device to match,
+# instead of leaving it on whatever it happened to be last. Same
+# reference-photo-comparison pattern presence.py's own ambiguous-match
+# vision fallback already uses (see input/presence.py's
+# _vision_fallback_is_match) — one base photo of him wearing the
+# headphones, compared against the live frame via the local vision
+# model, not a face-identity check.
+
+# Exact device names on this machine — confirmed live 2026-08-23 via
+# pycaw's AudioUtilities.GetAllDevices(). Not portable to another
+# machine/device without re-checking these (same caveat
+# PRESENCE_CAMERA_INDEX's own history already taught this codebase —
+# see that constant's comment).
+HEADPHONE_OUTPUT_DEVICE_NAME = "Da Pro's Rockerz (Rockerz 512 ANC)"
+SPEAKER_OUTPUT_DEVICE_NAME = "Speakers (Realtek(R) Audio)"
+
+HEADPHONES_REFERENCE_PATH = DATA_DIR / "headphones_reference.jpg"
+
+# How often to check, and how many consecutive same-answer checks
+# before actually switching the output device — audio switching mid-
+# word is more jarring than a delayed presence greeting, so this trades
+# responsiveness for not flapping on a single bad/ambiguous frame.
+HEADPHONE_CHECK_SECONDS = 30
+HEADPHONE_CHECK_STREAK = 2
+
 # Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible
 # once he's been present but hasn't had a real turn/tool-call with FRED for
 # this many minutes; grows by the step below each time it actually speaks,
