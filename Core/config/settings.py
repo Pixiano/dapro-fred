@@ -1279,6 +1279,17 @@ PRESENCE_ABSENT_DEBOUNCE = 4
 # actual complaint being fixed here. 2026-08-21.
 PRESENCE_PRESENT_DEBOUNCE = 2
 
+# Camera-obstruction check (proactive_checks.check_camera_obstruction,
+# Vatsal's own idea 2026-08-23): while sleep mode is active, real
+# keyboard/mouse input more recent than this many seconds means someone
+# is clearly still at the desk despite the camera reading absent — a
+# blocked/covered/misaimed camera looks identical to "stepped away"
+# otherwise. Deliberately smaller than PRESENCE_ABSENT_DEBOUNCE's ~60-75s
+# window: this has to mean "still actively typing right now," not just
+# "was here a minute ago," or it would fire on the tail end of a
+# legitimate departure.
+PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS = 20
+
 # Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible
 # once he's been present but hasn't had a real turn/tool-call with FRED for
 # this many minutes; grows by the step below each time it actually speaks,

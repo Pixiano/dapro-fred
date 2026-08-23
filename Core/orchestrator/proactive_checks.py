@@ -34,6 +34,7 @@ from config.settings import (
     VIP_MESSAGE_CHECK_MINUTES,
     CALL_LOG_CHECK_MINUTES,
     PRESENCE_POLL_SECONDS,
+    PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
 )
 from input import presence
 from orchestrator import focus_checkin, reflection, sleep_mode
@@ -727,6 +728,52 @@ def check_presence():
     sleep_mode.on_presence_poll(present, greeting=random.choice(_PRESENCE_GREETINGS))
 
 
+# =========================================================
+# 10. CAMERA OBSTRUCTION -- active input while camera reads absent
+# =========================================================
+
+def check_camera_obstruction():
+    """
+    Sleep mode is purely camera-driven, but a blocked/covered/misaimed
+    camera looks identical to "stepped away" from that signal alone.
+    Cross-check against real keyboard/mouse activity (idle_seconds(),
+    the same OS-level GetLastInputInfo timestamp long_session/
+    security_watch already use elsewhere in this file — no keystroke
+    content, just "how long since the last input") to catch the case
+    where FRED thinks nobody's home but someone is clearly still typing.
+    Vatsal's own idea, 2026-08-23.
+
+    Deliberately bypasses this module's own notify() wrapper (which
+    gates on sleep_mode.is_sleeping()) — that gate would silence the
+    exact case this check exists to catch. Goes straight to
+    utils.notifier.notify, same precedent consolidation.py's
+    on_sleep_exit already sets for the same reason.
+
+    Dedup: at most once per sleep stretch. The "asked" flag resets the
+    moment sleep mode isn't active, so the next stretch can ask again —
+    same "second reminder is fine" shape as every other check here, just
+    keyed off sleep-mode edges instead of a value/date.
+    """
+    state = _load_state()
+    obstruction = state.setdefault("camera_obstruction", {})
+
+    if not sleep_mode.is_sleeping():
+        if obstruction.get("asked"):
+            obstruction["asked"] = False
+            _save_state(state)
+        return
+
+    if obstruction.get("asked"):
+        return
+
+    if idle_seconds() >= PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS:
+        return
+
+    _real_notify("Camera looks blocked, sir — still there?", title="Camera")
+    obstruction["asked"] = True
+    _save_state(state)
+
+
 def register(scheduler, llm=None, on_agenda_ask=None):
     """
     Call once at orchestrator startup — see orchestrator.py's __init__.
@@ -786,6 +833,13 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     # variant of add_periodic just for this.
     scheduler.add_periodic(
         check_presence, PRESENCE_POLL_SECONDS / 60, "proactive_presence"
+    )
+    # Same cadence as presence polling above — cheap (no camera/LLM call,
+    # just an OS idle-time read and a state-file check), and this needs
+    # to notice "still typing" promptly, not on the multi-minute cadence
+    # everything-else-here uses.
+    scheduler.add_periodic(
+        check_camera_obstruction, PRESENCE_POLL_SECONDS / 60, "proactive_camera_obstruction"
     )
     # Focus-awareness check-in — see orchestrator/focus_checkin.py. Fires
     # through this module's own notify() so sleep-mode gating is automatic
