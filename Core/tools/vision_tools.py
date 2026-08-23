@@ -118,9 +118,9 @@ def look_through_camera(question: str = "") -> str:
 
     import cv2
 
-    from config.settings import PRESENCE_CAMERA_INDEX
+    from input.presence import resolve_camera_index
 
-    cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
+    cap = cv2.VideoCapture(resolve_camera_index())
     try:
         if not cap.isOpened():
             return "I couldn't open the webcam just now."

@@ -62,6 +62,8 @@ _family_embeddings = None  # lazy-loaded {name: [np.ndarray, ...]}, cached after
 
 _state_cache = None  # in-memory mirror of STATE_PATH, simplest correct approach per phone_tools' CALL_SEEN_PATH pattern
 
+_camera_index_cache = None  # cv2 index, resolved once per process — see resolve_camera_index()
+
 # Last per-poll family classification, updated by _frame_matches_enrollment
 # every poll_once() — see last_classification() below.
 _last_classification = {"known_people": [], "unrecognized": False}
@@ -414,6 +416,70 @@ def _frame_matches_enrollment(frame):
     return False, None, None
 
 
+def _is_live_feed(index: int) -> bool:
+    """Two frames, a beat apart: a real camera sensor has natural noise
+    even on a static scene, a frozen virtual-cam placeholder (OBS Virtual
+    Camera / Canon EOS Webcam Utility both show a static "no signal"
+    bitmap when idle) is bit-identical between reads. Confirmed live
+    2026-08-23: real iBall frame-diff mean ~45, OBS placeholder exactly
+    0.0. Any failure (camera won't open, mocked/fake capture returning a
+    non-array frame in tests) means "can't tell" -> not live, never
+    raises."""
+    import time
+
+    try:
+        cap = cv2.VideoCapture(index)
+        try:
+            if not cap.isOpened():
+                return False
+            ok1, f1 = cap.read()
+            time.sleep(0.4)
+            ok2, f2 = cap.read()
+        finally:
+            cap.release()
+        if not (ok1 and ok2):
+            return False
+        return cv2.absdiff(f1, f2).mean() > 1.0
+    except Exception:
+        return False
+
+
+def resolve_camera_index() -> int:
+    """Which cv2 index is the real, live desk camera right now — auto
+    probed rather than trusting the hardcoded PRESENCE_CAMERA_INDEX,
+    because Windows does not guarantee stable camera index ordering
+    across reboots when virtual-cam apps (OBS, Canon EOS Webcam Utility)
+    are involved. Confirmed live 2026-08-23: a reboot silently swapped
+    the real iBall from index 1 to index 0, and PRESENCE_CAMERA_INDEX
+    (still 1) spent the better part of an hour reading OBS Virtual
+    Camera's idle placeholder instead — presence detection never saw
+    Vatsal, and nobody noticed until look_through_camera described the
+    placeholder graphic instead of the desk.
+
+    Cached for the process lifetime once resolved — each probe opens the
+    camera and waits ~0.4s per candidate index, not something to redo on
+    every 15s poll, and the mapping can't change without a reboot/device
+    change anyway (restart the process to re-probe, same convention as
+    presence.py's other lazy-cached loaders).
+
+    Falls back to the configured PRESENCE_CAMERA_INDEX if nothing looks
+    live (no camera connected, or a test/mock environment where the
+    frame-diff probe itself can't run) — same index poll_once() always
+    used before this existed.
+    """
+    global _camera_index_cache
+    if _camera_index_cache is not None:
+        return _camera_index_cache
+
+    for index in range(4):
+        if _is_live_feed(index):
+            _camera_index_cache = index
+            return index
+
+    _camera_index_cache = PRESENCE_CAMERA_INDEX
+    return _camera_index_cache
+
+
 def poll_once() -> bool:
     """Grab one frame, match, update state, return current presence.
 
@@ -424,7 +490,7 @@ def poll_once() -> bool:
     now = datetime.now()
     state = _load_state()
 
-    cap = cv2.VideoCapture(PRESENCE_CAMERA_INDEX)
+    cap = cv2.VideoCapture(resolve_camera_index())
     try:
         if not cap.isOpened():
             event_log.log("presence_poll_failed", note="camera did not open")
