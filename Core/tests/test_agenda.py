@@ -575,6 +575,23 @@ def test_carryover_candidates_excludes_already_done(tmp_path, monkeypatch):
     assert agenda.carryover_candidates() == []
 
 
+def test_carryover_candidates_drops_items_past_the_stale_cutoff(tmp_path, monkeypatch):
+    """The 2026-08-23 bug: no lower bound at all meant a still-open item
+    due arbitrarily far in the past kept resurfacing as a daily check-in
+    question forever. Past PROACTIVE_TASK_STALE_DAYS it must stop being
+    raised here — an item inside the window still must."""
+    monkeypatch.setattr(agenda, "VAULT_DIR", tmp_path)
+    monkeypatch.setattr(agenda, "PROACTIVE_TASK_STALE_DAYS", 14)
+    agenda.add_item("homework", "Ancient thing", due="2026-08-01")
+    agenda.add_item("homework", "Recent thing", due="2026-08-20")
+
+    candidates = agenda.carryover_candidates(today=datetime(2026, 8, 31))
+    names = [i["subject"] for i in candidates]
+
+    assert "Recent thing" in names
+    assert "Ancient thing" not in names
+
+
 # =========================================================
 # FUZZY MATCH FALLBACK — confirmed live 2026-08-21: the LLM re-passed an
 # item's entire subject verbatim (echoed from an earlier list_agenda_items

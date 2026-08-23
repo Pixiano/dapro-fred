@@ -87,6 +87,23 @@ def test_rolled_forward_tasks_are_labelled_with_their_day(tmp_path, monkeypatch)
     assert "older thing (from 2026-08-04)" in listed
 
 
+def test_ages_old_unfinished_task_stops_rolling_forward(tmp_path, monkeypatch):
+    """The 2026-08-23 bug: _all_tasks had no lower bound at all, so an
+    unfinished task from the 1st of the month was still listed as open
+    on the 31st. Past PROACTIVE_TASK_STALE_DAYS it must stop surfacing
+    as current — a task inside the window still must."""
+    monkeypatch.setattr(daily_tasks, "VAULT_DIR", tmp_path)
+    monkeypatch.setattr(daily_tasks, "PROACTIVE_TASK_STALE_DAYS", 14)
+
+    daily_tasks.add_task("ancient unfinished thing", day="2026-08-01")
+    daily_tasks.add_task("recent unfinished thing", day="2026-08-20")
+
+    listed = daily_tasks.list_tasks(day="2026-08-31")
+
+    assert "recent unfinished thing" in listed
+    assert "ancient unfinished thing" not in listed
+
+
 def test_add_task_preserves_content_outside_the_tasks_section(tmp_path, monkeypatch):
     """A note that already has other content (e.g. a session_summary.py
     recap block) must survive add_task touching an unrelated section."""

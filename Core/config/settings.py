@@ -293,6 +293,19 @@ PROACTIVE_DEADLINE_WARN_DAYS = 7
 # something that isn't actionable yet and train him to ignore it.
 PROACTIVE_TASK_DUE_DAYS = 2
 
+# How far back an unfinished daily-note task or agenda item keeps
+# rolling forward as "still open" before it's considered stale and
+# stops being silently listed as current. Confirmed live 2026-08-23:
+# tools/daily_tasks.py's carry-forward had no lower bound at all, so a
+# task added on the 1st of the month and never checked off still showed
+# up as an open task on the 31st, tagged "(from 2026-08-01)" — the
+# "ages-old tasks" symptom. 14 days is generous enough that nothing
+# genuinely still-relevant gets dropped silently (a same-week errand or
+# even a slow month-spanning item survives it), while a task that's
+# been sitting open for two full weeks has almost certainly either been
+# forgotten or handled elsewhere.
+PROACTIVE_TASK_STALE_DAYS = 14
+
 # How long the machine must sit untouched before FRED treats the day as
 # over and rolls the still-open tasks into the new day's note. Two hours
 # rather than a fixed clock time: the sleep hour moves, a two-hour gap

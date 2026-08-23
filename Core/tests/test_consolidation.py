@@ -19,7 +19,7 @@ class _NoNote:
         return False
 
 
-def _reset(monkeypatch):
+def _reset(monkeypatch, tmp_path):
     consolidation._pending = None
     calls = []
     monkeypatch.setattr(consolidation, "notify", lambda msg, title="F.R.E.D.": calls.append((msg, title)))
@@ -28,21 +28,31 @@ def _reset(monkeypatch):
     # the real vault path.
     monkeypatch.setattr(consolidation.reflection, "has_pending_review", lambda: False)
     monkeypatch.setattr(consolidation.session_summary, "_daily_note_path", lambda day=None: _NoNote())
+    # Real ask-count dedup watermark (added 2026-08-23) lives on disk —
+    # redirect it per-test so these don't read/write the real machine's
+    # consolidation_state.json, and stub collect_today so on_sleep_enter's
+    # gate sees a real, non-empty asks list rather than whatever today's
+    # actual session logs happen to contain.
+    monkeypatch.setattr(consolidation, "CONSOLIDATION_STATE_PATH", tmp_path / "consolidation_state.json")
+    monkeypatch.setattr(
+        consolidation.session_summary, "collect_today",
+        lambda day=None: {"asks": ["one", "two", "three"]},
+    )
     return calls
 
 
-def test_sleep_exit_with_nothing_pending_is_a_noop(monkeypatch):
-    calls = _reset(monkeypatch)
+def test_sleep_exit_with_nothing_pending_is_a_noop(monkeypatch, tmp_path):
+    calls = _reset(monkeypatch, tmp_path)
     consolidation.on_sleep_exit()
     assert calls == []
     assert consolidation._pending is None
 
 
-def test_sleep_enter_auto_writes_without_confirmation(monkeypatch):
+def test_sleep_enter_auto_writes_without_confirmation(monkeypatch, tmp_path):
     """The write functions run directly from on_sleep_enter() now —
     no waiting on a spoken 'save it' / 'add them' first — and each
     auto-write carries the auto-logged marker."""
-    calls = _reset(monkeypatch)
+    calls = _reset(monkeypatch, tmp_path)
     written = {}
     monkeypatch.setattr(
         consolidation.session_summary, "summarise_today",
@@ -73,8 +83,8 @@ def test_sleep_enter_auto_writes_without_confirmation(monkeypatch):
     assert calls == []  # nothing spoken yet — that's on_sleep_exit's job
 
 
-def test_sleep_enter_skips_map_write_when_nothing_missing(monkeypatch):
-    _reset(monkeypatch)
+def test_sleep_enter_skips_map_write_when_nothing_missing(monkeypatch, tmp_path):
+    _reset(monkeypatch, tmp_path)
     monkeypatch.setattr(
         consolidation.session_summary, "summarise_today",
         lambda day=None, llm=None, existing_note=None: "Nothing logged today yet, sir.",
@@ -90,8 +100,8 @@ def test_sleep_enter_skips_map_write_when_nothing_missing(monkeypatch):
     consolidation.on_sleep_enter()  # must not raise, must not call append_missing
 
 
-def test_sleep_enter_failure_never_raises(monkeypatch):
-    _reset(monkeypatch)
+def test_sleep_enter_failure_never_raises(monkeypatch, tmp_path):
+    _reset(monkeypatch, tmp_path)
     def _boom(day=None, llm=None, existing_note=None):
         raise RuntimeError("no logs")
     monkeypatch.setattr(consolidation.session_summary, "summarise_today", _boom)
@@ -102,13 +112,13 @@ def test_sleep_enter_failure_never_raises(monkeypatch):
     assert consolidation._pending is None
 
 
-def test_sleep_enter_polishes_recap_with_llm(monkeypatch):
+def test_sleep_enter_polishes_recap_with_llm(monkeypatch, tmp_path):
     """The bundled recap material goes through one LLM polish call —
     reusing summary/vault content is fine (local_only=True, same
     sensitivity class as summarise_today's own call) — and the spoken
     result must not contain the old confirmation phrasing, since
     auto-write means there's nothing left to confirm."""
-    _reset(monkeypatch)
+    _reset(monkeypatch, tmp_path)
     monkeypatch.setattr(
         consolidation.session_summary, "summarise_today",
         lambda day=None, llm=None, existing_note=None: "Worked on the vault today.",
@@ -148,8 +158,8 @@ def test_sleep_enter_polishes_recap_with_llm(monkeypatch):
         assert phrase not in consolidation._pending
 
 
-def test_sleep_exit_speaks_once_then_clears(monkeypatch):
-    calls = _reset(monkeypatch)
+def test_sleep_exit_speaks_once_then_clears(monkeypatch, tmp_path):
+    calls = _reset(monkeypatch, tmp_path)
     consolidation._pending = "While you were away: 3 requests today."
 
     consolidation.on_sleep_exit()

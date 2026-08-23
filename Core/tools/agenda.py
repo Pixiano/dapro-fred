@@ -28,7 +28,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config.settings import VAULT_DIR
+from config.settings import PROACTIVE_TASK_STALE_DAYS, VAULT_DIR
 from orchestrator.scheduler import parse_when, describe_when
 
 
@@ -634,9 +634,18 @@ def events_upcoming(within_hours: float = 24) -> list:
 
 def carryover_candidates(today: datetime = None) -> list:
     """Homework/project items due today or earlier, still open — the
-    raw material for proactive_checks.check_agenda_carryover."""
+    raw material for proactive_checks.check_agenda_carryover.
+
+    Floored at PROACTIVE_TASK_STALE_DAYS before `today` (added
+    2026-08-23, same cutoff and reasoning as
+    daily_tasks._all_tasks/carryover_candidates — this had no lower
+    bound at all before, so an item due arbitrarily far in the past kept
+    resurfacing as a daily check-in question indefinitely). Below the
+    cutoff it's just not raised here anymore; still open_items(), still
+    editable/completable directly, just no longer nagged about."""
     today = (today or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    cutoff = today - timedelta(days=PROACTIVE_TASK_STALE_DAYS)
     return [
         i for i in open_items()
-        if i["kind"] != "event" and i["when"].date() <= today.date()
+        if i["kind"] != "event" and cutoff.date() <= i["when"].date() <= today.date()
     ]

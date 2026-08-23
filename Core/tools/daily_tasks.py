@@ -21,7 +21,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config.settings import VAULT_DIR
+from config.settings import PROACTIVE_TASK_STALE_DAYS, VAULT_DIR
 
 _TASKS_HEADING = "## Tasks"
 
@@ -160,13 +160,20 @@ def add_task(text: str, day: str = None) -> str:
 
 def _all_tasks(day: str = None) -> dict:
     """
-    {task_text: (done, origin_day)} across every daily note up to and
-    including `day`, later days winning on status. `origin_day` is the
-    note the winning entry came from — list_tasks needs it to say which
-    tasks are today's and which rolled forward, because a merged list
-    that doesn't distinguish them reads as "today's tasks" to FRED and
-    to Vatsal alike (confirmed 2026-08-05: yesterday's list was spoken
-    as today's).
+    {task_text: (done, origin_day)} across every daily note from
+    PROACTIVE_TASK_STALE_DAYS before `day` up to and including `day`,
+    later days winning on status. `origin_day` is the note the winning
+    entry came from — list_tasks needs it to say which tasks are
+    today's and which rolled forward, because a merged list that
+    doesn't distinguish them reads as "today's tasks" to FRED and to
+    Vatsal alike (confirmed 2026-08-05: yesterday's list was spoken as
+    today's).
+
+    The stale cutoff (added 2026-08-23) exists because this used to have
+    no lower bound at all — a task added on the 1st of the month and
+    never checked off was still listed as open on the 31st. Below the
+    cutoff, an unfinished task just stops being silently carried forward
+    as "current"; it isn't deleted, only no longer surfaced here.
 
     Shared by list_tasks and open_due_tasks so the roll-forward rule
     (see list_tasks) has exactly one implementation — a proactive
@@ -174,12 +181,13 @@ def _all_tasks(day: str = None) -> dict:
     the spoken task list would be a bug nobody would spot for weeks.
     """
     day = day or datetime.now().strftime("%Y-%m-%d")
+    cutoff = (datetime.strptime(day, "%Y-%m-%d") - timedelta(days=PROACTIVE_TASK_STALE_DAYS)).strftime("%Y-%m-%d")
     month_dir = _daily_note_path(day).parent
 
     by_text = {}
     if month_dir.is_dir():
         for path in sorted(month_dir.glob("*.md")):
-            if path.stem > day:
+            if path.stem > day or path.stem < cutoff:
                 continue
             _, tasks, _ = _split_tasks_section(_read_lines(path))
             for parsed in (_parse_task_line(t) for t in tasks):
