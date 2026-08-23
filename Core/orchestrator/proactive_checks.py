@@ -883,8 +883,11 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     # Headphone-detection -> audio-output switching — see
     # orchestrator/headphone_watch.py's own module docstring. A no-op
     # every tick until scripts/enroll_headphones.py has been run once.
+    # Fires through this module's own notify() (passed in, not imported
+    # back — same reason focus_checkin.check(notify) takes it as a
+    # parameter below) so sleep-mode gating is automatic.
     scheduler.add_periodic(
-        headphone_watch.check_and_switch,
+        lambda: headphone_watch.check_and_switch(notify),
         HEADPHONE_CHECK_SECONDS / 60,
         "proactive_headphone_watch",
     )

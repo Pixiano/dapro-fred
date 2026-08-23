@@ -145,10 +145,18 @@ def _wearing_headphones(frame) -> bool | None:
     return None
 
 
-def check_and_switch():
+def check_and_switch(notify=None):
     """One poll: capture, classify, debounce, switch on a real change.
     Never raises — a failure here must not affect anything else FRED is
-    doing (same convention proactive_checks.py's own checks hold to)."""
+    doing (same convention proactive_checks.py's own checks hold to).
+
+    notify: proactive_checks.py's own gated notify(), passed in rather
+    than imported — same reason focus_checkin.check(notify) takes it as
+    a parameter instead of importing proactive_checks back: that module
+    already imports this one, so a top-level import the other way would
+    cycle. Vatsal's own ask 2026-08-23: a manual output-device switch in
+    Windows shows a heads-up, so an automatic one should say something
+    too rather than silently swapping under him."""
     global _last_state, _streak, _pending_state
 
     if not (HEADPHONES_ON_PATHS[0].exists() and HEADPHONES_OFF_PATHS[0].exists()):
@@ -178,5 +186,9 @@ def check_and_switch():
         set_audio_output(device_name)
         event_log.log("headphone_switch", wearing=result, device=device_name)
         _last_state = result
+
+        if notify is not None:
+            short = "your headphones" if result else "speakers"
+            notify(f"Switched audio output to {short}, sir.", title="Audio")
     except Exception as e:
         event_log.log_error("headphone_watch", e)
