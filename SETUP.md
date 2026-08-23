@@ -42,7 +42,7 @@ Three launchers at the repo root:
 - Starts the voice assistant; the HUD server comes up quietly in the
   background and stays closed until you click the tray icon
 - Greets you immediately when started by hand (`--greet-now`); waits
-  ten minutes when started at log-on via `install_startup.py`, so it
+  2 minutes when started at log-on via `install_startup.py`, so it
   isn't talking over the rest of Windows starting up
 
 #### `FRED_POPUP.bat` — hold-to-talk popup

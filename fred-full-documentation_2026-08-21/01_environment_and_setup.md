@@ -13,7 +13,7 @@ Confirmed hardware for the reference machine this was built on/for:
 
 | File | What it does |
 |---|---|
-| `FRED.bat` | The normal way to start FRED. Runs `Core\venv\Scripts\pythonw.exe fred_popup.py --greet-now`. `pythonw.exe`, not `python.exe` — no console window, the tray icon is the UI. The HUD server comes up quietly in the background; the HUD *window* stays closed until the tray icon is clicked. `--greet-now` makes FRED speak a greeting within seconds of starting — used when started by hand. Compare: started at log-on via `install_startup.py` (no arguments), FRED waits **10 minutes** before greeting, specifically so it isn't talking over the rest of Windows starting up. |
+| `FRED.bat` | The normal way to start FRED. Runs `Core\venv\Scripts\pythonw.exe fred_popup.py --greet-now`. `pythonw.exe`, not `python.exe` — no console window, the tray icon is the UI. The HUD server comes up quietly in the background; the HUD *window* stays closed until the tray icon is clicked. `--greet-now` makes FRED speak a greeting within seconds of starting — used when started by hand. Compare: started at log-on via `install_startup.py` (no arguments), FRED waits **2 minutes** (`GREETING_DELAY_STARTUP`, `Core/ui/pill_app.py`) before greeting, specifically so it isn't talking over the rest of Windows starting up. |
 | `FRED_POPUP.bat` | Launches the hold-to-talk popup GUI directly, no tray-icon step, no HUD. |
 | `fred_cli.bat` | Runs `Core\main.py` — terminal text/voice interface, for scripting and voice testing without the HUD. |
 | `install_startup.py` | Registers (or `--remove`, or `--status`) FRED to start automatically at Windows log-on. |
