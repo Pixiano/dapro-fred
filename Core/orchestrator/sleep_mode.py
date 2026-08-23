@@ -12,6 +12,8 @@
 # survive one. If that turns out wrong, follow presence.py's own
 # STATE_PATH/_save_state pattern.
 
+import threading
+
 from config.settings import PRESENCE_ABSENT_DEBOUNCE, PRESENCE_PRESENT_DEBOUNCE
 from orchestrator import consolidation, reflection
 from utils import event_log
@@ -53,11 +55,28 @@ def on_presence_poll(present: bool, greeting: str = None):
     if not _sleeping and _streak >= PRESENCE_ABSENT_DEBOUNCE:
         _sleeping = True
         event_log.log("sleep_mode_enter", streak=_streak)
-        consolidation.on_sleep_enter()
-        # Own trigger gate (accumulated new material, not sleep-mode
-        # entry itself) — most sleep windows are a no-op here. See
-        # reflection.py's module docstring for the full story.
-        consolidation.append_pending(reflection.run_if_due())
+        # Off-thread: this call chain (consolidation.on_sleep_enter(), an
+        # LLM call, then reflection.run_if_due(), a multi-chunk LLM pass
+        # that can run for minutes) used to run inline here, which is
+        # inside proactive_checks.check_presence()'s periodic scheduler
+        # job — APScheduler won't fire that job's next 15s tick until the
+        # current one returns, so this blocked presence polling entirely
+        # for as long as reflection took. Confirmed live 2026-08-23: a
+        # multi-minute gap in presence_log.jsonl right as reflection
+        # kicked in, no wake greeting until the hotkey forced it. It also
+        # made reflection's own "check is_sleeping() between chunks, bail
+        # out if presence returned" interrupt logic a no-op, since
+        # nothing could ever flip that flag while this call held the only
+        # thread that could flip it.
+        threading.Thread(target=_run_sleep_enter_work, daemon=True).start()
+
+
+def _run_sleep_enter_work():
+    consolidation.on_sleep_enter()
+    # Own trigger gate (accumulated new material, not sleep-mode
+    # entry itself) — most sleep windows are a no-op here. See
+    # reflection.py's module docstring for the full story.
+    consolidation.append_pending(reflection.run_if_due())
 
 
 def wake(reason: str):

@@ -1191,16 +1191,22 @@ WAKEWORD_THRESHOLD = 0.35
 # that depends on this being proven reliable first).
 
 # Confirmed live 2026-08-21 by capturing a frame from every index and
-# looking at it: index 0 is Canon's EOS Webcam Utility (virtual, shows
-# an idle placeholder), index 2 is OBS Virtual Camera (also virtual),
-# index 1 is the only real hardware — the iBall PHOCUS 40A, confirmed
-# by a real captured photo. This is a desktop with no built-in webcam,
-# so "the only real camera besides two virtual ones" is a solid
-# identification, not a guess — but if the camera setup ever changes
-# (a new virtual cam app installed, the iBall unplugged and replaced),
-# re-run the same per-index capture check rather than assuming this
-# index still holds.
-PRESENCE_CAMERA_INDEX = 1
+# looking at it: index 1 was the iBall PHOCUS 40A (the only real
+# hardware — desktop has no built-in webcam), 0 and 2 were virtual
+# (Canon EOS Webcam Utility / OBS Virtual Camera).
+#
+# RE-CONFIRMED (and changed) 2026-08-22: a reboot re-enumerated the
+# cameras and swapped the mapping — index 0 is now the real iBall,
+# index 1 is now OBS Virtual Camera's idle "no signal" placeholder.
+# Presence detection was silently reading that placeholder as "not
+# present" for the better part of an hour before this was caught
+# (look_through_camera's own description — "an oval emblem... a muted
+# or recording-disabled camera icon" — was the tell). Windows camera
+# index order is NOT guaranteed stable across reboots when multiple
+# virtual-cam apps are involved; re-run the same per-index
+# capture-and-inspect check after any reboot-related presence weirdness
+# rather than assuming this index still holds.
+PRESENCE_CAMERA_INDEX = 0
 
 # Raw camera poll interval — Vatsal's call 2026-08-21, resolving the
 # design doc's own inconsistency (it separately said "~15s" for the
