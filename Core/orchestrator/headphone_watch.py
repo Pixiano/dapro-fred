@@ -38,6 +38,8 @@
 # camera-index resolver, but its own concern (audio routing) is
 # unrelated to either module's job.
 
+import random
+
 import cv2
 
 from config.settings import (
@@ -61,6 +63,23 @@ _streak = 0
 _pending_state = None  # the state the current streak is confirming
 
 _ref_histograms = None  # (on_hist, off_hist), computed once and cached
+
+# Short, varied heads-up on an actual switch — same "sir-suffixed
+# short-phrase-pool" style as proactive_checks.py's own
+# _PRESENCE_GREETINGS/_CAMERA_OBSTRUCTION_PHRASES, so this doesn't say
+# the exact same line every single time. Vatsal's call 2026-08-23.
+_TO_HEADPHONES_PHRASES = (
+    "Switched to your headphones, sir.",
+    "On headphones now, sir.",
+    "Headphones it is, sir.",
+    "You're on headphones, sir.",
+)
+_TO_SPEAKERS_PHRASES = (
+    "Switched to speakers, sir.",
+    "On speakers now, sir.",
+    "Speakers it is, sir.",
+    "You're on speakers, sir.",
+)
 
 
 def _capture_frame():
@@ -206,7 +225,7 @@ def check_and_switch(notify=None):
         _last_state = result
 
         if notify is not None:
-            short = "your headphones" if result else "speakers"
-            notify(f"Switched audio output to {short}, sir.", title="Audio")
+            phrases = _TO_HEADPHONES_PHRASES if result else _TO_SPEAKERS_PHRASES
+            notify(random.choice(phrases), title="Audio")
     except Exception as e:
         event_log.log_error("headphone_watch", e)
