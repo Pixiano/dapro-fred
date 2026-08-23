@@ -1,8 +1,20 @@
 # Core/orchestrator/headphone_watch.py
 #
 # Detects via camera whether Vatsal is wearing his headphones and
-# switches the default Windows playback device to match — Vatsal's own
-# idea, 2026-08-23.
+# switches FRED's own audio output to match — Vatsal's own idea,
+# 2026-08-23.
+#
+# Switches via audio.device_info.set_output_device (sd.default.device —
+# PortAudio, process-local), the SAME mechanism the HUD's speaker
+# dropdown already uses. Deliberately NOT the Windows-wide system
+# default (pycaw's SetDefaultDevice) — first attempt here used that and
+# confirmed live 2026-08-23 it visibly did nothing Vatsal could hear:
+# FRED's own TTS output stream reads sd.default.device at creation
+# time, independent of the OS system default, so it kept talking
+# through whatever sd.default.device already was (pinned by
+# apply_saved_devices()/the HUD dropdown) regardless of the Windows-wide
+# default changing underneath it. Vatsal's explicit call: only touch
+# what the HUD already touches, not system-wide settings.
 #
 # Classical CV, not a vision-LLM call: presence.py's face detector
 # (insightface, already loaded in-process for identity matching) locates
@@ -35,8 +47,8 @@ from config.settings import (
     HEADPHONES_ON_PATHS,
     SPEAKER_OUTPUT_DEVICE_NAME,
 )
+from audio import device_info
 from input.presence import _get_analyzer, resolve_camera_index
-from tools.machine_tools import set_audio_output
 from utils import event_log
 
 # None = never checked yet / unknown. True = headphones last confirmed
@@ -183,7 +195,13 @@ def check_and_switch(notify=None):
             return  # confirmed, but nothing actually changed
 
         device_name = HEADPHONE_OUTPUT_DEVICE_NAME if result else SPEAKER_OUTPUT_DEVICE_NAME
-        set_audio_output(device_name)
+        matches = [d for d in device_info.list_output_devices() if d["name"] == device_name]
+        if not matches:
+            event_log.log_error(
+                "headphone_watch", OSError(f"no output device named {device_name!r} present")
+            )
+            return
+        device_info.set_output_device(matches[0]["index"])
         event_log.log("headphone_switch", wearing=result, device=device_name)
         _last_state = result
 
