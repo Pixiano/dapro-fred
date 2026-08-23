@@ -205,6 +205,10 @@ def test_family_classification_does_not_affect_vatsal_match(monkeypatch):
     )
     monkeypatch.setattr(presence, "_get_family_embeddings", lambda: {})
     monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
+    # Every non-HIGH match now goes to the vision fallback (2026-08-23,
+    # see _frame_matches_enrollment's own comment) — stub it rather than
+    # exercising the real HTTP call against a fake "frame" string.
+    monkeypatch.setattr(presence, "_vision_fallback_is_match", lambda frame: False)
 
     present, matched_face, matched_tier = presence._frame_matches_enrollment("frame")
 
@@ -227,6 +231,8 @@ def test_family_classification_recognizes_family_member(monkeypatch):
     )
     monkeypatch.setattr(presence, "_get_family_embeddings", lambda: {"Mom": [_np.array([0.9, 0.9, 0.9])]})
     monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
+    # Same reason as the stranger-classification test above.
+    monkeypatch.setattr(presence, "_vision_fallback_is_match", lambda frame: False)
 
     present, _, _ = presence._frame_matches_enrollment("frame")
 

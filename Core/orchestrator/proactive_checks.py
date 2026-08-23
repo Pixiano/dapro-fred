@@ -35,6 +35,8 @@ from config.settings import (
     CALL_LOG_CHECK_MINUTES,
     PRESENCE_POLL_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
+    PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS,
+    PROACTIVE_CAMERA_OBSTRUCTION_STREAK,
 )
 from input import presence
 from orchestrator import focus_checkin, reflection, sleep_mode
@@ -732,6 +734,19 @@ def check_presence():
 # 10. CAMERA OBSTRUCTION -- active input while camera reads absent
 # =========================================================
 
+_CAMERA_OBSTRUCTION_PHRASES = (
+    "Camera looks blocked, sir — still there?",
+    "Is the camera obstructed, sir?",
+    "Can't see you, sir — camera blocked, or did you just look away?",
+    "Sir, I think something's covering the camera — you still there?",
+)
+
+# Consecutive qualifying polls (sleeping + recent input), in-memory only
+# — same "a restart is a real event" reasoning sleep_mode.py's own
+# streak counters hold to, not persisted.
+_camera_obstruction_streak = 0
+
+
 def check_camera_obstruction():
     """
     Sleep mode is purely camera-driven, but a blocked/covered/misaimed
@@ -743,21 +758,36 @@ def check_camera_obstruction():
     where FRED thinks nobody's home but someone is clearly still typing.
     Vatsal's own idea, 2026-08-23.
 
+    Debounced (Vatsal's own follow-up call, same day): registered on its
+    own PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS-interval job (5s, not
+    the 15s presence-poll cadence) and requires
+    PROACTIVE_CAMERA_OBSTRUCTION_STREAK (3) CONSECUTIVE qualifying polls
+    before it actually speaks — a single glance-away-then-back must not
+    trigger this. Also see input/presence.py's own 2026-08-23 fix: a
+    face at a bad angle now always gets a real vision-model check before
+    being written off as absent, which is the other half of the same
+    complaint ("turning away or looking down even a little" was
+    triggering this too fast).
+
     Deliberately bypasses this module's own notify() wrapper (which
     gates on sleep_mode.is_sleeping()) — that gate would silence the
     exact case this check exists to catch. Goes straight to
     utils.notifier.notify, same precedent consolidation.py's
     on_sleep_exit already sets for the same reason.
 
-    Dedup: at most once per sleep stretch. The "asked" flag resets the
-    moment sleep mode isn't active, so the next stretch can ask again —
-    same "second reminder is fine" shape as every other check here, just
-    keyed off sleep-mode edges instead of a value/date.
+    Dedup: at most once per sleep stretch. The "asked" flag (and the
+    streak) resets the moment sleep mode isn't active, so the next
+    stretch can ask again — same "second reminder is fine" shape as
+    every other check here, just keyed off sleep-mode edges instead of a
+    value/date.
     """
+    global _camera_obstruction_streak
+
     state = _load_state()
     obstruction = state.setdefault("camera_obstruction", {})
 
     if not sleep_mode.is_sleeping():
+        _camera_obstruction_streak = 0
         if obstruction.get("asked"):
             obstruction["asked"] = False
             _save_state(state)
@@ -767,9 +797,14 @@ def check_camera_obstruction():
         return
 
     if idle_seconds() >= PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS:
+        _camera_obstruction_streak = 0
         return
 
-    _real_notify("Camera looks blocked, sir — still there?", title="Camera")
+    _camera_obstruction_streak += 1
+    if _camera_obstruction_streak < PROACTIVE_CAMERA_OBSTRUCTION_STREAK:
+        return
+
+    _real_notify(random.choice(_CAMERA_OBSTRUCTION_PHRASES), title="Camera")
     obstruction["asked"] = True
     _save_state(state)
 
@@ -834,12 +869,15 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     scheduler.add_periodic(
         check_presence, PRESENCE_POLL_SECONDS / 60, "proactive_presence"
     )
-    # Same cadence as presence polling above — cheap (no camera/LLM call,
-    # just an OS idle-time read and a state-file check), and this needs
-    # to notice "still typing" promptly, not on the multi-minute cadence
-    # everything-else-here uses.
+    # Own faster cadence, not presence polling's 15s — the debounce
+    # inside check_camera_obstruction needs PROACTIVE_CAMERA_OBSTRUCTION_STREAK
+    # consecutive 5s ticks, so 3*5s=15s total before it speaks. Cheap
+    # either way (no camera/LLM call, just an OS idle-time read and a
+    # state-file check).
     scheduler.add_periodic(
-        check_camera_obstruction, PRESENCE_POLL_SECONDS / 60, "proactive_camera_obstruction"
+        check_camera_obstruction,
+        PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS / 60,
+        "proactive_camera_obstruction",
     )
     # Focus-awareness check-in — see orchestrator/focus_checkin.py. Fires
     # through this module's own notify() so sleep-mode gating is automatic

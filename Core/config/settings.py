@@ -1242,26 +1242,31 @@ PRESENCE_HARD_EMBEDDINGS_TARGET = 15
 PRESENCE_DYNAMIC_EMBEDDINGS_CAP = 15
 
 # ArcFace/buffalo_l cosine-similarity match threshold. NOT a measured
-# constant — this repo had never run the model as of 2026-08-21, so
-# these are starting guesses (typical same-person ArcFace similarity
-# clusters 0.35-0.45 in the wild) to verify/retune against real
-# enrollment + real live frames, not settled numbers. Two thresholds,
-# not one: below the low mark is a confident non-match, above the high
-# mark is a confident match, and the band between them is genuinely
-# ambiguous — see presence.py's fallback to a real vision-model
-# comparison for that band, proven live 2026-08-21 via Bonsai-27B
-# through LM Studio (verdict: correctly identified the same person
-# across a hard side-angle shot, high confidence) before being wired
-# into this codebase's own already-working vision_server.py pipeline
-# instead of depending on LM Studio at runtime.
-PRESENCE_MATCH_THRESHOLD_LOW = 0.30
+# constant — this repo had never run the model as of 2026-08-21, so this
+# is a starting guess (typical same-person ArcFace similarity clusters
+# 0.35-0.45 in the wild) to verify/retune against real enrollment + real
+# live frames, not a settled number. Below this is not yet a confident
+# match — see presence.py's fallback to a real vision-model comparison
+# for anything below it, proven live 2026-08-21 via Bonsai-27B through
+# LM Studio (verdict: correctly identified the same person across a
+# hard side-angle shot, high confidence) before being wired into this
+# codebase's own already-working vision_server.py pipeline instead of
+# depending on LM Studio at runtime.
+#
 # Raised from the original 0.45 starting guess, 2026-08-21: live use
 # showed a single high-confidence-but-wrong frame was enough to flip
 # present, exit sleep mode, fire the wake greeting, and accumulate a bad
 # embedding — "the notifications are appearing like every false match
-# from the face recog." A stricter single-frame bar, plus the present-
-# debounce below, are the two-part fix; LOW is untouched, it only gates
-# the ambiguous-vision-fallback band, a separate concern.
+# from the face recog."
+#
+# There used to be a second, lower threshold (PRESENCE_MATCH_THRESHOLD_LOW)
+# below which a face skipped the vision-model fallback entirely as a
+# "confident non-match." Removed 2026-08-23: Vatsal reported that
+# turning away or looking down even a little was enough to drop
+# similarity below that mark, skipping the vision check and reporting
+# absent straight away. Every face below HIGH now goes to the vision
+# model — see _frame_matches_enrollment's own comment for the
+# accepted cost (a stranger's face also pays a vision round trip now).
 PRESENCE_MATCH_THRESHOLD_HIGH = 0.58
 
 # Consecutive absent polls (at PRESENCE_POLL_SECONDS each) required before
@@ -1289,6 +1294,15 @@ PRESENCE_PRESENT_DEBOUNCE = 2
 # "was here a minute ago," or it would fire on the tail end of a
 # legitimate departure.
 PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS = 20
+
+# Debounce for the same check: how often it polls and how many
+# consecutive qualifying polls (sleeping + recent input) are required
+# before it actually speaks — Vatsal's own call 2026-08-23, same
+# streak-counter shape as PRESENCE_ABSENT_DEBOUNCE, just faster since
+# this only needs a few seconds of confirmation, not a full presence
+# debounce. 3 * 5s = 15s of sustained "still typing" before it asks.
+PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS = 5
+PROACTIVE_CAMERA_OBSTRUCTION_STREAK = 3
 
 # Focus-awareness check-in (orchestrator/focus_checkin.py): first eligible
 # once he's been present but hasn't had a real turn/tool-call with FRED for

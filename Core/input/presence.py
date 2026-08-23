@@ -35,7 +35,6 @@ from config.settings import (
     PRESENCE_CAMERA_INDEX,
     PRESENCE_DYNAMIC_EMBEDDINGS_CAP,
     PRESENCE_MATCH_THRESHOLD_HIGH,
-    PRESENCE_MATCH_THRESHOLD_LOW,
     PRESENCE_PRESENT_DEBOUNCE,
 )
 from input import presence_log
@@ -394,11 +393,17 @@ def _frame_matches_enrollment(frame):
         if similarity >= PRESENCE_MATCH_THRESHOLD_HIGH:
             event_log.log("presence_match", similarity=round(similarity, 3), tier=tier)
             return True, face, tier
-        if similarity < PRESENCE_MATCH_THRESHOLD_LOW:
-            continue  # confident non-match for this face, check the next one
 
-        # Ambiguous band: fall back to the vision model. A clear match on
-        # any single face is enough to report present.
+        # Below HIGH always goes to the vision model now — Vatsal's own
+        # 2026-08-23 report: turning away or looking down even a little
+        # was enough to drop ArcFace similarity below the old LOW
+        # threshold (0.30), which skipped the vision fallback entirely
+        # and reported absent straight away. PRESENCE_MATCH_THRESHOLD_LOW
+        # is no longer read here for that reason (still used elsewhere,
+        # e.g. as a general "this isn't even close" reference point in
+        # docs/settings). Cost: a stranger's face in frame (family
+        # visiting) now also pays a vision-model round trip instead of
+        # being skipped cheaply — accepted, not a reported problem yet.
         verdict = _vision_fallback_is_match(frame)
         if verdict is True:
             event_log.log("presence_match", similarity=round(similarity, 3), tier=tier,
