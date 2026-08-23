@@ -26,8 +26,15 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from config.settings import HEADPHONES_OFF_PATHS, HEADPHONES_ON_PATHS
+from config.settings import (
+    HEADPHONES_OFF_PATHS,
+    HEADPHONES_ON_PATHS,
+    HEADPHONES_TRAINING_OFF_DIR,
+    HEADPHONES_TRAINING_ON_DIR,
+)
 from input.presence import resolve_camera_index
+
+_TRAIN_DIRS = {"on": HEADPHONES_TRAINING_ON_DIR, "off": HEADPHONES_TRAINING_OFF_DIR}
 
 # (path, seconds-of-countdown-before-this-shot, prompt).
 _SHOTS = [
@@ -83,11 +90,35 @@ def capture_one(path: Path, delay: float = 0) -> bool:
     return True
 
 
+def _next_training_path(state: str) -> Path:
+    """First non-existent NNN.jpg in the training/{on,off} folder —
+    lets --train-shot be called repeatedly (e.g. once per turn while
+    narrating a 30-50 shot session) without tracking a counter across
+    calls; each invocation is a fresh process anyway."""
+    d = _TRAIN_DIRS[state]
+    d.mkdir(parents=True, exist_ok=True)
+    existing = {p.stem for p in d.glob("*.jpg")}
+    n = 1
+    while f"{n:03d}" in existing:
+        n += 1
+    return d / f"{n:03d}.jpg"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--shot", choices=sorted(_SLOT_PATHS), help="capture just one named shot")
+    parser.add_argument(
+        "--train-shot", choices=sorted(_TRAIN_DIRS),
+        help="capture one photo into data/headphones_training/{on,off}, auto-numbered — "
+             "for scripts/train_headphones_classifier.py's 30-50-photo pool, not the "
+             "6-shot vision-LLM reference set --shot targets",
+    )
     parser.add_argument("--delay", type=float, default=0, help="seconds to wait before this shot")
     args = parser.parse_args()
+
+    if args.train_shot:
+        ok = capture_one(_next_training_path(args.train_shot), args.delay)
+        sys.exit(0 if ok else 1)
 
     if args.shot:
         ok = capture_one(_SLOT_PATHS[args.shot], args.delay)

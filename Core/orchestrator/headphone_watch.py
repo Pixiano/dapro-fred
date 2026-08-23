@@ -39,7 +39,7 @@
 #      colour histogram) is just too diluted by hair/skin/background/
 #      clothing variance to isolate "is there a white plastic object on
 #      this head" reliably.
-#   3. THIS — vision-LLM again, but with the reference AND live images
+#   3. Vision-LLM again, but with the reference AND live images
 #      downscaled to 512px on the long edge before encoding (was full
 #      resolution). Confirmed live 2026-08-23: prompt cost drops from
 #      ~10800 tokens/call to ~1450, latency from 10-20s to ~0.4-0.5s,
@@ -48,9 +48,23 @@
 #      cost. (256px was tried first and was too degraded — the model's
 #      answers became biased toward one class, the discriminating
 #      detail was gone; 512px is the point that keeps enough of the
-#      headphones themselves visible.) This is genuinely the best of
-#      the three found so far on "cheap, quick, and accurate" — not
-#      claimed to be perfect, 10/12 is a real number, not 12/12.
+#      headphones themselves visible.) This is the FALLBACK now — see 4.
+#   4. TRAINED CLASSIFIER, preferred when present. A real object
+#      detector (YOLOv8n/s pretrained on Open Images V7, which HAS a
+#      "Headphones" class) was tried and tested against all 12
+#      reference photos, at multiple crop strategies — 0% recall, not a
+#      threshold problem, a domain mismatch between these specific
+#      photos and the pretrained class's training distribution. Bigger
+#      object detectors were judged not worth chasing (nano and small
+#      both totally blind to this object, likely the same gap). Instead:
+#      scripts/train_headphones_classifier.py fits a small scikit-learn
+#      SVM on headphone_features.py's HSV-histogram feature (the SAME
+#      feature approach 2 used, but now actually TRAINED on 30-50
+#      labeled photos per class via cross-validation, instead of
+#      correlation against 1-2 hand-picked references) — Vatsal's own
+#      call 2026-08-23. Structure built before the photos exist; this
+#      module falls back to approach 3 until HEADPHONES_CLASSIFIER_PATH
+#      actually exists on disk.
 #
 # Gated on presence.is_present() (Vatsal's own call 2026-08-23): runs
 # on presence.py's own 15s poll cadence and skips entirely — no camera
@@ -68,13 +82,18 @@ import cv2
 from config.settings import (
     HEADPHONE_CHECK_STREAK,
     HEADPHONE_OUTPUT_DEVICE_NAME,
+    HEADPHONES_CLASSIFIER_PATH,
     HEADPHONES_OFF_PATHS,
     HEADPHONES_ON_PATHS,
     SPEAKER_OUTPUT_DEVICE_NAME,
 )
 from audio import device_info
 from input import presence
+from orchestrator.headphone_features import extract_feature
 from utils import event_log
+
+_classifier = None  # lazy-loaded, cached — None also means "tried and not present"
+_classifier_checked = False
 
 # Long edge in pixels for both the reference photos and the live frame
 # before they're sent to the vision model — see this module's own
@@ -144,7 +163,44 @@ def _encode_small(image) -> str | None:
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
 
 
-def _wearing_headphones(frame) -> bool | None:
+def _get_classifier():
+    """Loaded once, cached — None (and cached as such) if
+    HEADPHONES_CLASSIFIER_PATH doesn't exist yet or fails to load, so
+    every poll doesn't re-stat the filesystem. Restart the process to
+    pick up a freshly (re)trained model, same convention as every other
+    lazy-load-once cache in this codebase (presence.py's own
+    enrollment-embeddings cache included)."""
+    global _classifier, _classifier_checked
+    if _classifier_checked:
+        return _classifier
+    _classifier_checked = True
+    if not HEADPHONES_CLASSIFIER_PATH.exists():
+        return None
+    try:
+        import joblib
+        _classifier = joblib.load(HEADPHONES_CLASSIFIER_PATH)
+    except Exception as e:
+        event_log.log_error("headphone_watch", e)
+        _classifier = None
+    return _classifier
+
+
+def _wearing_headphones_classifier(frame) -> bool | None:
+    """True/False from the trained scikit-learn model
+    (scripts/train_headphones_classifier.py), None if it isn't trained
+    yet or no face was detected in `frame` — caller falls back to the
+    vision-LLM path in either case."""
+    model = _get_classifier()
+    if model is None:
+        return None
+    feature = extract_feature(frame, presence._get_analyzer())
+    if feature is None:
+        return None
+    prediction = model.predict([feature])[0]
+    return bool(prediction)
+
+
+def _wearing_headphones_llm(frame) -> bool | None:
     """True/False on a clear signal, None if the reference photos
     aren't ready, encoding failed, or the model/network genuinely
     couldn't produce a clear signal (caller keeps the last known state
@@ -203,6 +259,19 @@ def _wearing_headphones(frame) -> bool | None:
     if has_not and not has_wearing:
         return False
     return None
+
+
+def _wearing_headphones(frame) -> bool | None:
+    """Trained classifier if it exists and has an opinion, else the
+    vision-LLM comparison — see this module's own docstring for the
+    full method history. Restart the process after running
+    scripts/train_headphones_classifier.py to pick up a newly (re)
+    trained model — _get_classifier caches a "not present" result too,
+    same as every other lazy-load-once cache in this codebase."""
+    result = _wearing_headphones_classifier(frame)
+    if result is not None:
+        return result
+    return _wearing_headphones_llm(frame)
 
 
 def check_and_switch(notify=None):

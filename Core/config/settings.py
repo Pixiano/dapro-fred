@@ -1359,14 +1359,11 @@ PROACTIVE_CAMERA_OBSTRUCTION_STREAK = 3
 HEADPHONE_OUTPUT_DEVICE_NAME = "Da Pro's Rockerz (Rockerz 512 ANC)"
 SPEAKER_OUTPUT_DEVICE_NAME = "Speakers (Realtek(R) Audio)"
 
-# Four shots each state (raised from two, Vatsal's own call 2026-08-23,
-# for more robustness on the glasses dimension specifically — a
-# glasses-day frame compared only against a glasses-less reference, or
-# vice versa, is a needless extra source of mismatch). The live runtime
-# check (headphone_watch.py's _reference_histograms) averages the
-# histogram across every path in each list that actually exists on
-# disk, not just the first — more reference shots genuinely improves
-# the comparison instead of sitting unused as spares.
+# Six shots each state, used as the vision-LLM comparison references
+# (headphone_watch.py's _wearing_headphones reads only the first of
+# each list — [1] onward are spares on disk, not currently read by
+# anything). Raised from two, Vatsal's own call 2026-08-23, mainly for
+# glasses-combination coverage.
 HEADPHONES_ON_PATHS = [
     DATA_DIR / "headphones_on_1.jpg", DATA_DIR / "headphones_on_2.jpg",
     DATA_DIR / "headphones_on_3.jpg", DATA_DIR / "headphones_on_4.jpg",
@@ -1377,6 +1374,23 @@ HEADPHONES_OFF_PATHS = [
     DATA_DIR / "headphones_off_3.jpg", DATA_DIR / "headphones_off_4.jpg",
     DATA_DIR / "headphones_off_5.jpg", DATA_DIR / "headphones_off_6.jpg",
 ]
+
+# A SEPARATE, larger pool for scripts/train_headphones_classifier.py —
+# not the 6-photo vision-LLM reference set above. Vatsal's own call
+# 2026-08-23: build the trained-classifier structure now, capture the
+# 30-50 photos per class later. Arbitrary filenames inside these
+# folders (scripts/enroll_headphones.py --train-shot on/off
+# auto-numbers them), unlike the fixed on_N/off_N naming above, so the
+# count can grow without touching settings.py again.
+HEADPHONES_TRAINING_DIR = DATA_DIR / "headphones_training"
+HEADPHONES_TRAINING_ON_DIR = HEADPHONES_TRAINING_DIR / "on"
+HEADPHONES_TRAINING_OFF_DIR = HEADPHONES_TRAINING_DIR / "off"
+
+# Written by train_headphones_classifier.py, read by headphone_watch.py.
+# When this file exists, headphone_watch.py prefers it over the
+# vision-LLM comparison (faster, no GPU/LLM round trip) — see that
+# module's own docstring for the fallback order.
+HEADPHONES_CLASSIFIER_PATH = DATA_DIR / "headphones_classifier.joblib"
 
 # How many consecutive same-answer checks before actually switching the
 # output device — audio switching mid-word is more jarring than a

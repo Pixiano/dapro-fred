@@ -48,6 +48,12 @@ Core/data/headphones_off_4.jpg
 Core/data/headphones_off_5.jpg
 Core/data/headphones_off_6.jpg
 
+# Headphones classifier training pool (Core/data/headphones_training/)
+# and the trained model itself (Core/scripts/train_headphones_classifier.py)
+# — same biometric/personal treatment as the reference photos above.
+Core/data/headphones_training/
+Core/data/headphones_classifier.joblib
+
 # Family/friend face embeddings (Core/scripts/enroll_face.py --person) —
 # biometric data for other real people, same treatment as above.
 Core/data/family_enrollment.json
