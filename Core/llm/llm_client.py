@@ -1,8 +1,10 @@
 # Core/llm/llm_client.py
 
+import contextlib
 import gc
 import json
 import re
+import threading
 import time
 
 import requests
@@ -156,6 +158,24 @@ class LLMClient:
         # FRED doesn't pay the load cost for tiers it never needs.
         self._loaded = {}
 
+        # Serializes all local-model access (load/evict/infer) — this
+        # machine has exactly one GPU and _get_model() evicts the
+        # previously-loaded tier before loading a new one (only one tier
+        # resident at a time, see that method's own comment). Two threads
+        # doing this concurrently (e.g. a turn's own LLM call racing
+        # orchestrator/sleep_mode.py's background reflection/consolidation
+        # thread) means one can be freeing a model's llama.cpp context
+        # while the other is still using or loading into it — confirmed
+        # live 2026-08-23 as a hard "Windows fatal exception: access
+        # violation" crash inside llama_cpp's free_ctx, mid-eviction, the
+        # exact moment a reminder request needed the model right as a
+        # background reflection pass also needed it. RLock, not Lock:
+        # generate_with_tools()'s own fallback re-enters generate() from
+        # inside its except branch, and generate_stream() acquires this
+        # once for its whole local-path setup+consume lifetime while
+        # _get_model()/unload() also acquire it internally.
+        self._lock = threading.RLock()
+
         # False for vision/screen_watcher.py's own LLMClient: that one
         # runs in a separate process this file is shared with only to
         # let IT read the MAIN process's status (see
@@ -283,24 +303,25 @@ class LLMClient:
         messages = self._apply_thinking(messages, chosen_tier)
 
         try:
-            model = self._get_model(chosen_tier)
-            # _strip_thinking deliberately returns "" when the model
-            # opened a reasoning block and never closed it — it ran out
-            # of tokens mid-thought and genuinely has no answer, and
-            # speaking the raw chain of thought would be worse. But an
-            # empty string reaches the TTS layer as total silence:
-            # confirmed in session_2026-08-01_18-41-50.jsonl, where three
-            # turns logged `"text": ""` with `spoken: true` and FRED just
-            # said nothing at all. Thinking-on Qwen3-8B makes this
-            # reachable on any turn whose reasoning overruns max_tokens.
-            # Say something honest instead of nothing.
-            return self._generate(
-                model, chosen_tier, messages, max_tokens=max_tokens,
-                force_no_thinking=force_no_thinking,
-            ) or (
-                "I ran out of room thinking that one through, sir. "
-                "Ask me again, or narrow it down a little."
-            )
+            with self._lock:
+                model = self._get_model(chosen_tier)
+                # _strip_thinking deliberately returns "" when the model
+                # opened a reasoning block and never closed it — it ran out
+                # of tokens mid-thought and genuinely has no answer, and
+                # speaking the raw chain of thought would be worse. But an
+                # empty string reaches the TTS layer as total silence:
+                # confirmed in session_2026-08-01_18-41-50.jsonl, where three
+                # turns logged `"text": ""` with `spoken: true` and FRED just
+                # said nothing at all. Thinking-on Qwen3-8B makes this
+                # reachable on any turn whose reasoning overruns max_tokens.
+                # Say something honest instead of nothing.
+                return self._generate(
+                    model, chosen_tier, messages, max_tokens=max_tokens,
+                    force_no_thinking=force_no_thinking,
+                ) or (
+                    "I ran out of room thinking that one through, sir. "
+                    "Ask me again, or narrow it down a little."
+                )
 
         except Exception as error:
 
@@ -308,14 +329,15 @@ class LLMClient:
 
             if chosen_tier != self.default_tier:
                 try:
-                    model = self._get_model(self.default_tier)
-                    return self._generate(
-                        model, self.default_tier, messages, max_tokens=max_tokens,
-                        force_no_thinking=force_no_thinking,
-                    ) or (
-                        "I ran out of room thinking that one through, sir. "
-                        "Ask me again, or narrow it down a little."
-                    )
+                    with self._lock:
+                        model = self._get_model(self.default_tier)
+                        return self._generate(
+                            model, self.default_tier, messages, max_tokens=max_tokens,
+                            force_no_thinking=force_no_thinking,
+                        ) or (
+                            "I ran out of room thinking that one through, sir. "
+                            "Ask me again, or narrow it down a little."
+                        )
                 except Exception as fallback_error:
                     print("[LLM] Fallback inference failed:", fallback_error)
 
@@ -397,6 +419,8 @@ class LLMClient:
         stream = None if local_only else self._cloud_stream(messages)
         chosen_tier = None
 
+        used_local = stream is None
+
         if stream is None:
             chosen_tier = tier or self._pick_tier(messages)
             # Separate name, same reason as generate_with_tools below: the
@@ -404,10 +428,11 @@ class LLMClient:
             # and the adapted copy is rejected there with a 400.
             local_messages = self._apply_thinking(messages, chosen_tier)
             try:
-                model = self._get_model(chosen_tier)
-                stream = self._native_call(
-                    model, chosen_tier, local_messages, stream=True
-                )
+                with self._lock:
+                    model = self._get_model(chosen_tier)
+                    stream = self._native_call(
+                        model, chosen_tier, local_messages, stream=True
+                    )
             except Exception as error:
                 print(f"[LLM] Streaming failed on '{chosen_tier}', falling back:", error)
                 yield self.generate(messages, tier=chosen_tier, local_only=local_only)
@@ -450,47 +475,61 @@ class LLMClient:
                     return out
                 pending = pending[end + 1:]
 
+        # Held for the whole local-stream consumption, not just setup
+        # above — create_chat_completion(stream=True) is lazy (see this
+        # method's own docstring on cancellation), so the actual
+        # token-by-token GPU work happens HERE, across these yields, not
+        # in the _native_call() that only constructs the generator. A
+        # `with` block correctly stays entered across yield points in a
+        # generator function (including early abandonment via
+        # GeneratorExit), so this genuinely blocks a concurrent
+        # unload()/_get_model() on another thread until this stream is
+        # fully consumed or abandoned. RLock, so used_local=False (cloud
+        # stream, no local model touched) just pays a harmless uncontended
+        # lock for the same span — not worth a second code path to avoid.
+        lock_ctx = self._lock if used_local else contextlib.nullcontext()
         try:
-            for chunk in stream:
-                delta = (
-                    chunk.get("choices", [{}])[0]
-                    .get("delta", {})
-                    .get("content")
-                ) or ""
-                if not delta:
-                    continue
+            with lock_ctx:
+                for chunk in stream:
+                    delta = (
+                        chunk.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content")
+                    ) or ""
+                    if not delta:
+                        continue
 
-                if state == "done":
-                    piece = emit(delta)
-                    if piece:
-                        yield piece
-                    continue
-
-                buffer += delta
-
-                if state == "unknown":
-                    if any(o in buffer for o in self._THOUGHT_OPENERS):
-                        state = "thinking"
-                    elif not self._could_start_thought(buffer.lstrip()[:12]):
-                        # Long enough to be sure no opener is coming.
-                        state = "done"
-                        piece = emit(buffer)
-                        buffer = ""
+                    if state == "done":
+                        piece = emit(delta)
                         if piece:
                             yield piece
                         continue
 
-                if state == "thinking":
-                    for closer in self._THOUGHT_CLOSERS:
-                        index = buffer.find(closer)
-                        if index >= 0:
-                            remainder = buffer[index + len(closer):]
+                    buffer += delta
+
+                    if state == "unknown":
+                        if any(o in buffer for o in self._THOUGHT_OPENERS):
+                            state = "thinking"
+                        elif not self._could_start_thought(buffer.lstrip()[:12]):
+                            # Long enough to be sure no opener is coming.
                             state = "done"
+                            piece = emit(buffer)
                             buffer = ""
-                            piece = emit(remainder) if remainder.strip() else ""
                             if piece:
                                 yield piece
-                            break
+                            continue
+
+                    if state == "thinking":
+                        for closer in self._THOUGHT_CLOSERS:
+                            index = buffer.find(closer)
+                            if index >= 0:
+                                remainder = buffer[index + len(closer):]
+                                state = "done"
+                                buffer = ""
+                                piece = emit(remainder) if remainder.strip() else ""
+                                if piece:
+                                    yield piece
+                                break
 
         except Exception as error:
             print(f"[LLM] Stream interrupted: {error}")
@@ -563,12 +602,13 @@ class LLMClient:
         local_messages = self._apply_thinking(messages, chosen_tier)
 
         try:
-            model = self._get_model(chosen_tier)
+            with self._lock:
+                model = self._get_model(chosen_tier)
 
-            response = self._native_call(
-                model, chosen_tier, local_messages,
-                tools=tools, tool_choice="auto", max_tokens=self.max_tokens,
-            )
+                response = self._native_call(
+                    model, chosen_tier, local_messages,
+                    tools=tools, tool_choice="auto", max_tokens=self.max_tokens,
+                )
 
             message = response["choices"][0]["message"]
 
@@ -713,122 +753,123 @@ class LLMClient:
         4566 of 4814 MiB reclaimed. The ~248 MiB left is the CUDA context,
         which is reused on the next load rather than leaked per cycle.
         """
-        targets = [tier] if tier else list(self._loaded.keys())
-        dropped = 0
+        with self._lock:
+            targets = [tier] if tier else list(self._loaded.keys())
+            dropped = 0
 
-        for name in targets:
-            model = self._loaded.pop(name, None)
-            if model is None:
-                continue
-            try:
-                close = getattr(model, "close", None)
-                if close:
-                    close()
-            except Exception as e:
-                print(f"[LLM] close() failed for '{name}': {e}")
-            del model
-            dropped += 1
+            for name in targets:
+                model = self._loaded.pop(name, None)
+                if model is None:
+                    continue
+                try:
+                    close = getattr(model, "close", None)
+                    if close:
+                        close()
+                except Exception as e:
+                    print(f"[LLM] close() failed for '{name}': {e}")
+                del model
+                dropped += 1
 
-        if dropped:
-            gc.collect()
-            print(f"[LLM] unloaded {dropped} model(s) — VRAM released")
+            if dropped:
+                gc.collect()
+                print(f"[LLM] unloaded {dropped} model(s) — VRAM released")
 
-        if self._report_status:
-            _write_llm_status(self._loaded.keys())
-        return dropped
+            if self._report_status:
+                _write_llm_status(self._loaded.keys())
+            return dropped
 
     def _get_model(self, tier: str) -> Llama:
+        with self._lock:
+            if tier in self._loaded:
+                return self._loaded[tier]
 
-        if tier in self._loaded:
-            return self._loaded[tier]
+            # Only ONE tier stays resident. Measured 2026-08-02 on the venv's
+            # CUDA build: Standard (Qwen3-8B Q4_K_M) at n_ctx 24576 peaks at
+            # ~9.9 GB VRAM of a 16310 MiB card, and Deep (Qwen3-14B) is
+            # larger again — two resident at once cannot fit, and this
+            # machine has a documented history of hard access-violation
+            # crashes (0xc0000005) from VRAM exhaustion.
+            #
+            # This was latent before today and is now reachable: nothing used
+            # to request Deep at all (TIER_ROUTING_ENABLED is False), but
+            # tools/smart_search.py's find_file_smart could pull a second
+            # model in alongside the resident one on a single "find my X"
+            # turn.
+            #
+            # The cost is a reload when alternating tiers, and the
+            # tier-switching path is rare.
+            if self._loaded:
+                evicted = ", ".join(self._loaded)
+                print(f"[LLM] evicting {evicted} to load '{tier}' (one tier resident)")
+                self.unload()
 
-        # Only ONE tier stays resident. Measured 2026-08-02 on the venv's
-        # CUDA build: Standard (Qwen3-8B Q4_K_M) at n_ctx 24576 peaks at
-        # ~9.9 GB VRAM of a 16310 MiB card, and Deep (Qwen3-14B) is
-        # larger again — two resident at once cannot fit, and this
-        # machine has a documented history of hard access-violation
-        # crashes (0xc0000005) from VRAM exhaustion.
-        #
-        # This was latent before today and is now reachable: nothing used
-        # to request Deep at all (TIER_ROUTING_ENABLED is False), but
-        # tools/smart_search.py's find_file_smart could pull a second
-        # model in alongside the resident one on a single "find my X"
-        # turn.
-        #
-        # The cost is a reload when alternating tiers, and the
-        # tier-switching path is rare.
-        if self._loaded:
-            evicted = ", ".join(self._loaded)
-            print(f"[LLM] evicting {evicted} to load '{tier}' (one tier resident)")
-            self.unload()
+            model_path = self.tiers.get(tier, self.tiers[self.default_tier])
 
-        model_path = self.tiers.get(tier, self.tiers[self.default_tier])
-
-        if not model_path.exists():
-            raise FileNotFoundError(
-                f"Model file not found for tier '{tier}': {model_path}"
-            )
-
-        # Confirmed live 2026-08-13: a cloud 429 mid-conversation fell
-        # through to a cold load here that took the user-visible reply
-        # from "instant" to ~100s, with nothing in the logs to show that
-        # was the cause — only a print(), invisible in this headless
-        # (pythonw) process. Not fixing the load time itself (that's
-        # real GGUF-from-disk cost), just making it visible so a future
-        # slow turn is diagnosable instead of a silent mystery gap.
-        load_start = time.monotonic()
-
-        n_ctx = CONTEXT_WINDOW_BY_TIER.get(tier, CONTEXT_WINDOW)
-
-        # Most local GGUFs' own embedded chat templates have no provision
-        # for tool definitions at all — llama.cpp then silently never
-        # shows the model its tools, so chatml-function-calling is the
-        # default because it works for tool calls AND plain chat on any
-        # model. But it also *replaces* the model's own template, which
-        # discards anything that template alone provides. Gemma 4 handles
-        # both tools and thinking natively, so it opts out via
-        # CHAT_FORMAT_BY_TIER and keeps its own.
-        mmproj_path = MMPROJ_PATH_BY_TIER.get(tier)
-
-        if mmproj_path is not None:
-            # Vision tiers use a chat_handler, not chat_format — the
-            # handler is what actually knows how to fold an image into
-            # the prompt via the paired mmproj (CLIP) model. Passing
-            # both chat_format and chat_handler is not a supported
-            # combination, so this branch is exclusive of the one below.
-            if not mmproj_path.exists():
+            if not model_path.exists():
                 raise FileNotFoundError(
-                    f"mmproj file not found for tier '{tier}': {mmproj_path}"
+                    f"Model file not found for tier '{tier}': {model_path}"
                 )
-            from llama_cpp.llama_chat_format import Gemma4ChatHandler
-            chat_handler = Gemma4ChatHandler(clip_model_path=str(mmproj_path))
 
-            model = Llama(
-                model_path=str(model_path),
-                n_ctx=n_ctx,
-                n_gpu_layers=GPU_LAYERS,
-                verbose=False,
-                chat_handler=chat_handler,
-            )
-        else:
-            chat_format = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling")
-            model = Llama(
-                model_path=str(model_path),
-                n_ctx=n_ctx,
-                n_gpu_layers=GPU_LAYERS,
-                verbose=False,
-                chat_format=chat_format,
-            )
+            # Confirmed live 2026-08-13: a cloud 429 mid-conversation fell
+            # through to a cold load here that took the user-visible reply
+            # from "instant" to ~100s, with nothing in the logs to show that
+            # was the cause — only a print(), invisible in this headless
+            # (pythonw) process. Not fixing the load time itself (that's
+            # real GGUF-from-disk cost), just making it visible so a future
+            # slow turn is diagnosable instead of a silent mystery gap.
+            load_start = time.monotonic()
 
-        load_seconds = time.monotonic() - load_start
-        print(f"[LLM] loaded '{tier}' in {load_seconds:.1f}s")
-        event_log.log("llm_model_load", tier=tier, seconds=round(load_seconds, 1))
+            n_ctx = CONTEXT_WINDOW_BY_TIER.get(tier, CONTEXT_WINDOW)
 
-        self._loaded[tier] = model
-        if self._report_status:
-            _write_llm_status(self._loaded.keys())
+            # Most local GGUFs' own embedded chat templates have no provision
+            # for tool definitions at all — llama.cpp then silently never
+            # shows the model its tools, so chatml-function-calling is the
+            # default because it works for tool calls AND plain chat on any
+            # model. But it also *replaces* the model's own template, which
+            # discards anything that template alone provides. Gemma 4 handles
+            # both tools and thinking natively, so it opts out via
+            # CHAT_FORMAT_BY_TIER and keeps its own.
+            mmproj_path = MMPROJ_PATH_BY_TIER.get(tier)
 
-        return model
+            if mmproj_path is not None:
+                # Vision tiers use a chat_handler, not chat_format — the
+                # handler is what actually knows how to fold an image into
+                # the prompt via the paired mmproj (CLIP) model. Passing
+                # both chat_format and chat_handler is not a supported
+                # combination, so this branch is exclusive of the one below.
+                if not mmproj_path.exists():
+                    raise FileNotFoundError(
+                        f"mmproj file not found for tier '{tier}': {mmproj_path}"
+                    )
+                from llama_cpp.llama_chat_format import Gemma4ChatHandler
+                chat_handler = Gemma4ChatHandler(clip_model_path=str(mmproj_path))
+
+                model = Llama(
+                    model_path=str(model_path),
+                    n_ctx=n_ctx,
+                    n_gpu_layers=GPU_LAYERS,
+                    verbose=False,
+                    chat_handler=chat_handler,
+                )
+            else:
+                chat_format = CHAT_FORMAT_BY_TIER.get(tier, "chatml-function-calling")
+                model = Llama(
+                    model_path=str(model_path),
+                    n_ctx=n_ctx,
+                    n_gpu_layers=GPU_LAYERS,
+                    verbose=False,
+                    chat_format=chat_format,
+                )
+
+            load_seconds = time.monotonic() - load_start
+            print(f"[LLM] loaded '{tier}' in {load_seconds:.1f}s")
+            event_log.log("llm_model_load", tier=tier, seconds=round(load_seconds, 1))
+
+            self._loaded[tier] = model
+            if self._report_status:
+                _write_llm_status(self._loaded.keys())
+
+            return model
 
     # =========================================================
     # TIER SELECTION

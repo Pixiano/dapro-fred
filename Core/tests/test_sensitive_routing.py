@@ -17,6 +17,7 @@
 # is still the bug.
 
 import inspect
+import threading
 
 import pytest
 
@@ -210,6 +211,7 @@ def _bare_client(monkeypatch, cloud_calls):
     client.top_p = 1.0
     client.max_tokens = 256
     client._loaded = {}
+    client._lock = threading.RLock()
 
     def _cloud_generate(*args, **kwargs):
         cloud_calls.append("generate")
