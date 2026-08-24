@@ -104,35 +104,40 @@ def _next_training_path(state: str) -> Path:
     return d / f"{n:03d}.jpg"
 
 
-def passive_capture(state: str, duration: float, count: int):
-    """`count` shots spread evenly across `duration` seconds, into
+def passive_capture(state: str, duration: float, interval: float = 1.0, progress_every: int = 50):
+    """One shot every `interval` seconds for `duration` seconds, into
     data/headphones_training/{on,off} — Vatsal's own call 2026-08-23:
     natural, unposed variation (however he's actually sitting, however
     the headphones actually happen to sit that minute) beats another
-    batch of consciously-posed shots, since the posed set is already
-    what the earlier reference photos were and the classifier needs
-    real variety, not more of the same pose repeated.
+    batch of consciously-posed shots. Driven by wall-clock time rather
+    than a fixed target count (Vatsal's own call 2026-08-24: "as many
+    as plausible", not a preset number) — interval=1.0 keeps
+    consecutive frames different enough to be worth keeping (frames a
+    fraction of a second apart are near-duplicates) while still landing
+    in the hundreds over a 5-minute window, not the "1 million" a
+    sub-second interval would produce.
 
-    Deliberately no per-shot prints, only a start/end summary — the
-    whole point is not narrating each capture as it happens. A failed
-    individual shot (camera hiccup mid-session) is skipped, not fatal;
-    the run keeps going so one bad frame doesn't lose the rest of a
-    5-minute window that can't easily be redone identically.
+    Prints progress every `progress_every` shots (a session that can
+    now run into the hundreds needs some sign of life) plus a final
+    summary — still no per-shot prints. A failed individual shot
+    (camera hiccup mid-session) is skipped, not fatal; the run keeps
+    going so one bad frame doesn't lose the rest of a window that can't
+    easily be redone identically.
     """
-    interval = duration / count
-    print(f"Passive capture starting: {count} '{state}' shots over {duration:.0f}s "
-          f"(~{interval:.1f}s apart). No further output until done.")
+    print(f"Passive capture starting: '{state}' shots every {interval:.1f}s for {duration:.0f}s "
+          f"(progress every {progress_every}).")
+    start = time.time()
     saved = 0
-    for i in range(count):
-        if i:
-            time.sleep(interval)
+    while time.time() - start < duration:
         frame = _capture(resolve_camera_index())
-        if frame is None:
-            continue
-        path = _next_training_path(state)
-        cv2.imwrite(str(path), frame)
-        saved += 1
-    print(f"Passive capture done: {saved}/{count} '{state}' shots saved.")
+        if frame is not None:
+            path = _next_training_path(state)
+            cv2.imwrite(str(path), frame)
+            saved += 1
+            if saved % progress_every == 0:
+                print(f"{saved} '{state}' shots saved so far...")
+        time.sleep(interval)
+    print(f"Passive capture done: {saved} '{state}' shots saved.")
 
 
 def main():
@@ -146,16 +151,16 @@ def main():
     )
     parser.add_argument(
         "--passive", choices=sorted(_TRAIN_DIRS),
-        help="unattended: spread --count shots over --duration seconds while you just sit "
-             "there naturally, instead of posing for each one",
+        help="unattended: one shot every --interval seconds for --duration seconds while you "
+             "just sit there naturally, instead of posing for each one",
     )
     parser.add_argument("--duration", type=float, default=300, help="passive-capture window, seconds")
-    parser.add_argument("--count", type=int, default=35, help="passive-capture shot count")
+    parser.add_argument("--interval", type=float, default=1.0, help="seconds between passive-capture shots")
     parser.add_argument("--delay", type=float, default=0, help="seconds to wait before this shot")
     args = parser.parse_args()
 
     if args.passive:
-        passive_capture(args.passive, args.duration, args.count)
+        passive_capture(args.passive, args.duration, args.interval)
         sys.exit(0)
 
     if args.train_shot:
