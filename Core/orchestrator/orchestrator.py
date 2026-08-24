@@ -38,6 +38,7 @@ from utils import confidence, sensitive
 from orchestrator import canned_replies
 from orchestrator.dispatcher import Dispatcher
 from orchestrator.scheduler import ReminderScheduler
+from orchestrator import headphone_watch
 from orchestrator import proactive_checks
 from orchestrator import consolidation
 from orchestrator import reflection
@@ -423,9 +424,16 @@ class FREDOrchestrator:
         self.last_turn_id = tool_call_log.new_turn_id()
 
         canned = None if self.pending_action else canned_replies.match(user_input)
+        # Independent of pending_action's destructive-tool confirmation
+        # flow — see orchestrator/headphone_watch.py's own docstring on
+        # handle_confirmation_reply. Cheap no-op (returns None
+        # immediately) on every turn where nothing's actually pending.
+        headphone_reply = None if self.pending_action else headphone_watch.handle_confirmation_reply(user_input)
 
         if self.pending_action:
             assistant_reply = self._handle_pending_confirmation(user_input)
+        elif headphone_reply is not None:
+            assistant_reply = headphone_reply
         elif canned:
             assistant_reply = canned
         else:
@@ -476,6 +484,14 @@ class FREDOrchestrator:
             reply = self._handle_pending_confirmation(user_input)
             finish(reply)
             yield reply
+            return
+
+        # Same independent headphone-confirmation check as process() —
+        # see that method's own comment.
+        headphone_reply = headphone_watch.handle_confirmation_reply(user_input)
+        if headphone_reply is not None:
+            finish(headphone_reply)
+            yield headphone_reply
             return
 
         canned = canned_replies.match(user_input)

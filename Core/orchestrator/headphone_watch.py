@@ -82,6 +82,7 @@
 import base64
 import json as _json
 import random
+import re
 import urllib.error
 import urllib.request
 
@@ -97,6 +98,7 @@ from config.settings import (
 )
 from audio import device_info
 from input import presence
+from orchestrator import intent
 from orchestrator.headphone_features import extract_feature_from_face
 from utils import event_log
 
@@ -163,6 +165,39 @@ _SWITCH_FAILED_TO_SPEAKERS_PHRASES = (
     "Can't switch to speakers, sir — the device isn't showing up.",
     "Speakers aren't available as an output right now, sir.",
 )
+
+# Chance that a real successful switch is ALSO followed by a spoken
+# "was that right?" — added 2026-08-24, Vatsal's own ask: an indefinite,
+# ongoing way to grow the training pool from real live reads (a "yes"
+# saves the frame that got classified) rather than only dedicated
+# capture sessions. A single fixed value from the requested "10-25% of
+# the time" range, not a variable roll — no reason for this probability
+# to itself be random. Deliberately no cap/expiry, unlike
+# _SWITCH_FAILED_ANNOUNCE_MAX above — this keeps firing forever.
+_CONFIRM_PROMPT_CHANCE = 0.15
+_CONFIRM_PROMPT_PHRASES = (
+    "Did I get that right, sir?",
+    "Was that switch correct, sir?",
+    "Quick check — was that right, sir?",
+    "Did that match what you're actually wearing, sir?",
+)
+
+# No is_negative counterpart exists in orchestrator/intent.py (its
+# _handle_pending_confirmation treats "not affirmative" as "no" for its
+# own destructive-tool flow) — this needs a real three-way split
+# (yes / no / unclear-passthrough, see handle_confirmation_reply), so a
+# small local negative match, same shape/style as intent._AFFIRMATIVE.
+_NEGATIVE_RE = re.compile(
+    r"^(?:no|nope|nah|negative|incorrect|wrong|not\s+really|that's\s+wrong)\b[\s,.!]*$",
+    re.IGNORECASE,
+)
+
+# Set only when check_and_switch's confirmation-prompt roll actually
+# fires: {"frame": ndarray, "label": bool} for the switch being
+# confirmed. In-memory only, same "restart drops it" convention as
+# _last_state/_streak above — an unanswered prompt across a restart is
+# just quietly forgotten, not persisted.
+_pending_confirmation = None
 
 
 def _encode_small(image) -> str | None:
@@ -323,7 +358,7 @@ def check_and_switch(notify=None):
     cycle. Vatsal's own ask 2026-08-23: a manual output-device switch in
     Windows shows a heads-up, so an automatic one should say something
     too rather than silently swapping under him."""
-    global _last_state, _streak, _pending_state, _switch_failed_count
+    global _last_state, _streak, _pending_state, _switch_failed_count, _pending_confirmation
 
     if not (HEADPHONES_ON_PATHS[0].exists() and HEADPHONES_OFF_PATHS[0].exists()):
         return  # not enrolled yet — see scripts/enroll_headphones.py
@@ -383,5 +418,43 @@ def check_and_switch(notify=None):
         if notify is not None:
             phrases = _TO_HEADPHONES_PHRASES if result else _TO_SPEAKERS_PHRASES
             notify(random.choice(phrases), title="Audio")
+
+            if random.random() < _CONFIRM_PROMPT_CHANCE:
+                _pending_confirmation = {"frame": frame, "label": result}
+                notify(random.choice(_CONFIRM_PROMPT_PHRASES), title="Audio")
     except Exception as e:
         event_log.log_error("headphone_watch", e)
+
+
+def handle_confirmation_reply(user_input: str) -> str | None:
+    """Answers the confirmation prompt check_and_switch sometimes asks
+    right after a switch (see _CONFIRM_PROMPT_CHANCE) — checked on
+    EVERY turn by orchestrator.py, so this must be cheap when there's
+    nothing pending: None immediately, no work done.
+
+    Clear yes (intent.is_affirmative): saves the frame from that switch
+    into data/headphones_training/{on,off}/ (via
+    scripts.enroll_headphones._next_training_path, same numbering the
+    dedicated capture sessions use) for a future retrain. Clear no
+    (_NEGATIVE_RE): discards it — never save a photo under a label the
+    user just said was wrong. Anything else: also clears the pending
+    state (doesn't stay open indefinitely waiting for exact phrasing)
+    and returns None so the turn falls through to normal processing
+    instead of an unrelated reply getting swallowed here."""
+    global _pending_confirmation
+    if _pending_confirmation is None:
+        return None
+
+    pending = _pending_confirmation
+    _pending_confirmation = None
+
+    if intent.is_affirmative(user_input):
+        from scripts.enroll_headphones import _next_training_path
+
+        state = "on" if pending["label"] else "off"
+        path = _next_training_path(state)
+        cv2.imwrite(str(path), pending["frame"])
+        return "Saved, thanks."
+    if _NEGATIVE_RE.match((user_input or "").strip()):
+        return "Noted, won't use that one."
+    return None
