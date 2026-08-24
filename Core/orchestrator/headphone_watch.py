@@ -212,33 +212,28 @@ def _get_classifier():
     return _classifier
 
 
-# Below this confidence, treat the classifier as having no opinion and
-# fall back to the vision-LLM path instead — added 2026-08-24 after a
-# live false-positive switch survived the 3-poll streak debounce, which
-# means the classifier was confidently wrong three times in a row for
-# some lighting/pose (a correlated error the streak can't catch,
-# unlike an independent one-off fluke). predict_proba is free — the
-# trained pipeline already has probability=True.
-_CLASSIFIER_CONFIDENCE_MIN = 0.75
-
-
+# A confidence gate on predict_proba (added, then reverted, 2026-08-24)
+# was tried after a false positive survived the 3-poll streak debounce.
+# Measured live: even CORRECT training-photo reads only average
+# ~0.75 confidence (min 0.67, max 0.90-0.99) — this SVM's probabilities
+# are too compressed at this sample size to threshold on, so a 0.75 cut
+# called >half of genuinely correct reads "ambiguous" and sent nearly
+# every poll to the vision-LLM fallback (10-20s call, GPU pegged).
+# Back to a plain hard decision; the streak debounce is the only
+# guard against a single bad read, same as before that detour.
 def _wearing_headphones_classifier(frame) -> bool | None:
     """True/False from the trained scikit-learn model
     (scripts/train_headphones_classifier.py), None if it isn't trained
-    yet, no face was detected in `frame`, or its confidence is below
-    _CLASSIFIER_CONFIDENCE_MIN — caller falls back to the vision-LLM
-    path in any of these cases."""
+    yet or no face was detected in `frame` — caller falls back to the
+    vision-LLM path in either case."""
     model = _get_classifier()
     if model is None:
         return None
     feature = extract_feature(frame, presence._get_analyzer())
     if feature is None:
         return None
-    proba = model.predict_proba([feature])[0]
-    off_p, on_p = proba  # classes_ == [0, 1], see train_headphones_classifier.py
-    if max(off_p, on_p) < _CLASSIFIER_CONFIDENCE_MIN:
-        return None
-    return on_p > off_p
+    prediction = model.predict([feature])[0]
+    return bool(prediction)
 
 
 def _wearing_headphones_llm(frame) -> bool | None:
