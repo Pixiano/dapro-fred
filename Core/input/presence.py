@@ -63,6 +63,18 @@ _state_cache = None  # in-memory mirror of STATE_PATH, simplest correct approach
 
 _camera_index_cache = None  # cv2 index, resolved once per process — see resolve_camera_index()
 
+# Last poll's frame + confirmed-match face object, cached so a sibling
+# checker on the same cadence (orchestrator/headphone_watch.py) can
+# reuse them instead of opening its own camera connection and running
+# its own insightface detection pass — added 2026-08-24, Vatsal's own
+# report of the GPU/CPU cost of the two running redundantly every 15s.
+# _last_matched_face is None whenever this poll's present result came
+# from anything other than a confirmed direct/vision-fallback match
+# (no face, or the "fail safe to last known state" ambiguous path) —
+# callers must treat that the same as "nothing to reuse this cycle".
+_last_frame = None
+_last_matched_face = None
+
 # Last per-poll family classification, updated by _frame_matches_enrollment
 # every poll_once() — see last_classification() below.
 _last_classification = {"known_people": [], "unrecognized": False}
@@ -485,12 +497,20 @@ def resolve_camera_index() -> int:
     return _camera_index_cache
 
 
+def last_poll_frame_and_face():
+    """(frame, matched_face) from the most recent poll_once() — see
+    _last_frame/_last_matched_face's own comment above. Either or both
+    can be None (no camera frame this cycle, or a present result that
+    didn't come from a confirmed match); callers must check."""
+    return _last_frame, _last_matched_face
+
+
 def poll_once() -> bool:
     """Grab one frame, match, update state, return current presence.
 
     Camera-in-use failure mode (e.g. the iBall claimed by a video call):
     fails soft, returns the last-known persisted state, never raises."""
-    global _present_streak
+    global _present_streak, _last_frame, _last_matched_face
 
     now = datetime.now()
     state = _load_state()
@@ -514,6 +534,7 @@ def poll_once() -> bool:
         return state.get("present", False)
 
     present, matched_face, matched_tier = _frame_matches_enrollment(frame)
+    _last_frame, _last_matched_face = frame, matched_face
 
     if present:
         _present_streak += 1

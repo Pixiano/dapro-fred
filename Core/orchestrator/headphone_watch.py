@@ -70,6 +70,14 @@
 # on presence.py's own 15s poll cadence and skips entirely — no camera
 # open — the instant presence's own last-known state says nobody's
 # there.
+#
+# RESOURCE FIX 2026-08-24: this used to also open its own camera
+# connection and run its own insightface detection pass every cycle —
+# fully redundant with presence.py doing the exact same thing on the
+# exact same cadence a moment earlier. Now reuses presence.py's own
+# last-poll frame + confirmed-match face (presence.last_poll_frame_and_
+# face()) instead, cutting both the camera opens and the face-detection
+# passes in half.
 
 import base64
 import json as _json
@@ -89,7 +97,7 @@ from config.settings import (
 )
 from audio import device_info
 from input import presence
-from orchestrator.headphone_features import extract_feature
+from orchestrator.headphone_features import extract_feature_from_face
 from utils import event_log
 
 _classifier = None  # lazy-loaded, cached — None also means "tried and not present"
@@ -157,21 +165,6 @@ _SWITCH_FAILED_TO_SPEAKERS_PHRASES = (
 )
 
 
-def _capture_frame():
-    """Same open-one-frame-release-immediately pattern used everywhere
-    else in this codebase (presence.py's poll_once, vision_tools.py's
-    look_through_camera). Returns None on any camera failure — this
-    check just skips a cycle rather than raising."""
-    cap = cv2.VideoCapture(presence.resolve_camera_index())
-    try:
-        if not cap.isOpened():
-            return None
-        ok, frame = cap.read()
-    finally:
-        cap.release()
-    return frame if ok else None
-
-
 def _encode_small(image) -> str | None:
     """`image` is either a frame (numpy array, from the live camera) or
     a path (a reference photo on disk). Downscaled to _ENCODE_SIZE on
@@ -221,15 +214,23 @@ def _get_classifier():
 # every poll to the vision-LLM fallback (10-20s call, GPU pegged).
 # Back to a plain hard decision; the streak debounce is the only
 # guard against a single bad read, same as before that detour.
-def _wearing_headphones_classifier(frame) -> bool | None:
+def _wearing_headphones_classifier(frame, face) -> bool | None:
     """True/False from the trained scikit-learn model
     (scripts/train_headphones_classifier.py), None if it isn't trained
-    yet or no face was detected in `frame` — caller falls back to the
-    vision-LLM path in either case."""
+    yet or `face` is None (presence.py had nothing confirmed to reuse
+    this cycle — see check_and_switch) — caller falls back to the
+    vision-LLM path in either case.
+
+    Takes an already-detected `face` (presence.py's own cached match,
+    see presence.last_poll_frame_and_face) rather than running its own
+    analyzer.get(frame) — added 2026-08-24, Vatsal's own report that
+    presence polling and this check were each independently opening the
+    camera and running a full face-detection pass on the same ~15s
+    cadence, doubling that cost for nothing."""
     model = _get_classifier()
     if model is None:
         return None
-    feature = extract_feature(frame, presence._get_analyzer())
+    feature = extract_feature_from_face(frame, face)
     if feature is None:
         return None
     prediction = model.predict([feature])[0]
@@ -297,14 +298,14 @@ def _wearing_headphones_llm(frame) -> bool | None:
     return None
 
 
-def _wearing_headphones(frame) -> bool | None:
+def _wearing_headphones(frame, face) -> bool | None:
     """Trained classifier if it exists and has an opinion, else the
     vision-LLM comparison — see this module's own docstring for the
     full method history. Restart the process after running
     scripts/train_headphones_classifier.py to pick up a newly (re)
     trained model — _get_classifier caches a "not present" result too,
     same as every other lazy-load-once cache in this codebase."""
-    result = _wearing_headphones_classifier(frame)
+    result = _wearing_headphones_classifier(frame, face)
     if result is not None:
         return result
     return _wearing_headphones_llm(frame)
@@ -331,11 +332,17 @@ def check_and_switch(notify=None):
         return  # presence.py's own poll already says nobody's there — no camera capture needed
 
     try:
-        frame = _capture_frame()
+        # Reuse presence.py's own frame + confirmed-match face from its
+        # last poll (same ~15s cadence) rather than opening the camera
+        # and running face detection again here — see _wearing_headphones_
+        # classifier's docstring for why. face is None whenever presence's
+        # own present result didn't come from a confirmed match this
+        # cycle; the classifier treats that the same as "no opinion".
+        frame, face = presence.last_poll_frame_and_face()
         if frame is None:
             return
 
-        result = _wearing_headphones(frame)
+        result = _wearing_headphones(frame, face)
         if result is None:
             return  # ambiguous/unavailable — keep the last known state
 

@@ -21,19 +21,11 @@ _HIST_BINS = (8, 8)
 _CROP_SIZE = (128, 128)
 
 
-def head_region(frame, analyzer):
-    """Crop around the largest detected face, expanded upward and
+def _crop_from_face(frame, face):
+    """Crop around one already-detected face, expanded upward and
     outward — where over-ear headphones and their band actually sit,
-    which a plain face bbox doesn't cover. None if no face detected.
-
-    `analyzer` is passed in (not imported/loaded here) so this module
-    has no opinion on which face-detector instance to use — callers
-    already have one warm (presence.py's _get_analyzer() singleton)."""
-    faces = analyzer.get(frame)
-    if not faces:
-        return None
-
-    face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+    which a plain face bbox doesn't cover. None if the crop ends up
+    empty (face bbox right at a frame edge)."""
     x1, y1, x2, y2 = face.bbox.astype(int)
     w, h = x2 - x1, y2 - y1
 
@@ -48,6 +40,20 @@ def head_region(frame, analyzer):
     return cv2.resize(crop, _CROP_SIZE)
 
 
+def head_region(frame, analyzer):
+    """Crop around the largest detected face — see _crop_from_face for
+    the actual crop geometry. None if no face detected.
+
+    `analyzer` is passed in (not imported/loaded here) so this module
+    has no opinion on which face-detector instance to use — callers
+    already have one warm (presence.py's _get_analyzer() singleton)."""
+    faces = analyzer.get(frame)
+    if not faces:
+        return None
+    face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+    return _crop_from_face(frame, face)
+
+
 def histogram_feature(crop) -> np.ndarray:
     """Flattened HSV histogram, `_HIST_BINS` bins per channel pair —
     a fixed-length feature vector suitable for a small-sample
@@ -60,10 +66,21 @@ def histogram_feature(crop) -> np.ndarray:
 
 
 def extract_feature(frame, analyzer) -> np.ndarray | None:
-    """head_region + histogram_feature in one call — what both the
-    training script and the live check actually want. None if no face
-    was detected in `frame`."""
+    """head_region + histogram_feature in one call — what the training
+    script wants (no pre-detected face available). None if no face was
+    detected in `frame`."""
     crop = head_region(frame, analyzer)
+    if crop is None:
+        return None
+    return histogram_feature(crop)
+
+
+def extract_feature_from_face(frame, face) -> np.ndarray | None:
+    """Same as extract_feature, but for a caller that already has a
+    detected face (presence.py's own poll, cached for headphone_watch.py
+    to reuse — see presence.py's _last_matched_face) and so skips a
+    second full analyzer.get() detection pass over the same frame."""
+    crop = _crop_from_face(frame, face)
     if crop is None:
         return None
     return histogram_feature(crop)
