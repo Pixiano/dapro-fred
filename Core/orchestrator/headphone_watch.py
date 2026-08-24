@@ -112,6 +112,15 @@ _last_state = None
 _streak = 0
 _pending_state = None  # the state the current streak is confirming
 
+# How many times in a row check_and_switch will SPEAK a "can't find that
+# device" heads-up before going quiet — Vatsal's own call 2026-08-24: a
+# device that's genuinely gone (unplugged/renamed) fails every single
+# poll, and repeating the same complaint forever is just nagging. Still
+# logged via event_log every time regardless (see below) — only the
+# spoken notification stops. Resets to 0 on any successful switch.
+_SWITCH_FAILED_ANNOUNCE_MAX = 3
+_switch_failed_count = 0
+
 # Short, varied heads-up on an actual switch — same "sir-suffixed
 # short-phrase-pool" style as proactive_checks.py's own
 # _PRESENCE_GREETINGS/_CAMERA_OBSTRUCTION_PHRASES, so this doesn't say
@@ -318,7 +327,7 @@ def check_and_switch(notify=None):
     cycle. Vatsal's own ask 2026-08-23: a manual output-device switch in
     Windows shows a heads-up, so an automatic one should say something
     too rather than silently swapping under him."""
-    global _last_state, _streak, _pending_state
+    global _last_state, _streak, _pending_state, _switch_failed_count
 
     if not (HEADPHONES_ON_PATHS[0].exists() and HEADPHONES_OFF_PATHS[0].exists()):
         return  # not enrolled yet — see scripts/enroll_headphones.py
@@ -352,7 +361,8 @@ def check_and_switch(notify=None):
             event_log.log_error(
                 "headphone_watch", OSError(f"no output device named {device_name!r} present")
             )
-            if notify is not None:
+            _switch_failed_count += 1
+            if notify is not None and _switch_failed_count <= _SWITCH_FAILED_ANNOUNCE_MAX:
                 phrases = (
                     _SWITCH_FAILED_TO_HEADPHONES_PHRASES if result
                     else _SWITCH_FAILED_TO_SPEAKERS_PHRASES
@@ -362,6 +372,7 @@ def check_and_switch(notify=None):
         device_info.set_output_device(matches[0]["index"])
         event_log.log("headphone_switch", wearing=result, device=device_name)
         _last_state = result
+        _switch_failed_count = 0
 
         if notify is not None:
             phrases = _TO_HEADPHONES_PHRASES if result else _TO_SPEAKERS_PHRASES
