@@ -104,6 +104,37 @@ def _next_training_path(state: str) -> Path:
     return d / f"{n:03d}.jpg"
 
 
+def passive_capture(state: str, duration: float, count: int):
+    """`count` shots spread evenly across `duration` seconds, into
+    data/headphones_training/{on,off} — Vatsal's own call 2026-08-23:
+    natural, unposed variation (however he's actually sitting, however
+    the headphones actually happen to sit that minute) beats another
+    batch of consciously-posed shots, since the posed set is already
+    what the earlier reference photos were and the classifier needs
+    real variety, not more of the same pose repeated.
+
+    Deliberately no per-shot prints, only a start/end summary — the
+    whole point is not narrating each capture as it happens. A failed
+    individual shot (camera hiccup mid-session) is skipped, not fatal;
+    the run keeps going so one bad frame doesn't lose the rest of a
+    5-minute window that can't easily be redone identically.
+    """
+    interval = duration / count
+    print(f"Passive capture starting: {count} '{state}' shots over {duration:.0f}s "
+          f"(~{interval:.1f}s apart). No further output until done.")
+    saved = 0
+    for i in range(count):
+        if i:
+            time.sleep(interval)
+        frame = _capture(resolve_camera_index())
+        if frame is None:
+            continue
+        path = _next_training_path(state)
+        cv2.imwrite(str(path), frame)
+        saved += 1
+    print(f"Passive capture done: {saved}/{count} '{state}' shots saved.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--shot", choices=sorted(_SLOT_PATHS), help="capture just one named shot")
@@ -113,8 +144,19 @@ def main():
              "for scripts/train_headphones_classifier.py's 30-50-photo pool, not the "
              "6-shot vision-LLM reference set --shot targets",
     )
+    parser.add_argument(
+        "--passive", choices=sorted(_TRAIN_DIRS),
+        help="unattended: spread --count shots over --duration seconds while you just sit "
+             "there naturally, instead of posing for each one",
+    )
+    parser.add_argument("--duration", type=float, default=300, help="passive-capture window, seconds")
+    parser.add_argument("--count", type=int, default=35, help="passive-capture shot count")
     parser.add_argument("--delay", type=float, default=0, help="seconds to wait before this shot")
     args = parser.parse_args()
+
+    if args.passive:
+        passive_capture(args.passive, args.duration, args.count)
+        sys.exit(0)
 
     if args.train_shot:
         ok = capture_one(_next_training_path(args.train_shot), args.delay)
