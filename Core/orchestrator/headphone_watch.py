@@ -129,6 +129,24 @@ _TO_SPEAKERS_PHRASES = (
     "You're on speakers, sir.",
 )
 
+# Heads-up when the target device isn't in device_info.list_output_devices()
+# at all (renamed/unplugged/OS didn't enumerate it) — added 2026-08-24,
+# Vatsal's own ask: a silent failure here just leaves him talking into
+# the wrong output with no idea why, same "say something" reasoning as
+# the successful-switch phrases above.
+_SWITCH_FAILED_TO_HEADPHONES_PHRASES = (
+    "Headphones are on, sir, but I can't find that output device to switch to.",
+    "I see the headphones, sir, but they're not listed as an output — staying on speakers.",
+    "Can't switch to headphones, sir — the device isn't showing up.",
+    "Headphones detected, sir, but that output device isn't available right now.",
+)
+_SWITCH_FAILED_TO_SPEAKERS_PHRASES = (
+    "Headphones are off, sir, but I can't find the speakers to switch to.",
+    "Trying to switch to speakers, sir, but that device isn't listed.",
+    "Can't switch to speakers, sir — the device isn't showing up.",
+    "Speakers aren't available as an output right now, sir.",
+)
+
 
 def _capture_frame():
     """Same open-one-frame-release-immediately pattern used everywhere
@@ -334,6 +352,12 @@ def check_and_switch(notify=None):
             event_log.log_error(
                 "headphone_watch", OSError(f"no output device named {device_name!r} present")
             )
+            if notify is not None:
+                phrases = (
+                    _SWITCH_FAILED_TO_HEADPHONES_PHRASES if result
+                    else _SWITCH_FAILED_TO_SPEAKERS_PHRASES
+                )
+                notify(random.choice(phrases), title="Audio")
             return
         device_info.set_output_device(matches[0]["index"])
         event_log.log("headphone_switch", wearing=result, device=device_name)
