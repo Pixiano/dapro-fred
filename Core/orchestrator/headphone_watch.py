@@ -361,6 +361,10 @@ def check_and_switch(notify=None):
             event_log.log_error(
                 "headphone_watch", OSError(f"no output device named {device_name!r} present")
             )
+            # Structured entry, same shape as the successful "headphone_switch"
+            # event below — so a failed switch is queryable/reviewable the same
+            # way, not just buried in the generic error log.
+            event_log.log("headphone_switch_failed", wearing=result, device=device_name)
             _switch_failed_count += 1
             if notify is not None and _switch_failed_count <= _SWITCH_FAILED_ANNOUNCE_MAX:
                 phrases = (
