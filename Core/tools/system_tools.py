@@ -508,10 +508,20 @@ def lockdown_engage() -> str:
 
 def lockdown_disengage(pin: str = "") -> str:
     """Lift FRED's lockdown mode — must be said together with the PIN
-    ("unlock fred 1111")."""
+    ("unlock fred 1111"), AND presence must currently confirm Vatsal's
+    own face in frame. Vatsal's own call 2026-08-25: the PIN alone only
+    proves someone knows "1111" (a fixed, checked-into-git demo string,
+    see its own comment above) — presence.is_present() is a harder
+    signal to fake than repeating a string, and it's already running on
+    its own poll cadence, nothing new to build. Checked before the PIN
+    so a stranger who happens to know it still gets refused."""
 
     if not lockdown_state.is_locked():
         return "Not locked — nothing to lift."
+
+    from input import presence
+    if not presence.is_present():
+        return "Still locked — I can't confirm it's you right now."
 
     if pin.strip() != _LOCKDOWN_PIN:
         return "Still locked — wrong PIN."

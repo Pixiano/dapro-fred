@@ -31,6 +31,11 @@ def test_engage_is_bare_disengage_requires_correct_pin(monkeypatch):
     # both tool functions must degrade to "just flip the state" rather
     # than raising.
     monkeypatch.setattr("ui.pill_app.get_current_app", lambda: None)
+    # disengage also requires presence.is_present() now (2026-08-25 —
+    # see system_tools.lockdown_disengage's own docstring) — pinned True
+    # here so this test's "correct PIN" path doesn't silently depend on
+    # whether Vatsal actually happens to be at his desk when it runs.
+    monkeypatch.setattr("input.presence.is_present", lambda: True)
     lockdown_state.set_locked(False)
     try:
         result = system_tools.lockdown_engage()
@@ -50,6 +55,21 @@ def test_engage_is_bare_disengage_requires_correct_pin(monkeypatch):
         assert lockdown_state.is_locked() is False
 
         assert "nothing to lift" in system_tools.lockdown_disengage(pin="1111").lower()
+    finally:
+        lockdown_state.set_locked(False)
+
+
+def test_disengage_refuses_even_correct_pin_without_presence(monkeypatch):
+    # The PIN alone must not be enough — a stranger who knows "1111"
+    # (checked into git, not a real secret) is exactly who this gate is
+    # for. See system_tools.lockdown_disengage's own docstring.
+    monkeypatch.setattr("ui.pill_app.get_current_app", lambda: None)
+    monkeypatch.setattr("input.presence.is_present", lambda: False)
+    lockdown_state.set_locked(True)
+    try:
+        result = system_tools.lockdown_disengage(pin="1111")
+        assert "can't confirm" in result.lower()
+        assert lockdown_state.is_locked() is True
     finally:
         lockdown_state.set_locked(False)
 
