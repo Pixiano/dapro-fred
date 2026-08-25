@@ -1359,6 +1359,14 @@ PROACTIVE_CAMERA_OBSTRUCTION_STREAK = 3
 HEADPHONE_OUTPUT_DEVICE_NAME = "Da Pro's Rockerz (Rockerz 512 ANC)"
 SPEAKER_OUTPUT_DEVICE_NAME = "Speakers (Realtek(R) Audio)"
 
+# Second pair of Bluetooth earbuds Vatsal already uses — tried when
+# HEADPHONE_OUTPUT_DEVICE_NAME isn't currently connected, before
+# headphone_watch.py gives up and speaks a failure phrase. Vatsal's own
+# call 2026-08-25. No speaker-side fallback needed — SPEAKER_OUTPUT_
+# DEVICE_NAME is the machine's own built-in output, not something that
+# comes and goes like a Bluetooth pairing does.
+HEADPHONE_OUTPUT_DEVICE_FALLBACK_NAME = "Da Pro's Realme T310's (realme Buds T310)"
+
 # Six shots each state, used as the vision-LLM comparison references
 # (headphone_watch.py's _wearing_headphones reads only the first of
 # each list — [1] onward are spares on disk, not currently read by

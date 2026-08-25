@@ -78,6 +78,14 @@
 # last-poll frame + confirmed-match face (presence.last_poll_frame_and_
 # face()) instead, cutting both the camera opens and the face-detection
 # passes in half.
+#
+# MEDIA-PLAYING PRIORITY SIGNAL, 2026-08-25 — Vatsal's own ask: if
+# audio/media is playing anywhere on the machine (audio.media_state),
+# that alone means the target is headphones, no camera check needed —
+# "who uses speakers in family." The camera/classifier path only runs
+# when nothing's playing. See media_state.py's own docstring for how
+# "is media playing" is detected (pycaw session peak-metering,
+# excluding FRED's own process so its own TTS doesn't count).
 
 import base64
 import json as _json
@@ -90,13 +98,14 @@ import cv2
 
 from config.settings import (
     HEADPHONE_CHECK_STREAK,
+    HEADPHONE_OUTPUT_DEVICE_FALLBACK_NAME,
     HEADPHONE_OUTPUT_DEVICE_NAME,
     HEADPHONES_CLASSIFIER_PATH,
     HEADPHONES_OFF_PATHS,
     HEADPHONES_ON_PATHS,
     SPEAKER_OUTPUT_DEVICE_NAME,
 )
-from audio import device_info
+from audio import device_info, media_state
 from input import presence
 from orchestrator import intent
 from orchestrator.headphone_features import extract_feature_from_face
@@ -148,22 +157,24 @@ _TO_SPEAKERS_PHRASES = (
     "You're on speakers, sir.",
 )
 
-# Heads-up when the target device isn't in device_info.list_output_devices()
-# at all (renamed/unplugged/OS didn't enumerate it) — added 2026-08-24,
-# Vatsal's own ask: a silent failure here just leaves him talking into
-# the wrong output with no idea why, same "say something" reasoning as
-# the successful-switch phrases above.
+# Heads-up when NONE of the target device(s) are in
+# device_info.list_output_devices() (renamed/unplugged/OS didn't
+# enumerate it) — added 2026-08-24, Vatsal's own ask: a silent failure
+# here just leaves him talking into the wrong output with no idea why,
+# same "say something" reasoning as the successful-switch phrases
+# above. Shortened and generalized 2026-08-25, Vatsal's own ask: now
+# that headphones tries HEADPHONE_OUTPUT_DEVICE_NAME then
+# HEADPHONE_OUTPUT_DEVICE_FALLBACK_NAME before failing, a phrase naming
+# one specific device/reason no longer fits every failure case.
 _SWITCH_FAILED_TO_HEADPHONES_PHRASES = (
-    "Headphones are on, sir, but I can't find that output device to switch to.",
-    "I see the headphones, sir, but they're not listed as an output — staying on speakers.",
-    "Can't switch to headphones, sir — the device isn't showing up.",
-    "Headphones detected, sir, but that output device isn't available right now.",
+    "Can't switch to headphones, sir.",
+    "No headphone output available, sir.",
+    "Headphones aren't reachable right now, sir.",
 )
 _SWITCH_FAILED_TO_SPEAKERS_PHRASES = (
-    "Headphones are off, sir, but I can't find the speakers to switch to.",
-    "Trying to switch to speakers, sir, but that device isn't listed.",
-    "Can't switch to speakers, sir — the device isn't showing up.",
-    "Speakers aren't available as an output right now, sir.",
+    "Can't switch to speakers, sir.",
+    "No speaker output available, sir.",
+    "Speakers aren't reachable right now, sir.",
 )
 
 # Chance that a real successful switch is ALSO followed by a spoken
@@ -367,19 +378,28 @@ def check_and_switch(notify=None):
         return  # presence.py's own poll already says nobody's there — no camera capture needed
 
     try:
-        # Reuse presence.py's own frame + confirmed-match face from its
-        # last poll (same ~15s cadence) rather than opening the camera
-        # and running face detection again here — see _wearing_headphones_
-        # classifier's docstring for why. face is None whenever presence's
-        # own present result didn't come from a confirmed match this
-        # cycle; the classifier treats that the same as "no opinion".
-        frame, face = presence.last_poll_frame_and_face()
-        if frame is None:
-            return
+        if media_state.is_media_playing():
+            # Media playing beats the camera check entirely, and doesn't
+            # need a frame at all — checked first so a not-yet-cached
+            # presence frame (e.g. the first poll cycle after a restart)
+            # can't block this signal. See this module's own docstring,
+            # "MEDIA-PLAYING PRIORITY SIGNAL".
+            result = True
+        else:
+            # Reuse presence.py's own frame + confirmed-match face from
+            # its last poll (same ~15s cadence) rather than opening the
+            # camera and running face detection again here — see
+            # _wearing_headphones_classifier's docstring for why. face is
+            # None whenever presence's own present result didn't come
+            # from a confirmed match this cycle; the classifier treats
+            # that the same as "no opinion".
+            frame, face = presence.last_poll_frame_and_face()
+            if frame is None:
+                return
 
-        result = _wearing_headphones(frame, face)
-        if result is None:
-            return  # ambiguous/unavailable — keep the last known state
+            result = _wearing_headphones(frame, face)
+            if result is None:
+                return  # ambiguous/unavailable — keep the last known state
 
         if result != _pending_state:
             _pending_state = result
@@ -392,16 +412,31 @@ def check_and_switch(notify=None):
         if result == _last_state:
             return  # confirmed, but nothing actually changed
 
-        device_name = HEADPHONE_OUTPUT_DEVICE_NAME if result else SPEAKER_OUTPUT_DEVICE_NAME
-        matches = [d for d in device_info.list_output_devices() if d["name"] == device_name]
-        if not matches:
+        # Headphones tries the primary device, then the fallback pair —
+        # Vatsal's own ask 2026-08-25, see HEADPHONE_OUTPUT_DEVICE_
+        # FALLBACK_NAME's own comment in settings.py. Speakers has no
+        # fallback: SPEAKER_OUTPUT_DEVICE_NAME is the machine's built-in
+        # output, not a Bluetooth pairing that can just not be there.
+        candidates = (
+            (HEADPHONE_OUTPUT_DEVICE_NAME, HEADPHONE_OUTPUT_DEVICE_FALLBACK_NAME) if result
+            else (SPEAKER_OUTPUT_DEVICE_NAME,)
+        )
+        devices = device_info.list_output_devices()
+        device_name = device_index = None
+        for name in candidates:
+            match = next((d for d in devices if d["name"] == name), None)
+            if match is not None:
+                device_name, device_index = name, match["index"]
+                break
+
+        if device_name is None:
             event_log.log_error(
-                "headphone_watch", OSError(f"no output device named {device_name!r} present")
+                "headphone_watch", OSError(f"none of {candidates!r} present")
             )
             # Structured entry, same shape as the successful "headphone_switch"
             # event below — so a failed switch is queryable/reviewable the same
             # way, not just buried in the generic error log.
-            event_log.log("headphone_switch_failed", wearing=result, device=device_name)
+            event_log.log("headphone_switch_failed", wearing=result, device=candidates[0])
             _switch_failed_count += 1
             if notify is not None and _switch_failed_count <= _SWITCH_FAILED_ANNOUNCE_MAX:
                 phrases = (
@@ -410,7 +445,7 @@ def check_and_switch(notify=None):
                 )
                 notify(random.choice(phrases), title="Audio")
             return
-        device_info.set_output_device(matches[0]["index"])
+        device_info.set_output_device(device_index)
         event_log.log("headphone_switch", wearing=result, device=device_name)
         _last_state = result
         _switch_failed_count = 0

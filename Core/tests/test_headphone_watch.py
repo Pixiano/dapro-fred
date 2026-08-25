@@ -1,10 +1,12 @@
 # Core/tests/test_headphone_watch.py
 #
-# Pure logic test for headphone_watch.py's confirmation-prompt reply
-# handling (handle_confirmation_reply) — no camera, no classifier, no
-# real training photos. Everything else in this module needs a real
-# camera/insightface/trained model to exercise meaningfully and is
-# validated live, same convention as headphone_features.py's own
+# Pure logic tests for headphone_watch.py: confirmation-prompt reply
+# handling (handle_confirmation_reply), and check_and_switch's
+# media-playing priority signal + headphone device fallback chain
+# (media_state.is_media_playing, presence, and device_info all mocked
+# — no real camera/classifier/hardware needed for these decision
+# paths). Everything requiring a real camera/insightface/trained model
+# is validated live, same convention as headphone_features.py's own
 # __main__ self-check.
 
 import numpy as np
@@ -14,6 +16,26 @@ from orchestrator import headphone_watch as hw
 
 def _reset():
     hw._pending_confirmation = None
+
+
+def _reset_switch_state():
+    hw._last_state = None
+    hw._streak = 0
+    hw._pending_state = None
+    hw._switch_failed_count = 0
+    hw._pending_confirmation = None
+
+
+def _make_enrolled(tmp_path, monkeypatch):
+    """check_and_switch's first gate is HEADPHONES_ON_PATHS[0].exists()
+    and the OFF equivalent — fake both to real (empty) files so the
+    "not enrolled yet" early-return doesn't fire in these tests."""
+    on_path = tmp_path / "on0.jpg"
+    off_path = tmp_path / "off0.jpg"
+    on_path.touch()
+    off_path.touch()
+    monkeypatch.setattr(hw, "HEADPHONES_ON_PATHS", [on_path])
+    monkeypatch.setattr(hw, "HEADPHONES_OFF_PATHS", [off_path])
 
 
 def test_no_op_when_nothing_pending():
@@ -55,3 +77,89 @@ def test_unclear_reply_clears_pending_and_falls_through():
     reply = hw.handle_confirmation_reply("what's the weather")
     assert reply is None
     assert hw._pending_confirmation is None  # doesn't stay open indefinitely
+
+
+def _drive_to_switch(monkeypatch):
+    """Runs check_and_switch() HEADPHONE_CHECK_STREAK times — the
+    number of consecutive confirmed reads it takes to actually trigger
+    a switch (see check_and_switch's own streak/debounce logic)."""
+    for _ in range(hw.HEADPHONE_CHECK_STREAK):
+        hw.check_and_switch(notify=None)
+
+
+def test_media_playing_skips_camera_and_targets_headphones(tmp_path, monkeypatch):
+    """Vatsal's own ask 2026-08-25: media playing anywhere on the
+    machine means headphones, no camera/classifier check needed."""
+    _reset_switch_state()
+    _make_enrolled(tmp_path, monkeypatch)
+    monkeypatch.setattr(hw.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        hw.presence, "last_poll_frame_and_face",
+        lambda: (np.zeros((4, 4, 3), dtype=np.uint8), object()),
+    )
+    monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: True)
+    monkeypatch.setattr(
+        hw, "_wearing_headphones",
+        lambda frame, face: (_ for _ in ()).throw(AssertionError("camera path must be skipped")),
+    )
+    monkeypatch.setattr(
+        hw.device_info, "list_output_devices",
+        lambda: [{"name": hw.HEADPHONE_OUTPUT_DEVICE_NAME, "index": 5}],
+    )
+    switched = []
+    monkeypatch.setattr(hw.device_info, "set_output_device", lambda index: switched.append(index))
+
+    _drive_to_switch(monkeypatch)
+
+    assert switched == [5]
+    assert hw._last_state is True
+
+
+def test_fallback_device_used_when_primary_missing(tmp_path, monkeypatch):
+    """Only the Realme fallback is connected — headphones still switches,
+    just to the second device in the chain."""
+    _reset_switch_state()
+    _make_enrolled(tmp_path, monkeypatch)
+    monkeypatch.setattr(hw.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        hw.presence, "last_poll_frame_and_face",
+        lambda: (np.zeros((4, 4, 3), dtype=np.uint8), object()),
+    )
+    monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: True)
+    monkeypatch.setattr(
+        hw.device_info, "list_output_devices",
+        lambda: [{"name": hw.HEADPHONE_OUTPUT_DEVICE_FALLBACK_NAME, "index": 9}],
+    )
+    switched = []
+    monkeypatch.setattr(hw.device_info, "set_output_device", lambda index: switched.append(index))
+
+    _drive_to_switch(monkeypatch)
+
+    assert switched == [9]
+    assert hw._last_state is True
+
+
+def test_failure_phrase_when_neither_headphone_device_present(tmp_path, monkeypatch):
+    """Neither the primary nor the fallback device is connected — falls
+    through to the (now shortened/generalized) failure phrase pool,
+    never calls set_output_device."""
+    _reset_switch_state()
+    _make_enrolled(tmp_path, monkeypatch)
+    monkeypatch.setattr(hw.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        hw.presence, "last_poll_frame_and_face",
+        lambda: (np.zeros((4, 4, 3), dtype=np.uint8), object()),
+    )
+    monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: True)
+    monkeypatch.setattr(hw.device_info, "list_output_devices", lambda: [])
+    monkeypatch.setattr(
+        hw.device_info, "set_output_device",
+        lambda index: (_ for _ in ()).throw(AssertionError("must not switch")),
+    )
+    spoken = []
+
+    for _ in range(hw.HEADPHONE_CHECK_STREAK):
+        hw.check_and_switch(notify=lambda msg, title=None: spoken.append(msg))
+
+    assert spoken and spoken[0] in hw._SWITCH_FAILED_TO_HEADPHONES_PHRASES
+    assert hw._last_state is None  # never actually switched
