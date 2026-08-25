@@ -34,6 +34,7 @@ from config.settings import (
     VIP_MESSAGE_CHECK_MINUTES,
     CALL_LOG_CHECK_MINUTES,
     PRESENCE_POLL_SECONDS,
+    HEADPHONE_POLL_SECONDS_ON_HEADPHONES,
     PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_STREAK,
@@ -880,18 +881,20 @@ def register(scheduler, llm=None, on_agenda_ask=None):
         "proactive_camera_obstruction",
     )
     # Headphone-detection -> audio-output switching — see
-    # orchestrator/headphone_watch.py's own module docstring. Rides
-    # presence polling's own 15s cadence rather than a separate
-    # schedule (Vatsal's own call 2026-08-23) — it gates on
-    # presence.is_present() as its first check, so this is cheap on
-    # every tick nobody's there. A no-op every tick until
-    # scripts/enroll_headphones.py has been run once. Fires through
-    # this module's own notify() (passed in, not imported back — same
-    # reason focus_checkin.check(notify) takes it as a parameter below)
-    # so sleep-mode gating is automatic.
+    # orchestrator/headphone_watch.py's own module docstring. Registered
+    # at the FAST cadence (HEADPHONE_POLL_SECONDS_ON_HEADPHONES, 3s) —
+    # Vatsal's own call 2026-08-25 — since APScheduler's add_periodic
+    # has no per-job dynamic interval; check_and_switch() self-throttles
+    # down to the slower on-speakers cadence internally instead (see its
+    # own _last_check_ts). It gates on presence.is_present() as its
+    # first check, so this is cheap on every tick nobody's there. A
+    # no-op every tick until scripts/enroll_headphones.py has been run
+    # once. Fires through this module's own notify() (passed in, not
+    # imported back — same reason focus_checkin.check(notify) takes it
+    # as a parameter below) so sleep-mode gating is automatic.
     scheduler.add_periodic(
         lambda: headphone_watch.check_and_switch(notify),
-        PRESENCE_POLL_SECONDS / 60,
+        HEADPHONE_POLL_SECONDS_ON_HEADPHONES / 60,
         "proactive_headphone_watch",
     )
     # Focus-awareness check-in — see orchestrator/focus_checkin.py. Fires

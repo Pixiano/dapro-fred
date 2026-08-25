@@ -1249,7 +1249,7 @@ PRESENCE_CAMERA_INDEX = 0
 # raw camera poll cost/frequency tradeoff — two different numbers for
 # two different things, not a real conflict, but only this one matters
 # for the MVP since sleep-mode/consolidation isn't built yet).
-PRESENCE_POLL_SECONDS = 15
+PRESENCE_POLL_SECONDS = 10  # was 15 — Vatsal's own call 2026-08-25
 
 # Enrollment: 5 reference photos, 5s apart, fully automatic (no
 # per-shot keypress) — Vatsal's call 2026-08-21. See
@@ -1400,13 +1400,28 @@ HEADPHONES_TRAINING_OFF_DIR = HEADPHONES_TRAINING_DIR / "off"
 # module's own docstring for the fallback order.
 HEADPHONES_CLASSIFIER_PATH = DATA_DIR / "headphones_classifier.joblib"
 
+# headphone_watch.py's own poll cadence — Vatsal's own call 2026-08-25:
+# no longer strictly rides presence.py's cadence. While currently ON
+# headphones, checks every HEADPHONE_POLL_SECONDS_ON_HEADPHONES, a
+# faster, independent timer, so a stopped-media or headphones-off read
+# gets acted on quickly. While on speakers, checks every
+# HEADPHONE_POLL_SECONDS_ON_SPEAKERS, deliberately the same as
+# PRESENCE_POLL_SECONDS — no reason for "should I switch to
+# headphones" to run faster than presence's own poll when nothing
+# suggests a change is due. Implementation: the scheduler job itself is
+# registered at the FAST interval (see proactive_checks.register());
+# on the slower state, check_and_switch() self-throttles internally
+# rather than needing a second scheduler job or dynamic rescheduling.
+HEADPHONE_POLL_SECONDS_ON_HEADPHONES = 3
+HEADPHONE_POLL_SECONDS_ON_SPEAKERS = PRESENCE_POLL_SECONDS
+
 # How many consecutive same-answer checks before actually switching the
 # output device — audio switching mid-word is more jarring than a
 # delayed presence greeting, so this trades responsiveness for not
-# flapping on a single bad/ambiguous frame. No separate poll interval
-# of its own (was 30s) — Vatsal's own call 2026-08-23: this rides
-# presence.py's own PRESENCE_POLL_SECONDS cadence and gates on
-# presence.is_present(), not an independent schedule.
+# flapping on a single bad/ambiguous frame. Still gates on
+# presence.is_present(), not an independent schedule — see
+# HEADPHONE_POLL_SECONDS_ON_HEADPHONES/_ON_SPEAKERS above for the
+# actual cadence.
 #
 # Raised from 2 to 3 the same day, after a live false-positive switch:
 # headphone_watch.py's own classifier (see its module docstring for the

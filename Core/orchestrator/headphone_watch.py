@@ -66,10 +66,20 @@
 #      module falls back to approach 3 until HEADPHONES_CLASSIFIER_PATH
 #      actually exists on disk.
 #
-# Gated on presence.is_present() (Vatsal's own call 2026-08-23): runs
-# on presence.py's own 15s poll cadence and skips entirely — no camera
-# open — the instant presence's own last-known state says nobody's
-# there.
+# Gated on presence.is_present() (Vatsal's own call 2026-08-23): skips
+# entirely — no camera open, no work at all — the instant presence's
+# own last-known state says nobody's there. Deliberately NOT reworked
+# when the cadence below decoupled from presence's own poll (Vatsal's
+# own call 2026-08-25, "stay fully skipped while absent") — absence is
+# still a hard stop, not just a slower poll.
+#
+# POLL CADENCE, 2026-08-25 — no longer strictly rides presence.py's
+# cadence. See HEADPHONE_POLL_SECONDS_ON_HEADPHONES/_ON_SPEAKERS in
+# settings.py: fast (3s) while currently on headphones, same as
+# presence's own cadence while on speakers. The scheduler job (see
+# proactive_checks.register()) is registered at the fast interval;
+# check_and_switch() self-throttles internally on the slower state —
+# see _last_check_ts below.
 #
 # RESOURCE FIX 2026-08-24: this used to also open its own camera
 # connection and run its own insightface detection pass every cycle —
@@ -94,12 +104,16 @@ import re
 import urllib.error
 import urllib.request
 
+import time
+
 import cv2
 
 from config.settings import (
     HEADPHONE_CHECK_STREAK,
     HEADPHONE_OUTPUT_DEVICE_FALLBACK_NAME,
     HEADPHONE_OUTPUT_DEVICE_NAME,
+    HEADPHONE_POLL_SECONDS_ON_HEADPHONES,
+    HEADPHONE_POLL_SECONDS_ON_SPEAKERS,
     HEADPHONES_CLASSIFIER_PATH,
     HEADPHONES_OFF_PATHS,
     HEADPHONES_ON_PATHS,
@@ -130,6 +144,14 @@ _JPEG_QUALITY = 80
 _last_state = None
 _streak = 0
 _pending_state = None  # the state the current streak is confirming
+
+# Real work last actually happened at this monotonic timestamp — the
+# scheduler job itself is registered at the fast (on-headphones) cadence
+# (see proactive_checks.register()), so on the slower on-speakers state
+# this function self-throttles rather than needing a second scheduler
+# job or dynamic per-job rescheduling. See HEADPHONE_POLL_SECONDS_ON_
+# HEADPHONES/_ON_SPEAKERS in settings.py for the actual intervals.
+_last_check_ts = 0.0
 
 # How many times in a row check_and_switch will SPEAK a "can't find that
 # device" heads-up before going quiet — Vatsal's own call 2026-08-24: a
@@ -370,12 +392,26 @@ def check_and_switch(notify=None):
     Windows shows a heads-up, so an automatic one should say something
     too rather than silently swapping under him."""
     global _last_state, _streak, _pending_state, _switch_failed_count, _pending_confirmation
+    global _last_check_ts
 
     if not (HEADPHONES_ON_PATHS[0].exists() and HEADPHONES_OFF_PATHS[0].exists()):
         return  # not enrolled yet — see scripts/enroll_headphones.py
 
     if not presence.is_present():
         return  # presence.py's own poll already says nobody's there — no camera capture needed
+
+    # Self-throttle: the scheduler job fires every HEADPHONE_POLL_SECONDS_
+    # ON_HEADPHONES (the fast cadence), but real work only happens that
+    # often while _last_state is actually True (on headphones). On
+    # speakers (or before any state is known), it backs off to the
+    # slower HEADPHONE_POLL_SECONDS_ON_SPEAKERS instead — see this
+    # module's own docstring / settings.py's own comment on both
+    # constants for why.
+    min_interval = HEADPHONE_POLL_SECONDS_ON_HEADPHONES if _last_state else HEADPHONE_POLL_SECONDS_ON_SPEAKERS
+    now = time.monotonic()
+    if now - _last_check_ts < min_interval:
+        return
+    _last_check_ts = now
 
     try:
         if media_state.is_media_playing():

@@ -24,6 +24,7 @@ def _reset_switch_state():
     hw._pending_state = None
     hw._switch_failed_count = 0
     hw._pending_confirmation = None
+    hw._last_check_ts = 0.0
 
 
 def _make_enrolled(tmp_path, monkeypatch):
@@ -82,8 +83,12 @@ def test_unclear_reply_clears_pending_and_falls_through():
 def _drive_to_switch(monkeypatch):
     """Runs check_and_switch() HEADPHONE_CHECK_STREAK times — the
     number of consecutive confirmed reads it takes to actually trigger
-    a switch (see check_and_switch's own streak/debounce logic)."""
+    a switch (see check_and_switch's own streak/debounce logic).
+    Resets _last_check_ts before each call so the real self-throttle
+    gate (see check_and_switch's own comment on it) doesn't block these
+    back-to-back calls, which happen with no real time between them."""
     for _ in range(hw.HEADPHONE_CHECK_STREAK):
+        hw._last_check_ts = 0.0
         hw.check_and_switch(notify=None)
 
 
@@ -159,7 +164,29 @@ def test_failure_phrase_when_neither_headphone_device_present(tmp_path, monkeypa
     spoken = []
 
     for _ in range(hw.HEADPHONE_CHECK_STREAK):
+        hw._last_check_ts = 0.0  # bypass the self-throttle for these back-to-back calls
         hw.check_and_switch(notify=lambda msg, title=None: spoken.append(msg))
 
     assert spoken and spoken[0] in hw._SWITCH_FAILED_TO_HEADPHONES_PHRASES
     assert hw._last_state is None  # never actually switched
+
+
+def test_self_throttle_skips_a_too_soon_recheck(tmp_path, monkeypatch):
+    """Regression for the 2026-08-25 cadence change: the scheduler job
+    now fires every HEADPHONE_POLL_SECONDS_ON_HEADPHONES (3s), faster
+    than the on-speakers cadence check_and_switch should actually run
+    at — a call within min_interval of the last real check must do
+    nothing at all, not even touch the streak."""
+    _reset_switch_state()
+    _make_enrolled(tmp_path, monkeypatch)
+    monkeypatch.setattr(hw.presence, "is_present", lambda: True)
+    monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: False)
+    monkeypatch.setattr(
+        hw.presence, "last_poll_frame_and_face",
+        lambda: (_ for _ in ()).throw(AssertionError("throttled call must not do any work")),
+    )
+    hw._last_check_ts = hw.time.monotonic()  # "just checked" — nothing due yet
+
+    hw.check_and_switch(notify=None)
+
+    assert hw._streak == 0  # untouched — the throttle returned before any real work
