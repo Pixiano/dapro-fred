@@ -18,6 +18,21 @@
 #
 # Privacy: voice embeddings are biometric data, same treatment as
 # face_reference.jpg/face_enrollment.json — see .gitignore.
+#
+# POSSIBLE FUTURE USES (discussed 2026-08-25, none built yet — this
+# module stays standalone until one of these is actually chosen):
+#   - Reject a wake-word trigger from a non-Vatsal voice (TV, visitor,
+#     video call) before FRED acts on it — the audio-side counterpart
+#     to presence.py's camera check.
+#   - Speaker-tag transcripts if FRED ever sits in on calls/multi-person
+#     conversations — which segments are Vatsal vs someone else.
+#   - Per-person personalization if family voices get enrolled too,
+#     mirroring family_enrollment.json's face-based tiering for audio.
+#   - A security signal ("command from an unenrolled voice") companion
+#     to security_watch.py's stranger-face detection, for cases the
+#     camera can't cover (obstructed, another room, phone-based access).
+#   - Identity confirmation if phone_api.py ever answers real calls —
+#     voice would be the only identity signal available there.
 
 import json
 
