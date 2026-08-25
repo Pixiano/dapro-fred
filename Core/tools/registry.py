@@ -80,6 +80,18 @@ class ToolRegistry:
 
         tool = self.tools[tool_name]
 
+        # Local models don't always respect a declared "string" schema
+        # type for a numeric-looking value — confirmed live 2026-08-25:
+        # a spoken PIN ("unlock fred 1111") came back from the tool-call
+        # JSON as an int, not a string, and lockdown_disengage(pin=1111)
+        # crashed on pin.strip() since ints have no .strip(). Coerced
+        # here, once, for every tool with a string-typed parameter,
+        # rather than each tool defensively str()-ing its own args.
+        properties = tool["parameters"].get("properties", {})
+        for key, value in kwargs.items():
+            if properties.get(key, {}).get("type") == "string" and not isinstance(value, str):
+                kwargs[key] = str(value)
+
         return tool["function"](**kwargs)
 
     # =========================================================
