@@ -94,13 +94,18 @@ def _drive_to_switch(monkeypatch):
 
 def test_media_playing_skips_camera_and_targets_headphones(tmp_path, monkeypatch):
     """Vatsal's own ask 2026-08-25: media playing anywhere on the
-    machine means headphones, no camera/classifier check needed."""
+    machine means headphones, no camera/classifier check needed — and
+    no presence check either (2nd ask, same day): media playing is
+    itself strong enough evidence someone's there."""
     _reset_switch_state()
     _make_enrolled(tmp_path, monkeypatch)
-    monkeypatch.setattr(hw.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        hw.presence, "is_present",
+        lambda: (_ for _ in ()).throw(AssertionError("must not check presence when media's playing")),
+    )
     monkeypatch.setattr(
         hw.presence, "last_poll_frame_and_face",
-        lambda: (np.zeros((4, 4, 3), dtype=np.uint8), object()),
+        lambda: (_ for _ in ()).throw(AssertionError("camera path must be skipped")),
     )
     monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: True)
     monkeypatch.setattr(

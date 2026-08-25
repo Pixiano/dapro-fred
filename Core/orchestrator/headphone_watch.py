@@ -397,8 +397,11 @@ def check_and_switch(notify=None):
     if not (HEADPHONES_ON_PATHS[0].exists() and HEADPHONES_OFF_PATHS[0].exists()):
         return  # not enrolled yet — see scripts/enroll_headphones.py
 
-    if not presence.is_present():
-        return  # presence.py's own poll already says nobody's there — no camera capture needed
+    # presence.is_present() is checked below, per-branch, not here —
+    # media playing is itself strong enough evidence someone's there
+    # (Vatsal's own call 2026-08-25), so that path skips it entirely.
+    # Still required for the camera/classifier path, which needs an
+    # actual confirmed face to read.
 
     # Self-throttle: the scheduler job fires every HEADPHONE_POLL_SECONDS_
     # ON_HEADPHONES (the fast cadence), but real work only happens that
@@ -422,6 +425,9 @@ def check_and_switch(notify=None):
             # "MEDIA-PLAYING PRIORITY SIGNAL".
             result = True
         else:
+            if not presence.is_present():
+                return  # presence.py's own poll already says nobody's there — no camera capture needed
+
             # Reuse presence.py's own frame + confirmed-match face from
             # its last poll (same ~15s cadence) rather than opening the
             # camera and running face detection again here — see
