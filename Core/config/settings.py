@@ -1308,15 +1308,17 @@ PRESENCE_MATCH_THRESHOLD_HIGH = 0.58
 # orchestrator/sleep_mode.py declares actual absence and enters sleep
 # mode — debounces someone briefly stepping out of frame, or just
 # looking down for a while (writing, reading) and losing a confident
-# face match without actually leaving. Target real-world window: ~60s.
-# Raised from 3 to 4 (45-60s -> 60-75s), Vatsal's call 2026-08-22, back
-# when PRESENCE_POLL_SECONDS was 15. Raised again to 6, 2026-08-25 —
-# PRESENCE_POLL_SECONDS dropped to 10 that same day without this being
-# scaled alongside it, silently shrinking the real window to 40s and
-# causing a false "absent" (reflection fired while Vatsal was sitting
-# right there, just looking down to write). 6 * 10s = 60s restores the
-# original target.
-PRESENCE_ABSENT_DEBOUNCE = 6
+# face match without actually leaving. Raised from 3 to 4 (45-60s ->
+# 60-75s), Vatsal's call 2026-08-22, back when PRESENCE_POLL_SECONDS
+# was 15. Raised to 6 (60s), 2026-08-25, after PRESENCE_POLL_SECONDS
+# dropped to 10 without this being scaled alongside it. Raised again to
+# 9 (90s) same day, Vatsal's own call — but see
+# _frame_matches_enrollment's own no-face motion fail-safe in
+# presence.py for the actual fix: no fixed number here survives an
+# extended writing session, since a real one can always be longer.
+# This number is now a backstop for genuine absence, not the primary
+# defense against a false one.
+PRESENCE_ABSENT_DEBOUNCE = 9
 
 # Symmetrical debounce for the return trip: consecutive present/match
 # polls required before treating a return as real — i.e. before
