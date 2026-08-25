@@ -196,3 +196,52 @@ def test_self_throttle_skips_a_too_soon_recheck(tmp_path, monkeypatch):
     hw.check_and_switch(notify=None)
 
     assert hw._streak == 0  # untouched — the throttle returned before any real work
+
+
+def test_media_stopping_still_debounces_the_switch_to_speakers(tmp_path, monkeypatch):
+    """Vatsal's own question 2026-08-25: after a media-triggered instant
+    switch to headphones (_streak forced to HEADPHONE_CHECK_STREAK, see
+    the test above this file's media-priority test), does the camera
+    path's own debounce still hold once media stops? Yes — it's a
+    completely separate branch from the media fast-path, untouched by
+    it. This pins that with a real sequence: media on (instant switch),
+    then media off with the camera saying "off" HEADPHONE_CHECK_STREAK
+    times — the first HEADPHONE_CHECK_STREAK - 1 of those must NOT
+    switch, only the last one does."""
+    _reset_switch_state()
+    _make_enrolled(tmp_path, monkeypatch)
+    monkeypatch.setattr(hw.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        hw.presence, "last_poll_frame_and_face",
+        lambda: (np.zeros((4, 4, 3), dtype=np.uint8), object()),
+    )
+    monkeypatch.setattr(
+        hw.device_info, "list_output_devices",
+        lambda: [
+            {"name": hw.HEADPHONE_OUTPUT_DEVICE_NAME, "index": 5},
+            {"name": hw.SPEAKER_OUTPUT_DEVICE_NAME, "index": 1},
+        ],
+    )
+    switched = []
+    monkeypatch.setattr(hw.device_info, "set_output_device", lambda index: switched.append(index))
+
+    # Media on: instant switch to headphones, one call.
+    monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: True)
+    hw.check_and_switch(notify=None)
+    assert switched == [5]
+    assert hw._last_state is True
+
+    # Media off: camera now reads "off" (speakers) every call — must
+    # NOT switch until the HEADPHONE_CHECK_STREAK-th consecutive read.
+    monkeypatch.setattr(hw.media_state, "is_media_playing", lambda: False)
+    monkeypatch.setattr(hw, "_wearing_headphones", lambda frame, face: False)
+    for i in range(hw.HEADPHONE_CHECK_STREAK - 1):
+        hw._last_check_ts = 0.0
+        hw.check_and_switch(notify=None)
+        assert switched == [5], f"switched too early on attempt {i + 1}"
+        assert hw._last_state is True
+
+    hw._last_check_ts = 0.0
+    hw.check_and_switch(notify=None)
+    assert switched == [5, 1]
+    assert hw._last_state is False
