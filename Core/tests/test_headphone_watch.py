@@ -94,9 +94,10 @@ def _drive_to_switch(monkeypatch):
 
 def test_media_playing_skips_camera_and_targets_headphones(tmp_path, monkeypatch):
     """Vatsal's own ask 2026-08-25: media playing anywhere on the
-    machine means headphones, no camera/classifier check needed — and
-    no presence check either (2nd ask, same day): media playing is
-    itself strong enough evidence someone's there."""
+    machine means headphones, no camera/classifier check needed — no
+    presence check either (2nd ask, same day) — and no streak debounce
+    either (3rd ask, same day): a single call switches instantly, since
+    media-playing is a deterministic signal, not a shaky camera read."""
     _reset_switch_state()
     _make_enrolled(tmp_path, monkeypatch)
     monkeypatch.setattr(
@@ -119,7 +120,7 @@ def test_media_playing_skips_camera_and_targets_headphones(tmp_path, monkeypatch
     switched = []
     monkeypatch.setattr(hw.device_info, "set_output_device", lambda index: switched.append(index))
 
-    _drive_to_switch(monkeypatch)
+    hw.check_and_switch(notify=None)  # ONE call — must switch immediately, no debounce wait
 
     assert switched == [5]
     assert hw._last_state is True

@@ -417,7 +417,8 @@ def check_and_switch(notify=None):
     _last_check_ts = now
 
     try:
-        if media_state.is_media_playing():
+        media_triggered = media_state.is_media_playing()
+        if media_triggered:
             # Media playing beats the camera check entirely, and doesn't
             # need a frame at all — checked first so a not-yet-cached
             # presence frame (e.g. the first poll cycle after a restart)
@@ -443,7 +444,15 @@ def check_and_switch(notify=None):
             if result is None:
                 return  # ambiguous/unavailable — keep the last known state
 
-        if result != _pending_state:
+        if media_triggered:
+            # Deterministic signal, not a shaky camera read — the
+            # streak debounce exists to smooth out ambiguous frames,
+            # which doesn't apply here. Vatsal's own call 2026-08-25:
+            # switch instantly instead of waiting HEADPHONE_CHECK_STREAK
+            # polls.
+            _pending_state = result
+            _streak = HEADPHONE_CHECK_STREAK
+        elif result != _pending_state:
             _pending_state = result
             _streak = 1
         else:
