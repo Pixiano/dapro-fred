@@ -32,11 +32,14 @@
 # mid-generation (see llm_client.py's generate_with_tools docstring —
 # no stopping_criteria hook on that path), so interruption granularity
 # here is "between chunks" (one chunk = one session-log file). Before
-# starting each chunk, sleep_mode.is_sleeping() is checked; the instant
-# it's gone False (Vatsal's back), everything buffered so far for this
-# run is discarded — no writes, no state update — so the same
-# unprocessed material is picked up whole on the next qualifying window
-# rather than being half-credited.
+# starting each chunk, sleep_mode.is_sleeping() AND _turn_in_progress()
+# are both checked; the instant either says Vatsal's back (camera
+# presence returned, or a real turn is using the LLM/STT/TTS pipeline
+# right now), everything buffered so far for this run is discarded —
+# no writes, no state update — so the same unprocessed material is
+# picked up whole on the next qualifying window rather than being
+# half-credited. The _turn_in_progress() half was added 2026-08-25 —
+# see its own docstring for the crash that made it necessary.
 
 import json
 import os
@@ -136,6 +139,33 @@ def run_if_due():
         return None
 
 
+def _turn_in_progress() -> bool:
+    """True if pill_app's own _turn_lock is currently held — a real
+    conversational turn (or a proactive utterance) is using the
+    STT/LLM/TTS pipeline RIGHT NOW. Checked alongside
+    sleep_mode.is_sleeping() before every chunk's LLM call below —
+    confirmed live 2026-08-25: is_sleeping() alone isn't enough, since
+    it only flips once PRESENCE_PRESENT_DEBOUNCE consecutive camera
+    polls clear, not the instant a hotkey/wake-word/HUD turn actually
+    starts. That gap let this module's own _reflect_on_chunk() generate
+    call collide with a live turn's faster-whisper transcription — two
+    separate native libraries with no lock between them — and
+    hard-aborted the whole process (Fatal Python error: Aborted, inside
+    llama_cpp's decode()), not a catchable Python exception. See
+    ui/pill_app.py's own _turn_lock comment (~line 813) for the
+    matching turn-vs-turn version of this same crash signature.
+
+    Imported locally, not at module level: ui.pill_app already imports
+    orchestrator modules, so a top-level import here would cycle (same
+    reasoning tools/system_tools.py's own get_current_app imports
+    already follow)."""
+    from ui.pill_app import get_current_app
+
+    app = get_current_app()
+    lock = getattr(app, "_turn_lock", None)
+    return lock is not None and lock.locked()
+
+
 def _run_if_due():
     # Imported here, not at module level: sleep_mode.py calls
     # run_if_due() from its own module, so a top-level import here would
@@ -170,10 +200,12 @@ def _run_if_due():
     self_facts = []
 
     for path in files:
-        if not sleep_mode.is_sleeping():
+        if not sleep_mode.is_sleeping() or _turn_in_progress():
             # Vatsal's back mid-pass — discard everything buffered for
             # THIS run and bail without touching state, per the module
-            # docstring's interrupt-safety contract.
+            # docstring's interrupt-safety contract. _turn_in_progress()
+            # catches the case is_sleeping()'s debounce hasn't caught up
+            # to yet — see that function's own docstring.
             return None
 
         events = [e for e in _read_events([path]) if e.get("ts", "") > last_run_ts]
@@ -186,7 +218,7 @@ def _run_if_due():
 
     # One last check before committing anything — the loop above can
     # finish its final chunk in the same instant presence returns.
-    if not sleep_mode.is_sleeping():
+    if not sleep_mode.is_sleeping() or _turn_in_progress():
         return None
 
     audit_lines = []

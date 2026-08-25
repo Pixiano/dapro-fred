@@ -79,6 +79,16 @@ def _wait_then_exit():
     os._exit(0)
 
 
+# How long to wait after spawning the new process before trusting it's
+# actually alive — long enough to catch an immediate startup crash
+# (missing model, import error, bad state file) without meaningfully
+# delaying a normal restart. ponytail: fixed, not a full readiness
+# check (e.g. polling the HUD port) — that would catch a *slower* crash
+# too, but this already fixes the confirmed failure mode below without
+# needing to know which of FRED's several startup steps to poll for.
+_RESTART_LIVENESS_WAIT = 1.5
+
+
 def restart_fred() -> str:
     """
     Relaunch FRED as a fresh detached process, then tear this one down
@@ -96,19 +106,30 @@ def restart_fred() -> str:
     # process's PID and refuse to let the new one start — release it
     # first, since this restart IS the intended hand-off, not a rogue
     # second launch.
-    from utils.single_instance import release as _release_instance_lock
+    from utils.single_instance import LOCK_PATH, release as _release_instance_lock
     _release_instance_lock()
 
     python = str(_VENV_PYTHONW) if _VENV_PYTHONW.is_file() else sys.executable
     try:
-        subprocess.Popen(
+        proc = subprocess.Popen(
             [python, str(_POPUP_SCRIPT), "--greet-now"],
             cwd=str(_PROJECT_DIR),
             creationflags=_DETACHED | _NEW_GROUP,
             close_fds=True,
         )
     except OSError as e:
+        LOCK_PATH.write_text(str(os.getpid()))  # still here — reclaim the lock we just gave up
         return f"Restart failed — couldn't launch a new instance: {e}"
+
+    # Confirmed live 2026-08-25: without this check, a new process that
+    # crashes on startup (before it could reclaim the PID lock itself)
+    # left NOTHING running — this process had already released the lock
+    # and was about to be torn down regardless of whether the new one
+    # actually survived. Now verified before that hand-off happens.
+    time.sleep(_RESTART_LIVENESS_WAIT)
+    if proc.poll() is not None:
+        LOCK_PATH.write_text(str(os.getpid()))  # reclaim — the new process never did
+        return "Restart failed — the new instance crashed on startup. Still running the old one."
 
     threading.Thread(target=_wait_then_exit, daemon=True).start()
     return "Restarting."

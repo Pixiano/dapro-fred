@@ -297,6 +297,27 @@ class PillApp:
         self.window.create()
         self.window.run(on_ready=self._on_ready)
 
+    def _nothing_else_focused(self) -> bool:
+        """True if nothing a person would call "a window they're using"
+        currently has focus — the desktop/shell itself, FRED's own pill
+        overlay (just created a moment ago in run(), before this method
+        even runs — its own creation must not count as "something's
+        focused" or the HUD would never auto-open), or no window at all.
+        Vatsal's own ask 2026-08-25: open the HUD on startup, but don't
+        steal focus from whatever he's actually doing.
+
+        Reuses machine_tools' own shell-window name list (Program
+        Manager etc. — already maintained there for the identical "is
+        this actually a window a person means" distinction
+        open_window_titles makes) rather than a second copy of it."""
+        import win32gui
+
+        hwnd = win32gui.GetForegroundWindow()
+        if not hwnd:
+            return True
+        title = win32gui.GetWindowText(hwnd)
+        return not title or title in machine_tools._SHELL_WINDOWS or title == "FRED_PILL"
+
     def _on_ready(self):
         self.hotkey.install()
         if self.stt:
@@ -305,6 +326,8 @@ class PillApp:
         self.lifecycle.start()
         self.screen_watcher.start()
         self.hud.start_server()
+        if self._nothing_else_focused():
+            self.hud.show()
         self._start_phone_api()
         threading.Thread(target=self._hud_command_loop, daemon=True).start()
         self._schedule_greeting()

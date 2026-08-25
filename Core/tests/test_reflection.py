@@ -128,6 +128,42 @@ def test_interrupt_mid_pass_discards_everything(paths):
     assert not pending_dir.exists()
 
 
+def test_turn_in_progress_discards_even_if_sleeping(paths, monkeypatch):
+    """Regression for the 2026-08-25 crash: is_sleeping() alone isn't
+    enough to gate a chunk's LLM call — a real turn can be running (a
+    hotkey/wake-word/HUD command) before is_sleeping()'s own camera
+    debounce has caught up. _turn_in_progress() must catch that even
+    while sleep_mode still says "sleeping"."""
+    session_dir, people_dir, pending_dir, state_path = paths
+    reflection._save_state({"last_run_ts": "2026-08-21T00:00:00"})
+    _write_events(
+        session_dir, "session_2026-08-22.jsonl", reflection.REFLECTION_MIN_NEW_EVENTS,
+        ts_base="2026-08-22T10:00:00",
+    )
+    reflection.configure(_FakeLLM({
+        "friend_entries": [{"person": "Ghost", "file_action": "new", "content": "should never be written"}],
+        "self_facts": [{"content": "should never be staged"}],
+    }))
+    sleep_mode._sleeping = True  # still "sleeping" by the camera-debounced signal
+
+    class _FakeLock:
+        def locked(self):
+            return True
+
+    class _FakeApp:
+        _turn_lock = _FakeLock()
+
+    monkeypatch.setattr("ui.pill_app.get_current_app", lambda: _FakeApp())
+    state_before = reflection._load_state()
+
+    result = reflection._run_if_due()
+
+    assert result is None
+    assert reflection._load_state() == state_before
+    assert not people_dir.exists()
+    assert not pending_dir.exists()
+
+
 def test_review_offer_primes_carry_and_marks_reviewed(paths, monkeypatch):
     session_dir, people_dir, pending_dir, state_path = paths
     pending_dir.mkdir(parents=True)
