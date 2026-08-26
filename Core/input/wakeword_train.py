@@ -321,6 +321,19 @@ ROOM_RECORDING_DIR = os.path.join(WORKSPACE, "room_recording")  # 2026-08-10, no
 REAL_POSITIVE_DIR = os.path.join(WORKSPACE, "real_positive")
 REAL_POSITIVE_TEST_FRACTION = 0.15
 
+# Real false-fire captures — passively collected during normal use
+# (input/wakeword_capture.py), reclassified 2026-08-25/26: the wake
+# word fired but either nothing meaningful followed, or the followup
+# was cancelled/too garbled to trust as a real command. These are
+# genuine hard negatives (real mic/room audio that already fooled the
+# model once), not synthetic — a stronger signal than
+# NEGATIVE_SPEECH_DIR's TTS-generated negatives. Whole-file, no
+# segmenting: unlike DEMAND_DIR's few long environment recordings (see
+# _segment_audio_file's own docstring on the 5-vs-200 imbalance that
+# caused), this is already thousands of individual short files.
+REAL_NEGATIVE_DIR = os.path.join(WORKSPACE, "real_negative")
+REAL_NEGATIVE_TEST_FRACTION = 0.15
+
 TARGET_SR = 16000
 POSITIVE_PHRASINGS = ["Hey FRED.", "Hey, Fred.", "Hey Fred!"]
 POSITIVE_SPEEDS = [0.9, 1.0, 1.1]
@@ -514,6 +527,44 @@ def ingest_real_positive_clips():
         sf.write(dst, audio, TARGET_SR)
 
 
+def ingest_real_negative_clips():
+    """
+    Mixes real false-fire captures (REAL_NEGATIVE_DIR) into NEG_TRAIN/
+    NEG_TEST — same idempotent-per-file, both-splits-checked shape as
+    ingest_real_positive_clips() above. Files in REAL_NEGATIVE_DIR are
+    expected to already be trigger-only clips (~2.5s, same convention
+    REAL_POSITIVE_DIR's real captures use) by the time this runs — see
+    that directory's own prep step, NOT this function, for the actual
+    trigger-only slicing. An earlier version of this function copied
+    the full trigger+gap+followup capture in whole (2.5-32s each) and
+    that broke training badly enough that even the ORIGINAL, unrelated,
+    previously-fine real_positive/take_*.wav scripted clips started
+    scoring near-zero — confirmed live 2026-08-26. Fixed upstream, not
+    here, by only ever populating REAL_NEGATIVE_DIR with pre-trimmed
+    clips in the first place.
+    """
+    if not os.path.isdir(REAL_NEGATIVE_DIR):
+        return
+    names = sorted(f for f in os.listdir(REAL_NEGATIVE_DIR) if f.endswith(".wav"))
+    if not names:
+        return
+
+    rng = np.random.default_rng(3)
+    rng.shuffle(names)
+    n_test = max(1, int(len(names) * REAL_NEGATIVE_TEST_FRACTION))
+
+    for i, name in enumerate(names):
+        dst_dir = NEG_TEST if i < n_test else NEG_TRAIN
+        dst_name = f"realneg_{os.path.splitext(name)[0]}.wav"
+        dst = os.path.join(dst_dir, dst_name)
+
+        if os.path.exists(dst) or os.path.exists(os.path.join(NEG_TRAIN, dst_name)) \
+                or os.path.exists(os.path.join(NEG_TEST, dst_name)):
+            continue
+        audio = _load_mono_16k_int16(os.path.join(REAL_NEGATIVE_DIR, name))
+        sf.write(dst, audio, TARGET_SR)
+
+
 # =========================================================
 # STEP 3.5 — negative SPEECH clips via Kokoro
 #
@@ -666,6 +717,8 @@ def assemble_negatives():
     for i, name in enumerate(speech_names):
         dst_dir = NEG_TEST if i < n_test else NEG_TRAIN
         shutil.copy(os.path.join(NEGATIVE_SPEECH_DIR, name), os.path.join(dst_dir, name))
+
+    ingest_real_negative_clips()
 
 
 # =========================================================
