@@ -225,6 +225,64 @@ def test_carryover_ignores_events():
     assert True
 
 
+def test_carryover_commitment_only_reasks_every_3rd_day(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    seen = _notifications(monkeypatch)
+    two_days_ago = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    agenda.add_item("commitment", "Email Raj back", due=two_days_ago)
+
+    pc.check_agenda_carryover(on_agenda_ask=lambda *a: None)  # day 2 -> skipped, not a multiple of 3
+    assert seen == []
+
+
+def test_carryover_commitment_asks_on_a_multiple_of_3_days_overdue(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    seen = _notifications(monkeypatch)
+    three_days_ago = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+    agenda.add_item("commitment", "Email Raj back", due=three_days_ago)
+
+    pc.check_agenda_carryover(on_agenda_ask=lambda *a: None)  # day 3 -> multiple of 3, asks
+    assert len(seen) == 1
+    assert "get to it" in seen[0].lower()
+
+
+def test_carryover_commitment_due_today_still_asks(tmp_path, monkeypatch):
+    """days_overdue == 0 on the due date itself -- 0 % 3 == 0, so a
+    commitment due today still gets asked about once, same as day 3/6."""
+    _isolate(tmp_path, monkeypatch)
+    seen = _notifications(monkeypatch)
+    agenda.add_item("commitment", "Email Raj back", due="today")
+
+    pc.check_agenda_carryover(on_agenda_ask=lambda *a: None)
+    assert len(seen) == 1
+
+
+def test_carryover_homework_cadence_unchanged_daily(tmp_path, monkeypatch):
+    """Homework/project still re-asks every day, unlike commitment's
+    every-3rd-day cadence -- pins that the reduced cadence is
+    commitment-only."""
+    _isolate(tmp_path, monkeypatch)
+    seen = _notifications(monkeypatch)
+    two_days_ago = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    agenda.add_item("homework", "Geography", due=two_days_ago)
+
+    pc.check_agenda_carryover(on_agenda_ask=lambda *a: None)  # day 2 -> still asks, homework is daily
+    assert len(seen) == 1
+
+
+def test_commitment_dismissed_via_done_true(tmp_path, monkeypatch):
+    """Easy dismissal: update_item(done=True) works on a commitment the
+    same way it already does for homework/project -- a casual 'never
+    mind' should land here, not delete_agenda_item."""
+    _isolate(tmp_path, monkeypatch)
+    agenda.add_item("commitment", "Email Raj back", due="today")
+
+    result = agenda.update_item("email raj", done=True)
+
+    assert "Updated" in result
+    assert agenda.list_items(kind="commitment") == "Nothing open, sir."
+
+
 def test_carryover_says_workaround_phrasing_not_reused_from_deadline_check(tmp_path, monkeypatch):
     """The carryover question and the deadline statement are different
     speech acts — this pins the question phrasing specifically, so a

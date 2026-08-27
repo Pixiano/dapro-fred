@@ -539,12 +539,21 @@ def check_agenda_carryover(on_agenda_ask=None):
     today = datetime.now().strftime(_DATE_FMT)
 
     for item in candidates:
+        days_overdue = (datetime.now().date() - item["when"].date()).days
+
+        # Commitments re-ask every 3rd day of carryover (day 0, 3, 6...)
+        # instead of daily -- Vatsal's own call 2026-08-28: a casual "I'll
+        # email them back" is lower-stakes than homework/project and
+        # shouldn't nag as often. Homework/project cadence is unchanged.
+        if item["kind"] == "commitment" and days_overdue % 3 != 0:
+            continue
+
         key = f"{item['kind']}|{item['subject']}|{item['when'].isoformat()}|{today}"
         if notified.get(key):
             continue
 
         subject = item["subject"] + (f", {item['detail']}" if item["detail"] else "")
-        overdue = (datetime.now().date() - item["when"].date()).days > 0
+        overdue = days_overdue > 0
         phrase = "was due" if overdue else "was due today"
         ask = (
             "did you get to it, or does it still need doing?"

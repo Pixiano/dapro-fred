@@ -2284,7 +2284,13 @@ class FREDOrchestrator:
                     },
                     "done": {
                         "type": "boolean",
-                        "description": "Mark fully done (homework/project) or prep complete (event).",
+                        "description": (
+                            "Mark fully done (homework/project), prep complete "
+                            "(event), or dismiss/drop it if it's no longer "
+                            "relevant (commitment) — a casual 'never mind' or "
+                            "'forget it' should call this with done=true, not "
+                            "delete_agenda_item."
+                        ),
                     },
                     "add_progress": {
                         "type": "integer",
