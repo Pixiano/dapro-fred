@@ -52,3 +52,22 @@ Running log of work completed this session, appended as it lands. See
   values yet, per the source plan doc's own verification standard.
   Confirmed real values move sensibly with head angle (facing vs.
   moderate-down samples). Commit `7c6fd13`.
+
+- **Fixed `test_focus_checkin.py`'s `test_threshold_grows_by_step_on_repeated_fires`**
+  — it asserted an immediate back-to-back `check()` call fires again on
+  unchanged idle time, which was literally the refire bug this session
+  fixed, encoded as expected. Rewritten to assert the correct behavior:
+  an immediate re-poll stays quiet until the grown threshold has
+  actually elapsed since the last fire. Commit `6499d8f`.
+
+- **Added mic-level VAD** (`Core/input/voice_activity.py`), tapping
+  `wakeword.py`'s existing continuous capture stream rather than opening
+  a second one — `webrtcvad` was already installed, unused. Re-chunks
+  the same int16 block `wakeword.py` already builds for openwakeword
+  into webrtcvad's fixed 20ms frames, exposes `is_voice_active()` (2s
+  rolling window). Wave-1 scope only: not wired into any decision yet
+  (presence composite signal, proactive-speech gating) — real
+  live-audio verification (silence, ambient noise, actual speech) comes
+  first. Voice enrollment (`scripts/enroll_voice.py`, needed for
+  `voice_id.py` wiring) deferred — Vatsal opted not to run the
+  8-prompt recording this session. Commit `f0541b3`.
