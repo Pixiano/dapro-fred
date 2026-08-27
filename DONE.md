@@ -71,3 +71,16 @@ Running log of work completed this session, appended as it lands. See
   first. Voice enrollment (`scripts/enroll_voice.py`, needed for
   `voice_id.py` wiring) deferred — Vatsal opted not to run the
   8-prompt recording this session. Commit `f0541b3`.
+
+- **Added a 3rd system-prompt mode, `PROACTIVE_SYSTEM_PROMPT`**
+  (`Core/personality/system_prompt.py`), same base+addendum shape as
+  the existing `LOCKDOWN_SYSTEM_PROMPT`. Rewired `focus_checkin.py`'s
+  vision call to use it instead of a hand-rolled "You are FRED...
+  address him as sir" prompt that had drifted disconnected from the
+  vault's persona.md. `vision_server.describe_image()` gained an
+  optional `system_prompt` param (it previously only ever sent one
+  user message, no system role) — backward compatible, every other
+  caller unaffected. 3 modes total: default (baseline), lockdown
+  (existing), proactive (new) — didn't invent a 4th/5th for round
+  numbers; a grep for other ad hoc "You are FRED" prompts across the
+  codebase found only this one real duplication. Commit `3f59bbb`.
