@@ -31,6 +31,7 @@ from config.settings import (
     PROACTIVE_DEADLINE_WARN_DAYS,
     PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
+    PROACTIVE_INTERRUPT_STREAK,
     VIP_MESSAGE_CHECK_MINUTES,
     CALL_LOG_CHECK_MINUTES,
     PRESENCE_POLL_SECONDS,
@@ -46,14 +47,90 @@ from utils import event_log
 from utils.notifier import notify as _real_notify
 from utils.vault_md import parse_frontmatter
 
-def notify(*args, **kwargs):
-    """Gate on sleep-mode: every proactive nudge in this file funnels
-    through here (this module's own `notify` shadows utils.notifier.notify,
-    imported above as _real_notify) rather than each check function
-    checking sleep_mode.is_sleeping() individually. Sleep mode just skips
-    a gated nudge — no queue/replay, matches reminders' own precedent of
-    "fire once or not at all"."""
+# =========================================================
+# NATURALNESS GATE — principles 2-5 from plan_perception_features_2026-08-25
+# .md's "Proactivity naturalness principles" section (principle 1, backoff
+# from last fire, already lives in focus_checkin.py's own fired_at anchor).
+# Piggybacked on check_presence's existing PRESENCE_POLL_SECONDS cadence
+# below rather than a new scheduled job — it already needs presence.is_
+# present() every tick, this just rides along.
+# =========================================================
+
+# In-memory only, same "a restart is a real event" precedent every other
+# streak counter in this codebase holds to (security_watch._stranger_streak,
+# presence._present_streak).
+_interruptible_streak = 0
+_last_window_title = None  # None = not observed yet, first tick can't be "changed"
+_last_media_playing = False
+_task_boundary_this_tick = False
+
+
+def _update_interruptibility():
+    """Composite interruptibility + suppress-during-busy (principles 3
+    and 5): present, and nothing else is actively playing audio —
+    media_state.py already excludes FRED's own TTS output, so a True
+    here means someone else's audio (music/video/a call) is live, not
+    FRED talking over itself. Also tracks the task-boundary signal
+    (principle 2): the foreground window changing, or media that WAS
+    playing just stopping."""
+    global _interruptible_streak, _last_window_title, _last_media_playing
+    global _task_boundary_this_tick
+
+    # Local imports, same convention check_vip_messages/check_recent_calls
+    # already use in this file — pycaw (media_state) and win32gui aren't
+    # needed by every process that imports this module (e.g. the CLI),
+    # so don't pay for them at module load.
+    from audio import media_state
+
+    media_playing = media_state.is_media_playing()
+    try:
+        import win32gui
+        title = (win32gui.GetWindowText(win32gui.GetForegroundWindow()) or "").strip()
+    except Exception:
+        title = _last_window_title  # unreadable this tick -- don't manufacture a false "changed"
+
+    media_just_stopped = _last_media_playing and not media_playing
+    title_changed = _last_window_title is not None and title != _last_window_title
+    _task_boundary_this_tick = media_just_stopped or title_changed
+
+    _last_media_playing = media_playing
+    _last_window_title = title
+
+    good_moment = presence.is_present() and not media_playing
+    _interruptible_streak = _interruptible_streak + 1 if good_moment else 0
+
+
+def _ready_to_interrupt() -> bool:
+    """Calm technology (principle 4): the composite signal must have
+    held for PROACTIVE_INTERRUPT_STREAK consecutive polls before an
+    ordinary nudge speaks — UNLESS a task boundary was just observed
+    (principle 2), which is itself already a strong "good moment" signal
+    and gets to skip the wait. Either way the composite signal must be
+    good THIS tick — a boundary during a busy/absent moment still holds."""
+    if _interruptible_streak == 0:
+        return False
+    return _task_boundary_this_tick or _interruptible_streak >= PROACTIVE_INTERRUPT_STREAK
+
+
+def notify(*args, urgent=False, **kwargs):
+    """Gate on sleep-mode and (unless urgent) the naturalness gate above:
+    every proactive nudge in this file funnels through here (this
+    module's own `notify` shadows utils.notifier.notify, imported above
+    as _real_notify) rather than each check function checking
+    sleep_mode.is_sleeping() individually. Neither gate queues or
+    replays a skipped nudge — matches reminders' own precedent of "fire
+    once or not at all", now extended from just sleep-mode to "is this
+    actually a good moment."
+
+    urgent=True bypasses the naturalness gate (not sleep-mode) for
+    checks where timing quality matters less than not going stale —
+    VIP messages, recent calls, headphone-switch status announcements.
+    Ordinary "presence/work/focus" nudges (vault staleness, long
+    session, deadlines, agenda carryover, focus check-ins, etc.) leave
+    this False."""
     if sleep_mode.is_sleeping():
+        return
+    if not urgent and not _ready_to_interrupt():
         return
     _real_notify(*args, **kwargs)
 
@@ -659,7 +736,10 @@ def check_vip_messages():
         return
 
     if summary:
-        notify(summary, title="Message")
+        # urgent: a VIP message going stale while FRED waits for a "good
+        # moment" defeats the point of a fast-poll check in the first
+        # place — see this module's own comment on VIP_MESSAGE_CHECK_MINUTES.
+        notify(summary, title="Message", urgent=True)
 
 
 def check_recent_calls():
@@ -684,7 +764,7 @@ def check_recent_calls():
         return
 
     if summary:
-        notify(summary, title="Call")
+        notify(summary, title="Call", urgent=True)  # same reasoning as check_vip_messages above
 
 
 # Wake-awareness greeting, same sir-suffixed short-phrase-pool style as
@@ -732,6 +812,11 @@ def check_presence():
     except Exception as e:
         event_log.log_error("proactive_presence", e)
         return
+
+    try:
+        _update_interruptibility()
+    except Exception as e:
+        event_log.log_error("proactive_interruptibility", e)
 
     sleep_mode.on_presence_poll(present, greeting=random.choice(_PRESENCE_GREETINGS))
 

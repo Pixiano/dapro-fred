@@ -171,7 +171,7 @@ def test_failure_phrase_when_neither_headphone_device_present(tmp_path, monkeypa
 
     for _ in range(hw.HEADPHONE_CHECK_STREAK):
         hw._last_check_ts = 0.0  # bypass the self-throttle for these back-to-back calls
-        hw.check_and_switch(notify=lambda msg, title=None: spoken.append(msg))
+        hw.check_and_switch(notify=lambda msg, title=None, **kw: spoken.append(msg))
 
     assert spoken and spoken[0] in hw._SWITCH_FAILED_TO_HEADPHONES_PHRASES
     assert hw._last_state is None  # never actually switched

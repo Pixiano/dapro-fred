@@ -494,7 +494,11 @@ def check_and_switch(notify=None):
                     _SWITCH_FAILED_TO_HEADPHONES_PHRASES if result
                     else _SWITCH_FAILED_TO_SPEAKERS_PHRASES
                 )
-                notify(random.choice(phrases), title="Audio")
+                # urgent: this is functional status (audio output just
+                # changed, or failed to), not an opinion-nudge -- the
+                # naturalness gate in proactive_checks.notify() is for
+                # the latter, see that function's own docstring.
+                notify(random.choice(phrases), title="Audio", urgent=True)
             return
         device_info.set_output_device(device_index)
         event_log.log("headphone_switch", wearing=result, device=device_name)
@@ -503,11 +507,11 @@ def check_and_switch(notify=None):
 
         if notify is not None:
             phrases = _TO_HEADPHONES_PHRASES if result else _TO_SPEAKERS_PHRASES
-            notify(random.choice(phrases), title="Audio")
+            notify(random.choice(phrases), title="Audio", urgent=True)
 
             if random.random() < _CONFIRM_PROMPT_CHANCE:
                 _pending_confirmation = {"frame": frame, "label": result}
-                notify(random.choice(_CONFIRM_PROMPT_PHRASES), title="Audio")
+                notify(random.choice(_CONFIRM_PROMPT_PHRASES), title="Audio", urgent=True)
     except Exception as e:
         event_log.log_error("headphone_watch", e)
 

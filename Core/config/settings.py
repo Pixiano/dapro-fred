@@ -1469,6 +1469,16 @@ FOCUS_CHECKIN_STEP_MINUTES = 10
 SECURITY_WATCH_POLL_SECONDS = 5
 SECURITY_STRANGER_DEBOUNCE = 5
 
+# Proactivity naturalness gate (orchestrator/proactive_checks.py's
+# _ready_to_interrupt): consecutive qualifying PRESENCE_POLL_SECONDS
+# ticks (present + no media playing) required before an ordinary
+# opinion-nudge is allowed to actually speak — calm technology, per
+# plan_perception_features_2026-08-25.md's "Proactivity naturalness
+# principles". 3 * 10s = 30s of a genuine lull, not a momentary gap
+# between songs. Not yet measured against real use, same "revisit once
+# real behavior is observed" standard as PRESENCE_YOLO_PERSON_CONFIDENCE.
+PROACTIVE_INTERRUPT_STREAK = 3
+
 # =========================================================
 # TOOL SETTINGS
 # =========================================================
