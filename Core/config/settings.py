@@ -1320,6 +1320,15 @@ PRESENCE_MATCH_THRESHOLD_HIGH = 0.58
 # defense against a false one.
 PRESENCE_ABSENT_DEBOUNCE = 9
 
+# Confidence floor for the no-face YOLO person fail-safe below
+# (input/presence.py, _frame_matches_enrollment's `if not faces:` branch,
+# added 2026-08-27). yolov8n's own default confidence floor for a
+# well-covered COCO class like "person" — NOT yet measured against a
+# real empty-room vs. head-down-writing sample per
+# plan_perception_features_2026-08-25.md's verification standard. Revisit
+# once real presence_no_face_person_failsafe log confidences come in.
+PRESENCE_YOLO_PERSON_CONFIDENCE = 0.5
+
 # Symmetrical debounce for the return trip: consecutive present/match
 # polls required before treating a return as real — i.e. before
 # sleep_mode.py exits sleep mode / fires the wake greeting, and before

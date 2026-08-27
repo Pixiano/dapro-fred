@@ -36,6 +36,7 @@ from config.settings import (
     PRESENCE_DYNAMIC_EMBEDDINGS_CAP,
     PRESENCE_MATCH_THRESHOLD_HIGH,
     PRESENCE_PRESENT_DEBOUNCE,
+    PRESENCE_YOLO_PERSON_CONFIDENCE,
 )
 from input import presence_log
 from utils import event_log
@@ -56,6 +57,7 @@ REFERENCE_PHOTO_PATH = DATA_DIR / "face_reference.jpg"
 FAMILY_ENROLLMENT_PATH = DATA_DIR / "family_enrollment.json"
 
 _analyzer = None  # lazy, load-once-keep-warm — same pattern as llm_client._get_model
+_yolo_model = None  # lazy, load-once-keep-warm — same pattern, see _get_yolo_model
 _enrollment_embeddings = None  # lazy-loaded list[np.ndarray], cached after first read
 _family_embeddings = None  # lazy-loaded {name: [np.ndarray, ...]}, cached after first read
 
@@ -97,6 +99,31 @@ def _get_analyzer():
         _analyzer = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
         _analyzer.prepare(ctx_id=0)
     return _analyzer
+
+
+def _get_yolo_model():
+    """Lazy-loaded yolov8n singleton, mirrors _get_analyzer() above.
+    Nano weights — fast, COCO-pretrained, "person" is one of its
+    best-covered classes (unlike the earlier failed headphone-detection
+    attempt with a niche class). `ultralytics` is already an installed
+    dependency from that attempt."""
+    global _yolo_model
+    if _yolo_model is None:
+        from ultralytics import YOLO
+        _yolo_model = YOLO("yolov8n.pt")
+    return _yolo_model
+
+
+def _frame_has_person(frame) -> tuple:
+    """(has_person, confidence) — best "person" detection confidence in
+    frame, or (False, 0.0) if none clears PRESENCE_YOLO_PERSON_CONFIDENCE.
+    COCO class 0 is "person" in yolov8n's default weights."""
+    results = _get_yolo_model()(frame, classes=[0], verbose=False)
+    best = 0.0
+    for r in results:
+        for conf in r.boxes.conf.tolist():
+            best = max(best, conf)
+    return best >= PRESENCE_YOLO_PERSON_CONFIDENCE, best
 
 
 def _get_enrollment_embeddings() -> dict:
@@ -394,11 +421,24 @@ def _frame_matches_enrollment(frame):
     global _last_classification
     _last_classification = _classify_family(faces)
 
+    last_state = is_present()
+
     if not faces:
+        # No face at all — before declaring absence, check for a
+        # person-shaped blob (head down writing, turned away, partial
+        # occlusion). Fails safe toward last known state exactly like the
+        # ambiguous-vision-fallback-failed path below, never a confirmed
+        # match (no embedding to accumulate). PRESENCE_ABSENT_DEBOUNCE
+        # stays the backstop for genuine absence either way.
+        has_person, confidence = _frame_has_person(frame)
+        if has_person:
+            event_log.log("presence_no_face_person_failsafe",
+                           confidence=round(confidence, 3), fallback_to_last_state=last_state)
+            if last_state:
+                return True, None, None
         return False, None, None
 
     embeddings_by_tier = _get_enrollment_embeddings()
-    last_state = is_present()
 
     for face in faces:
         similarity, tier = _best_similarity(face.normed_embedding, embeddings_by_tier)

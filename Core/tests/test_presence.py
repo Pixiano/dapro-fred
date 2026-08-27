@@ -265,3 +265,44 @@ def test_family_classification_excludes_vatsals_own_face(monkeypatch):
     classification = presence.last_classification()
     assert classification["known_people"] == []
     assert classification["unrecognized"] is False  # excluded, not a stranger
+
+
+# =========================================================
+# NO-FACE YOLO PERSON FAIL-SAFE -- zero faces detected must not declare
+# absence outright if a person-shaped blob is still in frame; fails safe
+# to last known presence state, same shape as the ambiguous-vision-
+# fallback-failed path.
+# =========================================================
+
+def test_no_face_person_detected_fails_safe_to_last_present_state(monkeypatch):
+    monkeypatch.setattr(presence, "_get_analyzer", lambda: _types.SimpleNamespace(get=lambda frame: []))
+    monkeypatch.setattr(presence, "_state_cache", {"present": True, "last_seen": None, "last_checked": None})
+    monkeypatch.setattr(presence, "_frame_has_person", lambda frame: (True, 0.8))
+
+    present, matched_face, matched_tier = presence._frame_matches_enrollment("frame")
+
+    assert present is True  # was present, person blob still in frame -> stays present
+    assert matched_face is None  # not a confirmed match, nothing to accumulate
+    assert matched_tier is None
+
+
+def test_no_face_person_detected_stays_absent_if_was_already_absent(monkeypatch):
+    monkeypatch.setattr(presence, "_get_analyzer", lambda: _types.SimpleNamespace(get=lambda frame: []))
+    monkeypatch.setattr(presence, "_state_cache", {"present": False, "last_seen": None, "last_checked": None})
+    monkeypatch.setattr(presence, "_frame_has_person", lambda frame: (True, 0.8))
+
+    present, _, _ = presence._frame_matches_enrollment("frame")
+
+    assert present is False  # a person blob alone never flips absent -> present
+
+
+def test_no_face_no_person_reports_absent(monkeypatch):
+    monkeypatch.setattr(presence, "_get_analyzer", lambda: _types.SimpleNamespace(get=lambda frame: []))
+    monkeypatch.setattr(presence, "_state_cache", {"present": True, "last_seen": None, "last_checked": None})
+    monkeypatch.setattr(presence, "_frame_has_person", lambda frame: (False, 0.0))
+
+    present, matched_face, matched_tier = presence._frame_matches_enrollment("frame")
+
+    assert present is False  # empty frame, no fail-safe applies
+    assert matched_face is None
+    assert matched_tier is None
