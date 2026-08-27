@@ -40,13 +40,16 @@ def test_threshold_grows_by_step_on_repeated_fires(monkeypatch):
     assert len(calls) == 1
     state = json.loads(fc.PROACTIVE_STATE_PATH.read_text(encoding="utf-8"))
     assert state["focus_checkin"]["threshold_minutes"] == 60 + 10
+    assert state["focus_checkin"]["fired_at_iso"] is not None
 
-    # Third tick: same interaction, idle time unchanged (still 200 min) —
-    # threshold is now 70, still eligible -> fires again, grows to 80.
+    # Third tick, same stale interaction time (idle-since-interaction
+    # still reads 200min): must NOT refire immediately. This is the
+    # exact bug this anchor fixes -- backoff is measured from the last
+    # FIRE (just now), not from idle-since-interaction, so a poll
+    # moments later stays quiet until the grown threshold (70min) has
+    # actually elapsed since the fire.
     fc.check(notify)
-    assert len(calls) == 2
-    state = json.loads(fc.PROACTIVE_STATE_PATH.read_text(encoding="utf-8"))
-    assert state["focus_checkin"]["threshold_minutes"] == 80
+    assert len(calls) == 1
 
 
 def test_real_interaction_resets_threshold_to_base(monkeypatch):
