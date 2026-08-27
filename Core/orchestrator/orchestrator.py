@@ -2173,26 +2173,30 @@ class FREDOrchestrator:
             name="add_agenda_item",
             function=agenda.add_item,
             description=(
-                "Log one homework item, project, or event that needs "
-                "getting-ready lead time (a class trip, a movie, meeting "
-                "friends). Call this the moment one is mentioned, even "
-                "offhand — the same reasoning as add_task, but for "
-                "anything that has its own due date or progress. Call it "
-                "ONCE PER ITEM: 'geography and physics homework, due in "
-                "3 days' is two separate calls, not one."
+                "Log one homework item, project, event, or commitment "
+                "that needs following up on. Call this the moment one is "
+                "mentioned, even offhand — the same reasoning as "
+                "add_task, but for anything that has its own due date or "
+                "progress. Call it ONCE PER ITEM: 'geography and physics "
+                "homework, due in 3 days' is two separate calls, not one."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "kind": {
                         "type": "string",
-                        "enum": ["homework", "project", "event"],
+                        "enum": ["homework", "project", "event", "commitment"],
                         "description": (
                             "homework: a one-off assignment or questions. "
                             "project: multi-step work with its own "
                             "progress and a next step. event: something "
                             "at a specific time that may need getting-"
-                            "ready lead time."
+                            "ready lead time. commitment: something "
+                            "Vatsal said he'd do for someone else that "
+                            "isn't school/project work, e.g. 'I'll email "
+                            "them back' or 'I'll call him tomorrow' — "
+                            "gets followed up on the same way homework "
+                            "does."
                         ),
                     },
                     "subject": {
@@ -2247,7 +2251,7 @@ class FREDOrchestrator:
                     },
                     "kind": {
                         "type": "string",
-                        "enum": ["homework", "project", "event"],
+                        "enum": ["homework", "project", "event", "commitment"],
                         "description": "Restrict to one kind. Omit for all kinds.",
                     },
                     "subject": {
@@ -2263,7 +2267,7 @@ class FREDOrchestrator:
             name="update_agenda_item",
             function=agenda.update_item,
             description=(
-                "Update an existing homework/project/event item: "
+                "Update an existing homework/project/event/commitment item: "
                 "progress, done state, reschedule, or a note. This is "
                 "where the ANSWER to a question FRED asked about "
                 "something overdue or upcoming actually gets recorded — "
@@ -2315,7 +2319,7 @@ class FREDOrchestrator:
             name="delete_agenda_item",
             function=agenda.delete_item,
             description=(
-                "Remove a homework/project/event item outright — for "
+                "Remove a homework/project/event/commitment item outright — for "
                 "something logged wrong (two things merged into one, "
                 "the wrong kind, a duplicate). Not for marking "
                 "something done — use update_agenda_item's done for "

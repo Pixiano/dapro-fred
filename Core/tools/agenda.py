@@ -70,7 +70,7 @@ def _find_candidates(match: str, items: list) -> list:
     return [i for i in items if combined(i) in close]
 
 _ITEMS_HEADING = "## Items"
-_KINDS = ("homework", "project", "event")
+_KINDS = ("homework", "project", "event", "commitment")
 
 
 # =========================================================
@@ -234,7 +234,7 @@ def _describe(item: dict, now: datetime = None) -> str:
         describe_when(item["when"], now) if item.get("has_time")
         else _describe_date(item["when"], now)
     )
-    anchor = "starts" if kind == "event" else "due"
+    anchor = "starts" if kind == "event" else "by" if kind == "commitment" else "due"
 
     head = item["subject"]
     if item.get("detail"):
@@ -422,7 +422,7 @@ def add_item(kind: str, subject: str, detail: str = "", count: int = None,
     subject = (subject or "").strip()
 
     if kind not in _KINDS:
-        return f"\"{kind}\" isn't something I track, sir — homework, project, or event."
+        return f"\"{kind}\" isn't something I track, sir — homework, project, event, or commitment."
     if not subject:
         return "I need a subject or title to log this against, sir."
 

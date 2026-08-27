@@ -212,6 +212,7 @@ def _check(notify):
     if fc.get("last_interaction_iso") != last_interaction.isoformat():
         fc["last_interaction_iso"] = last_interaction.isoformat()
         fc["threshold_minutes"] = FOCUS_CHECKIN_BASE_MINUTES
+        fc["fired_at_iso"] = None
         _save_state(state)
         return
 
@@ -219,8 +220,16 @@ def _check(notify):
         return
 
     threshold = fc.get("threshold_minutes", FOCUS_CHECKIN_BASE_MINUTES)
-    idle_minutes = (datetime.now() - last_interaction).total_seconds() / 60
-    if idle_minutes < threshold:
+
+    # Backoff from the last actual fire, not the fixed last_interaction
+    # anchor — idle-since-interaction only grows, so gating on that alone
+    # against a merely-larger threshold never holds once first cleared
+    # (poll interval > threshold step). Before any fire this cycle, anchor
+    # on last_interaction same as before.
+    fired_at_iso = fc.get("fired_at_iso")
+    anchor = datetime.fromisoformat(fired_at_iso) if fired_at_iso else last_interaction
+    elapsed_minutes = (datetime.now() - anchor).total_seconds() / 60
+    if elapsed_minutes < threshold:
         return
 
     frame = _capture_frame()
@@ -234,7 +243,10 @@ def _check(notify):
 
     notify(reply, title="Focus check-in")
     # Only grows on an actual fire — a silent (NO_OBSERVATION) tick stays
-    # at the same threshold and may try again next poll, still gated on
-    # presence + no new interaction.
+    # at the same threshold/anchor and may try again next poll, still gated
+    # on presence + no new interaction. fired_at re-anchors the backoff to
+    # this fire, so the grown threshold is measured from here, not the
+    # stale interaction timestamp.
     fc["threshold_minutes"] = threshold + FOCUS_CHECKIN_STEP_MINUTES
+    fc["fired_at_iso"] = datetime.now().isoformat()
     _save_state(state)

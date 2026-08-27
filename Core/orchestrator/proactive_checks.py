@@ -469,8 +469,13 @@ def check_agenda_carryover(on_agenda_ask=None):
         subject = item["subject"] + (f", {item['detail']}" if item["detail"] else "")
         overdue = (datetime.now().date() - item["when"].date()).days > 0
         phrase = "was due" if overdue else "was due today"
+        ask = (
+            "did you get to it, or does it still need doing?"
+            if item["kind"] == "commitment"
+            else "did you finish it, or find a workaround?"
+        )
         notify(
-            f"Sir, {subject} {phrase} — did you finish it, or find a workaround?",
+            f"Sir, {subject} {phrase} — {ask}",
             title="Check-in",
         )
         notified[key] = True
