@@ -39,6 +39,7 @@ from config.settings import (
     PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_POLL_SECONDS,
     PROACTIVE_CAMERA_OBSTRUCTION_STREAK,
+    PROACTIVE_BEHIND_YOU_DEBOUNCE,
 )
 from input import presence
 from orchestrator import focus_checkin, headphone_watch, reflection, sleep_mode
@@ -786,6 +787,64 @@ _PRESENCE_GREETINGS = (
 )
 
 
+# "Someone's behind you" awareness alert — the opposite of security_
+# watch.py's stranger-lockdown check, which only fires when Vatsal is
+# NOT present. Any second face in frame while he IS present counts,
+# known family or unrecognized alike — deliberately not reasoning about
+# gaze/head-pose direction, Vatsal's own explicit choice 2026-08-28. The
+# literal "Sir. " opener (a real sentence break, not just a comma) is
+# his own ask too, for a startled-then-informed cadence rather than a
+# single rushed line.
+#
+# TODO (deferred, Vatsal's own note): differentiate phrasing once the
+# second face is a RECOGNIZED family member vs a stranger — for now
+# these stay generic regardless of which.
+_BEHIND_YOU_PHRASES = (
+    "Sir. Someone's right behind you.",
+    "Sir. You've got company behind you.",
+    "Sir. Someone just stepped in behind you.",
+    "Sir. Heads up — there's someone right there.",
+)
+
+# Consecutive qualifying check_presence polls, in-memory only — same
+# "restart is a real event" streak-debounce shape as
+# security_watch._stranger_streak, avoiding a single misclassified
+# frame triggering this.
+_behind_you_streak = 0
+_behind_you_fired_this_episode = False
+
+
+def _check_behind_you():
+    """Bypasses this module's own notify() (naturalness gate + sleep-
+    mode) entirely — goes straight to utils.notifier.notify, same
+    precedent check_camera_obstruction sets below for the same reason:
+    this is an awareness alert, waiting for a "good moment" or for sleep
+    mode to lift defeats the point. Dedup is once per "episode" — the
+    fired flag resets the instant the extra face leaves frame, so a new
+    visitor later still gets a fresh alert."""
+    global _behind_you_streak, _behind_you_fired_this_episode
+
+    if not presence.is_present():
+        _behind_you_streak = 0
+        _behind_you_fired_this_episode = False
+        return
+
+    classification = presence.last_classification()
+    someone_else = bool(classification.get("known_people")) or classification.get("unrecognized", False)
+
+    if not someone_else:
+        _behind_you_streak = 0
+        _behind_you_fired_this_episode = False
+        return
+
+    _behind_you_streak += 1
+    if _behind_you_streak < PROACTIVE_BEHIND_YOU_DEBOUNCE or _behind_you_fired_this_episode:
+        return
+
+    _real_notify(random.choice(_BEHIND_YOU_PHRASES), title="Heads up")
+    _behind_you_fired_this_episode = True
+
+
 def check_presence():
     """
     Polls the camera for who's in frame — see input/presence.py's
@@ -826,6 +885,11 @@ def check_presence():
         _update_interruptibility()
     except Exception as e:
         event_log.log_error("proactive_interruptibility", e)
+
+    try:
+        _check_behind_you()
+    except Exception as e:
+        event_log.log_error("proactive_behind_you", e)
 
     sleep_mode.on_presence_poll(present, greeting=random.choice(_PRESENCE_GREETINGS))
 

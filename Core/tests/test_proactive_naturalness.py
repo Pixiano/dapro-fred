@@ -26,6 +26,9 @@ def _reset_gate_state(monkeypatch):
     monkeypatch.setattr(pc, "_last_media_playing", False)
     monkeypatch.setattr(pc, "_task_boundary_this_tick", False)
     monkeypatch.setattr(pc, "PROACTIVE_INTERRUPT_STREAK", 3)
+    monkeypatch.setattr(pc, "_behind_you_streak", 0)
+    monkeypatch.setattr(pc, "_behind_you_fired_this_episode", False)
+    monkeypatch.setattr(pc, "PROACTIVE_BEHIND_YOU_DEBOUNCE", 2)
 
 
 def _tick(monkeypatch, present, media_playing, title):
@@ -110,3 +113,107 @@ def test_notify_urgent_bypasses_the_gate(monkeypatch):
 
     pc.notify("hello", title="Test", urgent=True)  # bypasses the gate
     assert calls == [("hello",)]
+
+
+# =========================================================
+# "SOMEONE'S BEHIND YOU" ALERT (_check_behind_you) -- fires only when
+# present AND an extra face is classified, debounced across
+# PROACTIVE_BEHIND_YOU_DEBOUNCE polls, once per "episode" (resets the
+# instant the extra face leaves frame). Bypasses proactive_checks.notify()
+# entirely (goes straight to _real_notify), so these tests patch
+# pc._real_notify directly, not pc.notify.
+# =========================================================
+
+def _behind_you_calls(monkeypatch):
+    calls = []
+    monkeypatch.setattr(pc, "_real_notify", lambda *a, **k: calls.append(a))
+    return calls
+
+
+def test_behind_you_requires_both_present_and_extra_face(monkeypatch):
+    calls = _behind_you_calls(monkeypatch)
+    monkeypatch.setattr(pc.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        pc.presence, "last_classification",
+        lambda: {"known_people": [], "unrecognized": False},
+    )
+
+    for _ in range(5):
+        pc._check_behind_you()
+
+    assert calls == []  # present, but nobody else in frame -- never fires
+
+
+def test_behind_you_debounces_across_polls_then_fires(monkeypatch):
+    calls = _behind_you_calls(monkeypatch)
+    monkeypatch.setattr(pc.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        pc.presence, "last_classification",
+        lambda: {"known_people": [], "unrecognized": True},
+    )
+
+    for _ in range(pc.PROACTIVE_BEHIND_YOU_DEBOUNCE - 1):
+        pc._check_behind_you()
+        assert calls == []  # not enough consecutive polls yet
+
+    pc._check_behind_you()
+    assert len(calls) == 1
+    assert calls[0][0].startswith("Sir. ")
+
+
+def test_behind_you_does_not_refire_within_same_episode(monkeypatch):
+    calls = _behind_you_calls(monkeypatch)
+    monkeypatch.setattr(pc.presence, "is_present", lambda: True)
+    monkeypatch.setattr(
+        pc.presence, "last_classification",
+        lambda: {"known_people": ["Mom"], "unrecognized": False},
+    )
+
+    for _ in range(pc.PROACTIVE_BEHIND_YOU_DEBOUNCE):
+        pc._check_behind_you()
+    assert len(calls) == 1
+
+    pc._check_behind_you()  # extra face still in frame -- same episode
+    assert len(calls) == 1
+
+
+def test_behind_you_refires_for_a_new_episode(monkeypatch):
+    calls = _behind_you_calls(monkeypatch)
+    monkeypatch.setattr(pc.presence, "is_present", lambda: True)
+
+    someone_present = lambda: {"known_people": [], "unrecognized": True}
+    nobody_else = lambda: {"known_people": [], "unrecognized": False}
+
+    monkeypatch.setattr(pc.presence, "last_classification", someone_present)
+    for _ in range(pc.PROACTIVE_BEHIND_YOU_DEBOUNCE):
+        pc._check_behind_you()
+    assert len(calls) == 1
+
+    # Extra face leaves frame -- episode ends, streak/fired flag reset.
+    monkeypatch.setattr(pc.presence, "last_classification", nobody_else)
+    pc._check_behind_you()
+    assert len(calls) == 1
+
+    # A new visitor shows up later -- fresh episode, fires again.
+    monkeypatch.setattr(pc.presence, "last_classification", someone_present)
+    for _ in range(pc.PROACTIVE_BEHIND_YOU_DEBOUNCE):
+        pc._check_behind_you()
+    assert len(calls) == 2
+
+
+def test_behind_you_resets_streak_when_not_present(monkeypatch):
+    calls = _behind_you_calls(monkeypatch)
+    monkeypatch.setattr(
+        pc.presence, "last_classification",
+        lambda: {"known_people": [], "unrecognized": True},
+    )
+
+    monkeypatch.setattr(pc.presence, "is_present", lambda: True)
+    pc._check_behind_you()  # streak -> 1, one shy of debounce (2)
+
+    monkeypatch.setattr(pc.presence, "is_present", lambda: False)
+    pc._check_behind_you()  # not present -- resets, never fires
+
+    monkeypatch.setattr(pc.presence, "is_present", lambda: True)
+    pc._check_behind_you()  # streak restarts from 0, not from the earlier 1
+    assert calls == []

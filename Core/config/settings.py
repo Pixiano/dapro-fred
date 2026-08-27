@@ -1500,6 +1500,16 @@ SECURITY_STRANGER_DEBOUNCE = 5
 # as it goes without a faster dedicated poll).
 PROACTIVE_INTERRUPT_STREAK = 1
 
+# "Someone's behind you" awareness alert (orchestrator/proactive_checks.py's
+# _check_behind_you) -- Vatsal's own idea 2026-08-28, the opposite of
+# security_watch.py's stranger-lockdown check (only fires when he's NOT
+# present): alerts instantly if a second face joins the frame while he
+# IS present. Consecutive qualifying PRESENCE_POLL_SECONDS polls
+# required before it actually speaks. 2 * 10s = ~20s, enough to rule out
+# a single misclassified frame while still feeling immediate for the
+# "you have company" use case.
+PROACTIVE_BEHIND_YOU_DEBOUNCE = 2
+
 # =========================================================
 # TOOL SETTINGS
 # =========================================================
