@@ -57,6 +57,24 @@ assert sent["messages"][0]["content"][1] == {"type": "text", "text": "What's her
 assert sent["max_tokens"] == 150
 
 
+# system_prompt, when given, becomes a leading system message; the image+
+# text user message still follows it, unshifted from the no-system case.
+vs.ensure_running = lambda *a, **kw: True
+vs.urllib.request.urlopen = lambda req, timeout=None: (
+    captured_request.update(req=req)
+    or _FakeResponse({"choices": [{"message": {"content": "ok"}}]})
+)
+try:
+    vs.describe_image("data:image/png;base64,AAAA", "What's here?", system_prompt="Be terse.")
+finally:
+    vs.ensure_running = _real_ensure_running
+    vs.urllib.request.urlopen = _real_urlopen
+
+sent = json.loads(captured_request["req"].data)
+assert sent["messages"][0] == {"role": "system", "content": "Be terse."}, sent
+assert sent["messages"][1]["content"][1] == {"type": "text", "text": "What's here?"}
+
+
 # ensure_running() must not spawn anything when already healthy.
 _real_is_healthy = vs._is_healthy
 _real_popen = vs.subprocess.Popen

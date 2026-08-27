@@ -109,7 +109,8 @@ def ensure_running(startup_timeout: float = 30.0) -> bool:
 
 
 def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
-                    timeout: float = 60.0, thinking_signal_text: str = None) -> str:
+                    timeout: float = 60.0, thinking_signal_text: str = None,
+                    system_prompt: str = None) -> str:
     """
     Same call shape as the old in-process describe_image() local
     fallback: one-shot image + prompt, plain string back.
@@ -141,14 +142,19 @@ def describe_image(image_data_uri: str, prompt: str, max_tokens: int = 200,
     effective_max_tokens = max(max_tokens, 800) if enable_thinking else max_tokens
     effective_timeout = max(timeout, 120.0) if enable_thinking else timeout
 
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": image_data_uri}},
+            {"type": "text", "text": prompt},
+        ],
+    })
+
     payload = {
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": image_data_uri}},
-                {"type": "text", "text": prompt},
-            ],
-        }],
+        "messages": messages,
         "max_tokens": effective_max_tokens,
         "temperature": 0.2,
         "chat_template_kwargs": {"enable_thinking": enable_thinking},

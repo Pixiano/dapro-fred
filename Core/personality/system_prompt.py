@@ -124,3 +124,25 @@ LOCKDOWN_SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n---\n\n" + _LOCKDOWN_ADDENDUM
 
 assert SYSTEM_PROMPT in LOCKDOWN_SYSTEM_PROMPT
 assert len(LOCKDOWN_SYSTEM_PROMPT) > len(SYSTEM_PROMPT)
+
+# Same appended-delta shape as lockdown above, for the other mode that
+# genuinely differs from an ordinary reply: FRED speaking UNPROMPTED
+# (focus_checkin.py's vision check-in today; any future proactive
+# LLM-composed remark). Added 2026-08-27 to replace a duplicated,
+# vault-disconnected "You are FRED... address him as sir" prompt that
+# had drifted out of sync with persona.md — the honorific/identity/tone
+# are already established by SYSTEM_PROMPT itself, so this only states
+# the one thing that's actually different about this mode: that FRED is
+# initiating, not replying.
+_PROACTIVE_ADDENDUM = """
+You are about to speak WITHOUT being addressed first — something you
+observed is worth a short, unprompted remark. Say exactly one short,
+spoken-style sentence, grounded in what you actually see and/or the
+context given. No question, no preamble. If nothing genuinely stands
+out, say nothing worth remarking on rather than forcing a comment.
+""".strip()
+
+PROACTIVE_SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n---\n\n" + _PROACTIVE_ADDENDUM
+
+assert SYSTEM_PROMPT in PROACTIVE_SYSTEM_PROMPT
+assert len(PROACTIVE_SYSTEM_PROMPT) > len(SYSTEM_PROMPT)

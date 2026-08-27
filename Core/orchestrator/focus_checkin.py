@@ -165,27 +165,32 @@ def _ask_vision(photo_path, digest: str) -> str:
     """The ONLY vision call this module makes — always local
     vision_server.describe_image(), see the module docstring's privacy
     constraint. Prompted to answer NO_OBSERVATION verbatim when nothing
-    stands out, so a comment is the exception, not the default."""
+    stands out, so a comment is the exception, not the default.
+
+    Identity/tone/honorific come from personality.PROACTIVE_SYSTEM_PROMPT
+    (persona.md + the unprompted-speech addendum) rather than being
+    hand-rolled here — this prompt used to duplicate "You are FRED...
+    address him as sir" standalone, disconnected from the vault and
+    liable to drift out of sync with it. Only the situational bits
+    (why this photo was taken, the NO_OBSERVATION sentinel) stay here."""
     from llm import vision_server
+    from personality.system_prompt import PROACTIVE_SYSTEM_PROMPT
 
     data = base64.b64encode(photo_path.read_bytes()).decode("ascii")
     uri = f"data:image/jpeg;base64,{data}"
 
     prompt = (
-        "You are FRED, a voice assistant. This photo was just captured "
-        "because Vatsal (address him as 'sir') has been sitting at his "
-        "desk but hasn't interacted with you in a while. Context from his "
-        f"recent sessions:\n\n{digest}\n\n"
+        "This photo was just captured because Vatsal has been sitting at "
+        "his desk but hasn't interacted with you in a while. Context from "
+        f"his recent sessions:\n\n{digest}\n\n"
         f"Look at the photo. If nothing about it or the context above is "
         f"genuinely worth a short spoken remark, respond with exactly "
-        f"{_NO_OBSERVATION} and nothing else. Otherwise respond with "
-        "exactly one short, spoken-style sentence addressed to him as "
-        "sir, grounded in what you actually see and/or the context above "
-        "— for example noticing what he seems focused on, or a pattern "
-        "across recent sessions. No question, no preamble, one sentence."
+        f"{_NO_OBSERVATION} and nothing else."
     )
 
-    return vision_server.describe_image(uri, prompt, max_tokens=80)
+    return vision_server.describe_image(
+        uri, prompt, max_tokens=80, system_prompt=PROACTIVE_SYSTEM_PROMPT
+    )
 
 
 def check(notify):
