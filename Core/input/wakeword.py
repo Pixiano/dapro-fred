@@ -31,7 +31,7 @@ import numpy as np
 import sounddevice as sd
 
 from config.settings import WAKEWORD_MODEL_PATH, WAKEWORD_THRESHOLD
-from input import wakeword_log
+from input import voice_activity, wakeword_log
 
 CHUNK = 1280  # 80ms @ 16kHz — openwakeword's required frame size
 SR = 16000
@@ -172,6 +172,18 @@ class WakewordListener:
         block = np.clip(block * self._agc_gain, -1.0, 1.0)
 
         int16_block = np.clip(block * 32767, -32768, 32767).astype(np.int16)
+
+        # Feed the same int16 block openwakeword is about to score to
+        # voice_activity.py's rolling detector too -- no second capture
+        # pipeline, see that module's docstring. Failure here must never
+        # take down wake-word detection itself, same as predict_error
+        # below; this whole callback already has a last-resort catch-all
+        # in _callback, but that would also skip the predict() call this
+        # block leads into, so this gets its own narrow guard.
+        try:
+            voice_activity.feed_chunk(int16_block)
+        except Exception as e:
+            wakeword_log.log_event("voice_activity_feed_error", message=str(e))
 
         try:
             scores = self._oww.predict(int16_block)
