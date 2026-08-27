@@ -1329,6 +1329,19 @@ PRESENCE_ABSENT_DEBOUNCE = 9
 # once real presence_no_face_person_failsafe log confidences come in.
 PRESENCE_YOLO_PERSON_CONFIDENCE = 0.5
 
+# Cap on consecutive polls presence can be sustained by the no-face YOLO
+# fail-safe ALONE (no real face match in between) before it stops being
+# trusted and normal absence handling resumes. Original version was
+# unbounded — Vatsal's own call 2026-08-28: a YOLO "person" detection
+# doesn't confirm identity, so trusting it forever could mask him
+# actually leaving (someone else now in frame) or suppress
+# security_watch.py's stranger loop (which only runs when NOT present)
+# indefinitely. 30 * PRESENCE_POLL_SECONDS (10s) = 5 minutes — long
+# enough for a normal heads-down writing/reading stretch, short enough
+# that a real stranger-in-frame or Vatsal-actually-left scenario isn't
+# masked indefinitely.
+PRESENCE_YOLO_FAILSAFE_MAX_POLLS = 30
+
 # Symmetrical debounce for the return trip: consecutive present/match
 # polls required before treating a return as real — i.e. before
 # sleep_mode.py exits sleep mode / fires the wake greeting, and before

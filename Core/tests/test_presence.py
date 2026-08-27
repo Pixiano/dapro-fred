@@ -309,3 +309,57 @@ def test_no_face_no_person_reports_absent(monkeypatch):
     assert present is False  # empty frame, no fail-safe applies
     assert matched_face is None
     assert matched_tier is None
+
+
+def test_no_face_person_failsafe_stops_holding_present_after_cap(monkeypatch):
+    monkeypatch.setattr(presence, "_get_analyzer", lambda: _types.SimpleNamespace(get=lambda frame: []))
+    monkeypatch.setattr(presence, "_state_cache", {"present": True, "last_seen": None, "last_checked": None})
+    monkeypatch.setattr(presence, "_frame_has_person", lambda frame: (True, 0.8))
+    monkeypatch.setattr(presence, "PRESENCE_YOLO_FAILSAFE_MAX_POLLS", 3)
+    monkeypatch.setattr(presence, "_yolo_failsafe_streak", 0)
+
+    for _ in range(3):
+        present, _, _ = presence._frame_matches_enrollment("frame")
+        assert present is True
+
+    # 4th consecutive no-face-only poll exceeds the cap -> genuine absence,
+    # even though _frame_has_person still says a blob is there.
+    present, matched_face, matched_tier = presence._frame_matches_enrollment("frame")
+    assert present is False
+    assert matched_face is None
+    assert matched_tier is None
+
+
+def test_real_face_match_resets_the_yolo_failsafe_streak(monkeypatch):
+    monkeypatch.setattr(presence, "_state_cache", {"present": True, "last_seen": None, "last_checked": None})
+    monkeypatch.setattr(presence, "_frame_has_person", lambda frame: (True, 0.8))
+    monkeypatch.setattr(presence, "PRESENCE_YOLO_FAILSAFE_MAX_POLLS", 2)
+    monkeypatch.setattr(presence, "_yolo_failsafe_streak", 0)
+
+    no_face = _types.SimpleNamespace(get=lambda frame: [])
+    monkeypatch.setattr(presence, "_get_analyzer", lambda: no_face)
+
+    presence._frame_matches_enrollment("frame")  # no-face fail-safe -> streak 1
+    assert presence._yolo_failsafe_streak == 1
+
+    # A real face match happens in between.
+    matched_face = _FakeFace(0.9)
+    monkeypatch.setattr(
+        presence, "_get_analyzer",
+        lambda: _types.SimpleNamespace(get=lambda frame: [matched_face]),
+    )
+    monkeypatch.setattr(
+        presence, "_get_enrollment_embeddings",
+        lambda: {"base": [_np.array([0.9, 0.9, 0.9])], "hard": [], "dynamic": []},
+    )
+    monkeypatch.setattr(presence, "_get_family_embeddings", lambda: {})
+
+    present, face, tier = presence._frame_matches_enrollment("frame")
+    assert present is True
+    assert presence._yolo_failsafe_streak == 0  # reset by the real match
+
+    # Back to no-face fail-safe -- streak restarts from 0, not from where
+    # it left off before the match.
+    monkeypatch.setattr(presence, "_get_analyzer", lambda: no_face)
+    presence._frame_matches_enrollment("frame")
+    assert presence._yolo_failsafe_streak == 1

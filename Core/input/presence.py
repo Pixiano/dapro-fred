@@ -36,6 +36,7 @@ from config.settings import (
     PRESENCE_DYNAMIC_EMBEDDINGS_CAP,
     PRESENCE_MATCH_THRESHOLD_HIGH,
     PRESENCE_PRESENT_DEBOUNCE,
+    PRESENCE_YOLO_FAILSAFE_MAX_POLLS,
     PRESENCE_YOLO_PERSON_CONFIDENCE,
 )
 from input import presence_log
@@ -90,6 +91,18 @@ _last_classification = {"known_people": [], "unrecognized": False}
 # closes for the greeting/sleep-exit path. See PRESENCE_PRESENT_DEBOUNCE's
 # comment in settings.py.
 _present_streak = 0
+
+# Consecutive polls where presence was sustained ONLY via the no-face
+# YOLO-person fail-safe below (never a real face match in between),
+# in-memory only, same "restart is a real event" convention. A YOLO
+# "person" detection doesn't confirm identity, so trusting it forever
+# would mask Vatsal actually leaving (if someone else is now in frame)
+# or suppress security_watch.py's stranger loop indefinitely — capped at
+# PRESENCE_YOLO_FAILSAFE_MAX_POLLS, Vatsal's own call 2026-08-28 that
+# the original unbounded version was too permissive. Reset to 0 by any
+# real face match; incremented each poll the fail-safe alone is why
+# presence stayed True.
+_yolo_failsafe_streak = 0
 
 
 def _get_analyzer():
@@ -418,7 +431,7 @@ def _frame_matches_enrollment(frame):
     present is False."""
     faces = _get_analyzer().get(frame)
 
-    global _last_classification
+    global _last_classification, _yolo_failsafe_streak
     _last_classification = _classify_family(faces)
 
     last_state = is_present()
@@ -431,11 +444,20 @@ def _frame_matches_enrollment(frame):
         # match (no embedding to accumulate). PRESENCE_ABSENT_DEBOUNCE
         # stays the backstop for genuine absence either way.
         has_person, confidence = _frame_has_person(frame)
-        if has_person:
-            event_log.log("presence_no_face_person_failsafe",
-                           confidence=round(confidence, 3), fallback_to_last_state=last_state)
-            if last_state:
+        if has_person and last_state:
+            if _yolo_failsafe_streak < PRESENCE_YOLO_FAILSAFE_MAX_POLLS:
+                _yolo_failsafe_streak += 1
+                event_log.log("presence_no_face_person_failsafe",
+                               confidence=round(confidence, 3), fallback_to_last_state=last_state,
+                               streak=_yolo_failsafe_streak)
                 return True, None, None
+            # Cap exceeded — a YOLO "person" doesn't confirm identity, so
+            # trusting it indefinitely could mask Vatsal actually leaving
+            # (someone else now in frame) or suppress security_watch.py's
+            # stranger loop forever. Stop holding present; normal absence
+            # handling (PRESENCE_ABSENT_DEBOUNCE) resumes from here.
+            event_log.log("presence_no_face_person_failsafe_capped",
+                           confidence=round(confidence, 3), streak=_yolo_failsafe_streak)
         return False, None, None
 
     embeddings_by_tier = _get_enrollment_embeddings()
@@ -443,6 +465,9 @@ def _frame_matches_enrollment(frame):
     for face in faces:
         similarity, tier = _best_similarity(face.normed_embedding, embeddings_by_tier)
         if similarity >= PRESENCE_MATCH_THRESHOLD_HIGH:
+            # Real confirmed match -- resets the YOLO fail-safe streak,
+            # same reasoning as its own comment above.
+            _yolo_failsafe_streak = 0
             # pose = [pitch, yaw, roll] degrees, already computed by
             # buffalo_l's 1k3d68 landmark model on every detected face —
             # logged only, no decision built on it yet (plan_perception_
@@ -465,6 +490,7 @@ def _frame_matches_enrollment(frame):
         # being skipped cheaply — accepted, not a reported problem yet.
         verdict = _vision_fallback_is_match(frame)
         if verdict is True:
+            _yolo_failsafe_streak = 0  # real confirmed match, same as the HIGH-similarity branch above
             event_log.log("presence_match", similarity=round(similarity, 3), tier=tier,
                            via_vision_fallback=True)
             return True, face, tier
