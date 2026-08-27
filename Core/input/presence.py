@@ -443,7 +443,14 @@ def _frame_matches_enrollment(frame):
     for face in faces:
         similarity, tier = _best_similarity(face.normed_embedding, embeddings_by_tier)
         if similarity >= PRESENCE_MATCH_THRESHOLD_HIGH:
-            event_log.log("presence_match", similarity=round(similarity, 3), tier=tier)
+            # pose = [pitch, yaw, roll] degrees, already computed by
+            # buffalo_l's 1k3d68 landmark model on every detected face —
+            # logged only, no decision built on it yet (plan_perception_
+            # features_2026-08-25.md's wave-1 scope: confirm real values
+            # behave sensibly before using them for anything).
+            pose = face.get("pose")
+            event_log.log("presence_match", similarity=round(similarity, 3), tier=tier,
+                           pose=pose.tolist() if pose is not None else None)
             return True, face, tier
 
         # Below HIGH always goes to the vision model now — Vatsal's own

@@ -45,8 +45,11 @@ import types as _types
 import numpy as _np
 
 
-class _FakeFace:
+class _FakeFace(dict):
+    """dict subclass, matching insightface's real Face(dict) shape --
+    presence.py reads face.get("pose") on a confirmed match."""
     def __init__(self, value):
+        super().__init__()
         self.normed_embedding = _np.array([value, value, value])
 
 
