@@ -3,6 +3,49 @@
 Running log of work completed this session, appended as it lands. See
 `TODO.md` for what's still pending/deferred.
 
+## 2026-08-28 (review-driven fixes, built by a fork per Vatsal's own instruction)
+
+Vatsal reviewed the 5 things built earlier today (focus_checkin backoff,
+commitment agenda kind, YOLO presence fail-safe, naturalness gate, system
+prompt modes) and gave specific corrections. All 5 built by a delegated
+agent, not the parent session, per his explicit "set an agent to build
+them, not you."
+
+- **Capped focus_checkin's backoff at 3h, reset every 12h**
+  (`Core/orchestrator/focus_checkin.py`). Unbounded growth basically
+  stopped nagging by hour 3+; a 12h periodic reset (new `cycle_started_iso`
+  state field) stops an all-day quiet stretch from sitting at the cap
+  forever. `FOCUS_CHECKIN_MAX_MINUTES=180`, `FOCUS_CHECKIN_RESET_HOURS=12`.
+  Commit `5e47a18`.
+- **Commitment agenda items nag less, dismiss easier**
+  (`Core/orchestrator/proactive_checks.py`, `Core/orchestrator/orchestrator.py`).
+  `check_agenda_carryover` now re-asks about a commitment only every 3rd
+  day of carryover (homework/project unchanged, still daily);
+  `update_agenda_item`'s `done` description now explicitly covers a
+  casual "never mind" dismissal instead of implying only "fully done".
+  Commit `45680c8`.
+- **Capped the YOLO no-face presence fail-safe** (`Core/input/presence.py`).
+  Was unbounded — could mask Vatsal actually leaving or suppress
+  security_watch's stranger loop indefinitely if YOLO kept seeing any
+  person-shaped blob. New `_yolo_failsafe_streak` counter, reset by any
+  real face match, capped at `PRESENCE_YOLO_FAILSAFE_MAX_POLLS` (30,
+  ~5 minutes) before normal absence handling resumes. Commit `7f8161e`.
+- **Shortened the naturalness-gate wait to ~10s**
+  (`Core/config/settings.py`). `PROACTIVE_INTERRUPT_STREAK` 3 → 1 — the
+  30s wait felt too slow in practice. Commit `434ee84`.
+- **New "someone's behind you" awareness alert**
+  (`Core/orchestrator/proactive_checks.py`). The opposite of
+  security_watch's stranger-lockdown check: alerts instantly (bypasses
+  both the naturalness gate and sleep-mode gate) if a second face joins
+  the frame while Vatsal IS present — any second face counts, not just
+  unrecognized ones, no gaze-direction reasoning (Vatsal's explicit
+  simpler-is-better call). Debounced 2 polls (~20s), deduped once per
+  "episode". Phrasing starts with a literal "Sir. " for a deliberate
+  pause. Recognized-vs-stranger phrasing split explicitly deferred.
+  `PROACTIVE_BEHIND_YOU_DEBOUNCE=2`. Commit `2c2fca0`.
+
+Full suite: 618 passed (was 604 before this batch).
+
 ## 2026-08-28
 
 - **Added the proactivity naturalness gate** (`Core/orchestrator/proactive_checks.py`)
