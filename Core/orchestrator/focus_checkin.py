@@ -28,10 +28,12 @@
 
 import base64
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from config.settings import (
     FOCUS_CHECKIN_BASE_MINUTES,
+    FOCUS_CHECKIN_MAX_MINUTES,
+    FOCUS_CHECKIN_RESET_HOURS,
     FOCUS_CHECKIN_STEP_MINUTES,
     PROACTIVE_STATE_PATH,
     VAULT_DIR,
@@ -218,10 +220,26 @@ def _check(notify):
         fc["last_interaction_iso"] = last_interaction.isoformat()
         fc["threshold_minutes"] = FOCUS_CHECKIN_BASE_MINUTES
         fc["fired_at_iso"] = None
+        fc["cycle_started_iso"] = datetime.now().isoformat()
         _save_state(state)
         return
 
     if not presence.is_present():
+        return
+
+    # Periodic reset independent of any real interaction — Vatsal's own
+    # call 2026-08-28: without this, an all-day present-but-quiet stretch
+    # sits at FOCUS_CHECKIN_MAX_MINUTES forever once it grows there.
+    # cycle_started_iso is set on every reset (interaction-triggered
+    # above, or this one); missing (first run / old state) falls back to
+    # last_interaction, same default the anchor below already uses.
+    cycle_started_iso = fc.get("cycle_started_iso")
+    cycle_started = datetime.fromisoformat(cycle_started_iso) if cycle_started_iso else last_interaction
+    if datetime.now() - cycle_started >= timedelta(hours=FOCUS_CHECKIN_RESET_HOURS):
+        fc["threshold_minutes"] = FOCUS_CHECKIN_BASE_MINUTES
+        fc["fired_at_iso"] = None
+        fc["cycle_started_iso"] = datetime.now().isoformat()
+        _save_state(state)
         return
 
     threshold = fc.get("threshold_minutes", FOCUS_CHECKIN_BASE_MINUTES)
@@ -252,6 +270,6 @@ def _check(notify):
     # on presence + no new interaction. fired_at re-anchors the backoff to
     # this fire, so the grown threshold is measured from here, not the
     # stale interaction timestamp.
-    fc["threshold_minutes"] = threshold + FOCUS_CHECKIN_STEP_MINUTES
+    fc["threshold_minutes"] = min(threshold + FOCUS_CHECKIN_STEP_MINUTES, FOCUS_CHECKIN_MAX_MINUTES)
     fc["fired_at_iso"] = datetime.now().isoformat()
     _save_state(state)

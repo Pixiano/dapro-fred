@@ -52,6 +52,62 @@ def test_threshold_grows_by_step_on_repeated_fires(monkeypatch):
     assert len(calls) == 1
 
 
+def test_threshold_never_exceeds_max(monkeypatch):
+    interaction_time = datetime.now() - timedelta(minutes=200)
+    monkeypatch.setattr(fc, "_last_interaction_at", lambda: interaction_time)
+    monkeypatch.setattr(fc.presence, "is_present", lambda: True)
+    monkeypatch.setattr(fc, "_capture_frame", lambda: object())
+    monkeypatch.setattr(fc, "_save_frame", lambda frame: "fake_path")
+    monkeypatch.setattr(fc, "_build_digest", lambda: "digest")
+    monkeypatch.setattr(fc, "_ask_vision", lambda photo, digest: "You look focused, sir.")
+
+    calls = []
+    notify = lambda *a, **k: calls.append(a)
+
+    fc.check(notify)  # record
+
+    # Seed state just under the cap, fired long enough ago (and cycle
+    # started recently, so the 12h reset doesn't interfere) to be
+    # eligible to fire again this tick.
+    state = json.loads(fc.PROACTIVE_STATE_PATH.read_text(encoding="utf-8"))
+    state["focus_checkin"]["threshold_minutes"] = fc.FOCUS_CHECKIN_MAX_MINUTES - 5
+    state["focus_checkin"]["fired_at_iso"] = (
+        datetime.now() - timedelta(minutes=fc.FOCUS_CHECKIN_MAX_MINUTES)
+    ).isoformat()
+    state["focus_checkin"]["cycle_started_iso"] = datetime.now().isoformat()
+    fc._save_state(state)
+
+    fc.check(notify)  # fires -- would grow past the cap without clamping
+    assert len(calls) == 1
+    state = json.loads(fc.PROACTIVE_STATE_PATH.read_text(encoding="utf-8"))
+    assert state["focus_checkin"]["threshold_minutes"] == fc.FOCUS_CHECKIN_MAX_MINUTES
+
+
+def test_12h_cycle_resets_without_real_interaction(monkeypatch):
+    interaction_time = datetime.now() - timedelta(minutes=200)
+    monkeypatch.setattr(fc, "_last_interaction_at", lambda: interaction_time)
+    monkeypatch.setattr(fc.presence, "is_present", lambda: True)
+
+    calls = []
+    notify = lambda *a, **k: calls.append(a)
+
+    fc.check(notify)  # record, sets cycle_started_iso to now
+
+    # Seed a grown threshold with a cycle_started_iso 13h in the past --
+    # same stale interaction the whole time, no real interaction reset
+    # available to lean on.
+    state = json.loads(fc.PROACTIVE_STATE_PATH.read_text(encoding="utf-8"))
+    state["focus_checkin"]["threshold_minutes"] = 150
+    state["focus_checkin"]["fired_at_iso"] = (datetime.now() - timedelta(minutes=200)).isoformat()
+    state["focus_checkin"]["cycle_started_iso"] = (datetime.now() - timedelta(hours=13)).isoformat()
+    fc._save_state(state)
+
+    fc.check(notify)  # 12h elapsed since cycle start -> resets to base, does not fire
+    assert calls == []
+    state = json.loads(fc.PROACTIVE_STATE_PATH.read_text(encoding="utf-8"))
+    assert state["focus_checkin"]["threshold_minutes"] == fc.FOCUS_CHECKIN_BASE_MINUTES
+
+
 def test_real_interaction_resets_threshold_to_base(monkeypatch):
     monkeypatch.setattr(fc.presence, "is_present", lambda: True)
     monkeypatch.setattr(fc, "_capture_frame", lambda: object())

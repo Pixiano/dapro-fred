@@ -1460,6 +1460,13 @@ HEADPHONE_CHECK_STREAK = 3
 FOCUS_CHECKIN_BASE_MINUTES = 60
 FOCUS_CHECKIN_STEP_MINUTES = 10
 
+# Ceiling on the growth above, and a periodic reset independent of any
+# real interaction — Vatsal's own call, 2026-08-28: unbounded growth
+# basically stops nagging by hour 3+ in a long session, and without a
+# reset an all-day present-but-quiet stretch sits at the cap forever.
+FOCUS_CHECKIN_MAX_MINUTES = 180
+FOCUS_CHECKIN_RESET_HOURS = 12
+
 # Stranger-detection loop (orchestrator/security_watch.py): its own
 # separate 5s poll, deliberately NOT the shared 15s presence poll (see
 # that module's docstring for the accepted camera-contention tradeoff).
