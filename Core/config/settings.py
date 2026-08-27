@@ -1494,10 +1494,11 @@ SECURITY_STRANGER_DEBOUNCE = 5
 # ticks (present + no media playing) required before an ordinary
 # opinion-nudge is allowed to actually speak — calm technology, per
 # plan_perception_features_2026-08-25.md's "Proactivity naturalness
-# principles". 3 * 10s = 30s of a genuine lull, not a momentary gap
-# between songs. Not yet measured against real use, same "revisit once
-# real behavior is observed" standard as PRESENCE_YOLO_PERSON_CONFIDENCE.
-PROACTIVE_INTERRUPT_STREAK = 3
+# principles". Originally 3 (30s) — Vatsal's own call 2026-08-28, felt
+# too slow in practice. 1 * 10s poll = fires on the very next good poll,
+# effectively ~10s latency (the poll cadence is fixed, so this is as low
+# as it goes without a faster dedicated poll).
+PROACTIVE_INTERRUPT_STREAK = 1
 
 # =========================================================
 # TOOL SETTINGS
