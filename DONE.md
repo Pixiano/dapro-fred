@@ -3,6 +3,23 @@
 Running log of work completed this session, appended as it lands. See
 `TODO.md` for what's still pending/deferred.
 
+## 2026-08-28
+
+- **Added the proactivity naturalness gate** (`Core/orchestrator/proactive_checks.py`)
+  — principles 2-5 from the perception-features plan doc. `notify()` now
+  requires: presence AND no other audio playing (composite + suppress-
+  busy), held for `PROACTIVE_INTERRUPT_STREAK` (3) consecutive 10s
+  polls (calm technology, security_watch.py's streak-debounce shape),
+  UNLESS a task boundary (foreground window changed, or media that was
+  playing just stopped) is observed that tick, which skips the wait.
+  Piggybacked on `check_presence`'s existing poll, no new scheduled
+  job. `notify()` gained an `urgent=True` bypass for VIP
+  messages/recent calls/headphone-switch announcements — timing-
+  sensitive or functional-status nudges that shouldn't wait for a
+  "good moment." Principle 6 (observation phrasing) checked, already
+  satisfied by existing wording, no changes made. 8 new tests
+  (`test_proactive_naturalness.py`). Commit `66df83f`.
+
 ## 2026-08-27
 
 - **Fixed `focus_checkin.py`'s refire cadence bug** (`Core/orchestrator/focus_checkin.py`).
