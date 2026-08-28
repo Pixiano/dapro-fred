@@ -3,6 +3,45 @@
 Running log of work completed this session, appended as it lands. See
 `TODO.md` for what's still pending/deferred.
 
+## 2026-08-28 (Gmail IMAP bridge, built by a fork per Vatsal's own instruction)
+
+Real Gmail API (OAuth) blocked ~1 month on Vatsal's GCP project limit —
+built the two decided Gmail features (`roadmap_pre-finetune_2026-08-26.md`
+section 3(d)) over IMAP + a Google App Password instead, as an explicit
+temporary bridge. Credential handling constraint honored throughout: the
+password never passes through Claude at any point (see below).
+
+- **`Core/tools/gmail_imap.py`** (new) — `check_missed_replies()` flags
+  an inbox email with no matching `[Gmail]/Sent Mail` reply after
+  `GMAIL_MISSED_REPLY_DAYS` (3); `check_email_deadlines()` scans recent
+  email bodies for date-like phrases (local regex, no cloud LLM call on
+  raw bodies). Both dedup via their own Message-ID seen-sets, both
+  no-op (return `""`) until credentials are set. `GMAIL_ADDRESS`/
+  `GMAIL_APP_PASSWORD` in `config/settings.py` via `os.environ.get()`,
+  same pattern as the existing `GROQ_API_KEY`. Commits `5904739`.
+- **Wired into `Core/orchestrator/proactive_checks.py`** — two new
+  checks (`check_gmail_missed_replies`/`check_gmail_deadlines`), same
+  shape as the existing `check_vip_messages`/`check_recent_calls`,
+  `urgent=True` (bypasses the naturalness gate, same reasoning as VIP
+  messages/calls), own `GMAIL_CHECK_MINUTES` (15) cadence — slower than
+  the adb checks since an IMAP round trip is heavier. Commit `873dde8`.
+- **`Core/scripts/setup_gmail_credentials.py` + `.bat`** (new) — Vatsal
+  runs this himself: `input()` for the address (not sensitive),
+  `getpass.getpass()` for the App Password (never echoed), both
+  persisted via `setx` as real Windows user env vars — never printed,
+  logged, or written to any file Claude could read. Commit `f36d41d`.
+- **9 new tests** (`test_gmail_imap.py`) — `imaplib.IMAP4_SSL` fully
+  mocked, no real network; covers missed-reply detection with/without a
+  matching sent reply, deadline-phrase detection, dedup-across-calls for
+  both, no-op without credentials, and that connection/auth failures
+  never raise. Full suite: 627 passed (was 618 before this batch).
+  Commit `8aca304`.
+- **Docs**: `TODO.md` now has the activation step (run the `.bat`,
+  restart FRED) and the future real-API swap-back note; the roadmap
+  doc's section 3(d) got a status update plus the OAuth setup steps
+  written down for whenever the GCP limit clears, since they'd
+  otherwise only have existed in chat.
+
 ## 2026-08-28 (review-driven fixes, built by a fork per Vatsal's own instruction)
 
 Vatsal reviewed the 5 things built earlier today (focus_checkin backoff,

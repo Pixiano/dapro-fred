@@ -22,3 +22,18 @@
   speech) per the source plan doc's verification standard. `webrtcvad.Vad(2)`
   is the stock "moderate" default, unmeasured. Not wired into any
   decision (presence, proactive gating) until this is done.
+
+- **Run `Core/scripts/setup_gmail_credentials.bat`** — Gmail's IMAP
+  bridge (`Core/tools/gmail_imap.py`, 2026-08-28) no-ops until
+  `GMAIL_ADDRESS`/`GMAIL_APP_PASSWORD` are set. Needs a Google App
+  Password (Google Account -> Security -> 2-Step Verification -> App
+  Passwords). Restart FRED (or open a new Command Prompt) after running
+  it — `setx` only affects new processes.
+
+- **Swap the Gmail IMAP bridge for the real Gmail API** once Vatsal's
+  GCP project limit clears (~1 month from 2026-08-28 — a deleted
+  project's slot doesn't free up immediately). `tools/gmail_imap.py` is
+  explicitly temporary; the `proactive_checks.py` wiring and dedup
+  logic can likely stay as-is, only the transport changes. See
+  `roadmap_pre-finetune_2026-08-26.md` section 3(d) for the OAuth setup
+  steps to follow when that swap happens.
