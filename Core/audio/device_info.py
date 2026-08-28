@@ -102,6 +102,31 @@ def input_extra_settings():
     return None
 
 
+def refresh_device_list():
+    """
+    PortAudio enumerates devices once at init and caches that list —
+    sd.query_devices() does NOT notice a device plugged in after the
+    process started (confirmed gap, 2026-08-28: nothing in this codebase
+    re-initialized PortAudio, so a mid-session USB mic/Bluetooth headset
+    never appeared until FRED restarted). sd._terminate()/_initialize()
+    is the standard, widely-used workaround for this exact PortAudio
+    limitation — private API, but there's no public equivalent, and it's
+    what the sounddevice community actually uses for this.
+
+    Caller's responsibility: don't call this while a stream this process
+    owns is actively open (wakeword.py's continuous InputStream, an open
+    TTS OutputStream) — re-initializing PortAudio out from under a live
+    stream is undefined behavior. Fails silently (old device list stays
+    in effect) rather than raising, so a caller that gets this wrong
+    doesn't crash — same fail-soft convention as the rest of this file.
+    """
+    try:
+        sd._terminate()
+        sd._initialize()
+    except Exception:
+        pass
+
+
 def _devices_for(channel_key: str) -> list:
     wasapi = _wasapi_index()
     devices = list(enumerate(sd.query_devices()))
@@ -112,13 +137,17 @@ def _devices_for(channel_key: str) -> list:
 
 def list_input_devices() -> list:
     """[{index, name}] for every real microphone, one entry each — for
-    the HUD's microphone dropdown."""
+    the HUD's microphone dropdown. Refreshes PortAudio's device list
+    first (see refresh_device_list) so a mic plugged in mid-session
+    actually shows up, not just whatever was there at FRED's launch."""
+    refresh_device_list()
     return _devices_for("max_input_channels")
 
 
 def list_output_devices() -> list:
     """[{index, name}] for every real speaker, one entry each — for the
-    HUD's speaker dropdown."""
+    HUD's speaker dropdown. Same mid-session refresh as list_input_devices."""
+    refresh_device_list()
     return _devices_for("max_output_channels")
 
 
@@ -196,6 +225,24 @@ if __name__ == "__main__":
          patch.object(sd, "query_hostapis", lambda: _FAKE_HOSTAPIS):
 
         _PREF_PATH = Path(tmp) / "audio_device_prefs.json"
+
+        # refresh_device_list() calls the real (private) sd._terminate/
+        # _initialize -- mock both so this self-check never touches real
+        # audio hardware, and confirm list_input_devices()/
+        # list_output_devices() actually call it (not just define it).
+        _calls = []
+        with patch.object(sd, "_terminate", lambda: _calls.append("terminate")), \
+             patch.object(sd, "_initialize", lambda: _calls.append("initialize")):
+            refresh_device_list()
+            assert _calls == ["terminate", "initialize"], _calls
+
+            _calls.clear()
+            list_input_devices()
+            assert _calls == ["terminate", "initialize"], _calls
+
+            # Never raises even if the refresh itself blows up.
+            with patch.object(sd, "_terminate", lambda: (_ for _ in ()).throw(RuntimeError("boom"))):
+                refresh_device_list()  # must not raise
 
         # Device present -> gets picked up.
         sd.default.device = (None, None)

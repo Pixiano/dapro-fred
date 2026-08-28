@@ -269,8 +269,17 @@ class WakewordListener:
             # with only a log line to say so — that hour is exactly what
             # this retry closes. apply_saved_devices() looks the
             # remembered name up among the devices present RIGHT NOW,
-            # which is what a retry after a topology change needs.
+            # which is what a retry after a topology change needs — but
+            # that list itself is only as fresh as PortAudio's own cached
+            # enumeration (see device_info.refresh_device_list's own
+            # docstring, added 2026-08-28), so a device that's genuinely
+            # NEW since FRED launched (not just reconnected under a name
+            # PortAudio already knew) still wouldn't have been found
+            # without refreshing that first. Safe here specifically
+            # because _open_stream already failed/tore down above — no
+            # live stream this process owns is open right now.
             try:
+                device_info.refresh_device_list()
                 device_info.apply_saved_devices()
             except Exception as reselect_error:
                 wakeword_log.log_event(
