@@ -3,6 +3,67 @@
 Running log of work completed this session, appended as it lands. See
 `TODO.md` for what's still pending/deferred.
 
+## 2026-08-28 (single-instance lock, Gmail Primary scoping, email routing, audio device refresh)
+
+- **Fixed FRED not launching at all** (`Core/utils/single_instance.py`,
+  `fred_popup.py`). Two related bugs found live diagnosing why the app
+  wouldn't start: (1) the singleton lock only checked
+  `psutil.pid_exists(pid)`, true even if that PID had been recycled by
+  Windows into a totally unrelated process — now verifies the PID's own
+  cmdline actually names `fred_popup.py`. (2) `--mock` UI-test mode was
+  acquiring the SAME lock a real instance uses, before its early return
+  — a forgotten mock window (which never exits on its own) silently
+  blocked every real launch indefinitely. Moved the lock acquisition
+  after the `--mock` branch. Also hardened `Desktop/FRED.bat` (outside
+  the repo) to kill stale `fred_popup.py`/`phone_api.py` processes
+  before every launch. Commit `6b2e8c6`.
+
+- **Scoped Gmail IMAP checks to the Primary category only**
+  (`Core/tools/gmail_imap.py`). Was reading the whole flat INBOX —
+  IMAP has no native concept of Gmail's Primary/Social/Promotions/
+  Updates/Forums tabs, that's Gmail-web-UI-only. Uses Gmail's own
+  `X-GM-RAW` IMAP extension to send a real `category:primary` query
+  instead. Commit `5f977ba`.
+
+- **Made Gmail nudges non-urgent, tightened cadence to 5 min**
+  (`Core/orchestrator/proactive_checks.py`, `config/settings.py`).
+  Vatsal's own calls: missed-reply/deadline nudges now go through the
+  normal naturalness gate instead of bypassing it, and
+  `GMAIL_CHECK_MINUTES` dropped from 15 to 5. Commits `3583421`,
+  `4486e5c`.
+
+- **Fixed `check_email` having no route to it at all**
+  (`Core/orchestrator/intent.py`, `Core/orchestrator/tool_router.py`).
+  Confirmed live: "Get me my mail" had zero cue words anywhere and no
+  `tool_router.py` embedding example, so it either misrouted to
+  `read_messages` (phone/WhatsApp, wrong tool) or hit the LLM
+  ACTION/CHAT binary, which answered CHAT and the model fabricated a
+  plausible-sounding reply with **no tool call logged at all** — worse
+  than the wrong tool. New `email_read` intent category (mirrors
+  `messages_read`/`messages_send`'s own read/send separation), cue
+  words for mail/email/gmail/inbox, plus a routing example. Verified
+  live via CLI: `[intent] tools (cues email_read -> 1 tools)` now
+  correctly offers `check_email`. Separately surfaced (not fixed, not
+  a regression): FRED has no cloud LLM fallback configured right now
+  (`No cloud provider has an API key configured`), so every tool call
+  this session ran on the local, not-yet-fine-tuned model alone — the
+  exact reliability gap the pending LoRA fine-tune exists to close.
+  Commit `2a23396`.
+
+- **Added in-session audio device refresh, fixing a real PortAudio
+  caching gap** (`Core/audio/device_info.py`, `Core/input/wakeword.py`).
+  `sounddevice`/PortAudio enumerates devices once at process init and
+  caches that list — a device plugged in after FRED started never
+  showed up until a full restart, and nothing in this codebase worked
+  around it. New `refresh_device_list()` (the standard, if private,
+  `sd._terminate()`/`_initialize()` re-enumeration trick), wired into
+  two safe moments: `list_input_devices()`/`list_output_devices()` (the
+  HUD dropdown / "what devices do I have" queries) and `wakeword.py`'s
+  existing resume()-failure self-heal retry (the stream's already torn
+  down by the time that branch runs — exactly the device-topology-
+  change case that retry exists for, it just wasn't refreshing the
+  underlying list before re-resolving by name). Commit `e3d18d4`.
+
 ## 2026-08-28 (on-demand email tool, long-session bug fix, email tiers — built by a fork)
 
 Vatsal found FRED had defaulted to the WhatsApp reader for "get me my
