@@ -179,6 +179,7 @@ def test_connection_failure_never_raises(monkeypatch):
 
     assert gi.check_missed_replies() == ""
     assert gi.check_email_deadlines() == ""
+    assert "Couldn't reach Gmail" in gi.read_recent_primary()
 
 
 def test_auth_failure_never_raises(monkeypatch):
@@ -190,3 +191,67 @@ def test_auth_failure_never_raises(monkeypatch):
 
     assert gi.check_missed_replies() == ""
     assert gi.check_email_deadlines() == ""
+    assert "Couldn't reach Gmail" in gi.read_recent_primary()
+
+
+# =========================================================
+# read_recent_primary -- on-demand "check my email" tool, fills the gap
+# found live 2026-08-28 (FRED had no email tool, defaulted to the
+# WhatsApp reader for "get me my mail").
+# =========================================================
+
+def test_read_recent_primary_no_credentials(monkeypatch):
+    monkeypatch.setattr(gi, "GMAIL_APP_PASSWORD", None)
+    assert "isn't set up" in gi.read_recent_primary().lower()
+
+
+def test_read_recent_primary_without_llm_lists_sender_subject(monkeypatch):
+    mailboxes = {
+        "INBOX": [(2, _msg("<b@x>", "Boss <boss@x.com>", "Re: project")),
+                  (1, _msg("<a@x>", "School <school@x.com>", "Notice"))],
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    out = gi.read_recent_primary(count=5, llm=None)
+    assert "Boss" in out and "project" in out
+    assert "School" in out and "Notice" in out
+
+
+def test_read_recent_primary_respects_count(monkeypatch):
+    mailboxes = {
+        "INBOX": [(3, _msg("<c@x>", "C <c@x.com>", "Three")),
+                  (2, _msg("<b@x>", "B <b@x.com>", "Two")),
+                  (1, _msg("<a@x>", "A <a@x.com>", "One"))],
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    out = gi.read_recent_primary(count=1, llm=None)
+    assert "Three" in out  # newest (highest num) kept
+    assert "Two" not in out
+    assert "One" not in out
+
+
+def test_read_recent_primary_with_llm_summarizes(monkeypatch):
+    mailboxes = {
+        "INBOX": [(1, _msg("<a@x>", "Boss <boss@x.com>", "Re: project", body="Please send the report."))],
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    calls = []
+
+    class _FakeLLM:
+        def generate(self, prompt, local_only=False, force_no_thinking=False):
+            calls.append((prompt, local_only, force_no_thinking))
+            return "Boss wants the report."
+
+    out = gi.read_recent_primary(count=5, llm=_FakeLLM())
+    assert out == "Boss wants the report."
+    assert len(calls) == 1
+    _, local_only, force_no_thinking = calls[0]
+    assert local_only is True  # unattended raw-email content, never cloud
+    assert force_no_thinking is True
+
+
+def test_read_recent_primary_empty_inbox(monkeypatch):
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP({"INBOX": []}))
+    assert "Nothing" in gi.read_recent_primary()

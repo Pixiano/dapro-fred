@@ -16,6 +16,7 @@ from tools import web_tools
 from tools import machine_tools
 from tools import assist_tools
 from tools import git_tools
+from tools import gmail_imap
 from tools import phone_tools
 from tools import whatsapp_tools
 from tools import smart_search
@@ -1416,6 +1417,31 @@ class FREDOrchestrator:
                 "type": "object",
                 "properties": {
                     "limit": {"type": "integer", "description": "How many messages. Optional, defaults to 10."},
+                },
+                "required": [],
+            },
+        )
+
+        # ---------------------------------------------------
+        # Gmail, via a temporary IMAP bridge (tools/gmail_imap.py) — see
+        # that module's own docstring for why (GCP project limit, real
+        # OAuth API blocked for ~1 month). Read-only, Primary category
+        # only. Use THIS for "check my email"/"get me my mail" — not
+        # read_messages, which is WhatsApp/SMS, not email.
+        # ---------------------------------------------------
+
+        self.tools.register(
+            name="check_email",
+            function=self._check_email,
+            description=(
+                "Read and summarise your recent Primary-inbox email — use this for "
+                "'check my email', 'get me my mail', 'any new emails', etc. NOT the "
+                "same as read_messages (that's WhatsApp/SMS on your phone, not email)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "count": {"type": "integer", "description": "How many recent emails to summarise. Optional, defaults to 5."},
                 },
                 "required": [],
             },
@@ -3300,6 +3326,12 @@ class FREDOrchestrator:
         tools that need orchestrator-level state.
         """
         return smart_search.find_file_smart(description, directory, llm=self.llm)
+
+    def _check_email(self, count: int = 5) -> str:
+        """Bound wrapper, same shape as _find_file_smart above, so
+        gmail_imap.read_recent_primary gets an LLM handle for its
+        local_only=True summarization pass."""
+        return gmail_imap.read_recent_primary(count, llm=self.llm)
 
     # Below this, read_file summarises instead of reading verbatim —
     # short enough that hearing it read out loud in full is already the

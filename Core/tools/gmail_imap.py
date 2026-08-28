@@ -32,6 +32,7 @@ from config.settings import (
     GMAIL_APP_PASSWORD,
     GMAIL_DEADLINE_LOOKBACK_DAYS,
     GMAIL_MISSED_REPLY_DAYS,
+    GMAIL_READ_COUNT_DEFAULT,
 )
 
 MISSED_REPLY_SEEN_PATH = DATA_DIR / "gmail_missed_reply_seen.json"
@@ -236,3 +237,68 @@ def check_email_deadlines() -> str:
                 pass
     except Exception:
         return ""
+
+
+def read_recent_primary(count: int = GMAIL_READ_COUNT_DEFAULT, llm=None) -> str:
+    """The on-demand "check my email" tool -- fills the gap found live
+    2026-08-28 where "get me my mail" had nothing to call and FRED
+    defaulted to the WhatsApp reader instead. Fetches the `count` most
+    recent Primary-category emails (newest first) and summarizes them.
+
+    llm=None returns a bare sender/subject list (still useful, same
+    fallback shape session_summary.summarise_today uses without an llm
+    handle). With an llm, summarizes via local_only=True -- this reads
+    raw email content, unattended, same privacy bar as
+    session_summary.summarise_today's own local_only=True call for the
+    identical reason (see that function's docstring)."""
+    try:
+        conn = _connect()
+        if conn is None:
+            return "Email isn't set up yet, sir -- run setup_gmail_credentials first."
+        try:
+            since = datetime.now() - timedelta(days=14)
+            conn.select("INBOX")
+            _, data = _primary_search(conn, since)
+            nums = data[0].split() if data and data[0] else []
+            nums = sorted(nums, key=lambda n: int(n), reverse=True)[:count]
+
+            emails = []
+            for num in nums:
+                msg = _fetch_message(conn, num)
+                emails.append((
+                    _decode_header(msg.get("From", "")),
+                    _decode_header(msg.get("Subject", "")),
+                    _body_text(msg)[:1000],  # cap per-email body fed to the model
+                ))
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+    except Exception as e:
+        return f"Couldn't reach Gmail: {e}"
+
+    if not emails:
+        return "Nothing in your Primary inbox in the last two weeks, sir."
+
+    if llm is None:
+        return "\n".join(f"- {frm}: {subj}" for frm, subj, _ in emails)
+
+    listing = "\n\n".join(
+        f"From: {frm}\nSubject: {subj}\nBody: {body}" for frm, subj, body in emails
+    )
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "Summarise these emails for a spoken reply. One short line "
+                "per email: who it's from and the gist of what they want or "
+                "said. No preamble, no closing offer, nothing invented."
+            ),
+        },
+        {"role": "user", "content": listing},
+    ]
+    try:
+        return llm.generate(prompt, local_only=True, force_no_thinking=True)
+    except Exception as e:
+        return f"Couldn't summarise your email: {e}"
