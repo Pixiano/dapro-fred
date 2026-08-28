@@ -34,6 +34,7 @@ from config.settings import (
     PROACTIVE_INTERRUPT_STREAK,
     VIP_MESSAGE_CHECK_MINUTES,
     CALL_LOG_CHECK_MINUTES,
+    GMAIL_CHECK_MINUTES,
     PRESENCE_POLL_SECONDS,
     HEADPHONE_POLL_SECONDS_ON_HEADPHONES,
     PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
@@ -777,6 +778,39 @@ def check_recent_calls():
         notify(summary, title="Call", urgent=True)  # same reasoning as check_vip_messages above
 
 
+def check_gmail_missed_replies():
+    """Speak up when an inbox email has gone GMAIL_MISSED_REPLY_DAYS
+    with no reply, stay silent otherwise. Same dedup-in-the-tool-not-
+    _load_state() shape as check_vip_messages above — gmail_imap.py
+    keeps its own Message-ID seen-set. Never raises into the scheduler:
+    IMAP being briefly unreachable (or credentials never set up) is the
+    normal case, not an error — see gmail_imap.py's own docstring."""
+    try:
+        from tools.gmail_imap import check_missed_replies as fetch
+        summary = fetch()
+    except Exception as e:
+        event_log.log_error("proactive_gmail_missed_replies", e)
+        return
+
+    if summary:
+        notify(summary, title="Email", urgent=True)  # same reasoning as check_vip_messages above
+
+
+def check_gmail_deadlines():
+    """Speak up when a recent email's body mentions a date-like phrase,
+    stay silent otherwise. Same shape as check_gmail_missed_replies
+    above, separate seen-set (gmail_imap.check_email_deadlines)."""
+    try:
+        from tools.gmail_imap import check_email_deadlines as fetch
+        summary = fetch()
+    except Exception as e:
+        event_log.log_error("proactive_gmail_deadlines", e)
+        return
+
+    if summary:
+        notify(summary, title="Email", urgent=True)
+
+
 # Wake-awareness greeting, same sir-suffixed short-phrase-pool style as
 # canned_replies.py's "presence_check" category — fires once, only when
 # waking from a real debounced sleep-mode absence (see check_presence
@@ -1023,6 +1057,15 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     # instead of WhatsApp — see CALL_LOG_CHECK_MINUTES's comment.
     scheduler.add_periodic(
         check_recent_calls, CALL_LOG_CHECK_MINUTES, "proactive_recent_calls"
+    )
+    # Own slower cadence, see GMAIL_CHECK_MINUTES's comment — an IMAP
+    # round trip is heavier than the adb checks above. No-ops until
+    # scripts/setup_gmail_credentials.py has been run.
+    scheduler.add_periodic(
+        check_gmail_missed_replies, GMAIL_CHECK_MINUTES, "proactive_gmail_missed_replies"
+    )
+    scheduler.add_periodic(
+        check_gmail_deadlines, GMAIL_CHECK_MINUTES, "proactive_gmail_deadlines"
     )
     # add_periodic takes minutes, PRESENCE_POLL_SECONDS is defined in
     # seconds (Vatsal's explicit "15 seconds" call) — dividing by 60
