@@ -34,7 +34,13 @@ class _FakeIMAP:
         return "OK", [b"1"]
 
     def search(self, charset, *criteria):
-        nums = [str(n).encode() for n, _ in self.mailboxes.get(self.current, [])]
+        entries = self.mailboxes.get(self.current, [])
+        if len(criteria) >= 2 and criteria[0] == "TO":
+            # Crude substring match against the raw message bytes --
+            # good enough for tests, real Gmail does this server-side.
+            addr = criteria[1].strip('"').lower()
+            entries = [(n, raw) for n, raw in entries if addr in raw.decode(errors="ignore").lower()]
+        nums = [str(n).encode() for n, _ in entries]
         return "OK", [b" ".join(nums)]
 
     def fetch(self, num, spec):
@@ -47,7 +53,7 @@ class _FakeIMAP:
         pass
 
 
-def _msg(msg_id, frm, subject, date_days_ago=0, body="hello", in_reply_to=None):
+def _msg(msg_id, frm, subject, date_days_ago=0, body="hello", in_reply_to=None, list_unsubscribe=None):
     date = email.utils.format_datetime(
         __import__("datetime").datetime.now() - __import__("datetime").timedelta(days=date_days_ago)
     )
@@ -59,6 +65,8 @@ def _msg(msg_id, frm, subject, date_days_ago=0, body="hello", in_reply_to=None):
     )
     if in_reply_to:
         headers += f"In-Reply-To: {in_reply_to}\r\n"
+    if list_unsubscribe:
+        headers += f"List-Unsubscribe: {list_unsubscribe}\r\n"
     return (headers + "\r\n" + body).encode()
 
 
@@ -66,6 +74,7 @@ def _msg(msg_id, frm, subject, date_days_ago=0, body="hello", in_reply_to=None):
 def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(gi, "MISSED_REPLY_SEEN_PATH", tmp_path / "missed_seen.json")
     monkeypatch.setattr(gi, "DEADLINE_SEEN_PATH", tmp_path / "deadline_seen.json")
+    monkeypatch.setattr(gi, "TIER_SEEN_PATH", tmp_path / "tier_seen.json")
     monkeypatch.setattr(gi, "GMAIL_ADDRESS", "me@example.com")
     monkeypatch.setattr(gi, "GMAIL_APP_PASSWORD", "test-app-password")  # mock only
     monkeypatch.setattr(gi, "GMAIL_MISSED_REPLY_DAYS", 3)
@@ -255,3 +264,63 @@ def test_read_recent_primary_with_llm_summarizes(monkeypatch):
 def test_read_recent_primary_empty_inbox(monkeypatch):
     monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP({"INBOX": []}))
     assert "Nothing" in gi.read_recent_primary()
+
+
+# =========================================================
+# check_email_tiers -- three-tier classification for newly-arrived
+# email (useless/basic/vvip), Vatsal's own 2026-08-28 design.
+# =========================================================
+
+def test_tier_useless_for_list_unsubscribe_header(monkeypatch):
+    mailboxes = {
+        "INBOX": [(1, _msg("<n@x>", "Newsletter <news@x.com>", "This week",
+                            list_unsubscribe="<mailto:unsub@x.com>"))],
+        "[Gmail]/Sent Mail": [],
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    results = gi.check_email_tiers()
+    assert results == [("useless", results[0][1])]
+
+
+def test_tier_vvip_when_vatsal_emailed_first(monkeypatch):
+    mailboxes = {
+        "INBOX": [(1, _msg("<f@x>", "Friend <friend@x.com>", "Hey"))],
+        "[Gmail]/Sent Mail": [(1, _msg("<s@x>", "me@example.com", "intro", body="hi friend@x.com"))],
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    results = gi.check_email_tiers()
+    assert len(results) == 1
+    tier, summary = results[0]
+    assert tier == "vvip"
+    assert "Friend" in summary
+
+
+def test_tier_basic_for_everything_else(monkeypatch):
+    mailboxes = {
+        "INBOX": [(1, _msg("<x@x>", "Stranger <stranger@x.com>", "Hi there"))],
+        "[Gmail]/Sent Mail": [],  # never emailed this address
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    results = gi.check_email_tiers()
+    assert results == [("basic", results[0][1])]
+
+
+def test_tier_dedups_across_calls(monkeypatch):
+    mailboxes = {
+        "INBOX": [(1, _msg("<x@x>", "Stranger <stranger@x.com>", "Hi there"))],
+        "[Gmail]/Sent Mail": [],
+    }
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _FakeIMAP(mailboxes))
+
+    first = gi.check_email_tiers()
+    second = gi.check_email_tiers()
+    assert len(first) == 1
+    assert second == []
+
+
+def test_tier_check_never_raises_on_connection_failure(monkeypatch):
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: (_ for _ in ()).throw(ConnectionRefusedError()))
+    assert gi.check_email_tiers() == []

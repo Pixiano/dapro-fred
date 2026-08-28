@@ -841,6 +841,28 @@ def check_gmail_deadlines():
         notify(summary, title="Email")  # not urgent -- same reasoning as check_gmail_missed_replies above
 
 
+def check_email_tiers():
+    """Vatsal's own 2026-08-28 three-tier design for NEW arriving email
+    (distinct from the two content-based checks above): useless
+    (subscribed/newsletter, List-Unsubscribe header) never notifies;
+    vvip (Vatsal emailed them first) bypasses the naturalness gate,
+    same urgent=True precedent as check_vip_messages/check_recent_calls;
+    basic (everything else) goes through the normal gate. See
+    gmail_imap.check_email_tiers's own docstring for the classification
+    logic."""
+    try:
+        from tools.gmail_imap import check_email_tiers as fetch
+        results = fetch()
+    except Exception as e:
+        event_log.log_error("proactive_gmail_tiers", e)
+        return
+
+    for tier, summary in results:
+        if tier == "useless":
+            continue
+        notify(summary, title="Email", urgent=(tier == "vvip"))
+
+
 # Wake-awareness greeting, same sir-suffixed short-phrase-pool style as
 # canned_replies.py's "presence_check" category — fires once, only when
 # waking from a real debounced sleep-mode absence (see check_presence
@@ -1096,6 +1118,9 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     )
     scheduler.add_periodic(
         check_gmail_deadlines, GMAIL_CHECK_MINUTES, "proactive_gmail_deadlines"
+    )
+    scheduler.add_periodic(
+        check_email_tiers, GMAIL_CHECK_MINUTES, "proactive_gmail_tiers"
     )
     # add_periodic takes minutes, PRESENCE_POLL_SECONDS is defined in
     # seconds (Vatsal's explicit "15 seconds" call) — dividing by 60

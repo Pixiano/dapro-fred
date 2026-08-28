@@ -37,6 +37,7 @@ from config.settings import (
 
 MISSED_REPLY_SEEN_PATH = DATA_DIR / "gmail_missed_reply_seen.json"
 DEADLINE_SEEN_PATH = DATA_DIR / "gmail_deadline_seen.json"
+TIER_SEEN_PATH = DATA_DIR / "gmail_tier_seen.json"
 
 # Same lightweight date-phrase shapes tools/agenda.py's parse_due_date
 # matches (today/tomorrow/in N days/weekday/ISO/"13 August 2026") — this
@@ -302,3 +303,86 @@ def read_recent_primary(count: int = GMAIL_READ_COUNT_DEFAULT, llm=None) -> str:
         return llm.generate(prompt, local_only=True, force_no_thinking=True)
     except Exception as e:
         return f"Couldn't summarise your email: {e}"
+
+
+def _emailed_first(conn, address: str) -> bool:
+    """VVIP proxy: has Vatsal EVER sent TO this address? Full "who
+    actually messaged first, ever" reconstruction (earliest sent vs.
+    earliest received, per sender) would mean scanning unbounded Sent-
+    Mail history on every poll -- this is one cheap server-side IMAP
+    SEARCH (no message body/header fetch, just matching UIDs) per
+    newly-seen sender instead. Pragmatic call, not exact -- if it turns
+    out too loose/tight in practice, tighten to a real earliest-message
+    comparison then."""
+    try:
+        conn.select('"[Gmail]/Sent Mail"')
+        _, data = conn.search(None, "TO", f'"{address}"')
+        return bool(data and data[0])
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.select("INBOX")
+        except Exception:
+            pass
+
+
+def check_email_tiers() -> list:
+    """Classifies each newly-seen Primary-category email into useless/
+    basic/vvip (Vatsal's own 2026-08-28 three-tier design, same naming
+    as whatsapp_tools.py's existing useless/basic/trusted/vip tiers) and
+    returns [(tier, summary), ...] for anything new this poll:
+
+      useless -- carries a List-Unsubscribe header, the standard signal
+                 for newsletters/marketing mail. Caller must never
+                 notify for these.
+      vvip    -- Vatsal emailed this address first (see _emailed_first).
+                 Caller should bypass the naturalness gate (urgent).
+      basic   -- everything else, the default bucket. Caller routes
+                 through the normal (non-urgent) gate.
+
+    Own seen-set (Message-ID), same dedup shape as the other two checks
+    in this module -- each email is only classified/notified once."""
+    try:
+        conn = _connect()
+        if conn is None:
+            return []
+        try:
+            since = datetime.now() - timedelta(days=GMAIL_DEADLINE_LOOKBACK_DAYS)
+            conn.select("INBOX")
+            _, data = _primary_search(conn, since)
+            nums = data[0].split() if data and data[0] else []
+
+            seen = _load_seen(TIER_SEEN_PATH)
+            results = []
+            for num in nums:
+                msg = _fetch_message(conn, num)
+                msg_id = msg.get("Message-ID", "")
+                if not msg_id or msg_id in seen:
+                    continue
+                seen.add(msg_id)
+
+                from_addr = email.utils.parseaddr(msg.get("From", ""))[1]
+                if GMAIL_ADDRESS and from_addr.lower() == GMAIL_ADDRESS.lower():
+                    continue  # own address landing in Primary somehow -- not a real "new email"
+
+                sender = _decode_header(msg.get("From", ""))
+                subject = _decode_header(msg.get("Subject", ""))
+                summary = f'New email from {sender}: "{subject}"'
+
+                if msg.get("List-Unsubscribe"):
+                    results.append(("useless", summary))
+                elif from_addr and _emailed_first(conn, from_addr):
+                    results.append(("vvip", summary))
+                else:
+                    results.append(("basic", summary))
+
+            _save_seen(TIER_SEEN_PATH, seen)
+            return results
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+    except Exception:
+        return []
