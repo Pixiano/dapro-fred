@@ -18,6 +18,7 @@
 
 import os
 
+import pythoncom
 from pycaw.pycaw import AudioUtilities, IAudioMeterInformation
 
 # Real background noise floor measured at 0.0 on an idle session; a
@@ -27,18 +28,29 @@ _PEAK_THRESHOLD = 0.02
 
 
 def is_media_playing() -> bool:
-    my_pid = os.getpid()
-    for session in AudioUtilities.GetAllSessions():
-        proc = session.Process
-        if proc is None or proc.pid == my_pid:
-            continue
-        try:
-            peak = session._ctl.QueryInterface(IAudioMeterInformation).GetPeakValue()
-        except Exception:
-            continue  # a session can vanish between enumeration and query — skip, not fatal
-        if peak > _PEAK_THRESHOLD:
-            return True
-    return False
+    # pycaw's AudioUtilities is COM-based, same as audio/tts.py's own
+    # pyttsx3 SAPI backend — confirmed live 2026-08-28: called from the
+    # background scheduler thread (headphone_watch.py, proactive_checks.
+    # py), COM was never implicitly initialized there, and every call
+    # failed with "CoInitialize has not been called". Same fix as
+    # tts.py's own _speak_internal: explicit init/uninit around the
+    # COM-touching call, not relying on it happening implicitly.
+    pythoncom.CoInitialize()
+    try:
+        my_pid = os.getpid()
+        for session in AudioUtilities.GetAllSessions():
+            proc = session.Process
+            if proc is None or proc.pid == my_pid:
+                continue
+            try:
+                peak = session._ctl.QueryInterface(IAudioMeterInformation).GetPeakValue()
+            except Exception:
+                continue  # a session can vanish between enumeration and query — skip, not fatal
+            if peak > _PEAK_THRESHOLD:
+                return True
+        return False
+    finally:
+        pythoncom.CoUninitialize()
 
 
 if __name__ == "__main__":
