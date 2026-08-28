@@ -3,6 +3,44 @@
 Running log of work completed this session, appended as it lands. See
 `TODO.md` for what's still pending/deferred.
 
+## 2026-08-28 (on-demand email tool, long-session bug fix, email tiers — built by a fork)
+
+Vatsal found FRED had defaulted to the WhatsApp reader for "get me my
+mail" (no email tool existed at all), flagged `check_long_session` as
+"always wrong," and asked for a 3-tier email classification system.
+
+- **Added `check_email` — the on-demand "check my email" tool**
+  (`Core/tools/gmail_imap.py`'s `read_recent_primary(count, llm)`,
+  registered in `Core/orchestrator/orchestrator.py` via a bound wrapper
+  `_check_email`, same pattern as `_find_file_smart`). Fetches the N
+  most recent Primary-category emails and summarizes them via the LOCAL
+  model only (`local_only=True, force_no_thinking=True`) — same privacy
+  bar `session_summary.summarise_today` already holds for unattended
+  raw content. Falls back to a bare sender/subject list without an llm
+  handle. Commit `2137f39`.
+
+- **Fixed `check_long_session`'s false "3 hours straight" claims**
+  (`Core/orchestrator/proactive_checks.py`). Root cause: `last_break`
+  persists across restarts on purpose, but that's wrong when the GAP
+  itself is a FRED-was-down stretch — confirmed the false firing at
+  2026-08-28T14:45 landed mid-way through a stretch of repeated
+  FRED crashes/restarts (unrelated single-instance-lock debugging).
+  Now tracks `last_poll_at`; a gap >= `PROACTIVE_LONG_SESSION_RESTART_
+  GAP_MINUTES` (3x the poll interval) resets the continuity clock
+  instead of silently counting downtime as continuous work. Commit
+  `b570888`.
+
+- **Added three-tier email classification: useless/basic/vvip**
+  (`Core/tools/gmail_imap.py`'s `check_email_tiers()`, wired into
+  `proactive_checks.py`). Mirrors `whatsapp_tools.py`'s existing tier
+  naming. `useless` (List-Unsubscribe header) never notifies. `vvip`
+  (Vatsal emailed them first — pragmatic Sent-Mail proxy, not full
+  earliest-message reconstruction) bypasses the naturalness gate,
+  same `urgent=True` precedent as VIP WhatsApp/calls. `basic`
+  (everything else) goes through the normal gate. Commit `f93729c`.
+
+Full suite: 642 passed (was 628 before this batch).
+
 ## 2026-08-28 (Gmail IMAP bridge, built by a fork per Vatsal's own instruction)
 
 Real Gmail API (OAuth) blocked ~1 month on Vatsal's GCP project limit —
