@@ -270,11 +270,13 @@ CALL_LOG_CHECK_MINUTES = 2
 # Gmail, via a temporary IMAP bridge (tools/gmail_imap.py) — the real
 # Gmail API is blocked on Vatsal's GCP project limit clearing (~1 month
 # from 2026-08-28), so this reads over IMAP with a Google App Password
-# instead of OAuth. Slower cadence than the adb checks above: an IMAP
-# round trip (login + two folder searches) is heavier than a local
-# notification dump, and email deadlines/missed-replies are not a
-# 2-minutes-late problem the way a VIP text is.
-GMAIL_CHECK_MINUTES = 15
+# instead of OAuth. Vatsal's own call 2026-08-28: 5 minutes, tighter than
+# the original 15 — still slower than the adb checks above (an IMAP
+# round trip, login + two folder searches, is heavier than a local
+# notification dump), but email deadlines/missed-replies going through
+# the normal naturalness gate now (not urgent) makes a shorter poll less
+# disruptive than it would have been under the old urgent=True wiring.
+GMAIL_CHECK_MINUTES = 5
 
 # An inbox email with no matching Sent-folder reply after this many days
 # counts as "missed" and gets surfaced once. Not yet tuned against real
