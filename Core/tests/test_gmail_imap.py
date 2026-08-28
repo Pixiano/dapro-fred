@@ -33,7 +33,7 @@ class _FakeIMAP:
         self.current = folder.strip('"')
         return "OK", [b"1"]
 
-    def search(self, charset, criterion):
+    def search(self, charset, *criteria):
         nums = [str(n).encode() for n, _ in self.mailboxes.get(self.current, [])]
         return "OK", [b" ".join(nums)]
 
@@ -147,6 +147,29 @@ def test_deadline_dedups_across_calls(monkeypatch):
     second = gi.check_email_deadlines()
     assert first != ""
     assert second == ""
+
+
+def test_inbox_search_scoped_to_primary_category(monkeypatch):
+    """Vatsal's own call 2026-08-28: only the Primary tab, not the whole
+    flat INBOX (which also holds Promotions/Social/Updates/Forums) --
+    verifies the actual X-GM-RAW query sent, not just the mailbox result."""
+    calls = []
+
+    class _RecordingIMAP(_FakeIMAP):
+        def search(self, charset, *criteria):
+            calls.append(criteria)
+            return super().search(charset, *criteria)
+
+    mailboxes = {"INBOX": [], "[Gmail]/Sent Mail": []}
+    monkeypatch.setattr(gi.imaplib, "IMAP4_SSL", lambda *a, **k: _RecordingIMAP(mailboxes))
+
+    gi.check_missed_replies()
+    gi.check_email_deadlines()
+
+    inbox_calls = [c for c in calls if c[0] == "X-GM-RAW"]
+    assert inbox_calls, "expected an X-GM-RAW search"
+    for criteria in inbox_calls:
+        assert "category:primary" in criteria[1]
 
 
 def test_connection_failure_never_raises(monkeypatch):

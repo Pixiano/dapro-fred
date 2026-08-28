@@ -56,6 +56,18 @@ _DEADLINE_PATTERNS = [
 ]
 
 
+def _primary_search(conn, since: datetime):
+    """IMAP has no native concept of Gmail's Primary/Social/Promotions/
+    Updates/Forums tabs -- those are a Gmail-web-UI-only categorization
+    over one flat INBOX. X-GM-RAW is Gmail's own IMAP extension (only
+    works against imap.gmail.com) that accepts a real Gmail search query
+    string, which DOES support `category:primary` -- the only way to
+    actually scope this to Primary rather than reading everything.
+    Vatsal's own call 2026-08-28: only Primary, not the whole inbox."""
+    query = f'"category:primary after:{since.strftime("%Y/%m/%d")}"'
+    return conn.search(None, "X-GM-RAW", query)
+
+
 def _connect():
     """IMAP4_SSL logged in, or None if credentials aren't set / login
     fails. Caller must close() it when done."""
@@ -123,9 +135,9 @@ def check_missed_replies() -> str:
         if conn is None:
             return ""
         try:
-            since = (datetime.now() - timedelta(days=GMAIL_MISSED_REPLY_DAYS + 4)).strftime("%d-%b-%Y")
+            since = datetime.now() - timedelta(days=GMAIL_MISSED_REPLY_DAYS + 4)
             conn.select("INBOX")
-            _, data = conn.search(None, f'(SINCE "{since}")')
+            _, data = _primary_search(conn, since)
             inbox_nums = data[0].split() if data and data[0] else []
 
             conn.select('"[Gmail]/Sent Mail"')  # standard English-locale Gmail folder name
@@ -188,9 +200,9 @@ def check_email_deadlines() -> str:
         if conn is None:
             return ""
         try:
-            since = (datetime.now() - timedelta(days=GMAIL_DEADLINE_LOOKBACK_DAYS)).strftime("%d-%b-%Y")
+            since = datetime.now() - timedelta(days=GMAIL_DEADLINE_LOOKBACK_DAYS)
             conn.select("INBOX")
-            _, data = conn.search(None, f'(SINCE "{since}")')
+            _, data = _primary_search(conn, since)
             nums = data[0].split() if data and data[0] else []
 
             seen = _load_seen(DEADLINE_SEEN_PATH)
