@@ -267,6 +267,24 @@ VIP_MESSAGE_CHECK_MINUTES = 2
 # reason to poll it any less often.
 CALL_LOG_CHECK_MINUTES = 2
 
+# Gmail, via a temporary IMAP bridge (tools/gmail_imap.py) — the real
+# Gmail API is blocked on Vatsal's GCP project limit clearing (~1 month
+# from 2026-08-28), so this reads over IMAP with a Google App Password
+# instead of OAuth. Slower cadence than the adb checks above: an IMAP
+# round trip (login + two folder searches) is heavier than a local
+# notification dump, and email deadlines/missed-replies are not a
+# 2-minutes-late problem the way a VIP text is.
+GMAIL_CHECK_MINUTES = 15
+
+# An inbox email with no matching Sent-folder reply after this many days
+# counts as "missed" and gets surfaced once. Not yet tuned against real
+# inbox volume — revisit if it over- or under-fires.
+GMAIL_MISSED_REPLY_DAYS = 3
+
+# Only scan emails from the last N days for deadline phrases in the body
+# — avoids re-scanning the whole inbox every poll.
+GMAIL_DEADLINE_LOOKBACK_DAYS = 7
+
 # active-priorities.md's own `updated:` frontmatter date, not a per-item
 # parse of its prose bullets — see proactive_checks.py for why a
 # whole-file signal was chosen over trying to date-parse free text.
@@ -623,6 +641,14 @@ MODEL_TIERS = {
 # live) — a provider failover mid-outage changes nothing about how the
 # reply gets parsed.
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+# Gmail IMAP bridge credentials — never in this repo, never in a file
+# Claude or any other process reads back. Set once via
+# scripts/setup_gmail_credentials.py, which persists them as real
+# Windows user env vars (`setx`), same mechanism as every other secret
+# this codebase reads via os.environ.get() (see GROQ_API_KEY above).
+GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 
 # Forced off 2026-08-18: the Cerebras account is out of credits (every
 # call returning HTTP 402 Payment Required — 463 times in one day before
