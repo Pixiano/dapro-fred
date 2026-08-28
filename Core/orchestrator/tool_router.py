@@ -80,6 +80,7 @@ TOOL_EXAMPLES = {
     "schedule_file_watch": ["tell me when that file appears", "watch for this download"],
     "list_scheduled": ["what reminders do I have", "what's pending"],
     "cancel_scheduled": ["cancel that reminder", "forget the timer"],
+    "check_email": ["get me my mail", "check my email", "any new emails", "what's in my inbox"],
 }
 
 

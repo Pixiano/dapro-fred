@@ -111,6 +111,16 @@ TOOL_CATEGORIES = {
     # capabilities at once. Structural, not a prompt instruction.
     "messages_read": ("read_messages", "list_contact_tiers"),
     "messages_send": ("send_message", "set_contact_tier"),
+    # Confirmed live 2026-08-28: "Get me my mail"/"check my email" had no
+    # category of its own and no cue words anywhere in this file, so it
+    # either fell through to read_messages (phone/WhatsApp, wrong tool,
+    # wrong medium entirely) or to the LLM ACTION/CHAT binary, which
+    # answered CHAT and the model fabricated a plausible-sounding reply
+    # with no tool call at all — worse than the wrong tool. Own category,
+    # not folded into messages_read: email is a different medium (Gmail
+    # IMAP, not the paired phone), same read/send separation reasoning
+    # as messages_read/messages_send above.
+    "email_read": ("check_email",),
     # Questions about FRED himself. describe_self is listed here too:
     # it was registered with no category at all, so until now it was
     # only ever reachable by the embedder's rescue path. The two answer
@@ -323,6 +333,13 @@ CATEGORY_CUES = {
         "messages", "new messages", "unread",
         "who messaged", "who texted", "check whatsapp", "read whatsapp",
         "my whatsapp", "what did", "anything from",
+    ),
+    # See email_read's own comment above the category tuple — "mail"
+    # deliberately covers "get me my mail"/"check my mail", not just
+    # "email"/"gmail", since that's the exact phrasing that misrouted.
+    "email_read": (
+        "email", "emails", "e-mail", "mail", "gmail", "inbox",
+        "check my mail", "check my email", "any new emails", "new mail",
     ),
     # SINGULAR "message" as a verb. Its absence is why "Message Mom saying
     # hello" reached the model with no messaging tool offered at all, and
