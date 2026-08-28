@@ -115,6 +115,20 @@ def main():
     crash_log = _enable_crash_dump()
     print(f"[fred_popup] crash traces -> {crash_log}")
 
+    if args.mock:
+        # Deliberately BEFORE the singleton lock below: mock mode is a
+        # UI-only test window (no LLM, no mic, no port binding, no child
+        # processes — see this file's own module docstring) and never
+        # exits on its own, so it can sit open indefinitely. Confirmed
+        # live 2026-08-28: a forgotten --mock window held the real lock
+        # file for who knows how long, silently refusing every real
+        # launch (FRED.bat, the Startup shortcut, manual runs) with no
+        # visible error at all, since pythonw has no console. Mock mode
+        # can't actually conflict with a real instance in any of the ways
+        # the lock exists to prevent, so it shouldn't touch it.
+        run_mock(args.indicator)
+        return
+
     # Refuse to start a second FRED alongside a live one — see
     # utils/single_instance.py for why this matters beyond wasted
     # resources (a port-binding race between two HUD/phone-API servers).
@@ -131,10 +145,6 @@ def main():
     # See utils/process_group.py for the mechanism.
     from utils.process_group import contain_children
     contain_children()
-
-    if args.mock:
-        run_mock(args.indicator)
-        return
 
     from utils import event_log
     session_log = event_log.start_session()
