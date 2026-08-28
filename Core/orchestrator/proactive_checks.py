@@ -793,7 +793,10 @@ def check_gmail_missed_replies():
         return
 
     if summary:
-        notify(summary, title="Email", urgent=True)  # same reasoning as check_vip_messages above
+        # Not urgent, deliberately -- Vatsal's own call 2026-08-28: unlike
+        # a VIP text/call, a missed-reply nag can wait for a good moment
+        # via the normal naturalness gate rather than interrupting anything.
+        notify(summary, title="Email")
 
 
 def check_gmail_deadlines():
@@ -808,7 +811,7 @@ def check_gmail_deadlines():
         return
 
     if summary:
-        notify(summary, title="Email", urgent=True)
+        notify(summary, title="Email")  # not urgent -- same reasoning as check_gmail_missed_replies above
 
 
 # Wake-awareness greeting, same sir-suffixed short-phrase-pool style as
