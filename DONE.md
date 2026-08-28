@@ -3,6 +3,34 @@
 Running log of work completed this session, appended as it lands. See
 `TODO.md` for what's still pending/deferred.
 
+## 2026-08-28 (post-restart log triage: 3 real pre-existing bugs found and fixed)
+
+Vatsal restarted FRED and asked to check the logs — three genuine bugs
+surfaced, all pre-existing (confirmed in production logs back to
+2026-08-25, not introduced this session):
+
+- **YOLO weights re-download loop** (`Core/input/presence.py`).
+  `YOLO("yolov8n.pt")` resolved relative to cwd, and the real running
+  process's cwd isn't `Core/` — every no-face poll tried and failed to
+  re-download ("curl return value 23") instead of finding the copy
+  from manual testing. Pinned to `Core/models/yolov8n.pt` (same
+  convention `voice_id.py`'s `_MODEL_CACHE_DIR` uses), moved the
+  existing download there, gitignored. Commit `7f49fe7`.
+- **`headphone_watch.py` UnboundLocalError on `frame`** — a
+  media-triggered switch never captures a frame (deliberate, no camera
+  check needed for a deterministic signal), but the confirm-prompt
+  block referenced it unconditionally. Root-cause fix: skip the
+  confirm-prompt entirely on that path, since it only makes sense for
+  a camera-classifier switch anyway. Commit `7c84fa9`.
+- **`media_state.is_media_playing()` COM error** — pycaw is COM-based;
+  called from the background scheduler thread, COM was never
+  initialized there. Same fix `audio/tts.py`'s own `_speak_internal`
+  already uses for the identical error, applied once in the shared
+  function every caller (headphone_watch, the naturalness gate) routes
+  through. Commit `7ed5361`.
+
+Full suite: 642 passed throughout.
+
 ## 2026-08-28 (single-instance lock, Gmail Primary scoping, email routing, audio device refresh)
 
 - **Fixed FRED not launching at all** (`Core/utils/single_instance.py`,
