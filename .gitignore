@@ -113,6 +113,10 @@ Core/data/reminders.sqlite
 # results). See Core/orchestrator/tool_call_log.py.
 Core/data/tool_call_log.jsonl
 
+# Frozen eval holdout, same personal-data sensitivity as the log above.
+# See Core/scripts/build_eval_holdout.py.
+Core/data/tool_call_eval_holdout.jsonl
+
 # Wake-word detection log (runtime data — see Core/input/wakeword_log.py)
 Core/data/wakeword_log.jsonl
 
@@ -135,6 +139,10 @@ Core/models/kokoro/
 # source. See that script's docstring to retrain.
 Core/data/wakeword_training/
 Core/models/wakeword/
+
+# YOLOv8n weights (presence.py's no-face person fail-safe), auto-fetched
+# from ultralytics' GitHub releases on first use - not source.
+Core/models/yolov8n.pt
 
 # faster-whisper models live in the HuggingFace cache, not the repo,
 # and are fetched on first run.

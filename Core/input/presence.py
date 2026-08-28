@@ -31,6 +31,7 @@ from pathlib import Path
 import cv2
 
 from config.settings import (
+    BASE_DIR,
     DATA_DIR,
     PRESENCE_CAMERA_INDEX,
     PRESENCE_DYNAMIC_EMBEDDINGS_CAP,
@@ -114,16 +115,29 @@ def _get_analyzer():
     return _analyzer
 
 
+_YOLO_WEIGHTS_PATH = BASE_DIR / "models" / "yolov8n.pt"
+
+
 def _get_yolo_model():
     """Lazy-loaded yolov8n singleton, mirrors _get_analyzer() above.
     Nano weights — fast, COCO-pretrained, "person" is one of its
     best-covered classes (unlike the earlier failed headphone-detection
     attempt with a niche class). `ultralytics` is already an installed
-    dependency from that attempt."""
+    dependency from that attempt.
+
+    Pinned to an absolute path under Core/models/ (same convention
+    voice_id.py's _MODEL_CACHE_DIR already uses) — NOT the bare
+    "yolov8n.pt" this used before, which resolves relative to the
+    process's cwd. Confirmed live 2026-08-28: the real running FRED
+    process's cwd isn't Core/, so every no-face poll was trying (and
+    failing — "curl return value 23") to re-download into whatever cwd
+    it actually had, spamming errors instead of ever finding the copy
+    that existed at Core/yolov8n.pt from manual CLI testing."""
     global _yolo_model
     if _yolo_model is None:
         from ultralytics import YOLO
-        _yolo_model = YOLO("yolov8n.pt")
+        _YOLO_WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _yolo_model = YOLO(str(_YOLO_WEIGHTS_PATH))
     return _yolo_model
 
 
