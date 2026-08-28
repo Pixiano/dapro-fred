@@ -287,6 +287,10 @@ GMAIL_MISSED_REPLY_DAYS = 3
 # — avoids re-scanning the whole inbox every poll.
 GMAIL_DEADLINE_LOOKBACK_DAYS = 7
 
+# How many recent Primary-category emails the on-demand "check my email"
+# tool (tools/gmail_imap.read_recent_primary) summarizes at once.
+GMAIL_READ_COUNT_DEFAULT = 5
+
 # active-priorities.md's own `updated:` frontmatter date, not a per-item
 # parse of its prose bullets — see proactive_checks.py for why a
 # whole-file signal was chosen over trying to date-parse free text.
@@ -297,6 +301,22 @@ PROACTIVE_STALE_DAYS = 7
 # what counts as "he took a break," not a fixed clock reset.
 PROACTIVE_BREAK_IDLE_MINUTES = 15
 PROACTIVE_LONG_SESSION_HOURS = 3
+
+# Bug found live 2026-08-28: check_long_session's "last_break" timestamp
+# is persisted to disk so it survives a normal FRED restart mid-session —
+# correct when Vatsal's still there. But nothing observes what happens
+# DURING a gap where FRED itself is down (crashed, killed, not just
+# idle-but-running) -- confirmed the false "3 hours straight" firing at
+# 2026-08-28T14:45 landed in the middle of a stretch where FRED was
+# repeatedly killed/restarted debugging an unrelated bug, so it was
+# almost certainly not continuously polling for 3 real hours. If the gap
+# since this check last actually ran is much wider than its own poll
+# cadence (PROACTIVE_CHECK_INTERVAL_MINUTES), that's a FRED-was-down
+# gap, not a live idle-but-running gap -- treated as unknown/uncounted,
+# same "can't prove it, don't claim it" reasoning presence.py's fail-safes
+# already use. 3x the poll interval leaves real headroom over ordinary
+# scheduler jitter.
+PROACTIVE_LONG_SESSION_RESTART_GAP_MINUTES = PROACTIVE_CHECK_INTERVAL_MINUTES * 3
 
 # A vault file's optional `deadline: YYYY-MM-DD` frontmatter field,
 # flagged once it's within this many days out. No vault file uses this

@@ -28,6 +28,7 @@ from config.settings import (
     PROACTIVE_STALE_DAYS,
     PROACTIVE_BREAK_IDLE_MINUTES,
     PROACTIVE_LONG_SESSION_HOURS,
+    PROACTIVE_LONG_SESSION_RESTART_GAP_MINUTES,
     PROACTIVE_DEADLINE_WARN_DAYS,
     PROACTIVE_TASK_DUE_DAYS,
     PROACTIVE_STATE_PATH,
@@ -235,10 +236,35 @@ def check_long_session():
     idle time rather than FRED-conversation activity — the two are
     different things, and "no one has spoken to FRED in an hour" says
     nothing about whether Vatsal stepped away.
+
+    Bug fixed 2026-08-28: `last_break` persists across restarts on
+    purpose (so a normal FRED restart mid-session doesn't lose track),
+    but that's exactly wrong when the GAP itself is a FRED-was-down
+    stretch, not a live idle-but-running one — nothing observed what
+    actually happened during it, so counting it as continuous work is a
+    guess dressed up as a measurement. See PROACTIVE_LONG_SESSION_
+    RESTART_GAP_MINUTES's own comment. `last_poll_at` tracks when this
+    check last actually ran; every exit path below updates it.
     """
     state = _load_state()
     session = state.setdefault("long_session", {})
     now = datetime.now()
+
+    last_poll_str = session.get("last_poll_at")
+    session["last_poll_at"] = now.isoformat()
+    if last_poll_str:
+        try:
+            gap_minutes = (now - datetime.fromisoformat(last_poll_str)).total_seconds() / 60
+        except ValueError:
+            gap_minutes = 0
+        if gap_minutes >= PROACTIVE_LONG_SESSION_RESTART_GAP_MINUTES:
+            # FRED was almost certainly down for this gap, not just
+            # Vatsal being idle-but-FRED-alive -- treat it as an unknown
+            # stretch, same as a real break.
+            session["last_break"] = now.isoformat()
+            session.pop("notified", None)
+            _save_state(state)
+            return
 
     idle = idle_seconds()
     if idle >= PROACTIVE_BREAK_IDLE_MINUTES * 60:
@@ -265,6 +291,7 @@ def check_long_session():
         return
 
     if session.get("notified"):
+        _save_state(state)  # still persist the updated last_poll_at
         return
 
     if now - last_break >= timedelta(hours=PROACTIVE_LONG_SESSION_HOURS):
@@ -274,7 +301,7 @@ def check_long_session():
             title="Break?",
         )
         session["notified"] = True
-        _save_state(state)
+    _save_state(state)
 
 
 # =========================================================
