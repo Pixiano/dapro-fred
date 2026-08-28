@@ -509,7 +509,13 @@ def check_and_switch(notify=None):
             phrases = _TO_HEADPHONES_PHRASES if result else _TO_SPEAKERS_PHRASES
             notify(random.choice(phrases), title="Audio", urgent=True)
 
-            if random.random() < _CONFIRM_PROMPT_CHANCE:
+            # Confirm-prompt only makes sense for a camera-classifier
+            # switch -- media_triggered never captures a frame at all
+            # (deliberately, see its own comment above), so `frame`
+            # doesn't exist on that path. Confirmed live 2026-08-28:
+            # UnboundLocalError on 'frame' whenever a media-triggered
+            # switch happened to also roll the confirm-prompt chance.
+            if not media_triggered and random.random() < _CONFIRM_PROMPT_CHANCE:
                 _pending_confirmation = {"frame": frame, "label": result}
                 notify(random.choice(_CONFIRM_PROMPT_PHRASES), title="Audio", urgent=True)
     except Exception as e:
