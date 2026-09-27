@@ -79,3 +79,8 @@
   with our own on-the-fly quantization. Nothing downloaded yet.
 - **Handoff written**: `handoff_realtime_venus.md` (plan, rules, facts,
   VRAM options, next steps).
+- **Committed and pushed** `8528f54` (benchmark, agents, daily docs),
+  `17fcc4e` (pending August work: wake-word AGC fix, plans, notes),
+  `5d1a7d2` (README rewritten for the current all-local FRED). Three
+  older notes with real share passwords stay local and are now
+  gitignored, as are six runtime state files in `Core/data/`.
