@@ -35,7 +35,8 @@ from config.settings import (
     PROACTIVE_INTERRUPT_STREAK,
     VIP_MESSAGE_CHECK_MINUTES,
     CALL_LOG_CHECK_MINUTES,
-    GMAIL_CHECK_MINUTES,
+    GMAIL_NEW_MAIL_CHECK_SECONDS,
+    GMAIL_MISSED_REPLY_CHECK_MINUTES,
     PRESENCE_POLL_SECONDS,
     HEADPHONE_POLL_SECONDS_ON_HEADPHONES,
     PROACTIVE_CAMERA_OBSTRUCTION_IDLE_SECONDS,
@@ -805,62 +806,45 @@ def check_recent_calls():
         notify(summary, title="Call", urgent=True)  # same reasoning as check_vip_messages above
 
 
-def check_gmail_missed_replies():
-    """Speak up when an inbox email has gone GMAIL_MISSED_REPLY_DAYS
-    with no reply, stay silent otherwise. Same dedup-in-the-tool-not-
-    _load_state() shape as check_vip_messages above — gmail_imap.py
-    keeps its own Message-ID seen-set. Never raises into the scheduler:
-    IMAP being briefly unreachable (or credentials never set up) is the
-    normal case, not an error — see gmail_imap.py's own docstring."""
+_gmail_down = False
+
+
+def _gmail_check(name: str, fetch):
+    """Runs one Gmail alert check. Alerts are API-only (no IMAP polling
+    anymore), so an outage would otherwise be silent: say so ONCE, and
+    once more when it recovers, never on every tick."""
+    global _gmail_down
     try:
-        from tools.gmail_imap import check_missed_replies as fetch
-        summary = fetch()
+        result = fetch()
     except Exception as e:
-        event_log.log_error("proactive_gmail_missed_replies", e)
-        return
-
-    if summary:
-        # Not urgent, deliberately -- Vatsal's own call 2026-08-28: unlike
-        # a VIP text/call, a missed-reply nag can wait for a good moment
-        # via the normal naturalness gate rather than interrupting anything.
-        notify(summary, title="Email")
-
-
-def check_gmail_deadlines():
-    """Speak up when a recent email's body mentions a date-like phrase,
-    stay silent otherwise. Same shape as check_gmail_missed_replies
-    above, separate seen-set (gmail_imap.check_email_deadlines)."""
-    try:
-        from tools.gmail_imap import check_email_deadlines as fetch
-        summary = fetch()
-    except Exception as e:
-        event_log.log_error("proactive_gmail_deadlines", e)
-        return
-
-    if summary:
-        notify(summary, title="Email")  # not urgent -- same reasoning as check_gmail_missed_replies above
+        event_log.log_error(name, e)
+        if not _gmail_down:
+            _gmail_down = True
+            notify(f"Gmail alerts are paused, sir -- {str(e)[:120]}", title="Email")
+        return None
+    if _gmail_down:
+        _gmail_down = False
+        notify("Gmail alerts are back.", title="Email")
+    return result
 
 
-def check_email_tiers():
-    """Vatsal's own 2026-08-28 three-tier design for NEW arriving email
-    (distinct from the two content-based checks above): useless
-    (subscribed/newsletter, List-Unsubscribe header) never notifies;
-    vvip (Vatsal emailed them first) bypasses the naturalness gate,
-    same urgent=True precedent as check_vip_messages/check_recent_calls;
-    basic (everything else) goes through the normal gate. See
-    gmail_imap.check_email_tiers's own docstring for the classification
-    logic."""
-    try:
-        from tools.gmail_imap import check_email_tiers as fetch
-        results = fetch()
-    except Exception as e:
-        event_log.log_error("proactive_gmail_tiers", e)
-        return
-
-    for tier, summary in results:
-        if tier == "useless":
-            continue
+def check_gmail_new_mail():
+    """New Primary email since the last tick (tools/gmail_api.check_new_mail).
+    vvip (Vatsal emailed them first) bypasses the naturalness gate, same
+    urgent=True precedent as check_vip_messages; basic goes through it;
+    useless (newsletters) never comes back from the tool at all."""
+    from tools.gmail_api import check_new_mail
+    for tier, summary in _gmail_check("proactive_gmail_new_mail", check_new_mail) or []:
         notify(summary, title="Email", urgent=(tier == "vvip"))
+
+
+def check_gmail_missed_replies():
+    """Not urgent, deliberately -- Vatsal's own call 2026-08-28: a
+    missed-reply nag can wait for a good moment via the normal gate."""
+    from tools.gmail_api import check_missed_replies
+    summary = _gmail_check("proactive_gmail_missed_replies", check_missed_replies)
+    if summary:
+        notify(summary, title="Email")
 
 
 # Wake-awareness greeting, same sir-suffixed short-phrase-pool style as
@@ -1110,17 +1094,14 @@ def register(scheduler, llm=None, on_agenda_ask=None):
     scheduler.add_periodic(
         check_recent_calls, CALL_LOG_CHECK_MINUTES, "proactive_recent_calls"
     )
-    # Own slower cadence, see GMAIL_CHECK_MINUTES's comment — an IMAP
-    # round trip is heavier than the adb checks above. No-ops until
-    # scripts/setup_gmail_credentials.py has been run.
+    # Gmail: a cheap "anything new since last time?" delta every minute,
+    # plus the time-based missed-reply check hourly. See the settings
+    # comments. Both no-op until scripts/setup_gmail_oauth.py has run.
     scheduler.add_periodic(
-        check_gmail_missed_replies, GMAIL_CHECK_MINUTES, "proactive_gmail_missed_replies"
+        check_gmail_new_mail, GMAIL_NEW_MAIL_CHECK_SECONDS / 60, "proactive_gmail_new_mail"
     )
     scheduler.add_periodic(
-        check_gmail_deadlines, GMAIL_CHECK_MINUTES, "proactive_gmail_deadlines"
-    )
-    scheduler.add_periodic(
-        check_email_tiers, GMAIL_CHECK_MINUTES, "proactive_gmail_tiers"
+        check_gmail_missed_replies, GMAIL_MISSED_REPLY_CHECK_MINUTES, "proactive_gmail_missed_replies"
     )
     # add_periodic takes minutes, PRESENCE_POLL_SECONDS is defined in
     # seconds (Vatsal's explicit "15 seconds" call) — dividing by 60

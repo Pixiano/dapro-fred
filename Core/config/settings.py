@@ -267,29 +267,26 @@ VIP_MESSAGE_CHECK_MINUTES = 2
 # reason to poll it any less often.
 CALL_LOG_CHECK_MINUTES = 2
 
-# Gmail, via a temporary IMAP bridge (tools/gmail_imap.py) — the real
-# Gmail API is blocked on Vatsal's GCP project limit clearing (~1 month
-# from 2026-08-28), so this reads over IMAP with a Google App Password
-# instead of OAuth. Vatsal's own call 2026-08-28: 5 minutes, tighter than
-# the original 15 — still slower than the adb checks above (an IMAP
-# round trip, login + two folder searches, is heavier than a local
-# notification dump), but email deadlines/missed-replies going through
-# the normal naturalness gate now (not urgent) makes a shorter poll less
-# disruptive than it would have been under the old urgent=True wiring.
-GMAIL_CHECK_MINUTES = 5
+# Gmail (tools/gmail_api.py). The old GMAIL_CHECK_MINUTES = 5 full
+# rescans of 14 days of mail were SUPERSEDED 2026-09-27 by a History API
+# delta check: each tick asks Gmail only "what arrived since last time",
+# which costs almost nothing when nothing did.
+GMAIL_NEW_MAIL_CHECK_SECONDS = 60
 
-# An inbox email with no matching Sent-folder reply after this many days
-# counts as "missed" and gets surfaced once. Not yet tuned against real
-# inbox volume — revisit if it over- or under-fires.
+# An inbox email with no reply from Vatsal after this many days counts as
+# "missed" and gets surfaced once. Time-based, so it can't ride the
+# new-mail delta above -- its own hourly check.
 GMAIL_MISSED_REPLY_DAYS = 3
+GMAIL_MISSED_REPLY_CHECK_MINUTES = 60
 
-# Only scan emails from the last N days for deadline phrases in the body
-# — avoids re-scanning the whole inbox every poll.
-GMAIL_DEADLINE_LOOKBACK_DAYS = 7
+# Most results any listing/search tool returns in one go.
+GMAIL_SEARCH_LIMIT = 10
 
-# How many recent Primary-category emails the on-demand "check my email"
-# tool (tools/gmail_imap.read_recent_primary) summarizes at once.
-GMAIL_READ_COUNT_DEFAULT = 5
+# Where confirmed attachment downloads land.
+GMAIL_ATTACHMENT_DIR = Path.home() / "Downloads" / "FRED Email"
+
+# Per-sender tier overrides, hand-edited. In the vault: they're names.
+GMAIL_TIER_OVERRIDES_PATH = VAULT_DIR / "people" / "email-tiers.md"
 
 # active-priorities.md's own `updated:` frontmatter date, not a per-item
 # parse of its prose bullets — see proactive_checks.py for why a
@@ -671,6 +668,12 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 # this codebase reads via os.environ.get() (see GROQ_API_KEY above).
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
+
+# Real Gmail API (tools/gmail_api.py), primary transport; IMAP above is
+# the fallback. Both files live outside every git repo. The token is
+# written by scripts/setup_gmail_oauth.py after a one-time browser consent.
+GMAIL_OAUTH_CLIENT_PATH = Path(r"C:\Users\Dhiraj Vatsal\VatsalDaPro\Keys\FRED_Gmail.json")
+GMAIL_OAUTH_TOKEN_PATH = GMAIL_OAUTH_CLIENT_PATH.with_name("FRED_Gmail_token.json")
 
 # Forced off 2026-08-18: the Cerebras account is out of credits (every
 # call returning HTTP 402 Payment Required — 463 times in one day before

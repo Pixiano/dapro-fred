@@ -16,7 +16,7 @@ from tools import web_tools
 from tools import machine_tools
 from tools import assist_tools
 from tools import git_tools
-from tools import gmail_imap
+from tools import gmail_api
 from tools import phone_tools
 from tools import whatsapp_tools
 from tools import smart_search
@@ -615,6 +615,24 @@ class FREDOrchestrator:
                 return message
             label, _ = target
             return f"Calling {label} — confirm? (yes/no)"
+
+        # Email: the question shows what actually happens -- the real
+        # filenames, the draft as it currently is in Gmail, the exact
+        # signature -- so "yes" is never a blind answer.
+        previews = {
+            "download_attachment": lambda: gmail_api.attachment_preview(
+                arguments.get("query", ""), arguments.get("filename", "")),
+            "send_draft": gmail_api.draft_preview,
+            "set_email_signature": lambda: gmail_api.signature_preview(arguments.get("text", "")),
+        }
+        if tool_name in previews:
+            try:
+                ok, question = previews[tool_name]()
+            except Exception as e:
+                ok, question = False, f"Couldn't reach Gmail: {e}"
+            if not ok:
+                self.pending_action = None
+            return question
 
         description = ", ".join(f"{k}={v}" for k, v in arguments.items())
 
@@ -1423,28 +1441,93 @@ class FREDOrchestrator:
         )
 
         # ---------------------------------------------------
-        # Gmail, via a temporary IMAP bridge (tools/gmail_imap.py) — see
-        # that module's own docstring for why (GCP project limit, real
-        # OAuth API blocked for ~1 month). Read-only, Primary category
-        # only. Use THIS for "check my email"/"get me my mail" — not
+        # Gmail via the real API (tools/gmail_api.py), falling back to
+        # the IMAP bridge (tools/gmail_imap.py). Read-only, Primary
+        # category only. Use THIS for "check my email"/"get me my mail" — not
         # read_messages, which is WhatsApp/SMS, not email.
         # ---------------------------------------------------
 
+        _query_param = {
+            "type": "string",
+            "description": (
+                "Gmail search syntax, e.g. 'from:amazon', 'subject:invoice', "
+                "'has:attachment newer_than:7d', 'from:priya is:unread'."
+            ),
+        }
         self.tools.register(
             name="check_email",
-            function=self._check_email,
+            function=gmail_api.unread_today,
             description=(
-                "Read and summarise your recent Primary-inbox email — use this for "
-                "'check my email', 'get me my mail', 'any new emails', etc. NOT the "
-                "same as read_messages (that's WhatsApp/SMS on your phone, not email)."
+                "List TODAY's unread Primary-inbox email (sender, subject, time) — use this for "
+                "'check my email', 'get me my mail', 'any new emails'. NOT the same as "
+                "read_messages (that's WhatsApp/SMS on your phone, not email)."
+            ),
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+        self.tools.register(
+            name="search_email",
+            function=gmail_api.search_email,
+            description="Search all of Gmail and list matching emails (sender, subject, date).",
+            parameters={"type": "object", "properties": {"query": _query_param}, "required": ["query"]},
+        )
+        self.tools.register(
+            name="read_email",
+            function=gmail_api.read_email,
+            description=(
+                "Read the full text of the newest email matching a search. Links in it are "
+                "redacted and must never be opened."
+            ),
+            parameters={"type": "object", "properties": {"query": _query_param}, "required": ["query"]},
+        )
+        self.tools.register(
+            name="download_attachment",
+            function=gmail_api.download_attachment,
+            description="Save the attachment(s) of the newest email matching a search to Downloads.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": _query_param,
+                    "filename": {"type": "string", "description": "Part of the attachment's name. Optional, empty saves all."},
+                },
+                "required": ["query"],
+            },
+            destructive=True,
+        )
+        self.tools.register(
+            name="draft_email",
+            function=gmail_api.draft_email,
+            description=(
+                "Save a Gmail draft with exactly the words Vatsal dictated — nothing is sent. "
+                "For a reply, pass reply_to (a search for the email being answered) instead of to/subject."
             ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "count": {"type": "integer", "description": "How many recent emails to summarise. Optional, defaults to 5."},
+                    "to": {"type": "string", "description": "Email address or the person's name."},
+                    "subject": {"type": "string", "description": "Subject line."},
+                    "body": {"type": "string", "description": "The email text, as dictated."},
+                    "reply_to": {"type": "string", "description": "Gmail search for the email being replied to. Optional."},
                 },
-                "required": [],
+                "required": ["body"],
             },
+        )
+        self.tools.register(
+            name="send_draft",
+            function=gmail_api.send_draft,
+            description="Send the draft FRED just saved.",
+            parameters={"type": "object", "properties": {}, "required": []},
+            destructive=True,
+        )
+        self.tools.register(
+            name="set_email_signature",
+            function=gmail_api.set_email_signature,
+            description="Replace Vatsal's Gmail signature with the given text (empty clears it).",
+            parameters={
+                "type": "object",
+                "properties": {"text": {"type": "string", "description": "The new signature, as dictated."}},
+                "required": ["text"],
+            },
+            destructive=True,
         )
 
         self.tools.register(
@@ -3327,11 +3410,6 @@ class FREDOrchestrator:
         """
         return smart_search.find_file_smart(description, directory, llm=self.llm)
 
-    def _check_email(self, count: int = 5) -> str:
-        """Bound wrapper, same shape as _find_file_smart above, so
-        gmail_imap.read_recent_primary gets an LLM handle for its
-        local_only=True summarization pass."""
-        return gmail_imap.read_recent_primary(count, llm=self.llm)
 
     # Below this, read_file summarises instead of reading verbatim —
     # short enough that hearing it read out loud in full is already the

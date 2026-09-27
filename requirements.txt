@@ -79,3 +79,8 @@ pypdf>=6.0.0
 # matching the design doc's researched claim.
 opencv-python>=4.9.0
 insightface>=1.0.1
+
+# Gmail API OAuth (Core/tools/gmail_api.py). Pulls in google-auth; REST
+# calls go through its requests-based AuthorizedSession, so no
+# google-api-python-client.
+google-auth-oauthlib>=1.4.1

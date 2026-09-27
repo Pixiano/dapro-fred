@@ -1,388 +1,100 @@
 # Core/tools/gmail_imap.py
 #
-# TEMPORARY Gmail bridge over IMAP + a Google App Password, not the real
-# Gmail API. Vatsal hit his GCP project limit 2026-08-28 — deletion/reuse
-# won't clear for ~1 month, likely past this session's tool-calling LoRA
-# fine-tune — so this exists to unblock the two Gmail features from
-# roadmap_pre-finetune_2026-08-26.md section 3(d) in the meantime.
-# Read-only, same practical scope as the `gmail.readonly` OAuth scope
-# would have been. Swap this module for a real gmail_api.py later; the
-# proactive_checks.py wiring and dedup logic can stay as-is, only the
-# transport here changes.
+# FALLBACK read-only Gmail transport: IMAP + a Google App Password.
+# tools/gmail_api.py is the real transport; it calls search() here only
+# when the API is unreachable, so reads keep working through an outage.
+# Everything else (new-mail alerts, drafts, sending, settings) is API-only.
+# The old 5-minute IMAP rescans (missed replies / deadlines / tiers) were
+# removed 2026-09-27, superseded by gmail_api's history-delta checks.
+#
+# Also home of the two text helpers BOTH transports share, so there is one
+# place that decides what email text FRED is allowed to see:
+#   _decode_header / _body_text -- every link is replaced with
+#   "[REDACTED link to <domain>]". FRED never opens, fetches or reads a
+#   link from an email; it can only say one was there and roughly where to.
 #
 # CREDENTIAL HANDLING: GMAIL_ADDRESS/GMAIL_APP_PASSWORD come from
 # os.environ (config/settings.py), set once via
-# scripts/setup_gmail_credentials.py — never typed to or read by Claude,
-# never written to a file. Same "no-op until enrolled" convention
-# orchestrator/headphone_watch.py uses before scripts/enroll_headphones.py
-# has run: every public function here returns "" immediately if the
-# credentials aren't set, rather than attempting a connection.
+# scripts/setup_gmail_credentials.py -- never typed to or read by Claude.
 
 import email
 import email.header
-import email.utils
 import imaplib
-import json
 import re
-from datetime import datetime, timedelta
 
-from config.settings import (
-    DATA_DIR,
-    GMAIL_ADDRESS,
-    GMAIL_APP_PASSWORD,
-    GMAIL_DEADLINE_LOOKBACK_DAYS,
-    GMAIL_MISSED_REPLY_DAYS,
-    GMAIL_READ_COUNT_DEFAULT,
-)
+from config.settings import GMAIL_ADDRESS, GMAIL_APP_PASSWORD
 
-MISSED_REPLY_SEEN_PATH = DATA_DIR / "gmail_missed_reply_seen.json"
-DEADLINE_SEEN_PATH = DATA_DIR / "gmail_deadline_seen.json"
-TIER_SEEN_PATH = DATA_DIR / "gmail_tier_seen.json"
-
-# Same lightweight date-phrase shapes tools/agenda.py's parse_due_date
-# matches (today/tomorrow/in N days/weekday/ISO/"13 August 2026") — this
-# scans free-text email BODIES rather than a structured `due` argument,
-# so it's a standalone scanner, not an import of agenda.py's parser.
-_MONTH_NAMES = (
-    "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|"
-    "aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
-)
-_DEADLINE_PATTERNS = [
-    re.compile(r"\bdue\s+(?:by\s+|on\s+)?\w[\w ,]{0,25}", re.IGNORECASE),
-    re.compile(r"\bdeadline[:\s]+\w[\w ,]{0,25}", re.IGNORECASE),
-    re.compile(r"\bby\s+(tomorrow|today|next week|end of \w+)", re.IGNORECASE),
-    re.compile(r"\b(tomorrow|today)\b", re.IGNORECASE),
-    re.compile(r"\bin\s+\d+\s+(day|days|week|weeks)\b", re.IGNORECASE),
-    re.compile(rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{_MONTH_NAMES})\.?\s*\d{{0,4}}\b", re.IGNORECASE),
-    re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),
-]
+_LINK_RE = re.compile(r"(?<![@\w.])(?:https?://|www\.)[^\s<>\"'()\[\]]+", re.IGNORECASE)
 
 
-def _primary_search(conn, since: datetime):
-    """IMAP has no native concept of Gmail's Primary/Social/Promotions/
-    Updates/Forums tabs -- those are a Gmail-web-UI-only categorization
-    over one flat INBOX. X-GM-RAW is Gmail's own IMAP extension (only
-    works against imap.gmail.com) that accepts a real Gmail search query
-    string, which DOES support `category:primary` -- the only way to
-    actually scope this to Primary rather than reading everything.
-    Vatsal's own call 2026-08-28: only Primary, not the whole inbox."""
-    query = f'"category:primary after:{since.strftime("%Y/%m/%d")}"'
-    return conn.search(None, "X-GM-RAW", query)
-
-
-def _connect():
-    """IMAP4_SSL logged in, or None if credentials aren't set / login
-    fails. Caller must close() it when done."""
-    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
-        return None
-    conn = imaplib.IMAP4_SSL("imap.gmail.com")
-    conn.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-    return conn
-
-
-def _load_seen(path) -> set:
-    try:
-        return set(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        return set()
-
-
-def _save_seen(path, seen: set):
-    keep = sorted(seen)[-500:]  # tail only, this is dedup not an archive
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(keep), encoding="utf-8")
-    tmp.replace(path)
+def redact_links(text: str) -> str:
+    def _replace(match):
+        host = re.sub(r"^(?:https?://)?(?:www\.)?", "", match.group(0), flags=re.IGNORECASE)
+        host = re.split(r"[/?#:]", host, maxsplit=1)[0][:60]
+        return f"[REDACTED link to {host}]" if host else "[REDACTED link]"
+    return _LINK_RE.sub(_replace, text or "")
 
 
 def _decode_header(raw) -> str:
     if not raw:
         return ""
     parts = email.header.decode_header(raw)
-    return "".join(
+    return redact_links("".join(
         p.decode(enc or "utf-8", errors="replace") if isinstance(p, bytes) else p
         for p, enc in parts
-    )
-
-
-def _fetch_message(conn, num) -> email.message.Message:
-    _, data = conn.fetch(num, "(RFC822)")
-    return email.message_from_bytes(data[0][1])
+    ))
 
 
 def _body_text(msg: email.message.Message) -> str:
+    """Plain-text body (HTML stripped as a last resort), links redacted.
+    HTML tags go first, so href targets never survive at all."""
+    text = ""
     if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain":
+        for kind in ("text/plain", "text/html"):
+            part = next((p for p in msg.walk() if p.get_content_type() == kind), None)
+            if part is not None:
                 payload = part.get_payload(decode=True) or b""
-                return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
-        for part in msg.walk():
-            if part.get_content_type() == "text/html":
-                payload = part.get_payload(decode=True) or b""
-                html = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
-                return re.sub(r"<[^>]+>", " ", html)
-        return ""
-    payload = msg.get_payload(decode=True) or b""
-    return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
+                text = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+                if kind == "text/html":
+                    text = re.sub(r"<[^>]+>", " ", text)
+                break
+    else:
+        payload = msg.get_payload(decode=True) or b""
+        text = payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
+        if msg.get_content_type() == "text/html":
+            text = re.sub(r"<[^>]+>", " ", text)
+    return redact_links(text)
 
 
-def check_missed_replies() -> str:
-    """An inbox email >= GMAIL_MISSED_REPLY_DAYS old, not from Vatsal
-    himself, with no matching In-Reply-To/References in [Gmail]/Sent
-    Mail — one short summary of the most notable one, or "" if nothing
-    new. Dedup via a seen-set keyed on Message-ID, same shape as
-    whatsapp_tools.check_vip_messages's own seen-stamp file."""
+def _fetch_message(conn, num) -> email.message.Message:
+    # PEEK, not RFC822: an RFC822/BODY[] fetch sets \Seen, which silently
+    # marked every polled email as read.
+    _, data = conn.fetch(num, "(BODY.PEEK[])")
+    return email.message_from_bytes(data[0][1])
+
+
+def _imap_quote(query: str) -> str:
+    return '"' + query.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def search(query: str, limit: int = 10) -> list:
+    """Messages matching a Gmail search query, newest first, as
+    email.message.Message objects. Same query syntax as the API (Gmail's
+    own X-GM-RAW IMAP extension). Raises on any failure -- the caller
+    decides what to tell Vatsal."""
+    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
+        raise RuntimeError("IMAP fallback isn't set up (no App Password)")
+    conn = imaplib.IMAP4_SSL("imap.gmail.com")
     try:
-        conn = _connect()
-        if conn is None:
-            return ""
-        try:
-            since = datetime.now() - timedelta(days=GMAIL_MISSED_REPLY_DAYS + 4)
-            conn.select("INBOX")
-            _, data = _primary_search(conn, since)
-            inbox_nums = data[0].split() if data and data[0] else []
-
-            conn.select('"[Gmail]/Sent Mail"')  # standard English-locale Gmail folder name
-            _, sent_data = conn.search(None, "ALL")
-            sent_nums = sent_data[0].split() if sent_data and sent_data[0] else []
-            replied_to_ids = set()
-            for num in sent_nums:
-                msg = _fetch_message(conn, num)
-                for header in ("In-Reply-To", "References"):
-                    value = msg.get(header, "")
-                    replied_to_ids.update(value.split())
-
-            conn.select("INBOX")
-            seen = _load_seen(MISSED_REPLY_SEEN_PATH)
-            cutoff = datetime.now() - timedelta(days=GMAIL_MISSED_REPLY_DAYS)
-            missed = []
-            for num in inbox_nums:
-                msg = _fetch_message(conn, num)
-                msg_id = msg.get("Message-ID", "")
-                if not msg_id or msg_id in seen:
-                    continue
-                from_addr = email.utils.parseaddr(msg.get("From", ""))[1]
-                if GMAIL_ADDRESS and from_addr.lower() == GMAIL_ADDRESS.lower():
-                    continue
-                try:
-                    sent_at = email.utils.parsedate_to_datetime(msg.get("Date", ""))
-                    if sent_at.tzinfo is not None:
-                        sent_at = sent_at.replace(tzinfo=None)
-                except (TypeError, ValueError):
-                    continue
-                if sent_at > cutoff:
-                    continue  # not old enough yet
-                if msg_id in replied_to_ids:
-                    seen.add(msg_id)  # replied -- never surface, never re-check
-                    continue
-                days = (datetime.now() - sent_at).days
-                missed.append((msg_id, _decode_header(msg.get("From", "")), _decode_header(msg.get("Subject", "")), days))
-
-            _save_seen(MISSED_REPLY_SEEN_PATH, seen | {m[0] for m in missed})
-
-            if not missed:
-                return ""
-            sender, subject, days = missed[0][1], missed[0][2], missed[0][3]
-            return f'{sender} emailed "{subject}" {days} day(s) ago, still no reply'
-        finally:
-            try:
-                conn.logout()
-            except Exception:
-                pass
-    except Exception:
-        return ""
-
-
-def check_email_deadlines() -> str:
-    """Inbox emails from the last GMAIL_DEADLINE_LOOKBACK_DAYS days,
-    body-scanned for a date-like phrase — one short summary of the most
-    notable one, or "" if nothing new. Dedup via its own seen-set."""
-    try:
-        conn = _connect()
-        if conn is None:
-            return ""
-        try:
-            since = datetime.now() - timedelta(days=GMAIL_DEADLINE_LOOKBACK_DAYS)
-            conn.select("INBOX")
-            _, data = _primary_search(conn, since)
-            nums = data[0].split() if data and data[0] else []
-
-            seen = _load_seen(DEADLINE_SEEN_PATH)
-            found = []
-            for num in nums:
-                msg = _fetch_message(conn, num)
-                msg_id = msg.get("Message-ID", "")
-                if not msg_id or msg_id in seen:
-                    continue
-                body = _body_text(msg)
-                match = None
-                for pattern in _DEADLINE_PATTERNS:
-                    m = pattern.search(body)
-                    if m:
-                        match = m.group(0).strip()
-                        break
-                seen.add(msg_id)
-                if match:
-                    found.append((_decode_header(msg.get("From", "")), _decode_header(msg.get("Subject", "")), match))
-
-            _save_seen(DEADLINE_SEEN_PATH, seen)
-
-            if not found:
-                return ""
-            sender, subject, phrase = found[0]
-            return f'{sender}\'s email "{subject}" mentions: {phrase}'
-        finally:
-            try:
-                conn.logout()
-            except Exception:
-                pass
-    except Exception:
-        return ""
-
-
-def read_recent_primary(count: int = GMAIL_READ_COUNT_DEFAULT, llm=None) -> str:
-    """The on-demand "check my email" tool -- fills the gap found live
-    2026-08-28 where "get me my mail" had nothing to call and FRED
-    defaulted to the WhatsApp reader instead. Fetches the `count` most
-    recent Primary-category emails (newest first) and summarizes them.
-
-    llm=None returns a bare sender/subject list (still useful, same
-    fallback shape session_summary.summarise_today uses without an llm
-    handle). With an llm, summarizes via local_only=True -- this reads
-    raw email content, unattended, same privacy bar as
-    session_summary.summarise_today's own local_only=True call for the
-    identical reason (see that function's docstring)."""
-    try:
-        conn = _connect()
-        if conn is None:
-            return "Email isn't set up yet, sir -- run setup_gmail_credentials first."
-        try:
-            since = datetime.now() - timedelta(days=14)
-            conn.select("INBOX")
-            _, data = _primary_search(conn, since)
-            nums = data[0].split() if data and data[0] else []
-            nums = sorted(nums, key=lambda n: int(n), reverse=True)[:count]
-
-            emails = []
-            for num in nums:
-                msg = _fetch_message(conn, num)
-                emails.append((
-                    _decode_header(msg.get("From", "")),
-                    _decode_header(msg.get("Subject", "")),
-                    _body_text(msg)[:1000],  # cap per-email body fed to the model
-                ))
-        finally:
-            try:
-                conn.logout()
-            except Exception:
-                pass
-    except Exception as e:
-        return f"Couldn't reach Gmail: {e}"
-
-    if not emails:
-        return "Nothing in your Primary inbox in the last two weeks, sir."
-
-    if llm is None:
-        return "\n".join(f"- {frm}: {subj}" for frm, subj, _ in emails)
-
-    listing = "\n\n".join(
-        f"From: {frm}\nSubject: {subj}\nBody: {body}" for frm, subj, body in emails
-    )
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "Summarise these emails for a spoken reply. One short line "
-                "per email: who it's from and the gist of what they want or "
-                "said. No preamble, no closing offer, nothing invented."
-            ),
-        },
-        {"role": "user", "content": listing},
-    ]
-    try:
-        return llm.generate(prompt, local_only=True, force_no_thinking=True)
-    except Exception as e:
-        return f"Couldn't summarise your email: {e}"
-
-
-def _emailed_first(conn, address: str) -> bool:
-    """VVIP proxy: has Vatsal EVER sent TO this address? Full "who
-    actually messaged first, ever" reconstruction (earliest sent vs.
-    earliest received, per sender) would mean scanning unbounded Sent-
-    Mail history on every poll -- this is one cheap server-side IMAP
-    SEARCH (no message body/header fetch, just matching UIDs) per
-    newly-seen sender instead. Pragmatic call, not exact -- if it turns
-    out too loose/tight in practice, tighten to a real earliest-message
-    comparison then."""
-    try:
-        conn.select('"[Gmail]/Sent Mail"')
-        _, data = conn.search(None, "TO", f'"{address}"')
-        return bool(data and data[0])
-    except Exception:
-        return False
+        conn.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+        # All Mail, read-only (EXAMINE): matches the API's search scope, and
+        # nothing here can change a flag even if a fetch ever stopped peeking.
+        conn.select('"[Gmail]/All Mail"', readonly=True)
+        _, data = conn.search(None, "X-GM-RAW", _imap_quote(query))
+        nums = (data[0].split() if data and data[0] else [])[::-1][:limit]
+        return [_fetch_message(conn, n) for n in nums]
     finally:
         try:
-            conn.select("INBOX")
+            conn.logout()
         except Exception:
             pass
-
-
-def check_email_tiers() -> list:
-    """Classifies each newly-seen Primary-category email into useless/
-    basic/vvip (Vatsal's own 2026-08-28 three-tier design, same naming
-    as whatsapp_tools.py's existing useless/basic/trusted/vip tiers) and
-    returns [(tier, summary), ...] for anything new this poll:
-
-      useless -- carries a List-Unsubscribe header, the standard signal
-                 for newsletters/marketing mail. Caller must never
-                 notify for these.
-      vvip    -- Vatsal emailed this address first (see _emailed_first).
-                 Caller should bypass the naturalness gate (urgent).
-      basic   -- everything else, the default bucket. Caller routes
-                 through the normal (non-urgent) gate.
-
-    Own seen-set (Message-ID), same dedup shape as the other two checks
-    in this module -- each email is only classified/notified once."""
-    try:
-        conn = _connect()
-        if conn is None:
-            return []
-        try:
-            since = datetime.now() - timedelta(days=GMAIL_DEADLINE_LOOKBACK_DAYS)
-            conn.select("INBOX")
-            _, data = _primary_search(conn, since)
-            nums = data[0].split() if data and data[0] else []
-
-            seen = _load_seen(TIER_SEEN_PATH)
-            results = []
-            for num in nums:
-                msg = _fetch_message(conn, num)
-                msg_id = msg.get("Message-ID", "")
-                if not msg_id or msg_id in seen:
-                    continue
-                seen.add(msg_id)
-
-                from_addr = email.utils.parseaddr(msg.get("From", ""))[1]
-                if GMAIL_ADDRESS and from_addr.lower() == GMAIL_ADDRESS.lower():
-                    continue  # own address landing in Primary somehow -- not a real "new email"
-
-                sender = _decode_header(msg.get("From", ""))
-                subject = _decode_header(msg.get("Subject", ""))
-                summary = f'New email from {sender}: "{subject}"'
-
-                if msg.get("List-Unsubscribe"):
-                    results.append(("useless", summary))
-                elif from_addr and _emailed_first(conn, from_addr):
-                    results.append(("vvip", summary))
-                else:
-                    results.append(("basic", summary))
-
-            _save_seen(TIER_SEEN_PATH, seen)
-            return results
-        finally:
-            try:
-                conn.logout()
-            except Exception:
-                pass
-    except Exception:
-        return []

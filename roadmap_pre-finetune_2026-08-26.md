@@ -207,6 +207,11 @@ instead of an OAuth token). No-ops until
 `scripts/setup_gmail_credentials.bat` is run. Swap back to the real API
 once the project limit clears — see `TODO.md`.
 
+**SUPERSEDED 2026-09-27**: swapped to the real Gmail API
+(`Core/tools/gmail_api.py`), IMAP kept as a read-only fallback, and the
+5-minute IMAP rescans replaced by History API deltas. Current state
+lives in `plan_v1.2_2026-09-27.md` section 1 and `DONE.md` 2026-09-27.
+
 **OAuth setup steps, for when that swap happens** (not yet built, this
 is just so the steps aren't lost):
 1. https://console.cloud.google.com/ → New Project.

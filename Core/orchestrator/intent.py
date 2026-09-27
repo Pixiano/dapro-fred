@@ -120,7 +120,12 @@ TOOL_CATEGORIES = {
     # not folded into messages_read: email is a different medium (Gmail
     # IMAP, not the paired phone), same read/send separation reasoning
     # as messages_read/messages_send above.
-    "email_read": ("check_email",),
+    "email_read": ("check_email", "search_email", "read_email", "download_attachment"),
+    # Same read/send split as messages_read/messages_send above: a turn
+    # that just read a stranger's email shouldn't also hold the drafting
+    # tools. Sending is confirmation-gated in code regardless (send_draft
+    # is registered destructive), so this is the second line, not the only one.
+    "email_send": ("draft_email", "send_draft", "set_email_signature"),
     # Questions about FRED himself. describe_self is listed here too:
     # it was registered with no category at all, so until now it was
     # only ever reachable by the embedder's rescue path. The two answer
@@ -334,12 +339,24 @@ CATEGORY_CUES = {
         "who messaged", "who texted", "check whatsapp", "read whatsapp",
         "my whatsapp", "what did", "anything from",
     ),
-    # See email_read's own comment above the category tuple — "mail"
-    # deliberately covers "get me my mail"/"check my mail", not just
-    # "email"/"gmail", since that's the exact phrasing that misrouted.
+    # See email_read's own comment above the category tuple. Bare
+    # "email"/"mail" were dropped 2026-09-27: they also appear in "send an
+    # email"/"draft a mail", and a phrase matching both email categories
+    # unions them -- the isolation email_send exists for. So read is
+    # plural/possessive/"the email from", send is verb-led.
     "email_read": (
-        "email", "emails", "e-mail", "mail", "gmail", "inbox",
-        "check my mail", "check my email", "any new emails", "new mail",
+        "emails", "e-mails", "my email", "my mail", "get me my mail", "gmail", "inbox",
+        "check my mail", "check my email", "check email", "any new emails", "new mail",
+        "unread email", "unread mail", "email from", "mail from", "emails from",
+        "read the email", "read that email", "open the email", "search my email",
+        "search my mail", "search email", "find the email", "find an email",
+        "attachment", "attachments",
+    ),
+    "email_send": (
+        "draft", "send an email", "send a mail", "send email", "write an email",
+        "write a mail", "email to", "mail to", "email him", "email her", "email them",
+        "reply to the email", "reply to that email", "send the draft", "send that email",
+        "signature",
     ),
     # SINGULAR "message" as a verb. Its absence is why "Message Mom saying
     # hello" reached the model with no messaging tool offered at all, and

@@ -4,6 +4,45 @@ Running log of completed work, one dated section per calendar day. See
 `DOCUMENTATION_SYSTEM.md` for the rules this follows (Mark 1, adopted
 2026-08-28) and `TODO.md` for what's still pending/deferred.
 
+## 2026-09-27
+
+- **v1.2 scope set** (`plan_v1.2_2026-09-27.md`): Gmail, phone messages,
+  calls, file indexing first; credentials vault + AI-chat import
+  secondary; everything else on hold.
+- **Nightly file reindex**: `Core/scripts/nightly_reindex.py` +
+  Windows task `FRED_NightlyReindex` (03:00) rebuilds the file index
+  over all of VatsalDaPro — closes the "changed outside FRED" staleness.
+- **Gmail moved to the real API** (`Core/tools/gmail_api.py`, OAuth
+  client + token in `VatsalDaPro\Keys`, never in a repo). IMAP stays
+  as a read-only fallback (`gmail_imap.search`).
+- **Fixed: IMAP polling was marking mail read.** `FETCH (RFC822)` sets
+  `\Seen`; since 2026-08-28 every polled Primary email got marked read.
+  Now `BODY.PEEK[]` on a read-only `EXAMINE`.
+- **SUPERSEDED: the 5-minute Gmail rescans** (`GMAIL_CHECK_MINUTES`, three
+  jobs re-reading 7-14 days of mail). Replaced by a History API delta
+  every minute (only what arrived since last time) + an hourly
+  missed-reply check. An API outage now announces itself once instead
+  of going silent.
+- **New Gmail tools, all hardcoded, no LLM**: today's unread
+  (`check_email`), Gmail-syntax `search_email`, `read_email`,
+  `download_attachment` (confirm first, sanitised filenames),
+  `draft_email` / `send_draft` (confirm shows the draft as it is in
+  Gmail), `set_email_signature` (confirm first). Only a sent reply marks
+  anything read. Every link in email text becomes
+  `[REDACTED link to <domain>]` — FRED never opens links.
+- **Gmail tier labels, tuned on 5 days of real mail**: every new
+  Primary/Updates email gets `FRED/VVIP` / `FRED/Basic` / `FRED/Useless`
+  (labels only, never archived or marked read). FRED no longer touches
+  Social/Promotions/Forums at all. Fixes from the real-mail run: no-reply
+  senders are never VVIP; missed replies count VVIP senders only; "due
+  to" and bare "today" aren't deadlines. Hand overrides live in the
+  vault (`people/email-tiers.md`). API calls now back off on Gmail's
+  burst rate limit (hit live).
+- **Push notifications not built**: Gmail's push needs Pub/Sub, and with
+  no public endpoint FRED would still have to pull from that queue — no
+  faster than the History delta, plus a topic, IAM grant, extra scope and
+  a weekly watch renewal.
+
 ## 2026-08-28
 
 Everything below was originally logged across six separate same-day

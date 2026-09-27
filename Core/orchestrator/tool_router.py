@@ -81,6 +81,12 @@ TOOL_EXAMPLES = {
     "list_scheduled": ["what reminders do I have", "what's pending"],
     "cancel_scheduled": ["cancel that reminder", "forget the timer"],
     "check_email": ["get me my mail", "check my email", "any new emails", "what's in my inbox"],
+    "search_email": ["find emails from amazon", "search my email for the invoice", "any email from priya this week"],
+    "read_email": ["read the email from my school", "what did that email say", "open the email about the refund"],
+    "download_attachment": ["download the attachment from that email", "save the pdf they emailed me"],
+    "draft_email": ["draft an email to rahul", "write an email saying I'll be late", "reply to that email saying thanks"],
+    "send_draft": ["send the draft", "send that email"],
+    "set_email_signature": ["change my email signature", "set my gmail signature to"],
 }
 
 
