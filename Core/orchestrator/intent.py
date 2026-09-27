@@ -70,7 +70,11 @@ TOOL_CATEGORIES = {
     "time": ("get_current_time",),
     "weather": ("get_weather",),
     "math": ("calculate",),
-    "search": ("web_search",),
+    "search": ("web_search", "delegate_research"),
+    # Delegation (orchestrator/agents.py). The researcher only reads the
+    # web; the general worker has no tools. Neither can send or act, so
+    # this category is safe to union with anything.
+    "delegate": ("delegate_research", "delegate_general"),
     "sysinfo": ("get_system_status", "get_network_status"),
     "apps": ("launch_application", "open_website", "open_path", "open_vault_file"),
     "audio": ("get_volume", "set_volume", "adjust_volume", "mute", "media_control"),
@@ -188,6 +192,12 @@ CATEGORY_CUES = {
     "search": (
         "search", "look up", "google", "who is", "what happened",
         "news", "find out", "search for", "on the web", "find",
+    ),
+    "delegate": (
+        "research", "investigate", "dig into", "look into", "deep dive",
+        "compare", "comparison", "papers on", "recent papers",
+        "rewrite", "rephrase", "reword", "more formal", "sound more",
+        "proofread", "checklist", "turn these notes", "turn this into",
     ),
     "sysinfo": (
         "battery", "charge", "cpu", "ram", "memory", "disk", "storage",

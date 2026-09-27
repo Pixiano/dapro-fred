@@ -87,6 +87,10 @@ TOOL_EXAMPLES = {
     "draft_email": ["draft an email to rahul", "write an email saying I'll be late", "reply to that email saying thanks"],
     "send_draft": ["send the draft", "send that email"],
     "set_email_signature": ["change my email signature", "set my gmail signature to"],
+    "delegate_research": ["research the best budget GPUs", "compare these two phones for me",
+                          "find recent papers on speech models and summarise them"],
+    "delegate_general": ["rewrite this to sound more formal", "turn these notes into a checklist",
+                         "rephrase this message nicely"],
 }
 
 

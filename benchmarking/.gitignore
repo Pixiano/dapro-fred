@@ -1,0 +1,4 @@
+# Regenerate with make_fixtures.py
+fixtures/
+# Contain real past utterances from the tool-call holdout -- never commit
+results/

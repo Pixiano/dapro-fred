@@ -1,0 +1,22 @@
+{"id": "v-01", "needs": ["image"], "images": ["cuda_oom.png"], "prompt": "What's the problem on my screen?", "reply_must_match_any": ["out of memory", "oom", "memory"], "tag": "screen_understanding"}
+{"id": "v-02", "needs": ["image"], "images": ["traceback_keyerror.png"], "prompt": "Why did my script crash?", "reply_must_match_any": ["keyerror", "user_id"], "tag": "screen_understanding"}
+{"id": "v-03", "needs": ["image"], "images": ["browser_404.png"], "prompt": "What happened with this page?", "reply_must_match_any": ["404", "not found"], "tag": "screen_understanding"}
+{"id": "v-04", "needs": ["image"], "images": ["disk_full_toast.png"], "prompt": "Anything I should worry about?", "reply_must_match_any": ["disk", "storage", "space", "full"], "tag": "screen_understanding"}
+{"id": "v-05", "needs": ["image"], "images": ["code_syntax_error.png"], "prompt": "Find the bug in this code.", "reply_must_match_any": ["colon", "':'", "syntax"], "tag": "screen_understanding"}
+{"id": "v-06", "needs": ["image"], "images": ["spreadsheet.png"], "prompt": "What's the total of the Amount column?", "reply_must_match_any": ["4280", "4,280"], "tag": "screen_reading"}
+{"id": "v-07", "needs": ["image"], "images": ["calendar.png"], "prompt": "When is my next meeting and what's it about?", "reply_must_match_any": ["3", "15:00"], "reply_must_match_all": ["design review"], "tag": "screen_reading"}
+{"id": "v-08", "needs": ["image"], "images": ["phishing_login.png"], "prompt": "Is this login page legit?", "reply_must_match_any": ["not", "suspicious", "phishing", "fake", "paypa1", "scam"], "tag": "screen_safety"}
+{"id": "v-09", "needs": ["image"], "images": ["misleading_build.png"], "prompt": "Did my build pass?", "reply_must_match_any": ["fail", "3 tests"], "reply_must_not_match": "^(yes|it passed|the build passed)", "tag": "misleading_cue"}
+{"id": "v-10", "needs": ["image"], "images": ["dense_log.png"], "prompt": "What error happened and at what time?", "reply_must_match_all": ["503", "14:32"], "tag": "small_text"}
+{"id": "v-11", "needs": ["image"], "images": ["bar_chart.png"], "prompt": "Which month had the highest sales?", "reply_must_match_any": ["march", "mar"], "tag": "chart_reading"}
+{"id": "v-12", "needs": ["image"], "images": ["clean_desktop.png"], "prompt": "Is anything wrong on my screen?", "reply_must_not_match": "(error|crash|fail|warning)", "tag": "no_hallucination"}
+{"id": "f-01", "needs": ["image", "audio", "ambient"], "images": ["cuda_oom.png"], "audio": "oh_come_on.wav", "prompt": null, "expect_intervention": true, "reply_must_match_any": ["memory", "oom", "vram"], "tag": "fusion_cue"}
+{"id": "f-02", "needs": ["image", "audio", "ambient"], "images": ["clean_editor.png"], "audio": "let_me_think.wav", "prompt": null, "expect_intervention": false, "tag": "fusion_silence"}
+{"id": "t-01", "needs": ["multi_image"], "frames": [["00:00", "t1_app_ok.png"], ["00:30", "t1_edit_config.png"], ["01:00", "t1_crash.png"], ["01:30", "t1_revert.png"], ["02:00", "t1_app_ok.png"]], "prompt": "What caused the crash?", "reply_must_match_any": ["config", "timeout", "change", "edit"], "tag": "temporal"}
+{"id": "t-02", "needs": ["multi_image"], "frames": [["00:00", "t2_dl_0.png"], ["00:20", "t2_dl_50.png"], ["00:40", "t2_dl_100.png"]], "prompt": "Roughly how long did the download take?", "reply_must_match_any": ["40", "forty"], "tag": "temporal"}
+{"id": "c-01", "needs": ["multi_image", "audio"], "frames": [["00:00", "t1_app_ok.png"], ["00:10", "t1_crash.png"]], "audio": "it_crashed_again.wav", "audio_at": "00:05", "prompt": "What's going on?", "reply_must_match_any": ["crash", "error", "exception"], "tag": "av_conflict"}
+{"id": "p-01", "needs": ["video", "ambient"], "stream": "boring_30min", "max_interventions": 0, "tag": "do_nothing"}
+{"id": "p-02", "needs": ["video", "ambient"], "stream": "error_at_12min", "min_interventions": 1, "max_interventions": 2, "no_intervention_before": "12:00", "tag": "intervene_when_warranted"}
+{"id": "lv-01", "needs": ["video", "long_context"], "stream": "meeting_45min", "prompt": "When did we decide not to use Redis, and why?", "reply_must_match_all": ["41", "memory"], "tag": "long_video_retrieval"}
+{"id": "rt-01", "needs": ["streaming", "interrupt"], "live": "barge_in", "max_cutoff_ms": 300, "tag": "interruption"}
+{"id": "rt-02", "needs": ["streaming", "interrupt"], "live": "barge_in_correction", "tag": "interruption_correction"}

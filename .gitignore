@@ -244,3 +244,13 @@ Wispr/
 # Single-instance PID lock (Core/utils/single_instance.py) — runtime
 # state written fresh on every launch, not source.
 Core/data/fred.lock
+
+# Runtime state (Gmail seen-sets/history cursor, consolidation, reflection)
+Core/data/gmail_*.json
+Core/data/consolidation_state.json
+Core/data/reflection_state.json
+
+# Contain real share passwords / friends' details -- local only, never commit
+dapro-drive-friend-sharing-setup_2026-08-15.md
+dapro-drive-session-report_2026-08-15.md
+handoff_2026-08-17.md

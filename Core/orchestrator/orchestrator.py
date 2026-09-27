@@ -11,6 +11,7 @@ from memory.memory_manager import MemoryManager
 from llm.llm_client import LLMClient
 from personality.system_prompt import SYSTEM_PROMPT, LOCKDOWN_SYSTEM_PROMPT
 from tools.registry import ToolRegistry
+from orchestrator import agents
 from tools import system_tools
 from tools import web_tools
 from tools import machine_tools
@@ -952,6 +953,31 @@ class FREDOrchestrator:
                 },
                 "required": ["query"],
             },
+        )
+
+        # Delegation (orchestrator/agents.py): roles on the already-loaded
+        # model, spawned only inside these calls, dismissed after.
+        _task_param = {"type": "object", "properties": {"task": {
+            "type": "string", "description": "The full job, in plain words, including any text it needs."}},
+            "required": ["task"]}
+        self.tools.register(
+            name="delegate_research",
+            function=lambda task="": self._delegate("researcher", task),
+            description=(
+                "Hand a research job to FRED's research agent: questions that need several web "
+                "searches, comparisons, or current information (prices, releases, papers, specs). "
+                "Not for one quick fact -- use web_search for that."
+            ),
+            parameters=_task_param,
+        )
+        self.tools.register(
+            name="delegate_general",
+            function=lambda task="": self._delegate("general", task),
+            description=(
+                "Hand a self-contained text job to FRED's general worker: rewrite, rephrase, make "
+                "formal, reformat, turn notes into a list or checklist. No web, no tools."
+            ),
+            parameters=_task_param,
         )
 
         self.tools.register(
@@ -3400,6 +3426,9 @@ class FREDOrchestrator:
         user has said yes to the preview, per rules.md's
         propose-before-write (MAP.md is one of the sensitive files)."""
         return vault_map.append_missing()
+
+    def _delegate(self, role: str, task: str) -> str:
+        return agents.run(role, task, self.llm, self.tools, self._parse_text_tool_calls)
 
     def _find_file_smart(self, description: str, directory: str = "") -> str:
         """

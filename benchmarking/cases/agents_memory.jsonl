@@ -1,0 +1,12 @@
+{"id": "del-01", "needs": ["delegation"], "text": "research the best open-source TTS models under 1GB and compare their quality and speed", "expect_agent": "researcher", "tag": "should_delegate"}
+{"id": "del-02", "needs": ["delegation"], "text": "find me recent papers on streaming speech models and summarise the main ideas", "expect_agent": "researcher", "tag": "should_delegate"}
+{"id": "del-03", "needs": ["delegation"], "text": "what time is it", "expect_agent": null, "tag": "should_not_delegate"}
+{"id": "del-04", "needs": ["delegation"], "text": "set the volume to 40", "expect_agent": null, "tag": "should_not_delegate"}
+{"id": "del-05", "needs": ["delegation"], "text": "rewrite this sentence to sound more formal: gonna be late, sorry", "expect_agent": ["general", null], "tag": "cheap_misc"}
+{"id": "del-06", "needs": ["delegation"], "text": "how are you", "expect_agent": null, "tag": "should_not_delegate"}
+{"id": "del-07", "needs": ["delegation"], "text": "compare the specs and prices of the RTX 5060 Ti and RTX 4070 right now", "expect_agent": "researcher", "tag": "should_delegate"}
+{"id": "del-08", "needs": ["delegation"], "text": "turn these notes into a tidy checklist: buy milk, call bank, fix bike", "expect_agent": ["general", null], "tag": "cheap_misc"}
+{"id": "mem-01", "needs": ["text", "memory"], "sessions": [["my favourite colour is teal"], ["what's my favourite colour?"]], "reply_must_match_any": ["teal"], "tag": "cross_session_recall"}
+{"id": "mem-02", "needs": ["text", "memory"], "sessions": [["my favourite colour is teal"], ["actually my favourite colour changed, it's orange now"], ["what's my favourite colour?"]], "reply_must_match_any": ["orange"], "reply_must_not_match": "\\bteal\\b(?!.*orange)", "tag": "memory_update"}
+{"id": "mem-03", "needs": ["text", "memory"], "sessions": [["the wifi password for the office is on the fridge"], ["what's my dog's name?"]], "reply_must_match_any": ["don't know", "not sure", "haven't told", "didn't tell", "no idea", "don't have"], "tag": "no_false_recall"}
+{"id": "mem-04", "needs": ["text", "memory"], "sessions": [["we decided to use sqlite instead of postgres for the fred memory db because it's local"], ["why did we pick sqlite for the memory db?"]], "reply_must_match_any": ["local"], "tag": "decision_recall"}
