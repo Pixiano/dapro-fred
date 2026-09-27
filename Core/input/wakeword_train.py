@@ -56,6 +56,43 @@ CORE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKSPACE = os.path.join(CORE, "data", "wakeword_training")
 sys.path.insert(0, CORE)
 
+# Same constants wakeword.py's own live AGC uses — imported, not
+# duplicated, so the two can't silently drift apart. See
+# _apply_agc_gain's own comment below for why training data needs this
+# at all.
+from input.wakeword import _AGC_MAX_GAIN, _AGC_MIN_PEAK_TO_BOOST, _AGC_TARGET_PEAK  # noqa: E402
+
+
+def _apply_agc_gain(audio: np.ndarray) -> np.ndarray:
+    """
+    Single-shot equivalent of wakeword.py's live per-chunk AGC — peak-
+    normalize toward _AGC_TARGET_PEAK, capped at _AGC_MAX_GAIN, holding
+    gain at 1.0 for near-silence rather than amplifying noise. No
+    smoothing/persistence term (unlike the live version): these are
+    isolated short clips, not a continuous chunk stream with gain state
+    to carry across calls, so there's nothing to smooth against.
+
+    Added 2026-08-26 after eval numbers on ungained clips came back
+    badly enough to warrant investigating why (~20-25% recall) — this
+    project's own prior session notes (session_2026-08-12_wakeword_
+    changes.md, Part 4) had already flagged the exact same gap in
+    August and never closed it: every training/eval clip here was raw,
+    pre-AGC amplitude, while the live model only ever sees audio
+    already boosted toward a 0.7 target peak. Training on the wrong
+    signal level doesn't get fixed by adding more of it — this closes
+    the actual mismatch, applied uniformly to every audio source
+    (real captures via _load_mono_16k_int16, and the synthetic Kokoro
+    clips at generation time, since those bypass that shared loader).
+
+    `audio`: float32, any peak range. Returns float32, clipped to
+    [-1, 1] same as the live path.
+    """
+    peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
+    if peak > _AGC_MIN_PEAK_TO_BOOST:
+        gain = min(_AGC_TARGET_PEAK / peak, _AGC_MAX_GAIN)
+        audio = audio * gain
+    return np.clip(audio, -1.0, 1.0).astype(np.float32)
+
 # torch's ONNX exporter prints Unicode (a checkmark) in its verbose
 # progress output; Windows' console defaults to cp1252, which can't
 # encode it, crashing the export after it already succeeded. Force
@@ -444,6 +481,11 @@ def _load_mono_16k_int16(path):
     building the false-positive validation set) used to just assert
     sr == 16000 and crash on anything else — fine for openWakeWord's own
     16kHz WAV output, not for a voice memo recorded at 44.1kHz stereo.
+
+    Gain-normalized via _apply_agc_gain before the int16 conversion —
+    every real-audio path routes through here (DEMAND, room_recording,
+    real_positive, real_negative), so this is the one place that fixes
+    all of them at once. See _apply_agc_gain's own comment for why.
     """
     audio, sr = sf.read(path, dtype="float32", always_2d=True)  # (frames, channels)
     if audio.shape[1] > 1:
@@ -451,6 +493,7 @@ def _load_mono_16k_int16(path):
     else:
         audio = audio[:, 0]
     audio = _resample(audio, sr)
+    audio = _apply_agc_gain(audio)
     return np.clip(audio * 32767, -32768, 32767).astype(np.int16)
 
 
@@ -474,14 +517,14 @@ def generate_positive_clips():
             samples, sr = tts.kokoro.create(
                 POSITIVE_TEST_PHRASING, voice=voice, speed=POSITIVE_TEST_SPEED, lang="en-us"
             )
-            sf.write(os.path.join(POS_TEST, f"{voice}_test.wav"), _resample(samples, sr), TARGET_SR)
+            sf.write(os.path.join(POS_TEST, f"{voice}_test.wav"), _apply_agc_gain(_resample(samples, sr)), TARGET_SR)
             continue
 
         for phrase in POSITIVE_PHRASINGS:
             for speed in POSITIVE_SPEEDS:
                 samples, sr = tts.kokoro.create(phrase, voice=voice, speed=speed, lang="en-us")
                 name = f"{voice}_{phrase.strip('.!,').replace(' ', '_')}_{speed}.wav"
-                sf.write(os.path.join(POS_TRAIN, name), _resample(samples, sr), TARGET_SR)
+                sf.write(os.path.join(POS_TRAIN, name), _apply_agc_gain(_resample(samples, sr)), TARGET_SR)
 
 
 def ingest_real_positive_clips():
@@ -650,7 +693,7 @@ def generate_negative_speech_clips():
                 samples, sr = tts.kokoro.create(phrase, voice=voice, speed=speed, lang="en-us")
                 safe_name = "".join(c if c.isalnum() else "_" for c in phrase)[:40]
                 name = f"{safe_name}_{voice}_{speed}.wav"
-                sf.write(os.path.join(NEGATIVE_SPEECH_DIR, name), _resample(samples, sr), TARGET_SR)
+                sf.write(os.path.join(NEGATIVE_SPEECH_DIR, name), _apply_agc_gain(_resample(samples, sr)), TARGET_SR)
 
 
 # =========================================================

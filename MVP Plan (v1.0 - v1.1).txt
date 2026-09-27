@@ -164,6 +164,80 @@ Ordering matters — do these in sequence, not in parallel, since item
 
 Deadline: ready to freeze by tomorrow night, 2026-08-23.
 
+-----------------------------------------------------------------
+Pre-fine-tune technical checklist (added 2026-08-26)
+-----------------------------------------------------------------
+
+The three items above are process/hygiene. This is the concrete,
+model-facing checklist — what has to be true before the fine-tune
+actually runs, not just before the tool surface freezes.
+
+SCOPE NARROWED 2026-08-26: one model, one fine-tune, mostly tool-
+calling. Target is `unsloth/Qwen3.5-4B-GGUF` — already the model
+loaded for BOTH the Standard tier (tool-calling, settings.py:469) AND
+the Vision tier (settings.py:580), same weights, two separate
+processes. There is no separate "8B tool-calling model" — Standard
+was already re-pointed to this same 4B checkpoint (Qwen3-8B/Bonsai-27B
+are commented-out alternatives, settings.py:465/467). A single LoRA
+trained mostly on tool-calling data naturally carries into the Vision
+tier too, since it's the same base weights — no need to plan two
+fine-tunes or two checklists.
+
+Tool-calling LoRA (Qwen3.5-4B, Standard tier — the one the freeze
+above is actually for, and now the only planned fine-tune):
+  - Data collection already exists and is live: orchestrator/
+    tool_call_log.py writes one jsonl row per tool-eligible turn,
+    auto-labeled (ran clean -> positive, returned "Error: ..." ->
+    negative, user interrupted mid-reply -> weak negative). No manual
+    labelling pass needed.
+  - NOT yet answered: how much real data is "enough" to train on.
+    Check data/tool_call_log.jsonl's row count before scheduling the
+    actual run, don't guess.
+  - Planned (2026-08-26): generate synthetic examples to thicken the
+    undirected/ambiguous general-conversation bucket specifically (the
+    weak ~35-40%-accuracy case, not the already-stronger directed-call
+    ~70-80% case) — real data is thin there. Not yet built; generation
+    approach and verification/labeling method still need deciding.
+  - Eval holdout: DONE 2026-08-26. Core/scripts/build_eval_holdout.py
+    froze 119 rows (15%) of the 794 clean, non-bug-artefact tool-call
+    rows into Core/data/tool_call_eval_holdout.jsonl (gitignored, same
+    sensitivity as the source log). Deterministic split (seed 3),
+    script refuses to overwrite once frozen. 675 rows stay
+    train-eligible. Any future training run (real or synthetic-
+    augmented) MUST exclude these turn_ids — never train on a holdout
+    row.
+  - NOT yet done: actually RUNNING the baseline eval. The holdout set
+    exists now, but nothing has queried the live orchestrator against
+    those 119 utterances to record today's real accuracy number yet —
+    that's the next step, still needed BEFORE training starts, or
+    there's nothing to compare the tuned model against afterward.
+  - Toolchain/hardware not yet decided: which trainer (Unsloth per
+    the Qwen3.5 vision case below is the closest local precedent),
+    which GPU (RTX 5060 Ti candidate, not yet confirmed physically
+    present).
+
+Vision-tier side effect (same model, no separate fine-tune planned):
+since the Vision tier already runs these exact weights
+(`unsloth/Qwen3.5-4B-GGUF`), the tool-calling LoRA above will also
+apply when the model is loaded for presence's ambiguous-match fallback
+(input/presence.py) — untested whether that helps, hurts, or is
+neutral for vision-fallback accuracy specifically, since the training
+data is tool-calling-shaped, not vision-shaped. Not scoped as its own
+track; if it turns out to measurably hurt the vision fallback, that's
+a real finding to check for AFTER the tool-calling LoRA trains, not a
+reason to block training on it now. Full background on what a
+vision-specific data/training path would have looked like (now
+superseded by this single-fine-tune scope): plan_perception_features_
+2026-08-25.md's "Candidate: fine-tune the existing local vision
+model" section.
+
+Freeze-scope reminder: the freeze is the tool-calling surface only.
+Confirmed this session — the entire perception layer (presence,
+wake-word, voice_id, headphone/media detection, and everything in
+plan_perception_features_2026-08-25.md) never touches the LLM prompt
+or the tool-call transcript, so none of it is gated by this freeze in
+either direction — safe to keep building through it.
+
 
 =================================================================
 v1.1 — Full backlog, due January 31, 2027 (~7 months after v1.0)
@@ -492,6 +566,16 @@ Everything already identified as its own frontier, separate from
     None of this changes the four blockers above — latency,
     turn-taking, and disclosure survive every one of these options.
     What it changes is that the audio wall stops being a wall.
+
+  - AI meeting tools — live/recorded-meeting summaries, notes, ideas,
+    and proposal drafting. Filed here 2026-08-27, flagged by Vatsal
+    himself as "v3 level" — further out than the rest of this v2+ list,
+    not scheduled or scoped at all yet. Overlaps two things already
+    discussed elsewhere in this doc/roadmap: FRED holding the call
+    himself (audio-path work, above) and PA-level task proactivity's
+    Gmail-first scope (roadmap_pre-finetune_2026-08-26.md section 3d) —
+    likely reuses whichever transcription/summarization pipeline either
+    of those ends up building rather than its own from scratch.
 
   - Genuine self-awareness — explicitly NOT an engineering target for
     this or any current system; this stays out of every version, not

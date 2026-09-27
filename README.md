@@ -136,7 +136,7 @@ The authoritative, actively-maintained scope document is **`MVP Plan (v1.0 - v1.
 
 Don't duplicate that document's detail here — read it directly for the reasoning behind any of the above, the triage rule for new ideas, and what's explicitly out of scope.
 
-**Two unrelated things are both called "fine-tune" in this project — don't conflate them.** The v1.1 item above is a TTS voice-clone fine-tune: cloning my own voice so FRED speaks in it instead of Kokoro's stock one. Separately, `Fine-Tune MVP Plan (2026-08-09).md` and `Fine-Tune Plan Draft (2026-08-12).md` at the repo root scope a LoRA fine-tune of FRED's own tool-calling model (Qwen3-8B, the Standard tier) on logged real usage, once the tool-calling path is stable enough that the training data isn't just baking in today's known bugs. Both docs are planning-only — nothing has been trained yet — and neither is folded into the phase list above.
+**Two unrelated things are both called "fine-tune" in this project — don't conflate them.** The v1.1 item above is a TTS voice-clone fine-tune: cloning my own voice so FRED speaks in it instead of Kokoro's stock one. Separately, a single planned LoRA fine-tune (scope narrowed 2026-08-26 to one model, mostly-tool-calling) targets `unsloth/Qwen3.5-4B-GGUF` — the model already loaded for BOTH the `Standard` tier (tool-calling, `config/settings.py:469`) and the `Vision` tier (`config/settings.py:580`), same weights, two processes. Training data is `Core/data/tool_call_log.jsonl` (logged real usage), once the tool-calling path is stable enough that it isn't just baking in today's known bugs. See `MVP Plan (v1.0 - v1.1).txt`'s pre-fine-tune checklist and `roadmap_pre-finetune_2026-08-26.md` for current status — planning-only, nothing trained yet.
 
 ---
 
