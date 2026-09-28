@@ -1,0 +1,238 @@
+﻿# 2026-09-28 — work log
+
+- **Venus try 1 import (overnight, over the phone hotspot):**
+  environment finished -- torch 2.8.0+cu128 sees the 5060 Ti with SM120
+  kernels; transformers 4.51.3, bitsandbytes 0.50.2, minicpmo-utils 1.0.6
+  and the rest all import. Model checkpoint only ~2 of 19.4 GB: the
+  download loop was stopped by Claude Code while system RAM was low and
+  deliberately not restarted. Partial shards resume on rerun. Details and
+  the resume command: `Mark_II_Testing/Realtime_Venus/1/README.md`.
+- **Venus try 1 import complete.** Checkpoint downloaded over Wi-Fi;
+  all 11 LFS files (4 shards, token2wav, voice, sample videos) match the
+  Hub's SHA-256 (`Mark_II_Testing/Realtime_Venus/1/verify_sha.py`).
+  Overnight partials were reused after renaming them (hf-xet in
+  huggingface_hub 0.36 restarted from zero and the new version renamed
+  `.incomplete` files); downloaded with `HF_HUB_DISABLE_XET=1`.
+- FRED stopped (fred_popup + phone_api) under Vatsal's new rule: kill
+  FRED processes when memory runs out.
+- **Waiting for Vatsal's go** before any GPU work (bnb test, NF4 load).
+- **bitsandbytes NF4 GPU test: PASS** (`test_bnb.py`). bnb 0.50.2 on torch
+  2.8+cu128, RTX 5060 Ti SM120, Windows: 4096->12288 NF4 layer, cosine
+  0.996 vs BF16, 0.075 ms/call at 1 token, 0.31 ms at 64, all finite.
+  The Windows/SM120 risk (issue #1937, torch 2.11/CUDA 13) doesn't apply
+  to our cu128 stack. VRAM at test time: 5.9 GB used by other apps.
+- **Venus NF4 smoke test: PASS, realtime (text).** `smoke_nf4.py`: official
+  Omni, NF4 on the 252 LLM linears (OpenBMB skip list), everything else
+  BF16, loaded in 21 s, 7.94 GB, all weights on GPU. 70 s of the sample
+  video through the duplex loop, speech off: listening units 0.55 s mean,
+  speaking units 0.79 s mean / 0.93 s max, 69/70 under 1 s (the miss was
+  the 1.00 s warm-up). Peak 8.96 GB. Stayed silent until asked, answered
+  both questions correctly (incl. "a player scores ... 1-0" at 60 s), then
+  went quiet on its own. Two fixes on the way: `as_duplex()` loads
+  Token2wav (+3.2 GB, left 0 GB free) even with speech off -> skipped;
+  upstream needs `ffprobe` (not installed) for video length -> OpenCV.
+- **Venus voice output (try 1).** Works end to end (samples
+  `smoke_speech_fp32_10steps.wav`, `smoke_speech.wav`), not realtime yet.
+  Per spoken 1 s unit, best config (FP16 vocoder, 8 steps, SDPA talker):
+  prefill 0.38 + LLM ~0.39 + talker 0.39 + vocoder 0.21 = 1.43 s (was
+  1.54 s at upstream defaults). Venus VRAM with voice 10.5 GB (was 12.1).
+  Fixes: Token2wav's flow cache preallocated for 16 steps (1.95 GB fp32)
+  trimmed to the steps used; upstream FP16-vocoder bug in
+  `set_stream_cache` (Float/Half) wrapped in autocast; talker switched
+  from forced eager attention to SDPA (0.46 -> 0.39 s). Remaining fix
+  parked by Vatsal ("2 hr fix later"): CUDA graphs + static cache for the
+  talker (community: 0.11-0.15 s) and possibly the LLM step.
+- `live_duplex.py` (mic + screen/camera, voice to the Windows default
+  output, per-second GPU/VRAM line + console title, placeholder FRED
+  prompt, lavalier mic default). Vatsal's first live run (text only,
+  webcam mic): very good; webcam mic too far -> lavalier.
+- Other apps hold ~3.8-4.2 GB VRAM on the card (NVIDIA Overlay respawns
+  when killed; Instant Replay off; Resolve closed); free VRAM swings 0 <->
+  4.2 GB from outside Venus.
+- **Venus live run 2 (voice on) failed on VRAM growth.** Upstream ships
+  duplex with `sliding_window_mode="off"`: ~75 tokens/s into the KV cache
+  forever; Venus grew 10.2 -> 11.9 GB in ~1 min, Windows paged to RAM, one
+  unit took 17 s (lag 31.8 s). Vatsal also said it didn't answer most
+  spoken questions. Fixes in `live_duplex.py`/`smoke_nf4.py`: basic
+  sliding window (default 5000 tokens ~= last minute); on <512 MB free,
+  drop oldest context + shrink the window permanently and keep running
+  (Vatsal: "keep running after clearing" instead of stopping), stop only
+  if nothing is left to drop; per-second mic dB in the status line;
+  `live_mic.wav` records exactly what Venus heard; `--gain`.
+- **Venus live run 3:** greeted as "Fred" (placeholder prompt works), then
+  mostly silent. `live_mic.wav` analysis: loudest second -38 dB (peak 0.1
+  FS) over a -50 dB room -- Venus barely heard him. Default `--gain 8`
+  (+18 dB). Also the VRAM trim fired too early (counted only device-free,
+  not torch's reusable cached blocks) and shrank context to 1000 tokens;
+  now counts both.
+- Context trimming: floor raised to 3000 tokens (~40 s); `--frame-every N` added (frames are 64 of ~75 tokens/s; N=2 roughly doubles the memory span). Vatsal: "the context is dropping SOO much".
+- **Venus voice switched to Kokoro** (Vatsal: "switching the TTS to Kokoro
+  is just the best option"). `live_duplex.py --voice kokoro` (default):
+  Venus runs speech-off (realtime, ~1.4 GB less VRAM), its text is cut
+  into sentences and synthesised by FRED's Kokoro (`Core/models/kokoro`,
+  am_michael, 1.2x, CPU -- allowed exception) on a worker thread; a new
+  reply drops the old reply's queued audio. `--voice venus|off` kept.
+  Kokoro on CPU during a Venus run: 1.9 s to make 2.6 s of audio.
+  kokoro-onnx 0.5.0 pulled numpy 1.26 -> 2.2.6; full Venus import stack +
+  librosa checked OK on numpy 2. Found: importing decord before
+  onnxruntime breaks ort's DLL init (pre-existing; Venus/Kokoro import
+  ort first, so no effect).
+- **Mic order** (Vatsal): headset (Rockerz) first, lavalier as backup
+  (`--mic Rockerz,Lavalier`, falls through if the headset can't open).
+  Per-mic gain: lavalier 8x, others 1x until the headset is measured.
+  Note: using a Bluetooth headset's mic switches it to hands-free mode
+  (lower-quality audio out too).
+- Per-second decision confidence in `live_duplex.py`: wraps the decoder's first `decode()` of each unit and logs the raw P(speak) = 1 - P(<|listen|>) from that unit's logits (before temperature/top-k) as `speak NN%` in the status line and `live_duplex.log`. Duplex Venus has no text reasoning to log (one token decides each second). Gotcha: upstream `decoder.listen_id` is the tokenizer eos, not `<|listen|>`; used `duplex.listen_token_id`.
+- **Venus live run 4** (12 min, Kokoro voice, headset mic): VRAM flat at
+  9.3 GB (window works, no trims needed), answered on-screen questions
+  correctly (read README text, an email), spoke 45 of 719 s. Headset mic
+  at 1x: silence ~-65 dB, speech -23..-31 dB -- fine. Speaking units still
+  0.75-1.6 s (first unit of a reply slowest).
+- **Efficiency items 1-4 (Vatsal: do 1-4, report, then 5-6):** (1)
+  talker not built when Kokoro speaks (`init_tts=speech`); (2) barge-in:
+  2x100 ms mic blocks above -28 dB (after gain) while the voice plays ->
+  cut + mute rest of that reply (`--no-barge`, `--barge-db`); (3) first
+  chunk of a reply may break at a comma after 40 chars; (4) prefill
+  profiler (`profile_prefill`: img_prep, vision, audio_prep, audio_enc,
+  llm_feed; smoke test always, live with `--profile`). Waiting for the
+  live run to stop to measure.
+- **Frame quality (Vatsal: small text unreadable):** duplex uses
+  `max_slice_nums=1` -> whole screen resized to ~448x448 area (~600x340 on
+  16:9), 64 tokens; terminal text is a few pixels tall. Plan for #5:
+  `--slices N` (MiniCPM HD slicing: overview + up to N 448 px tiles, 64
+  tokens each), paired with #6 (skip unchanged frames) to pay for it.
+- **Efficiency 1-4 measured** (`profile.log`, 70 s sample, speech off):
+  (1) talker not built: weights 7.94 -> 7.29 GB, streaming peak 8.96 ->
+  8.26 GB, still 69/70 realtime, same answers. (4) prefill split per unit:
+  screen grab 0.033 s (1920x1080), img_prep 0.019, vision 0.080,
+  audio_prep 0.003, audio_enc 0.017, **llm_feed 0.311 s (75%)**. Feeding
+  ~75 tokens/s into the NF4 LLM dominates; suspected cause: bnb dequant
+  on every separate feed() call, and upstream feeds per embedding by
+  default (`batch_vision_feed=False`, documented as the slower path).
+  (2) barge-in and (3) first-clause start are live-only, untested yet.
+  Waiting for Vatsal's go on 5 (batch_vision_feed, then --slices for
+  small text) and 6 (skip unchanged frames).
+- **#5/#6 built** (Vatsal greenlit; target "~2x pixels / ~3x cost"):
+  `live_duplex.py --slices 2` default (overview + up to 2 HD tiles = 3x64
+  tokens), `batch_vision_feed=True` always (image passes 3 -> 1). Frame
+  skip: similarity = 1 - mean|diff|/255 of 64x36 grey thumbnails vs the
+  last sent frame; send when < `--similar 0.996` (Vatsal's number) or
+  every `--keepalive 5` s; `--no-skip` for A/B. sha256 considered and
+  rejected: exact-match only, so caret blinks/clock would count as change.
+  Real screen sample: sim 0.9792-0.9998 over 5 s; grab+thumb+compare
+  25 ms. Status line shows `frame/skip (sim, sent n/units)`.
+  Research agent (Sonnet) started on small-text readability options and
+  the slicing goldilocks zone. Measuring batch feed at slices 1/2/4.
+- Frame-skip threshold: Vatsal rejected the 0.996 guess ("another agent should test it"). Calibration agent (Sonnet, CPU only, numbers only, no screenshots saved) is measuring must-send changes (new terminal line, toast, dialog, window switch, scroll) vs must-skip noise (caret blink, clock tick) across metrics (64x36 global mean, larger thumbnails, max-over-tiles), plus a 2-min passive sample of the real screen; output `skip_threshold/results.md`. 0.996 stays only as a marked placeholder until then.
+- **Slice/scale measurements** (70 s sample, 1920x1080 frames):
+  batch_vision_feed at slices 1: llm_feed 0.311 -> 0.245 s (-21%), 69/70
+  realtime, listen 0.50 s / speak 0.75 s mean. Slices 2 (batched): vision
+  0.08 -> 0.24 s, llm_feed ~0.35 s, speaking units ~1.1 s -> not
+  realtime. Research agent (Sonnet): for 16:9, max_slice_nums 3 = same
+  [2,1] grid as 2 (wasted); real steps 2 -> 4 -> 6; token count (llm_feed)
+  is the lever, so raising `scale_resolution` (processor attribute, 448
+  default) keeps 64 tokens and only costs vision time (672 est. ~0.18 s)
+  but is untested quality (trained at 448); also suggested active-window
+  crop, overview + one targeted HD crop, Windows OCR side-channel.
+  Vatsal: "try 672 scale resolution too". Added `--scale` (smoke + live)
+  and `readtest.py`: synthetic 16 px Consolas terminal, random codes,
+  exact-read score across (448,1) (672,1) (896,1) (448,2) (448,4).
+- **Frame-skip threshold calibrated** (agent: `skip_threshold/calibrate.py`,
+  `results.md`, 88 pairs + 2 min real-screen sample, no screenshots saved).
+  Finding: the 64x36 global-mean metric can't see a new terminal line
+  (0.9997, same as noise) at any thumbnail size. Worst-tile of a 16x9 grid
+  on full-res grey fixes it. Agent recommended 0.986, but its own data shows
+  that skips 4/8 new terminal lines (0.9853-0.9864); re-evaluated: **0.990**
+  catches every terminal line / toast / dialog / window switch / scroll,
+  skips caret (0.9970+) and clock (0.9979+), idle skip 37%; hover
+  highlights (0.9866-0.9872) may send an extra frame (harmless). Typed
+  characters (0.994-0.997) left to the 5 s keepalive: catching them drops
+  idle skip to 18% and fires on noise. Implemented in `live_duplex.py`
+  with a self-check (new line 0.9851 send, caret 0.9982 skip, 7.6 ms).
+  Also fixed: live screen grab no longer thumbnails to 1280 px before the
+  model (--scale/--slices need full res; matches the calibration).
+- **672 speed run:** 65/70 realtime, listen 0.71 s / speak 0.95 s mean,
+  vision 0.27 s, llm_feed 0.25 s (unchanged tokens).
+- **Readability test (`readtest.py`, 16 px Consolas on 1920x1080, 9 exact
+  reads each):** 448/1 0/9 (0.35 s prefill), 672/1 0/9 (0.57 s), 896/1
+  0/9 (3.19 s, garbled), 448/2 0/9 (0.58 s), 448/4 2/9 (0.74 s). Near
+  misses creep closer with pixels ("979" for 9779, "274" for 174) but no
+  realtime setting reads terminal text, and Venus invents confident numbers
+  instead of saying it can't read. Live default back to slices 1 / scale
+  448. Proposed (not built): overview + one native-res HD crop around the
+  tiles the skip detector saw change (128 tokens).
+- Review agent (Sonnet) started: HF repo + remote code + upstream harness/
+  demos + arXiv 2609.13814 + MiniCPM-o 4.5 docs, for speed, longer runs
+  (long-video memory, context window mode), quality, delegation wiring to
+  FRED's tools, and a fit verdict -> `review_venus_for_fred.md`.
+- **Focus crop built** (Vatsal: "build the crop idea now"): on a sent frame,
+  the tiles the skip detector saw change (> the same 0.990 per-tile
+  threshold) get a 640x320 native-res crop (~= the 448^2 area the processor
+  resizes to, so no downscale) added as a second image: 128 image
+  tokens/s vs 192 (2 slices) / 256 (4 slices), ~0.16 s vision. No crop when
+  nothing changed or the change covers > 50% of the screen (window switch,
+  big scroll: overview is enough). `--no-focus` to disable. Shared helpers
+  `grey_tiles`/`tile_diffs`/`focus_crop` in live_duplex.py; readtest.py
+  reuses them (crop = text appearing on an empty terminal). Self-checks
+  pass. Readtest running: 448/1 no crop vs 448/1 + crop vs 672/1 + crop.
+- **Review agent report** (`review_venus_for_fred.md`): no static-cache /
+  CUDA-graph / torch.compile path for duplex (DynamicCache only); unused
+  knobs `force_listen_count`, `listen_top_k`, `max_new_speak_tokens_per_chunk`.
+  Verified by me: long-video Memory requires `sliding_window_mode="off"`
+  (`memory_adapter/model_adapter.py` duplex_factory_kwargs) -- conflicts
+  with our basic window, but the memory package has its own engine
+  (kv_cache.py, scheduler, archive retention), unread yet. Delegation:
+  harness `DelegateBackend` protocol plan/execute/oralize/aclose
+  (`repo/harness/core/backend.py:16`), `<backend>` results sanitised of
+  protocol tokens; no mid-execute confirmation hook -> proposed: keep
+  FRED's pending-action gate in FRED (backend returns "needs
+  confirmation: preview", Venus speaks it, "confirm" is a second
+  delegate). Project page: delegation accuracy 75.93% Omni / 68.89% Audio
+  (FRED routing 78-83%). Fit: Venus as the ears/eyes/turn-taking layer
+  with FRED's tools + gates behind it, not a straight swap.
+- **Focus crop readability: 448 + crop 8/9 exact reads (vs 0/9 without),
+  prefill 0.46 s/unit (+0.13).** 672 + crop 2/9 at 0.95 s -> native-res
+  crop at the trained 448 beats a bigger resize. Live defaults now: 448,
+  1 slice, focus crop on, tile-max skip < 0.990, keepalive 5 s, Kokoro
+  voice, headset mic (lavalier backup), barge-in, 5000-token window.
+- Delegation note (repo/demos/model/prompts.py): upstream's demo system
+  prompt is just "Streaming Omni Conversation." -- delegation is learned
+  behaviour, no tool list in the prompt.
+- Vatsal is running the live replacement test himself ("I will test it");
+  benchmark adapter for Venus deferred (would need its own venv bridge:
+  run.py's model stages run in FRED's Core venv).
+- **Live replacement test by Vatsal** (15:34, 293 s, focus crop on): "works
+  well" but misses replies and has a felt ~1 s delay. `analyse_live.py`
+  (new): answered 10/24 times he talked; misses had speak% peaks 7-53%
+  (heard, chose listen; worse later in the session, 7 of last 8 missed).
+  Replies start 1 s after he stops (sometimes 2-3 s) -- the 1 s unit
+  boundary -- plus unit compute (median 0.65 s, p90 0.89, never lagged)
+  plus Kokoro CPU first-sentence (~1-2 s). Frames: 178 frame+crop, 66
+  frame, 49 skipped. Proposed next: listen_prob_scale / prompt A/B,
+  wake-word/hotkey forcing a reply, Kokoro on GPU with timing, then the
+  candidate-1 verdict.
+- System prompt: removed the turn-taking instruction ("speak only when he talks to you or something on screen truly needs his attention") at Vatsal's request; prompt is now "Streaming Omni Conversation. You are FRED, Vatsal's personal assistant. You can see his screen and hear him. Be brief, friendly and direct." 2 fps discussed (2 frames/unit: +64 tokens +~0.08 s; or upstream stack_frames: same tokens, half-res per frame) -- neither addresses the 1 s decision delay or missed replies; deferred.
+- Live run 15:43 (after the prompt change): answered 13/41 times Vatsal
+  spoke -- still mostly silent; no logit data yet.
+- Proactivity: there is no proactive switch in upstream (only the
+  harness's `feedback.proactive_progress` = spoken progress of delegated
+  tasks). Unprompted speech is purely the model's per-second decision;
+  lever = `listen_prob_scale`. Added `--listen-scale` (default 1.0) plus
+  per-second raw `<|listen|>` logit / best-other logit logging;
+  `analyse_live.py` now computes, from data, which scale would have
+  answered missed turns vs how often idle seconds would speak.
+- Wake word + Kokoro-on-GPU install (openwakeword, onnxruntime-gpu) was
+  rejected by Vatsal before running; nothing installed.
+- **Verbose diagnostics** (Vatsal): `live_events.jsonl` -- run_start (all
+  args, devices, VRAM, prompt), one `unit` record per second (decision,
+  text, p_speak, listen logit, top-5 tokens, mic dB/peak/clipping, frame
+  skip/crop box/changed tiles, prefill split, unit time, lag, context
+  tokens, VRAM alloc/reserved/other/free, GPU util, voice queues),
+  voice_queued / voice_synth (synth time, RTF, queue wait) /
+  voice_audio_start (latency from reply start to first audio) /
+  voice_dropped_stale, barge_in, context_trim, run_end. Prefill profiling
+  always on.
+- **FRED integration checklist** added to the try-1 README: every patch,
+  gotcha and setting FRED's backend must carry over (Vatsal: "keep
+  documenting so that when we import this as the backend for FRED it
+  works properly").

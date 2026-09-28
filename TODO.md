@@ -23,3 +23,16 @@
   is the stock "moderate" default, unmeasured. Not wired into any
   decision (presence, proactive gating) until this is done.
 
+- **Venus try 1: realtime voice** (`Mark_II_Testing/Realtime_Venus/1/`,
+  parked 2026-09-28 by Vatsal as "2 hr fix later"). Spoken units take
+  1.43 s per 1 s of audio (prefill 0.38 + LLM ~0.39 + talker 0.39 +
+  vocoder 0.21). Fix: CUDA graphs + static KV cache over the talker's
+  per-token step (community measured 0.11-0.15 s on the same GPU), then
+  the LLM step if still short; prefill (0.38 vs their 0.09-0.17) next.
+
+- **Venus benchmark adapter** — `VenusOmni` class in `benchmarking/run.py`
+  (supports text, image, audio, video, ambient, streaming, delegation) so
+  try 1 can be scored against current FRED. Plus the pending benchmark
+  changes: drop Hinglish from scoring, reclassify `comp-01`, stub live
+  screen context + vault in the FRED adapter.
+

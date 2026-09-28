@@ -254,3 +254,14 @@ Core/data/reflection_state.json
 dapro-drive-friend-sharing-setup_2026-08-15.md
 dapro-drive-session-report_2026-08-15.md
 handoff_2026-08-17.md
+
+# Mark II candidate tries: upstream clones, venvs, checkpoints, outputs --
+# only the notes are source
+Mark_II_Testing/**/repo/
+Mark_II_Testing/**/models/
+Mark_II_Testing/**/output/
+Mark_II_Testing/**/*.log
+# Live-test recordings and transcripts (his voice, what Venus heard/said/saw)
+Mark_II_Testing/**/*.wav
+Mark_II_Testing/**/live_events.jsonl
+Mark_II_Testing/**/selftest_*.txt

@@ -84,3 +84,19 @@
   `5d1a7d2` (README rewritten for the current all-local FRED). Three
   older notes with real share passwords stay local and are now
   gitignored, as are six runtime state files in `Core/data/`.
+- **Mark II testing, Candidate 1 try 1 started** (`Mark_II_Testing/Realtime_Venus/1/`,
+  notes in its `README.md`; clone, venv, checkpoint and logs gitignored).
+  Import: upstream repo cloned, Python 3.10.11 venv, official Omni
+  checkpoint (HF commit `ad42af5f`) downloading via upstream's own
+  downloader, torch 2.8.0+cu128 installing in parallel. Link ~1.1 MB/s,
+  so the import takes hours.
+- **Venus research for try 1:** paper has no quantization/VRAM/latency
+  info. Venus config = MiniCPM-o 4.5 + 4 tokens, and OpenBMB's official
+  4.5 quants (AWQ / GPTQ W4 g128) quantize the LLM only, keeping vpm, apm,
+  resampler, audio projector/pooler, tts and lm_head BF16 -- our NF4 plan's
+  skip list, plus `audio_avg_pooler`. `as_duplex()` always loads Token2wav,
+  so the speech package is needed even with speech off. Risks: bitsandbytes
+  on Windows + SM120 (check with a 1-layer test; fallback FP8 via
+  `torch._scaled_mm`), onnxruntime CPU for the speaker embedding, stock HF
+  path unlikely to be realtime (the community 5060 Ti realtime numbers
+  needed CUDA graphs + static KV).
