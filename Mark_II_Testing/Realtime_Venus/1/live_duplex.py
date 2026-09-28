@@ -234,9 +234,11 @@ def main():
     ap.add_argument("--kokoro-device", choices=["gpu", "cpu"], default="gpu",
                     help="Kokoro on the GPU (onnxruntime-gpu) or CPU (FRED's allowed exception)")
     ap.add_argument("--selftest-force-at", type=int, help="testing: act as if 'hey FRED' was heard at unit N")
-    ap.add_argument("--barge", choices=["auto", "on", "off"], default="auto",
-                    help="cut the voice when you start talking; auto = on for headphones, off when the "
-                         "output looks like speakers (it would hear itself)")
+    ap.add_argument("--barge", choices=["intent", "energy", "off"], default="intent",
+                    help="what stops the voice mid-reply: intent = Ctrl+Alt (any tap), 'hey FRED', or Venus "
+                         "itself yielding while you talk over it (default); "
+                         "energy = any loud mic sound (TV / room noise cut both replies on 2026-09-28, "
+                         "quiet rooms + headphones only); off")
     ap.add_argument("--barge-db", type=float,
                     help="fixed mic level (after gain) that counts as talking over the voice; "
                          "default = adaptive (room noise floor + 12 dB)")
@@ -310,21 +312,22 @@ def main():
     # `muted` silences the rest of a reply you talked over; `first` = no audio queued yet.
     say, turn, pending, muted, first = queue.Queue(), [0], [""], [False], [True]
 
-    def barge_in(db_):
+    def barge_in(db_, why):
         dropped = sum(len(a) for a in list(play.queue)) + len(left[0])
         turn[0] += 1
         muted[0] = True
         while not play.empty():
             play.get_nowait()
         left[0] = np.zeros(0, dtype=np.float32)
-        evq.put(("barge_in", {"mic_db": round(db_, 1), "dropped_audio_s": round(dropped / 24000, 2), "turn": turn[0]}))
+        evq.put(("barge_in", {"why": why, "mic_db": round(db_, 1), "dropped_audio_s": round(dropped / 24000, 2),
+                              "turn": turn[0]}))
         print("  [you talked -> voice stopped]", end="", flush=True)
 
     # Barge-in, checked every 100 ms mic block: 2 loud blocks (200 ms) while
     # the voice is playing cut it. Needs headphones (speakers would trigger it:
     # 2026-09-28 it cut its own reply through the Realtek speakers), so `auto`
     # turns it off when the output device looks like speakers.
-    loud, barge_on = [0], [False]
+    loud, barge_on, on_speakers = [0], [False], [False]
     nf = NoiseFloor()  # the room's own level; "talking" / "stopped" are relative to it
 
     addressed = Addressed(wake=not args.no_wake)
@@ -336,19 +339,30 @@ def main():
         mic.put(x)
         held_before = addressed.held
         wake_score = addressed.feed(x)
+        playing = len(left[0]) or not play.empty()
+        if wake_score is not None and playing and on_speakers[0]:
+            # Probably Kokoro's own "Fred" through the speakers: don't address or interrupt.
+            addressed.clear()
+            evq.put(("wake_word_ignored", {"score": round(wake_score, 3), "why": "own voice on speakers"}))
+            wake_score = None
         if wake_score is not None:
             evq.put(("wake_word", {"score": round(wake_score, 3)}))
         if addressed.held != held_before:
             evq.put(("hotkey", {"held": addressed.held}))
-        if args.voice != "kokoro" or not barge_on[0] or not (len(left[0]) or not play.empty()):
+        if args.voice != "kokoro" or not barge_on[0] or not playing:
             loud[0] = 0
+            return
+        if args.barge == "intent":  # only a deliberate signal interrupts: chord press or "hey FRED"
+            # (through speakers a wake word while playing was already dropped above)
+            if (addressed.held and not held_before) or wake_score is not None:
+                barge_in(-999.0 if wake_score is None else 0.0, why="hotkey" if wake_score is None else "wake_word")
             return
         db_ = 20 * np.log10(max(float(np.sqrt(((x * gain) ** 2).mean())), 1e-6))
         limit = args.barge_db if args.barge_db is not None else nf.floor + NoiseFloor.TALK_DB + 4
         loud[0] = loud[0] + 1 if db_ > limit else 0
         if loud[0] >= 2:
             loud[0] = 0
-            barge_in(db_)
+            barge_in(db_, why="energy")
 
     mic = queue.Queue()
     stream, mic_name = open_mic(args.mic, on_mic)
@@ -427,7 +441,9 @@ def main():
 
     speaker = None if args.voice == "off" else sd.OutputStream(samplerate=24000, channels=1, dtype="float32", callback=out_cb)
     out_name = sd.query_devices(kind="output")["name"] if speaker else ""
-    barge_on[0] = args.voice == "kokoro" and (args.barge == "on" or (args.barge == "auto" and "speaker" not in out_name.lower()))
+    # energy barge-in also needs headphones: through speakers it hears itself.
+    on_speakers[0] = "speaker" in out_name.lower()
+    barge_on[0] = args.voice == "kokoro" and (args.barge == "intent" or (args.barge == "energy" and not on_speakers[0]))
     logf = open("live_duplex.log", "a", encoding="utf-8")
     heard = sf.SoundFile("live_mic.wav", "w", samplerate=SR, channels=1)  # exactly what Venus got, per run
     logf.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S} source={args.source} listen_scale={args.listen_scale} "
@@ -449,7 +465,10 @@ def main():
     stream.start()
     if speaker:
         speaker.start()
-        log(f"voice ({args.voice}) out on {out_name}; barge-in {'on' if barge_on[0] else 'off'}")
+        mode = "off" if not barge_on[0] else (
+            "Ctrl+Alt only" if args.barge == "intent" and on_speakers[0] else
+            "Ctrl+Alt or 'hey FRED'" if args.barge == "intent" else "any loud sound")
+        log(f"voice ({args.voice}) out on {out_name}; interrupt: {mode}")
     try:
         while True:
             while len(buf) < SR:
@@ -532,7 +551,14 @@ def main():
                     print(flush=True)
                     speaking = False
                     if args.voice == "kokoro":
-                        speak_text("", final=True)
+                        # Venus stopped its reply. If he was talking at that moment it
+                        # yielded to him (its trained interruption handling -- it keeps
+                        # talking through TV/background speech), so cut the queued
+                        # Kokoro audio. A normal ending (he's quiet) plays out in full.
+                        if args.barge != "off" and nf.talking(db) and (len(left[0]) or not play.empty()):
+                            barge_in(db, why="venus_yielded")
+                        else:
+                            speak_text("", final=True)
                 print(f"\r  listening  {stat}   ", end="", flush=True)
             else:
                 if not speaking:

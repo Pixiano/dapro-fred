@@ -294,3 +294,13 @@
   replies without chatter -> addressed replies should come from the
   wake-word / chord force; 0.9 is a candidate for light proactivity.
   Default stays 1.0 until a cleaner run (3 turns, noisy room).
+- **Barge-in on TV / room noise** (Vatsal: "audio output stops on noise
+  and bg tv sounds too"): run 21:56 (headset) had 2 replies, both cut by
+  energy barge-in at -37 / -31 dB. Loudness can't tell his voice from a TV.
+  New default `--barge intent`: only a Ctrl+Alt press (any tap) or "hey
+  FRED" interrupts; `--barge energy` keeps the old behaviour (quiet room +
+  headphones only), `off`. Through speakers the mic hears Kokoro (Kokoro
+  saying "Fred" scored ~1.0 on the wake model), so a wake word heard while
+  the voice plays on speakers is ignored for both interrupting and
+  addressing (`wake_word_ignored` event). barge_in events log `why`.
+- Talk-over interrupt (Vatsal: "what if I speak over it?"): when Venus stops its reply while he is talking (noise-floor "talking" that second), the queued Kokoro audio is cut (`barge_in why=venus_yielded`); a normal ending plays out. Relies on Venus's trained interruption handling (paper: 75% interruption response, 86% continues through background speech). Not yet tested live (needs his voice). Self-test with TV on (intent mode): forced reply played in full, 0 barge-ins, first audio 0.27 s.
