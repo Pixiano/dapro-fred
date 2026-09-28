@@ -10,6 +10,7 @@ Ctrl+C to stop. Output also goes to live_duplex.log; what it heard to live_mic.w
 import argparse
 import ctypes
 import json
+import os
 import queue
 import re
 import threading
@@ -30,6 +31,65 @@ KOKORO_DIR = Path(__file__).resolve().parents[3] / "Core" / "models" / "kokoro" 
 # Per-mic default gain. Lavalier measured 2026-09-28: speech peaked at -38 dB
 # (0.1 FS) over a -50 dB room -> 8x (+18 dB). Headset mic not measured yet.
 MIC_GAIN = {"lavalier": 8.0}
+
+# "Answer me now": FRED's frozen hey_fred.onnx with FRED's own constants
+# (Core/config/settings.py WAKEWORD_THRESHOLD, Core/input/wakeword.py AGC and
+# cooldown), plus FRED's hold-to-talk chord (left Ctrl + left Alt,
+# Core/input/hotkey.py). Not imported from FRED: its listener writes every
+# score to FRED's real wake-word log / training captures.
+WAKE_MODEL = Path(__file__).resolve().parents[3] / "Core" / "models" / "wakeword" / "hey_fred.onnx"
+WAKE_THRESHOLD, WAKE_COOLDOWN = 0.35, 2.0
+AGC_TARGET, AGC_MAX, AGC_MIN, AGC_SMOOTH = 0.7, 100.0, 0.01, 0.3
+VK_LCONTROL, VK_LMENU = 0xA2, 0xA4
+
+
+class Addressed:
+    """Tracks whether Vatsal is explicitly talking to Venus (wake word or held chord)."""
+
+    def __init__(self, wake=True):
+        self.at = None  # monotonic time of the last wake / chord press
+        self.held = False
+        self.source = None
+        self._oww, self._buf, self._gain, self._last_fire = None, np.zeros(0, np.float32), 1.0, 0.0
+        if wake:
+            from openwakeword.model import Model
+
+            self._oww = Model(wakeword_models=[str(WAKE_MODEL)], inference_framework="onnx")
+
+    def chord(self):
+        k = ctypes.windll.user32.GetAsyncKeyState
+        return bool(k(VK_LCONTROL) & 0x8000 and k(VK_LMENU) & 0x8000)
+
+    def feed(self, raw):
+        """Called with each raw 100 ms mic block (pre-gain, like FRED's listener)."""
+        held = self.chord()
+        if held:
+            self.at, self.source = time.monotonic(), "hotkey"
+        self.held = held
+        if self._oww is None:
+            return None
+        self._buf = np.concatenate([self._buf, raw])
+        score = None
+        while len(self._buf) >= 1280:  # openwakeword's 80 ms frame
+            block, self._buf = self._buf[:1280], self._buf[1280:]
+            peak = float(np.abs(block).max())
+            if peak > AGC_MIN:  # FRED's AGC: snap down instantly, ramp up slowly
+                want = min(AGC_TARGET / peak, AGC_MAX)
+                self._gain = want if want < self._gain else self._gain + (want - self._gain) * AGC_SMOOTH
+            pcm = np.clip(np.clip(block * self._gain, -1, 1) * 32767, -32768, 32767).astype(np.int16)
+            score = float(next(iter(self._oww.predict(pcm).values()), 0.0))
+            now = time.monotonic()
+            if score > WAKE_THRESHOLD and now - self._last_fire > WAKE_COOLDOWN:
+                self._last_fire, self.at, self.source = now, now, "wake_word"
+                self._oww.reset()
+                return score
+        return None
+
+    def active(self, window=10.0):
+        return self.at is not None and time.monotonic() - self.at < window
+
+    def clear(self):
+        self.at = self.source = None
 # Placeholder persona for testing, not FRED's real prompt.
 FRED_PROMPT = (
     "Streaming Omni Conversation. You are FRED, Vatsal's personal assistant. "
@@ -150,6 +210,12 @@ def main():
     ap.add_argument("--listen-scale", type=float, default=1.0,
                     help="upstream listen_prob_scale: multiplies the <|listen|> logit each second "
                          "(<1 = readier to speak, incl. unprompted). 1.0 = upstream; pick from logged logits")
+    ap.add_argument("--no-wake", action="store_true",
+                    help="disable 'hey FRED' / Ctrl+Alt forcing a reply (the chord still works unless --no-hotkey)")
+    ap.add_argument("--no-hotkey", action="store_true", help="disable the left Ctrl + left Alt force-reply chord")
+    ap.add_argument("--kokoro-device", choices=["gpu", "cpu"], default="gpu",
+                    help="Kokoro on the GPU (onnxruntime-gpu) or CPU (FRED's allowed exception)")
+    ap.add_argument("--selftest-force-at", type=int, help="testing: act as if 'hey FRED' was heard at unit N")
     ap.add_argument("--no-barge", action="store_true", help="don't cut the voice when you start talking")
     ap.add_argument("--barge-db", type=float, default=-28.0,
                     help="mic level (after gain) that counts as you talking over the voice")
@@ -184,7 +250,17 @@ def main():
     decision, orig_decode = {}, duplex.decoder.decode
 
     def decode(logits, **kw):
-        if "p_listen" not in decision:
+        if "p_listen" not in decision and decision.get("force"):
+            # Addressed ("hey FRED" / chord) and he has stopped talking: block
+            # <|listen|> at this second's decision so Venus answers now. The
+            # raw numbers below are still logged from the unmodified logits.
+            forced = logits.clone()
+            forced[0, duplex.listen_token_id] = float("-inf")
+            decision["forced"] = True
+            first_call = True
+        else:
+            first_call, forced = "p_listen" not in decision, None
+        if first_call:
             # duplex.listen_token_id = "<|listen|>", what streaming_generate checks
             # (decoder.listen_id is the tokenizer's eos, a different token).
             lg = logits[0].float()
@@ -198,7 +274,7 @@ def main():
             p, ids = torch.softmax(lg, -1).topk(5)
             toks = duplex.tokenizer.convert_ids_to_tokens(ids.tolist())
             decision["top5"] = [[t, round(v, 4)] for t, v in zip(toks, p.tolist())]
-        return orig_decode(logits=logits, **kw)
+        return orig_decode(logits=forced if forced is not None else logits, **kw)
 
     duplex.decoder.decode = decode
     prof = {}
@@ -227,9 +303,19 @@ def main():
     # the voice is playing cut it. Needs headphones (speakers would trigger it).
     loud = [0]
 
+    addressed = Addressed(wake=not args.no_wake)
+    if args.no_hotkey:
+        addressed.chord = lambda: False
+
     def on_mic(data, *_):
         x = data[:, 0].copy()
         mic.put(x)
+        held_before = addressed.held
+        wake_score = addressed.feed(x)
+        if wake_score is not None:
+            evq.put(("wake_word", {"score": round(wake_score, 3)}))
+        if addressed.held != held_before:
+            evq.put(("hotkey", {"held": addressed.held}))
         if args.voice != "kokoro" or args.no_barge or not (len(left[0]) or not play.empty()):
             loud[0] = 0
             return
@@ -242,10 +328,23 @@ def main():
     mic = queue.Queue()
     stream, mic_name = open_mic(args.mic, on_mic)
     gain = args.gain or next((g for k, g in MIC_GAIN.items() if k in mic_name.lower()), 1.0)
+    kokoro_providers = None
     if args.voice == "kokoro":
         from kokoro_onnx import Kokoro
 
+        # kokoro-onnx's own GPU check looks for a module named "onnxruntime-gpu",
+        # which can't exist (hyphen), so it always picks CPU; ONNX_PROVIDER is
+        # its documented override. Needs onnxruntime-gpu in this venv.
+        if args.kokoro_device == "gpu":
+            os.environ["ONNX_PROVIDER"] = "CUDAExecutionProvider"
+            import onnxruntime as ort
+
+            ort.set_default_logger_severity(3)  # hide harmless CUDA EP perf notices (memcpy nodes, ScatterND)
         kokoro = Kokoro(str(KOKORO_DIR / "kokoro-v1.0.onnx"), str(KOKORO_DIR / "voices-v1.0.bin"))
+        kokoro_providers = kokoro.sess.get_providers()
+        t_w = time.perf_counter()
+        kokoro.create("Ready.", voice="am_michael", speed=1.2, lang="en-us")  # warm-up: first GPU call took 1.09 s live
+        log(f"Kokoro on {kokoro_providers[0]} (warm-up {time.perf_counter() - t_w:.2f}s)")
 
         def tts_worker():
             while True:
@@ -267,16 +366,22 @@ def main():
         threading.Thread(target=tts_worker, daemon=True).start()
 
     def speak_text(text, final=False):
-        """Queue whole sentences for Kokoro; on final, flush whatever is left.
-        The first chunk of a reply may also break at a comma (after 40 chars) so
-        the voice starts sooner, the same trick as FRED's split_for_speech."""
+        """Queue text for Kokoro. Called once per 1 s unit with that unit's words.
+
+        Sentence ends always flush. Venus writes only ~4-5 words a second, so
+        waiting for whole sentences left ~1 s before the first audio and ~2 s
+        silent gaps mid-reply (self-test 2026-09-28). So also flush at the end
+        of a unit once the first chunk has >= 3 words, or later chunks >= 6
+        words, cutting at the last complete word. On final, flush the rest."""
         if muted[0]:
             return
         pending[0] += text
         p = pending[0]
         cut = len(p) if final else max((m.end() for m in re.finditer(r"[.!?](\s|$)", p)), default=0)
-        if not cut and first[0] and len(p) >= 40:
-            cut = max((m.end() for m in re.finditer(r",\s", p)), default=0)
+        if not cut:
+            words = p.split()
+            if len(words) >= (3 if first[0] else 6):
+                cut = p.rstrip().rfind(" ") if not p.endswith(" ") else len(p)  # keep a half-written word back
         if cut and p[:cut].strip():
             say.put((turn[0], p[:cut].strip(), time.perf_counter()))
             ev("voice_queued", turn=turn[0], text=p[:cut].strip(), first_chunk=first[0], final=final)
@@ -311,7 +416,8 @@ def main():
        venus_reserved_gb=round(torch.cuda.memory_reserved() / 2**30, 2),
        window=duplex.decoder._window_config.basic_window_high_tokens,
        scale_resolution=duplex.processor.image_processor.scale_resolution,
-       torch=torch.__version__, prompt=args.system)
+       torch=torch.__version__, prompt=args.system, kokoro_providers=kokoro_providers,
+       wake_word=not args.no_wake, hotkey=not args.no_hotkey)
     log(f"LIVE on {mic_name} (gain {gain:g}) + {args.source}. Talk to it. Ctrl+C to stop.")
     stream.start()
     if speaker:
@@ -352,7 +458,15 @@ def main():
             sent_frames += frame is not None
             pre = f" | grab {t_grab:.3f} " + " ".join(f"{k} {v:.3f}" for k, v in prof.items()) if args.profile else ""
             decision.clear()
+            # Force a reply once he has addressed Venus and stopped talking
+            # (chord released / a quiet second after "hey FRED").
+            if unit == args.selftest_force_at:
+                addressed.at, addressed.source = time.monotonic(), "selftest"
+            addr_source = addressed.source
+            decision["force"] = addressed.active() and not addressed.held and db < -40 and not speaking
             r = duplex.streaming_generate(listen_prob_scale=args.listen_scale)
+            if not r["is_listen"] or not addressed.active():
+                addressed.clear()
             p_speak = 1 - decision.get("p_listen", 1.0)  # everything that isn't <|listen|>
             dt = time.perf_counter() - t0
 
@@ -419,6 +533,7 @@ def main():
                end_of_turn=r.get("end_of_turn"), p_speak=round(p_speak, 4),
                listen_logit=decision.get("listen_logit"), best_other=decision.get("best_other"),
                top5=decision.get("top5"), listen_scale=args.listen_scale,
+               forced=decision.get("forced", False), addressed_by=addr_source if decision.get("force") else None,
                mic_db=round(db, 1), mic_peak=round(float(np.abs(audio).max()), 3),
                mic_clipped_frac=round(float((np.abs(audio) >= 0.999).mean()), 4),
                frame="frame+crop" if crop_img else ("frame" if frame else "skip"), sim=round(sim, 5),

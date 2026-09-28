@@ -437,9 +437,15 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
   image (small changes only): small-text reads 0/9 -> 8/9 (`readtest.py`).
 - Mic: headset first, lavalier backup; per-mic gain (lavalier 8x). Record
   what Venus heard (`live_mic.wav`) when debugging.
-- Voice: Kokoro (FRED's voice) from Venus's text, sentence-chunked, first
-  chunk may break at a comma; new reply drops the old reply's audio;
-  barge-in cuts it (200 ms above -28 dB).
+- Voice: Kokoro (FRED's voice) from Venus's text, **on the GPU**
+  (onnxruntime-gpu 1.21.1; set `ONNX_PROVIDER=CUDAExecutionProvider` --
+  kokoro-onnx's own GPU detection never fires), **warmed up at start**, and
+  chunked by words (first chunk at 3 words, then >= 6 per unit, sentence
+  ends always) -- first audio 0.1 s after Venus starts replying. New reply
+  drops the old reply's audio; barge-in cuts it (200 ms above -28 dB).
+- "Answer me now": FRED's frozen hey_fred.onnx (threshold 0.35, FRED's
+  AGC/cooldown) + FRED's left Ctrl + left Alt chord; once addressed and he
+  stops talking, block `<|listen|>` at that second's first decode.
 - Decision confidence: wrap the decoder's first `decode()` per unit. Use
   `duplex.listen_token_id` (`<|listen|>`); **`decoder.listen_id` is the
   tokenizer's eos, a different token.**
@@ -455,3 +461,21 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
   FRED (backend answers "needs confirmation", confirm = second delegate).
 - Screen text: invents confident numbers when it can't read (no "I can't
   read that").
+- **Installed (after push, Vatsal's go):** in the Venus venv only --
+  openwakeword 0.6.0 (+ melspectrogram/embedding feature models copied
+  from FRED's Core venv) and onnxruntime-gpu 1.21.1 replacing the CPU
+  onnxruntime (providers: TensorRT, CUDA, CPU).
+- **Kokoro on GPU** (`--kokoro-device gpu`, default): 3-4x faster than CPU
+  (1.2 s audio 0.37 -> 0.12 s; 5.0 s audio 1.12 -> 0.28 s;
+  `test_voice_wake.py`). Gotcha: kokoro-onnx's GPU check looks for a module
+  named "onnxruntime-gpu" (impossible, hyphen) so it always picks CPU; set
+  `ONNX_PROVIDER=CUDAExecutionProvider`. ort perf notices muted.
+- **"Answer me now"** (`Addressed` in live_duplex.py): FRED's frozen
+  hey_fred.onnx with FRED's threshold 0.35 / AGC / 2 s cooldown (not
+  imported: FRED's listener writes to FRED's real wake-word log), and FRED's
+  left Ctrl + left Alt chord. When addressed and he stops talking (chord
+  released / a quiet second, mic < -40 dB), `<|listen|>` is blocked at that
+  second's decision so Venus answers; cleared when it speaks or after 10 s.
+  Wake wiring test: 12/12 as expected on 3 synthetic voices (fires on "Hey
+  Fred" 0.97-1.00, not on "Hey Ted", other speech or silence).
+  `--no-wake`, `--no-hotkey`, `--selftest-force-at N` (simulated wake).

@@ -236,3 +236,21 @@
   gotcha and setting FRED's backend must carry over (Vatsal: "keep
   documenting so that when we import this as the backend for FRED it
   works properly").
+- **Installed (after push, Vatsal's go):** in the Venus venv only --
+  openwakeword 0.6.0 (+ melspectrogram/embedding feature models copied
+  from FRED's Core venv) and onnxruntime-gpu 1.21.1 replacing the CPU
+  onnxruntime (providers: TensorRT, CUDA, CPU).
+- **Kokoro on GPU** (`--kokoro-device gpu`, default): 3-4x faster than CPU
+  (1.2 s audio 0.37 -> 0.12 s; 5.0 s audio 1.12 -> 0.28 s;
+  `test_voice_wake.py`). Gotcha: kokoro-onnx's GPU check looks for a module
+  named "onnxruntime-gpu" (impossible, hyphen) so it always picks CPU; set
+  `ONNX_PROVIDER=CUDAExecutionProvider`. ort perf notices muted.
+- **"Answer me now"** (`Addressed` in live_duplex.py): FRED's frozen
+  hey_fred.onnx with FRED's threshold 0.35 / AGC / 2 s cooldown (not
+  imported: FRED's listener writes to FRED's real wake-word log), and FRED's
+  left Ctrl + left Alt chord. When addressed and he stops talking (chord
+  released / a quiet second, mic < -40 dB), `<|listen|>` is blocked at that
+  second's decision so Venus answers; cleared when it speaks or after 10 s.
+  Wake wiring test: 12/12 as expected on 3 synthetic voices (fires on "Hey
+  Fred" 0.97-1.00, not on "Hey Ted", other speech or silence).
+  `--no-wake`, `--no-hotkey`, `--selftest-force-at N` (simulated wake).

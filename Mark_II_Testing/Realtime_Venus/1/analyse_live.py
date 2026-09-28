@@ -67,3 +67,31 @@ if miss or idle:
               f"speaks in {sum(x > s for x in idle)}/{len(idle)} idle s")
 else:
     print("(no logit data in this run -- it predates logit logging)")
+
+# Voice + addressing, from the verbose event log (live_events.jsonl, newest run).
+import json  # noqa: E402
+
+ev_path = Path(__file__).parent / "live_events.jsonl"
+if ev_path.exists():
+    evs = [json.loads(l) for l in ev_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    run = evs[-1]["run"]
+    evs = [e for e in evs if e["run"] == run]
+    units = [e for e in evs if e["kind"] == "unit"]
+    print(f"\nevent log run {run}: {len(units)} units, "
+          f"{sum(e['kind'] == 'wake_word' for e in evs)} wake words, "
+          f"{sum(e['kind'] == 'hotkey' and e.get('held') for e in evs)} chord presses, "
+          f"{sum(bool(e.get('forced')) for e in units)} forced replies, "
+          f"{sum(e['kind'] == 'barge_in' for e in evs)} barge-ins, {sum(e['kind'] == 'context_trim' for e in evs)} trims")
+    starts = {}
+    for e in evs:
+        if e["kind"] == "voice_audio_start":
+            starts.setdefault(e["turn"], []).append(e.get("since_reply_start_s"))
+    forced_turns = {e["turn"] for e in units if e.get("forced")}
+    for turn, s in sorted(starts.items()):
+        text = " ".join(e["text"] for e in evs if e["kind"] == "voice_queued" and e["turn"] == turn)
+        print(f"  reply {turn}{' (forced)' if turn in forced_turns else ''}: first audio {s[0]}s after Venus "
+              f"started replying, {len(s) - 1} silent gap(s) -> {text[:70]!r}")
+    synth = [e for e in evs if e["kind"] == "voice_synth"]
+    if synth:
+        print(f"  Kokoro: {len(synth)} chunks, synth median {sorted(e['synth_s'] for e in synth)[len(synth) // 2]:.2f}s, "
+              f"max {max(e['synth_s'] for e in synth):.2f}s")
