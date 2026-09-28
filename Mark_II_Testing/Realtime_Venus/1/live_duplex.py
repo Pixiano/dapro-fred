@@ -102,6 +102,9 @@ FRED_PROMPT = (
     "Streaming Omni Conversation. You are FRED, Vatsal's personal assistant. "
     "You can see his screen and hear him. Be brief, friendly and direct."
 )
+# Proactivity test trigger (Vatsal chose it 2026-09-28): replicable on demand by
+# pressing play on any video. --alert "" disables.
+ALERT = " Whenever a video starts playing on his screen, say so in one short sentence, even if he hasn't spoken."
 # Dropped 2026-09-28: "speak only when he talks to you or something on screen
 # truly needs his attention" -- Vatsal: no prompt magic for turn-taking; it
 # answered only 10/24 times he spoke with it. Venus decides when to talk itself.
@@ -244,7 +247,12 @@ def main():
                          "default = adaptive (room noise floor + 12 dB)")
     ap.add_argument("--profile", action="store_true", help="log the prefill split per second")
     ap.add_argument("--gain", type=float, help="mic gain multiplier, clipped at +-1 (default per mic: lavalier 8, else 1)")
+    # Off by default: in run 22:09 the rule hijacked answers ("A video clip is playing
+    # on his screen" to unrelated questions, 2 false alarms, repeats every ~30 s).
+    ap.add_argument("--alert-video", action="store_true", help="proactivity test: add the play-a-video alert rule")
     args = ap.parse_args()
+    if args.system and args.alert_video:
+        args.system += ALERT
 
     duplex = load_duplex(speech=args.voice == "venus", window=args.window)
     if args.system:
@@ -451,7 +459,7 @@ def main():
 
     buf, unit, sent_frames = np.zeros(0, dtype=np.float32), 0, 0
     last_thumb, last_sent = [None], [-10**9]
-    speaking = False
+    speaking, reply_text = False, ""
     reply_started = {}  # turn -> perf time Venus began the reply (for voice latency)
     ev("run_start", args=vars(args), mic=mic_name, mic_gain=gain,
        output=sd.query_devices(kind="output")["name"] if speaker else None,
@@ -510,7 +518,11 @@ def main():
                 addressed.at, addressed.source = time.monotonic(), "selftest"
             addr_source = addressed.source
             floor = nf.floor
-            decision["force"] = addressed.active() and not addressed.held and nf.quiet(db) and not speaking
+            # Chord released = he's done (hold-to-talk). After "hey FRED" wait for a quiet
+            # second, but with a TV on it never comes (22:12-22:13), so give up after 2.5 s.
+            done = (addressed.source == "hotkey" or nf.quiet(db)
+                    or (addressed.at is not None and time.monotonic() - addressed.at >= 2.5))
+            decision["force"] = addressed.active() and not addressed.held and done and not speaking
             nf.add(db)
             r = duplex.streaming_generate(listen_prob_scale=args.listen_scale)
             if not r["is_listen"] or not addressed.active():
@@ -555,7 +567,10 @@ def main():
                         # yielded to him (its trained interruption handling -- it keeps
                         # talking through TV/background speech), so cut the queued
                         # Kokoro audio. A normal ending (he's quiet) plays out in full.
-                        if args.barge != "off" and nf.talking(db) and (len(left[0]) or not play.empty()):
+                        # Only a mid-sentence stop is a yield: with the TV on "talking" is
+                        # always true, and cutting natural endings clipped 3 replies (22:11-22:13).
+                        yielded = not re.search(r"[.!?]\s*$", reply_text)
+                        if args.barge != "off" and yielded and nf.talking(db) and (len(left[0]) or not play.empty()):
                             barge_in(db, why="venus_yielded")
                         else:
                             speak_text("", final=True)
@@ -568,9 +583,11 @@ def main():
                     turn[0] += 1
                     reply_started[turn[0]] = time.perf_counter()
                     pending[0], muted[0], first[0] = "", False, True
+                    reply_text = ""
                     while not play.empty():
                         play.get_nowait()
                     left[0] = np.zeros(0, dtype=np.float32)
+                reply_text += r["text"]
                 print(r["text"] + slow, end="", flush=True)
                 if args.voice == "kokoro":
                     speak_text(r["text"])

@@ -304,3 +304,36 @@
   the voice plays on speakers is ignored for both interrupting and
   addressing (`wake_word_ignored` event). barge_in events log `why`.
 - Talk-over interrupt (Vatsal: "what if I speak over it?"): when Venus stops its reply while he is talking (noise-floor "talking" that second), the queued Kokoro audio is cut (`barge_in why=venus_yielded`); a normal ending plays out. Relies on Venus's trained interruption handling (paper: 75% interruption response, 86% continues through background speech). Not yet tested live (needs his voice). Self-test with TV on (intent mode): forced reply played in full, 0 barge-ins, first audio 0.27 s.
+- Proactivity test trigger (Vatsal picked "a video starts playing"): `--alert` (default) appends "Whenever a video starts playing on his screen, say so in one short sentence, even if he hasn't spoken." to the system prompt; test = press play on any video; `--alert ""` disables. Logged prompt in run_start shows it.
+- **Test plan for live run ~22:08 (as given to Vatsal):**
+  1. Proactive video (the alert): stay silent 20 s, then press play on a
+     YouTube video and stay silent 15 s. Pass = Venus says a video started,
+     unprompted.
+  2. Proactive negative: pause the video, just scroll a page silently for
+     20 s. Pass = Venus stays quiet (nothing it was told to flag).
+  3. Hey FRED: say "Hey FRED, what's on my screen?" then stop. Pass =
+     forced reply within ~2 s describing the screen.
+  4. Talk over it: hold Ctrl+Alt, ask "describe everything on my screen in
+     detail", release; once it's mid-answer, say "stop, that's enough"
+     without pressing anything. Pass = voice stops (barge why=venus_yielded).
+  5. TV / noise robustness: with the TV or a video playing aloud, hold
+     Ctrl+Alt and ask "what time does my clock show?", release, stay quiet.
+     Pass = the reply plays to the end, no barge-in.
+- **Results of the 5-test run (22:09, Vatsal's verdicts + log):**
+  1. Proactive video: works (22:11:24, unforced, p_speak 0.65: "A video of
+     a person speaking has started playing") BUT two big mistakes first:
+     "A video is playing on your screen" at 22:09:27 (chord-forced) and
+     22:09:47 before any video played, and it then repeated every ~30 s.
+  2. Proactive negative: correct, stayed quiet.
+  3. Hey FRED: fail -- 0 wake-word detections with the TV on; forced
+     replies never fired (force waited for a quiet second the TV never
+     gave); replies got cut on their own.
+  4. Talk over: worked.
+  5. TV robustness: wrong -- answers to his questions were "A video clip
+     is playing on his screen" (the alert rule parroted, incl. "his").
+  Root causes + fixes: (a) the standing alert rule hijacks an 8B duplex
+  model's answers -> `--alert-video` opt-in only; (b) "venus_yielded" cut
+  3 natural endings because TV = "talking" -> only cut when Venus stops
+  mid-sentence (no final .!?); (c) force-reply needed a quiet second ->
+  chord release forces immediately, wake word waits for quiet or 2.5 s;
+  (d) wake word vs TV speech: model limitation, not fixed.
