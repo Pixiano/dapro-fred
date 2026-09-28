@@ -462,7 +462,8 @@ def main():
     on_speakers[0] = "speaker" in out_name.lower()
     barge_on[0] = args.voice == "kokoro" and (args.barge == "intent" or (args.barge == "energy" and not on_speakers[0]))
     logf = open("live_duplex.log", "a", encoding="utf-8")
-    heard = sf.SoundFile("live_mic.wav", "w", samplerate=SR, channels=1)  # exactly what Venus got, per run
+    # Exactly what Venus got, per run. 16-bit: float32 was ~230 MB/hour (soak tests).
+    heard = sf.SoundFile("live_mic.wav", "w", samplerate=SR, channels=1, subtype="PCM_16")
     logf.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S} source={args.source} listen_scale={args.listen_scale} "
                f"system={args.system!r}\n")
 
@@ -499,9 +500,13 @@ def main():
             t0 = time.perf_counter()
             unit += 1  # a frame is 64 of the ~75 tokens/s, so sparser frames = longer memory
             prof.clear()
-            frame, sim = None, -1.0
+            frame, sim, img = None, -1.0, None
             if unit % args.frame_every == 0:
-                img = grab()
+                try:
+                    img = grab()
+                except OSError as e:  # locked screen / secure desktop: no frame this second, keep running
+                    evq.put(("grab_failed", {"error": str(e)[:120]}))
+            if img is not None:
                 # #6: skip unchanged frames. Worst tile of a 16x9 grid: a whole-
                 # screen average washes out one new terminal line (0.9997, same as
                 # noise); per-tile doesn't. sha256 can only say identical-or-not.

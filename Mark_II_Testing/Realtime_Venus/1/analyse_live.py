@@ -90,6 +90,16 @@ if ev_path.exists():
           f"{sum(e['kind'] == 'hotkey' and e.get('held') for e in evs)} chord presses, "
           f"{sum(bool(e.get('forced')) for e in units)} forced replies, "
           f"{sum(e['kind'] == 'barge_in' for e in evs)} barge-ins, {sum(e['kind'] == 'context_trim' for e in evs)} trims")
+    if units:  # soak-test health
+        hours = len(units) / 3600
+        unprompted = sum(1 for a, b in zip(units, units[1:])
+                         if a["decision"] == "listen" and b["decision"] == "speak" and not b.get("forced"))
+        print(f"  health over {hours:.2f} h: VRAM reserved {min(e['vram_reserved_gb'] for e in units):.1f}-"
+              f"{max(e['vram_reserved_gb'] for e in units):.1f} GB, device free min "
+              f"{min(e['vram_free_gb'] for e in units):.1f} GB, context max {max(e['context_tokens'] for e in units)} "
+              f"tokens, unprompted replies {unprompted} ({unprompted / max(hours, 1e-9):.1f}/h), "
+              f"blocked by threshold {sum(bool(e.get('thresholded')) for e in units)} s, "
+              f"grab failures {sum(e['kind'] == 'grab_failed' for e in evs)}")
     starts = {}
     for e in evs:
         if e["kind"] == "voice_audio_start":
