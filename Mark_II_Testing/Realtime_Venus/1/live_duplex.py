@@ -25,6 +25,7 @@ import soundfile as sf
 import torch
 
 from smoke_nf4 import load_duplex, log, profile_prefill
+from speech_level import NoiseFloor
 
 SR = 16000
 KOKORO_DIR = Path(__file__).resolve().parents[3] / "Core" / "models" / "kokoro"  # FRED's copy
@@ -49,6 +50,7 @@ class Addressed:
     def __init__(self, wake=True):
         self.at = None  # monotonic time of the last wake / chord press
         self.held = False
+        self._pressed_at = 0.0
         self.source = None
         self._oww, self._buf, self._gain, self._last_fire = None, np.zeros(0, np.float32), 1.0, 0.0
         if wake:
@@ -60,11 +62,16 @@ class Addressed:
         k = ctypes.windll.user32.GetAsyncKeyState
         return bool(k(VK_LCONTROL) & 0x8000 and k(VK_LMENU) & 0x8000)
 
+    MIN_HOLD = 0.4  # s. 2026-09-28: 8 chord "presses" were sub-second taps landing on
+    # UI shortcuts with no speech; hold-to-talk is always longer than this.
+
     def feed(self, raw):
         """Called with each raw 100 ms mic block (pre-gain, like FRED's listener)."""
-        held = self.chord()
-        if held:
-            self.at, self.source = time.monotonic(), "hotkey"
+        held, now = self.chord(), time.monotonic()
+        if held and not self.held:
+            self._pressed_at = now
+        if held and now - self._pressed_at >= self.MIN_HOLD:
+            self.at, self.source = now, "hotkey"
         self.held = held
         if self._oww is None:
             return None
@@ -163,19 +170,30 @@ def focus_crop(img, diffs, thr):
 
 
 def open_mic(names, callback):
-    """First device matching the comma-separated names, in order (headset, then backup)."""
+    """First working device matching the comma-separated names, in order (headset, then backup).
+
+    Prefers the MME entries (Windows' normal devices). 2026-09-28: with the
+    Rockerz disconnected, its raw Bluetooth hands-free WDM-KS endpoint was still
+    listed, matched first, opened, then failed -> run died before unit 1. So a
+    device only counts once its stream has actually started.
+    """
     devices = sd.query_devices()
+    apis = [a["name"] for a in sd.query_hostapis()]
+    order = sorted(range(len(devices)), key=lambda i: apis[devices[i]["hostapi"]] != "MME")
     for name in names.split(","):
-        for i, d in enumerate(devices):
-            if d["max_input_channels"] and name.strip().lower() in d["name"].lower():
-                try:
-                    stream = sd.InputStream(device=i, samplerate=SR, channels=1, dtype="float32",
-                                            blocksize=SR // 10, callback=callback)
-                    return stream, d["name"]
-                except Exception as e:  # e.g. headset charging / disconnected
-                    log(f"mic {d['name']!r} unavailable ({e}); trying the next one")
-                break
-    raise SystemExit(f"no mic matching any of: {names}")
+        for i in order:
+            d = devices[i]
+            if not (d["max_input_channels"] and name.strip().lower() in d["name"].lower()):
+                continue
+            try:
+                stream = sd.InputStream(device=i, samplerate=SR, channels=1, dtype="float32",
+                                        blocksize=SR // 10, callback=callback)
+                stream.start()  # prove it streams; the main loop starts it again when ready
+                stream.stop()
+                return stream, d["name"]
+            except Exception as e:  # headset charging / disconnected / driver endpoint that won't stream
+                log(f"mic {d['name']!r} ({apis[d['hostapi']]}) unavailable ({e}); trying the next one")
+    raise SystemExit(f"no working mic matching any of: {names}")
 
 
 def main():
@@ -216,9 +234,12 @@ def main():
     ap.add_argument("--kokoro-device", choices=["gpu", "cpu"], default="gpu",
                     help="Kokoro on the GPU (onnxruntime-gpu) or CPU (FRED's allowed exception)")
     ap.add_argument("--selftest-force-at", type=int, help="testing: act as if 'hey FRED' was heard at unit N")
-    ap.add_argument("--no-barge", action="store_true", help="don't cut the voice when you start talking")
-    ap.add_argument("--barge-db", type=float, default=-28.0,
-                    help="mic level (after gain) that counts as you talking over the voice")
+    ap.add_argument("--barge", choices=["auto", "on", "off"], default="auto",
+                    help="cut the voice when you start talking; auto = on for headphones, off when the "
+                         "output looks like speakers (it would hear itself)")
+    ap.add_argument("--barge-db", type=float,
+                    help="fixed mic level (after gain) that counts as talking over the voice; "
+                         "default = adaptive (room noise floor + 12 dB)")
     ap.add_argument("--profile", action="store_true", help="log the prefill split per second")
     ap.add_argument("--gain", type=float, help="mic gain multiplier, clipped at +-1 (default per mic: lavalier 8, else 1)")
     args = ap.parse_args()
@@ -300,8 +321,11 @@ def main():
         print("  [you talked -> voice stopped]", end="", flush=True)
 
     # Barge-in, checked every 100 ms mic block: 2 loud blocks (200 ms) while
-    # the voice is playing cut it. Needs headphones (speakers would trigger it).
-    loud = [0]
+    # the voice is playing cut it. Needs headphones (speakers would trigger it:
+    # 2026-09-28 it cut its own reply through the Realtek speakers), so `auto`
+    # turns it off when the output device looks like speakers.
+    loud, barge_on = [0], [False]
+    nf = NoiseFloor()  # the room's own level; "talking" / "stopped" are relative to it
 
     addressed = Addressed(wake=not args.no_wake)
     if args.no_hotkey:
@@ -316,11 +340,12 @@ def main():
             evq.put(("wake_word", {"score": round(wake_score, 3)}))
         if addressed.held != held_before:
             evq.put(("hotkey", {"held": addressed.held}))
-        if args.voice != "kokoro" or args.no_barge or not (len(left[0]) or not play.empty()):
+        if args.voice != "kokoro" or not barge_on[0] or not (len(left[0]) or not play.empty()):
             loud[0] = 0
             return
         db_ = 20 * np.log10(max(float(np.sqrt(((x * gain) ** 2).mean())), 1e-6))
-        loud[0] = loud[0] + 1 if db_ > args.barge_db else 0
+        limit = args.barge_db if args.barge_db is not None else nf.floor + NoiseFloor.TALK_DB + 4
+        loud[0] = loud[0] + 1 if db_ > limit else 0
         if loud[0] >= 2:
             loud[0] = 0
             barge_in(db_)
@@ -401,6 +426,8 @@ def main():
         left[0] = buf_[n:]
 
     speaker = None if args.voice == "off" else sd.OutputStream(samplerate=24000, channels=1, dtype="float32", callback=out_cb)
+    out_name = sd.query_devices(kind="output")["name"] if speaker else ""
+    barge_on[0] = args.voice == "kokoro" and (args.barge == "on" or (args.barge == "auto" and "speaker" not in out_name.lower()))
     logf = open("live_duplex.log", "a", encoding="utf-8")
     heard = sf.SoundFile("live_mic.wav", "w", samplerate=SR, channels=1)  # exactly what Venus got, per run
     logf.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S} source={args.source} listen_scale={args.listen_scale} "
@@ -417,12 +444,12 @@ def main():
        window=duplex.decoder._window_config.basic_window_high_tokens,
        scale_resolution=duplex.processor.image_processor.scale_resolution,
        torch=torch.__version__, prompt=args.system, kokoro_providers=kokoro_providers,
-       wake_word=not args.no_wake, hotkey=not args.no_hotkey)
+       wake_word=not args.no_wake, hotkey=not args.no_hotkey, barge=barge_on[0])
     log(f"LIVE on {mic_name} (gain {gain:g}) + {args.source}. Talk to it. Ctrl+C to stop.")
     stream.start()
     if speaker:
         speaker.start()
-        log(f"voice ({args.voice}) out on {sd.query_devices(kind='output')['name']}")
+        log(f"voice ({args.voice}) out on {out_name}; barge-in {'on' if barge_on[0] else 'off'}")
     try:
         while True:
             while len(buf) < SR:
@@ -463,7 +490,9 @@ def main():
             if unit == args.selftest_force_at:
                 addressed.at, addressed.source = time.monotonic(), "selftest"
             addr_source = addressed.source
-            decision["force"] = addressed.active() and not addressed.held and db < -40 and not speaking
+            floor = nf.floor
+            decision["force"] = addressed.active() and not addressed.held and nf.quiet(db) and not speaking
+            nf.add(db)
             r = duplex.streaming_generate(listen_prob_scale=args.listen_scale)
             if not r["is_listen"] or not addressed.active():
                 addressed.clear()
@@ -534,7 +563,8 @@ def main():
                listen_logit=decision.get("listen_logit"), best_other=decision.get("best_other"),
                top5=decision.get("top5"), listen_scale=args.listen_scale,
                forced=decision.get("forced", False), addressed_by=addr_source if decision.get("force") else None,
-               mic_db=round(db, 1), mic_peak=round(float(np.abs(audio).max()), 3),
+               mic_db=round(db, 1), noise_floor_db=round(floor, 1), talking=db > floor + NoiseFloor.TALK_DB,
+               mic_peak=round(float(np.abs(audio).max()), 3),
                mic_clipped_frac=round(float((np.abs(audio) >= 0.999).mean()), 4),
                frame="frame+crop" if crop_img else ("frame" if frame else "skip"), sim=round(sim, 5),
                crop_box=crop_img.info.get("box") if crop_img else None,

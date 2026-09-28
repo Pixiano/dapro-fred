@@ -23,10 +23,18 @@ u = sorted(r["unit"] for r in rows)
 print(f"unit time median {u[n // 2]:.2f}s, p90 {u[int(n * .9)]:.2f}s, max {u[-1]:.2f}s; seconds with lag > 0.5 s: "
       f"{sum(r['lag'] > 0.5 for r in rows)}")
 
-# You talking = consecutive seconds with mic above -40 dB (after gain).
+# You talking = consecutive seconds clearly above the room's own noise floor
+# (same rule as live_duplex; a fixed -40 dB failed on the 8x lavalier).
+from speech_level import NoiseFloor  # noqa: E402
+
+nf = NoiseFloor()
+talk = []
+for r in rows:
+    talk.append(nf.talking(r["db"]))
+    nf.add(r["db"])
 bursts, cur = [], []
 for i, r in enumerate(rows):
-    if r["db"] > -40:
+    if talk[i]:
         cur.append(i)
     elif cur:
         bursts.append(cur)

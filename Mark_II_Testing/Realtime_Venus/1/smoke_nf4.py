@@ -65,6 +65,12 @@ def load_duplex(speech=False, fp16_vocoder=True, steps=8, talker_sdpa=True, wind
     log(f"start: {vram()}")
 
     t = time.perf_counter()
+    if not speech:
+        # The ~180-line "weights ... were not used" list is the talker we skip on
+        # purpose (init_tts=False); it buried real errors in the console.
+        from transformers.utils import logging as hf_logging
+
+        hf_logging.set_verbosity_error()
     model = AutoModel.from_pretrained(
         str(MODEL),
         trust_remote_code=True,

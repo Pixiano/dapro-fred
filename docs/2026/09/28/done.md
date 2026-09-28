@@ -271,3 +271,26 @@
   chord / barge-in / trim counts.
 - Committed + pushed `9d2773c` (try 1 so far) and `2fff0bd` (Kokoro GPU,
   force-reply, event log).
+- Live run 18:07 crashed at start: mic picker matched the Rockerz raw
+  Bluetooth hands-free WDM-KS endpoint while the headset was disconnected
+  ("Error starting stream ... WDM-KS GLE 0x48F", device not connected).
+  `open_mic` now prefers MME entries and accepts a device only once its
+  stream has actually started (tested: picks "Headset (Rockerz 512 ANC)";
+  falls back to the lavalier). Silenced the ~180-line "weights not used"
+  warning (the talker skipped on purpose).
+- Live run 18:09 (lavalier 8x, Realtek speakers): room at -26 dB median
+  after gain, above the fixed -40 dB "talking" line, so every second
+  counted as speech -> 2 "hey FRED" detections (0.996, 0.691) but no
+  forced reply (never a quiet second), and barge-in cut Venus's only reply
+  (speaker bleed). Fixes: `speech_level.NoiseFloor` (10th percentile of
+  the last 30 s; talking = floor + 8 dB, stopped = within 4 dB; self-check
+  in `__main__`) used by the force-reply, barge-in (floor + 12 dB per
+  100 ms block) and `analyse_live.py`; `--barge auto` = off when the
+  output device looks like speakers. Ctrl+Alt now needs a >= 0.4 s hold
+  (the 16:01 run's 8 "presses" were sub-second taps on UI shortcuts).
+- Re-analysed 18:09 with the adaptive floor: 3 turns, 0 answered.
+  listen-scale data: 0.9 -> 0/6 missed-turn s answered, 1/166 idle s
+  speaks; 0.85 -> 1/6, 5/166; 0.8 -> 4/6, 32/166. No scale fixes missed
+  replies without chatter -> addressed replies should come from the
+  wake-word / chord force; 0.9 is a candidate for light proactivity.
+  Default stays 1.0 until a cleaner run (3 turns, noisy room).
