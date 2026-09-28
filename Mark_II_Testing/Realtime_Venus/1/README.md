@@ -479,3 +479,20 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
   Wake wiring test: 12/12 as expected on 3 synthetic voices (fires on "Hey
   Fred" 0.97-1.00, not on "Hey Ted", other speech or silence).
   `--no-wake`, `--no-hotkey`, `--selftest-force-at N` (simulated wake).
+- **Live self-tests (Vatsal on break, simulated "hey FRED" at unit 20):**
+  forced reply works (speak prob was 5%; with `<|listen|>` blocked it
+  described the screen). Voice latency from Venus starting a reply to
+  first audio: **2.1 s -> 0.1 s** after (a) Kokoro warm-up at start (first
+  GPU call 1.09 s cold -> warm-up 0.77 s at launch; later chunks 0.10-0.13
+  s) and (b) chunking by words instead of whole sentences (first chunk at 3
+  words, then >= 6 words per unit, never splitting a half-written word).
+  Still ~2 short gaps mid-reply (Venus writes barely faster than Kokoro
+  speaks). VRAM peak 8.9 GB, units median 0.64 s.
+- **Idle proactivity data** (47 idle s, nobody present, wallpaper
+  animating): unprompted speech would start in 0/47 s at listen-scale 1.0,
+  1/47 at 0.9, 6/47 at 0.85, 14/47 at 0.8, 41/47 at 0.7. Needs Vatsal's
+  missed-turn data before choosing. `analyse_live.py` now also reports per
+  reply: first-audio delay, gaps, forced or not, Kokoro synth times, wake /
+  chord / barge-in / trim counts.
+- Committed + pushed `9d2773c` (try 1 so far) and `2fff0bd` (Kokoro GPU,
+  force-reply, event log).
