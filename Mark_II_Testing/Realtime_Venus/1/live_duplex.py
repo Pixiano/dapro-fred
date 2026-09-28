@@ -249,6 +249,8 @@ def main():
     ap.add_argument("--gain", type=float, help="mic gain multiplier, clipped at +-1 (default per mic: lavalier 8, else 1)")
     # Off by default: in run 22:09 the rule hijacked answers ("A video clip is playing
     # on his screen" to unrelated questions, 2 false alarms, repeats every ~30 s).
+    ap.add_argument("--speak-threshold", type=float, default=0.5,
+                    help="speak only if Venus's own P(speak) >= this at the decision (0 = upstream random sampling)")
     ap.add_argument("--alert-video", action="store_true", help="proactivity test: add the play-a-video alert rule")
     args = ap.parse_args()
     if args.system and args.alert_video:
@@ -305,6 +307,13 @@ def main():
             p, ids = torch.softmax(lg, -1).topk(5)
             toks = duplex.tokenizer.convert_ids_to_tokens(ids.tolist())
             decision["top5"] = [[t, round(v, 4)] for t, v in zip(toks, p.tolist())]
+            # Upstream samples this decision (temperature 0.7), so a 15% "speak" fires
+            # one second in seven: 22:16:55 "I'll help you check your system" in silence
+            # (p 0.15), false video alarms at 0.26-0.44; the real alert was 0.65.
+            if forced is None and args.speak_threshold and 1 - decision["p_listen"] < args.speak_threshold:
+                decision["thresholded"] = True
+                duplex.decoder.context += " "  # what upstream's own listen path in decode() does
+                return torch.tensor([duplex.listen_token_id], device=logits.device)
         return orig_decode(logits=forced if forced is not None else logits, **kw)
 
     duplex.decoder.decode = decode
@@ -605,7 +614,7 @@ def main():
                end_of_turn=r.get("end_of_turn"), p_speak=round(p_speak, 4),
                listen_logit=decision.get("listen_logit"), best_other=decision.get("best_other"),
                top5=decision.get("top5"), listen_scale=args.listen_scale,
-               forced=decision.get("forced", False), addressed_by=addr_source if decision.get("force") else None,
+               forced=decision.get("forced", False), thresholded=decision.get("thresholded", False), addressed_by=addr_source if decision.get("force") else None,
                mic_db=round(db, 1), noise_floor_db=round(floor, 1), talking=db > floor + NoiseFloor.TALK_DB,
                mic_peak=round(float(np.abs(audio).max()), 3),
                mic_clipped_frac=round(float((np.abs(audio) >= 0.999).mean()), 4),

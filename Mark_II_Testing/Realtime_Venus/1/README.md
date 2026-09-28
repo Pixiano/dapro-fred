@@ -570,3 +570,4 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
   mid-sentence (no final .!?); (c) force-reply needed a quiet second ->
   chord release forces immediately, wake word waits for quiet or 2.5 s;
   (d) wake word vs TV speech: model limitation, not fixed.
+- **False-positive proactive reply** (run 22:16, Vatsal: "got a false positive"): 22:16:55 "I'll help you check your system" in silence (mic -67 dB = floor), unforced, alert off, p_speak 0.15. Upstream samples the listen/speak decision (temperature 0.7), so low-probability speech fires at random; same mechanism as the 0.26-0.44 false video alarms (the real alert was 0.65). Added `--speak-threshold 0.5` (default): the first decode of a unit returns `<|listen|>` unless Venus's own P(speak) >= 0.5 (mirrors upstream's listen path: `decoder.context += " "`); forced replies and the reply wording unaffected; `thresholded` logged per unit; 0 = upstream sampling.
