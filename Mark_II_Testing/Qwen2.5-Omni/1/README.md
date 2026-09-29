@@ -5,8 +5,15 @@ Base Qwen2.5-Omni: a strong existing multimodal baseline, no FRED
 fine-tuning"). Order agreed 2026-09-29: 1 (done) → **3** → 5 → 4 → 2.
 Same procedure as candidate 1 (`../../Realtime_Venus/1/README.md`).
 
-Status: **import running.** Nothing loaded onto the GPU; waiting for
-Vatsal's go after the import.
+Status: **import complete and verified (2026-09-29 18:06).** Download
+took 62 min in one attempt (no retries); `verify_sha.py`: **7/7 LFS files
+match** the Hub at `ae9e1690` (5 shards, `spk_dict.pt`, tokenizer).
+Nothing loaded onto the GPU; waiting for Vatsal's go.
+
+Next on his go (mirrors candidate 1): NF4 load + all-on-GPU check +
+VRAM measurement (talker disabled) → smoke test (text, one screenshot,
+one audio clip, a short video) with latency → `benchmarking/run.py`
+adapter → live test with our own turn-taking.
 
 ## Layout (all but the .py/.md files is gitignored)
 

@@ -66,3 +66,4 @@
   on the GPU planned (Qwen's official low-VRAM mode offloads to CPU → not
   used). Not duplex: live test needs our own turn-taking. Waiting for
   Vatsal's go after the import.
+  - Import done 18:06: 62 min, no retries; SHA-256 7/7 match.
