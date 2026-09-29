@@ -93,3 +93,4 @@
   cu128 from cache, transformers 4.44.2 = upstream pin, bnb 0.50.2, vocos,
   vector-quantize, decord, Kokoro/onnxruntime-gpu), official weights @
   `06849bfd` (17.4 GB) downloading, ETA ~20:35.
+  - Import done 20:14: 60 min, no retries; SHA-256 12/12 match.

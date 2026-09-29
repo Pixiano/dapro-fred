@@ -5,7 +5,11 @@ Base MiniCPM-o 2.6: another compact multimodal baseline, kept separate from
 MiniCPM5-2B"). Order: 1 (done) → 3 (done) → **5** → 4 → 2. Same procedure
 as candidates 1 and 3.
 
-Status: **import running.** Nothing on the GPU yet; waiting for Vatsal's go.
+Status: **import complete and verified (2026-09-29 20:14).** 60 min, no
+retries; `verify_sha.py`: **12/12 LFS files match** at `06849bfd`. Env:
+torch 2.8 cu128, transformers 4.44.2, bnb 0.50.2, vocos, vector-quantize,
+decord, Kokoro on onnxruntime-gpu. Nothing on the GPU yet; waiting for
+Vatsal's go.
 
 ## Layout (all but the .py/.md files is gitignored)
 
