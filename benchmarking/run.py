@@ -67,6 +67,14 @@ def load(name):
     return [json.loads(l) for l in (CASES / name).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
+def needs(k, file):
+    """Capabilities a case needs. routing_hard.jsonl and conversation cases
+    expecting a tool call predate the `needs` field: both need tools."""
+    if "needs" in k:
+        return set(k["needs"])
+    return {"text", "tools"} if file == "routing_hard.jsonl" or k.get("tools") else {"text"}
+
+
 # ------------------------------------------------------------------ GPU guard
 
 def _smi(field):
@@ -278,6 +286,134 @@ class FredCurrent:
         segments, _ = self.stt.model.transcribe(audio, language=self.stt.language, beam_size=WHISPER_BEAM_SIZE,
                                                 vad_filter=True, initial_prompt=_build_prompt())
         return " ".join(s.text.strip() for s in segments).strip()
+
+
+class VenusOmni:
+    """Mark II candidate 1: official Realtime-Venus-Omni, NF4 LLM, with try 1's
+    live defaults (Mark_II_Testing/Realtime_Venus/1: FRED prompt, 448 px,
+    1 slice, batched vision feed, 5000-token window). Run with that folder's
+    venv -- nothing from Core is imported.
+
+    One fresh duplex session per case, 1 s units, silent mic unless the case
+    has audio. A question goes in on Venus's text channel (what FRED's STT
+    would hand it) and the next decision is forced to speak, like holding the
+    Ctrl+Alt chord live; with no question (ambient cases) it decides on its
+    own with the live P(speak) >= 0.5 threshold. No tool use: delegation is
+    the model's own <delegate>...</delegate> span, with no backend behind it."""
+
+    name = "venus-omni-nf4"
+    supports = {"text", "image", "multi_image", "audio", "ambient", "video", "streaming", "interrupt", "delegation"}
+    AGENT_TOOLS = {"<delegate>": "any"}  # the agent is chosen by the backend, so any handoff counts as the right one
+    VENUS = ROOT.parent / "Mark_II_Testing" / "Realtime_Venus" / "1"
+    SPEAK_THRESHOLD, TAIL_S, MAX_REPLY_S = 0.5, 8, 40
+
+    def __init__(self):
+        self.duplex = None
+        log(f"candidate {self.name}: {self.VENUS}")
+
+    def load_llm(self):
+        if self.duplex is not None:
+            return
+        sys.path.insert(0, str(self.VENUS))
+        from live_duplex import FRED_PROMPT, load_duplex
+        from transformers import set_seed
+        self.prompt, self.set_seed = FRED_PROMPT, set_seed
+        # 7.3 GB weights, 7.6-8.9 GB in use live; load_duplex also asserts >1 GB left free.
+        d = self.duplex = gpu_load("Venus NF4 duplex (speech off)", 8500, load_duplex)
+        delegate_id = d.tokenizer.convert_tokens_to_ids("<delegate>")
+        orig = d.decoder.decode
+
+        # Same decision hook as live_duplex.py: the first decode() of a unit is
+        # its listen/speak decision.
+        def decode(logits, **kw):
+            if self._first:
+                self._first = False
+                if self._force:
+                    logits = logits.clone()
+                    logits[0, d.listen_token_id] = float("-inf")
+                elif 1 - logits[0].float().softmax(-1)[d.listen_token_id].item() < self.SPEAK_THRESHOLD:
+                    d.decoder.context += " "  # what upstream's own listen path does
+                    return self._listen
+            out = orig(logits=logits, **kw)
+            self.delegated |= out.item() == delegate_id
+            return out
+
+        d.decoder.decode = decode
+        self._listen = __import__("torch").tensor([d.listen_token_id], device=d.device)
+        self._first = self._force = self.delegated = False
+
+    load_vision = load_llm
+
+    def _session(self, units, force_at=None):
+        """units: scripted seconds of (audio 16 kHz, PIL frame, text); then silent
+        seconds until the reply ends (or TAIL_S with no reply). Returns what it
+        said from `force_at` on (everything, if no force)."""
+        d = self.duplex
+        self.set_seed(42)
+        d.prepare(prefix_system_prompt=self.prompt)
+        self.delegated, reply, talking, quiet, t0 = False, "", False, 0, time.perf_counter()
+        silence = np.zeros(16000, np.float32)
+        for i in range(len(units) + self.MAX_REPLY_S):
+            audio, frame, text = units[i] if i < len(units) else (silence, None, None)
+            d.streaming_prefill(audio_waveform=audio, frame_list=[frame] if frame is not None else None,
+                                text_list=[text] if text else None, max_slice_nums=1, batch_vision_feed=True)
+            self._first, self._force = True, i == force_at
+            r = d.streaming_generate()
+            if not r["is_listen"] and i >= (force_at or 0):
+                reply, talking = reply + r["text"], True
+            if i >= len(units) - 1:
+                if talking and (r["is_listen"] or r.get("end_of_turn")):
+                    break
+                quiet += not talking
+                if quiet > self.TAIL_S:
+                    break
+        return {"reply": reply.strip(), "calls": ["<delegate>"] if self.delegated else [], "args": [],
+                "pending": None, "ms": (time.perf_counter() - t0) * 1000, "units": i + 1}
+
+    def turn(self, text, stubs=None, history=()):
+        # ponytail: stubs/history ignored -- every case using them needs tools (unsupported)
+        return self._session([(np.zeros(16000, np.float32), None, text)], force_at=0)
+
+    def see(self, images, prompt):
+        if len(images) != 1:
+            raise NotImplementedError("one image per case; frame sequences go through watch()")
+        img = self._img(images[0])
+        return self._session([(np.zeros(16000, np.float32), img, None),
+                              (np.zeros(16000, np.float32), img, prompt)], force_at=1)["reply"]
+
+    def watch(self, k):
+        """Frames at their timestamps (re-sent every 5 s, like live keepalive),
+        audio at audio_at (default 00:01), then the prompt one second after the
+        script ends -- or no prompt for ambient cases."""
+        mmss = lambda s: int(s[:2]) * 60 + int(s[3:])
+        frames = {mmss(t): self._img(f) for t, f in k.get("frames", [])} or {0: self._img(k["images"][0])}
+        audio = np.zeros(0, np.float32)
+        if k.get("audio"):
+            audio, sr = sf.read(FIXTURES / k["audio"], dtype="float32")
+            assert sr == 16000 and audio.ndim == 1, f"{k['audio']}: need 16 kHz mono"
+        a_at = mmss(k.get("audio_at", "00:01"))
+        end = max(max(frames), a_at + -(-len(audio) // 16000) - 1 if len(audio) else 0)
+        units, shown = [], None
+        for s in range(end + 1):
+            chunk = np.zeros(16000, np.float32)
+            if len(audio) and 0 <= s - a_at:
+                part = audio[(s - a_at) * 16000:(s - a_at + 1) * 16000]
+                chunk[:len(part)] = part
+            if s in frames:
+                shown = frames[s]
+            units.append((chunk, frames[s] if s in frames else (shown if s % 5 == 0 else None), None))
+        if k.get("prompt"):
+            units.append((np.zeros(16000, np.float32), None, k["prompt"]))
+            return self._session(units, force_at=len(units) - 1)
+        return self._session(units)
+
+    @staticmethod
+    def _img(name):
+        from PIL import Image
+        return Image.open(FIXTURES / name).convert("RGB")
+
+
+CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni}
 
 
 # ------------------------------------------------------------------ scoring helpers
@@ -650,6 +786,8 @@ def stage_llm(c):
                 continue
             if file == "safety.jsonl" and k.get("kind") == "confirmation_reply":
                 continue
+            if not needs(k, file) <= c.supports:
+                continue
             log(f"turn {k['id']}: {k['text']!r}", 2)
             try:
                 t = c.turn(k["text"], k.get("stub"), k.get("history", ()))
@@ -686,11 +824,13 @@ def stage_llm(c):
     log("delegation (did the core model hand off to the right agent, or correctly not?):", 1)
     cases = []
     for k in load("agents_memory.jsonl"):
-        if "delegation" not in k.get("needs", []):
+        if "delegation" not in k.get("needs", []) or "delegation" not in c.supports:
             continue
         t = c.turn(k["text"])
         used = {c.AGENT_TOOLS[n] for n in t["calls"] if n in c.AGENT_TOOLS} or {None}
         want = set(k["expect_agent"] if isinstance(k["expect_agent"], list) else [k["expect_agent"]])
+        if used == {"any"}:  # handoff with no agent named (Venus): right if any agent was wanted
+            used = (want - {None}) or used
         ok = bool(used & want) and not (used - want)
         cases.append({"id": k["id"], "status": "pass" if ok else "fail", "ms": t["ms"], "tag": k.get("tag"),
                       "detail": f"used {sorted(map(str, used))}, want {sorted(map(str, want))}"})
@@ -700,7 +840,7 @@ def stage_llm(c):
     log("memory (new conversation per session; long-term memory persists in scratch dir):", 1)
     cases = []
     for k in load("agents_memory.jsonl"):
-        if "memory" not in k.get("needs", []):
+        if "memory" not in k.get("needs", []) or not needs(k, "") <= c.supports:
             continue
         reply = ""
         for session in k["sessions"]:
@@ -719,16 +859,26 @@ def stage_vision(c):
     c.load_vision()
     cases = []
     for k in load("multimodal.jsonl"):
-        if not set(k["needs"]) <= c.supports or not k.get("images") or k.get("prompt") is None:
+        if not set(k["needs"]) <= c.supports:
+            continue
+        if k.get("stream") or k.get("live"):
+            cases.append({"id": k["id"], "status": "blocked", "detail": f"{k['tag']}: no fixture for "
+                          f"'{k.get('stream') or k.get('live')}' yet"})
+            show(cases[-1])
+            continue
+        simple = k.get("images") and k.get("prompt") is not None and not k.get("audio")
+        if not simple and not hasattr(c, "watch"):
             continue
         t = time.perf_counter()
         try:
-            reply = c.see(k["images"], k["prompt"])
+            reply = c.see(k["images"], k["prompt"]) if simple else c.watch(k)["reply"]
         except Exception as e:
             cases.append({"id": k["id"], "status": "fail", "detail": f"crashed: {e!r}"})
             show(cases[-1])
             continue
-        problems = reply_checks(k, reply)
+        problems = [] if "expect_intervention" in k and not k["expect_intervention"] else reply_checks(k, reply)
+        if "expect_intervention" in k and bool(reply) != k["expect_intervention"]:
+            problems.append("spoke up unprompted" if reply else "stayed silent")
         cases.append({"id": k["id"], "status": "fail" if problems else "pass", "ms": (time.perf_counter() - t) * 1000,
                       "detail": ("; ".join(problems) or "ok") + f" | reply: {reply[:80]!r}"})
         show(cases[-1])
@@ -738,9 +888,10 @@ def stage_vision(c):
 def stage_unsupported(c):
     log(f"STAGE capability gaps: cases needing more than {sorted(c.supports)}")
     rows = []
-    for file in ("multimodal.jsonl", "agents_memory.jsonl", "safety.jsonl"):
+    for file in ("multimodal.jsonl", "agents_memory.jsonl", "safety.jsonl", "routing_hard.jsonl",
+                 "conversation.jsonl"):
         for k in load(file):
-            missing = set(k.get("needs", [])) - c.supports
+            missing = needs(k, file) - c.supports
             if missing:
                 rows.append({"id": k["id"], "status": "unsupported", "detail": f"{k.get('tag')}: needs {sorted(missing)}"})
                 show(rows[-1])
@@ -762,11 +913,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stages", nargs="*",
                     default=["routing", "gates", "stt", "wakeword", "llm", "vision", "unsupported"])
+    ap.add_argument("--candidate", choices=CANDIDATES, default="fred",
+                    help="venus: run with Mark_II_Testing/Realtime_Venus/1's venv, stages llm vision unsupported")
     args = ap.parse_args()
     log(f"FRED benchmark -- stages {args.stages}")
     log(f"GPU: {subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,memory.free', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()}")
 
-    c = FredCurrent()
+    c = CANDIDATES[args.candidate]()
     results = {"candidate": c.name, "started": datetime.now().isoformat(timespec="seconds"),
                "vram_free_mib_at_start": vram_free_mib(), "suites": {}}
 

@@ -611,3 +611,13 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
   reliable way to address Venus.
 - Open: the nightly GPU jobs vs an always-on Venus (priority / scheduling
   is Vatsal's call); forced-reply repetition.
+
+### FRED benchmark suite (2026-09-29)
+
+`VenusOmni` adapter in `benchmarking/run.py`; run from this folder's venv:
+`venv\Scripts\python.exe ..\..\..\benchmarking\run.py --candidate venus --stages llm vision unsupported`
+(repo-root relative: `Mark_II_Testing/Realtime_Venus/1/venv/Scripts/python.exe benchmarking/run.py ...`).
+Conversation 7/21 (FRED 16/21), delegation 5/8 with zero `<delegate>`
+spans, screenshots 7/12 (FRED 12/12), frames/audio 3/5; tools and memory
+unsupported. Invents facts it can't know (weather, balance, time). Full
+table and reading in `VERDICT.md`.

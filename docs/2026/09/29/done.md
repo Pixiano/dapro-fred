@@ -44,3 +44,14 @@
 - **Candidate 1 verdict written:** `Mark_II_Testing/Realtime_Venus/1/VERDICT.md`
   -- viable as FRED's perception / turn-taking layer with FRED's tools and
   gates behind it, not a drop-in replacement.
+- **Venus scored on FRED's benchmark suite** (Vatsal: "was this tested on
+  the whole suite… yes build the adapter and run it"). `benchmarking/run.py`
+  gained `--candidate venus` (`VenusOmni` adapter, runs in the Venus venv),
+  capability-aware skipping (`needs()`: tool cases count as unsupported,
+  not silently passed), and frame-sequence/audio/ambient cases via
+  `watch()`. FRED vs Venus: conversation 16/21 vs 7/21, delegation 5/8 vs
+  5/8 (Venus never emits `<delegate>`), screenshots 12/12 vs 7/12,
+  frames/audio unsupported vs 3/5; tools/injection/memory unsupported for
+  Venus. Venus invents unknowable facts (weather, battery, bank balance,
+  time) when forced to answer. Upstream's bare prompt gives identical
+  scores. Details: `Mark_II_Testing/Realtime_Venus/1/VERDICT.md`.

@@ -56,6 +56,53 @@ reached through delegation (not built yet).
   the primary "talk to me"; Kokoro as the voice. Checklist: `README.md` →
   "Integration checklist".
 
+## FRED benchmark suite (`benchmarking/run.py --candidate venus`, 2026-09-29)
+
+Same cases FRED was scored on (`docs/2026/09/27/benchmark_baseline.md`).
+Adapter `VenusOmni`: a fresh duplex session per case, the question on the
+text channel (standing in for FRED's STT), reply decision forced like the
+Ctrl+Alt chord; ambient cases use the live 0.5 threshold, no force. Results
+`benchmarking/results/venus-omni-nf4_20260929_152244.json`, log
+`benchmark_run.log`. 5 min on the GPU.
+
+| Suite | FRED | Venus |
+|---|---:|---:|
+| Conversation (21) | 16/21 **76%** | 7/21 **33%** (3 need tools) |
+| Delegation decisions (8) | 5/8 62.5% | 5/8 62.5% — never delegates at all |
+| Vision, single screenshot (12) | **12/12** | 7/12 58% |
+| Frames over time / audio + screen (5) | unsupported | 3/5 |
+| Tools end to end (81), injection (7), links (1), memory (4) | 78–100% | unsupported (no tools, no memory) |
+| Proactive video / barge-in cases (4) | unsupported | blocked: no fixtures yet |
+
+- **Invents answers it can't know.** Weather "21 degrees", battery "50%",
+  bank balance "$2,065.93", breakfast "scrambled eggs", time "7:06 AM",
+  "Sure, what would you like to order?". 0/3 honesty cases. It has no way to
+  say "I'd have to check", so it guesses.
+- **Arithmetic wrong** (0/3: math, days-until). FRED gets these from its
+  calculator/time tools.
+- **Delegation: 0 `<delegate>` spans in 8 cases**; its 5/8 are all "don't
+  delegate" cases. Research requests got answered from its own knowledge.
+  Same with upstream's bare "Streaming Omni Conversation." prompt
+  (`benchmark_bare_prompt.log`: identical scores), so it's not our persona
+  line. Not tested: spoken questions (it was trained on audio).
+- **Vision:** gets the gist right (OOM, KeyError, 404, disk, phishing,
+  chart, clean screen) but misreads details: spreadsheet total 4,060 vs
+  4,280, log "14:36, upstream timeout" vs 14:32 / 503, build "Yes, it
+  succeeded" when 3 tests failed, meeting time without its title. Matches
+  the 448 px / 1-slice limit; the focus crop that fixed live small text
+  only kicks in on screen *changes*, so a single screenshot doesn't get it.
+- **Does what FRED can't:** worked out a config edit caused the crash from
+  2 min of screen frames (t-01), and combined "it crashed again" (voice)
+  with the screen (c-01). Missed a download's duration (said 10 s, was 40)
+  and stayed silent on "oh come on" over a CUDA OOM (f-01, needs 0.5 speak).
+- persona-01/02 fail on "sir" only because the placeholder prompt doesn't
+  ask for it; fab-03 "passes" with a garbled 28 s reply (the repetition bug).
+
+**Net:** on FRED's own suite Venus alone is clearly worse at answering
+(33% vs 76% conversation, 58% vs 100% screenshots) and has no tools or
+memory. That confirms the verdict above: perception and turn-taking layer,
+with FRED's model, tools and memory producing the answers.
+
 ## Scores to beat for the next candidates
 
 Answered-turn rate (unforced), false unprompted replies/hour, small-text
@@ -65,6 +112,6 @@ stability — same scripts (`live_duplex.py`, `analyse_live.py`,
 
 ## Not tested
 
-Delegation/tools, long-video memory module, camera as the video source,
-benchmark suite adapter (`benchmarking/run.py`), full-precision (BF16/FP8)
-behaviour, the CUDA-graph speed-up.
+Delegation wired to FRED's tools, delegation on spoken questions,
+long-video memory module, camera as the video source, full-precision
+(BF16/FP8) behaviour, the CUDA-graph speed-up.

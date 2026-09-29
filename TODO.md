@@ -30,9 +30,9 @@
   per-token step (community measured 0.11-0.15 s on the same GPU), then
   the LLM step if still short; prefill (0.38 vs their 0.09-0.17) next.
 
-- **Venus benchmark adapter** — `VenusOmni` class in `benchmarking/run.py`
-  (supports text, image, audio, video, ambient, streaming, delegation) so
-  try 1 can be scored against current FRED. Plus the pending benchmark
-  changes: drop Hinglish from scoring, reclassify `comp-01`, stub live
-  screen context + vault in the FRED adapter.
+- **Benchmark follow-ups** — drop Hinglish from scoring, reclassify
+  `comp-01`, stub live screen context + vault in the FRED adapter; build
+  fixtures for the blocked cases (p-01/p-02 streams, rt-01/rt-02 barge-in)
+  so streaming candidates can be scored on them. (`VenusOmni` adapter
+  done 2026-09-29.)
 
