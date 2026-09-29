@@ -52,6 +52,7 @@ class Addressed:
         self.held = False
         self._pressed_at = 0.0
         self.source = None
+        self.spoke = False  # after a wake word: has he actually said something since?
         self._oww, self._buf, self._gain, self._last_fire = None, np.zeros(0, np.float32), 1.0, 0.0
         if wake:
             from openwakeword.model import Model
@@ -87,7 +88,7 @@ class Addressed:
             score = float(next(iter(self._oww.predict(pcm).values()), 0.0))
             now = time.monotonic()
             if score > WAKE_THRESHOLD and now - self._last_fire > WAKE_COOLDOWN:
-                self._last_fire, self.at, self.source = now, now, "wake_word"
+                self._last_fire, self.at, self.source, self.spoke = now, now, "wake_word", False
                 self._oww.reset()
                 return score
         return None
@@ -97,6 +98,7 @@ class Addressed:
 
     def clear(self):
         self.at = self.source = None
+        self.spoke = False
 # Placeholder persona for testing, not FRED's real prompt.
 FRED_PROMPT = (
     "Streaming Omni Conversation. You are FRED, Vatsal's personal assistant. "
@@ -489,6 +491,15 @@ def main():
         log(f"voice ({args.voice}) out on {out_name}; interrupt: {mode}")
     try:
         while True:
+            # Stay on "now": if we've fallen > 3 s behind (another GPU job took the card at
+            # 02:00 in the soak test and the backlog reached 43 minutes), drop the stale
+            # audio and keep only the latest second.
+            backlog = mic.qsize() / 10 + len(buf) / SR
+            if backlog > 3.0:
+                while not mic.empty():
+                    buf = np.concatenate([buf, mic.get_nowait()])
+                evq.put(("lag_drop", {"dropped_s": round((len(buf) - SR) / SR, 1)}))
+                buf = buf[-SR:]
             while len(buf) < SR:
                 buf = np.concatenate([buf, mic.get()])
             audio, buf = buf[:SR], buf[SR:]
@@ -534,9 +545,18 @@ def main():
             floor = nf.floor
             # Chord released = he's done (hold-to-talk). After "hey FRED" wait for a quiet
             # second, but with a TV on it never comes (22:12-22:13), so give up after 2.5 s.
+            # A wake word only counts once he actually speaks after it: the soak test had
+            # 19 false wakes, each forcing an invented reply ("a message from your mother").
+            if addressed.source == "wake_word" and addressed.active():
+                if nf.talking(db):
+                    addressed.spoke = True
+                elif not addressed.spoke and time.monotonic() - addressed.at > 3.0:
+                    evq.put(("wake_unconfirmed", {"waited_s": 3.0}))
+                    addressed.clear()
             done = (addressed.source == "hotkey" or nf.quiet(db)
                     or (addressed.at is not None and time.monotonic() - addressed.at >= 2.5))
-            decision["force"] = addressed.active() and not addressed.held and done and not speaking
+            confirmed = addressed.source != "wake_word" or addressed.spoke
+            decision["force"] = addressed.active() and not addressed.held and done and confirmed and not speaking
             nf.add(db)
             r = duplex.streaming_generate(listen_prob_scale=args.listen_scale)
             if not r["is_listen"] or not addressed.active():

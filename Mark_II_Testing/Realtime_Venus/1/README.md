@@ -573,3 +573,41 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
 - **False-positive proactive reply** (run 22:16, Vatsal: "got a false positive"): 22:16:55 "I'll help you check your system" in silence (mic -67 dB = floor), unforced, alert off, p_speak 0.15. Upstream samples the listen/speak decision (temperature 0.7), so low-probability speech fires at random; same mechanism as the 0.26-0.44 false video alarms (the real alert was 0.65). Added `--speak-threshold 0.5` (default): the first decode of a unit returns `<|listen|>` unless Venus's own P(speak) >= 0.5 (mirrors upstream's listen path: `decoder.context += " "`); forced replies and the reply wording unaffected; `thresholded` logged per unit; 0 = upstream sampling.
 - Run 22:16 misread: 22:19:56 unprompted (p_speak 0.61, silent) "You have a video chat open with two people on screen" -- it was a terminal (read correctly earlier); 22:20:09 "The call has ended..." (p 0.48, now blocked by the 0.5 threshold). That unit had the overview only (change > 50% of screen -> no focus crop by design), ~600x340 for the whole screen. Known limitation: speak confidence says nothing about vision accuracy; big-change frames are low-res. Not fixed (options: sharper frame after big changes = slower).
 - Soak-test prep (Vatsal: run for hours, noise + TV, no direct commands, screensaver on): screen grab failures (locked screen / secure desktop) now skip that frame instead of crashing (`grab_failed` event); live_mic.wav now PCM_16 (float32 was ~230 MB/h); analyse_live prints a health line (VRAM range, min free, max context, unprompted replies per hour, seconds blocked by the speak threshold, grab failures). Baseline from run 22:16 (old code, no threshold): 20.6 unprompted replies/h, VRAM 7.6-8.9 GB, context capped at 4995 tokens.
+- **Soak test started** ~22:2x (Vatsal): hours, TV/noise, no direct commands, screensaver allowed; defaults (speak threshold 0.5, intent barge, alert off). Previous run 22:16 stopped (baseline 20.6 unprompted/h without threshold).
+  Soak conditions (Vatsal): overnight, mostly quiet room + screensaver, only ~half an hour of noise -> report quiet-hours and noisy-stretch false-alarm rates separately.
+
+### Overnight soak test (2026-09-29)
+
+- **Venus try 1 overnight soak test** (run `20260928_222918`, 22:29 -> 06:34,
+  7.78 h, 28,005 units; mostly quiet room + screensaver, ~30 min TV/noise,
+  no direct commands; defaults: speak threshold 0.5, intent barge, alert
+  off). `analyse_live.py` + ad-hoc breakdowns:
+  - **Unprompted replies: 0 in 7.8 h** (was 20.6/h before the 0.5 speak
+    threshold). VRAM reserved flat 7.6-8.9 GB, context capped ~5000 tokens,
+    0 trims, 0 crashes, 37 lock-screen grab failures skipped cleanly.
+  - **Realtime lost from 02:00:** other GPU usage 4.9 -> 6.6 GB and GPU at
+    ~96%; llm_feed 0.25 -> ~9 s per unit; the loop kept every second of
+    audio and fell up to **43 minutes** behind until morning. Likely one of
+    the nightly GPU jobs (DaProDrive_NightlyRecognizeWindow 01:50,
+    DaProDrive_PhotoLocationTagger 01:00, FRED_NightlyReindex 03:00) --
+    GPU time, not VRAM (4.8 GB still free). Per hour: 22-01h median unit
+    0.37 s, lag > 1 s in ~1% of seconds; 02-06h p90 5-9 s, lag in almost
+    every second.
+  - **Wake word: 19 false triggers** (11 in the TV/noise stretch before
+    midnight; 8 after 02:00, mic context unreliable due to lag). Each forced
+    a reply to nothing, and the replies were invented ("You have a message
+    from your mother", "Vatsal just got a new call from T...", "The meeting
+    has started", "shared note titled 'Important Info'"). Some forced
+    replies also repeated themselves ("Hello, Vatsal. How can I help you
+    today?Hello, V...").
+  - Kokoro: 45 chunks, synth median 0.26 s; one 8.8 s outlier during the
+    GPU contention.
+- **Fixes** (`live_duplex.py`): (1) stale-audio drop -- if the backlog
+  exceeds 3 s, discard it and continue from the latest second
+  (`lag_drop` event); (2) a wake word only forces a reply once he actually
+  speaks after it (noise-floor "talking" within 3 s), else
+  `wake_unconfirmed` and it's dropped. The wake model itself is frozen;
+  false wakes during TV speech remain -> the held Ctrl+Alt chord is the
+  reliable way to address Venus.
+- Open: the nightly GPU jobs vs an always-on Venus (priority / scheduling
+  is Vatsal's call); forced-reply repetition.
