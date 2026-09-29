@@ -413,7 +413,76 @@ class VenusOmni:
         return Image.open(FIXTURES / name).convert("RGB")
 
 
-CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni}
+class QwenOmni:
+    """Mark II candidate 3: official Qwen2.5-Omni-7B, NF4 Thinker, no talker
+    (Mark_II_Testing/Qwen2.5-Omni/1, run with that folder's venv). Same FRED
+    placeholder prompt as Venus. Turn-based, not duplex: every case is one
+    turn, the question in text (standing in for FRED's STT); frame sequences
+    become one 1 fps video with any audio placed at its timestamp (TMRoPE
+    time-aligned). Screenshots native, video frames 448x252 like Venus.
+    No ambient mode (it always answers when given a turn), no tools, no
+    delegation."""
+
+    name = "qwen2.5-omni-7b-nf4"
+    supports = {"text", "image", "multi_image", "audio", "video"}
+    AGENT_TOOLS = {}
+    DIR = ROOT.parent / "Mark_II_Testing" / "Qwen2.5-Omni" / "1"
+
+    def __init__(self):
+        self.model = None
+        log(f"candidate {self.name}: {self.DIR}")
+
+    def load_llm(self):
+        if self.model is not None:
+            return
+        sys.path.insert(0, str(self.DIR))
+        import smoke_nf4
+        self.q = smoke_nf4
+        # 7.95 GB measured for weights; load_model also asserts >1 GB left free.
+        self.model, self.processor = gpu_load("Qwen2.5-Omni-7B NF4 (no talker)", 8000, smoke_nf4.load_model)
+
+    load_vision = load_llm
+
+    def _ask(self, content, **kw):
+        t0 = time.perf_counter()
+        reply, s = self.q.ask(self.model, self.processor, content, max_new_tokens=200, **kw)
+        return {"reply": reply, "calls": [], "args": [], "pending": None, "ms": (time.perf_counter() - t0) * 1000,
+                "in_tokens": s["in_tokens"]}
+
+    def turn(self, text, stubs=None, history=()):
+        # ponytail: stubs/history ignored -- every case using them needs tools (unsupported)
+        return self._ask([{"type": "text", "text": text}])
+
+    def see(self, images, prompt):
+        from PIL import Image
+        content = [{"type": "image", "image": Image.open(FIXTURES / i).convert("RGB")} for i in images]
+        return self._ask(content + [{"type": "text", "text": prompt}])["reply"]
+
+    def watch(self, k):
+        """Frames held until the next timestamp, 1 fps; audio at audio_at."""
+        from PIL import Image
+        mmss = lambda s: int(s[:2]) * 60 + int(s[3:])
+        shots = sorted((mmss(t), f) for t, f in k["frames"])
+        n = shots[-1][0] + 1
+        n += n % 2  # temporal patch = 2 frames
+        frames, cur = [], None
+        for s in range(n):
+            for t, f in shots:
+                if t == s:
+                    cur = Image.open(FIXTURES / f).convert("RGB")
+            frames.append(cur)
+        track = None
+        if k.get("audio"):
+            a, sr = sf.read(FIXTURES / k["audio"], dtype="float32")
+            assert sr == 16000 and a.ndim == 1, f"{k['audio']}: need 16 kHz mono"
+            track = np.zeros(n * 16000, np.float32)
+            at = mmss(k.get("audio_at", "00:01")) * 16000
+            track[at:at + len(a)] = a[:len(track) - at]
+        video = {"type": "video", "video": frames, "max_pixels": self.q.VIDEO_FRAME_PIXELS}
+        return self._ask([video, {"type": "text", "text": k["prompt"]}], fps=1.0, audio_track=track)
+
+
+CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni, "qwen": QwenOmni}
 
 
 # ------------------------------------------------------------------ scoring helpers
@@ -914,7 +983,7 @@ def main():
     ap.add_argument("--stages", nargs="*",
                     default=["routing", "gates", "stt", "wakeword", "llm", "vision", "unsupported"])
     ap.add_argument("--candidate", choices=CANDIDATES, default="fred",
-                    help="venus: run with Mark_II_Testing/Realtime_Venus/1's venv, stages llm vision unsupported")
+                    help="venus|qwen: run with that candidate's Mark_II_Testing venv, stages llm vision unsupported")
     args = ap.parse_args()
     log(f"FRED benchmark -- stages {args.stages}")
     log(f"GPU: {subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,memory.free', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()}")

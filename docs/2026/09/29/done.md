@@ -67,3 +67,12 @@
   used). Not duplex: live test needs our own turn-taking. Waiting for
   Vatsal's go after the import.
   - Import done 18:06: 62 min, no retries; SHA-256 7/7 match.
+- **Candidate 3 loaded, smoke test + benchmark done** (Vatsal's go). NF4
+  7.95 GB all on GPU; smoke PASS (text/screenshot/audio/15 s video all
+  correct, 0.8–4.8 s). Fixed transformers' dense-mask encoder attention
+  (reserved 7 GB per screenshot; video spilled into system RAM → killed)
+  with per-segment SDPA (verified identical), plus a hard VRAM cap so
+  overflow raises instead of spilling. Benchmark vs FRED / Venus:
+  conversation 9/21 (16, 7), screenshots 9/12 (12, 7), frames+audio 2/3;
+  no delegation/tools/memory/ambient. Details:
+  `Mark_II_Testing/Qwen2.5-Omni/1/README.md`.

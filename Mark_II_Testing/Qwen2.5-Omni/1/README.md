@@ -70,3 +70,58 @@ adapter → live test with our own turn-taking.
   decide that design with Vatsal.
 - Windows: `qwen-omni-utils` falls back to torchvision for video (no
   decord wheel needed); upstream expects `ffmpeg` for URLs only.
+
+## Smoke test (2026-09-29, `smoke_nf4.py`, log `smoke_nf4.log`) — PASS
+
+Load 17 s, **7.95 GB**, all weights on cuda:0, 196 `Linear4bit`, talker
+never built. Timed (after warm-up), greedy:
+
+| Input | Time | Peak VRAM | Answer |
+|---|---|---|---|
+| text | 1.2 s (29 tok/s) | 7.7 GB | correct |
+| CUDA OOM screenshot (native 1280x720) | 3.6 s | 10.9 GB | read "2.00 GiB … 412.00 MiB free" exactly |
+| "it crashed again" clip | 0.8 s | 7.8 GB | words + "you sound a bit frustrated" |
+| 15 s video (30 frames, 448 px) + audio | 4.8 s | 8.6 GB | soccer match, players walk on, shake hands: correct |
+
+Fixes needed:
+- **Encoder attention (root cause of 2 failed runs).** transformers
+  4.52's SDPA path for the vision and audio encoders builds one dense
+  `[seq, seq]` block mask: the screenshot reserved ~7 GB, 15 s of video
+  asked for 111 GB (full-size frames) or spilled into system RAM at 15 GB
+  (448 px frames; 100% GPU, no progress for 7 min, killed). Patched to run
+  SDPA per `cu_seqlens` segment (what flash-attn varlen does; no Windows
+  wheel). `test_segmented_attention.py`: identical to upstream, max diff
+  1e-7.
+- **Spill guard:** `set_per_process_memory_fraction(free at start − 0.5 GB)`
+  → overflow raises OOM instead of silently paging (GPU-only rule).
+- Video given as a frame list bypasses qwen-omni-utils' pixel cap → cap
+  per frame at 448x252 (`VIDEO_FRAME_PIXELS`).
+
+## FRED benchmark suite (2026-09-29, `--candidate qwen`)
+
+`QwenOmni` adapter in `benchmarking/run.py`: one turn per case, question as
+text, greedy. Frame sequences → one 1 fps video, audio placed at its
+timestamp (TMRoPE `use_audio_in_video`). Results
+`benchmarking/results/qwen2.5-omni-7b-nf4_20260929_185735.json`, log
+`benchmark_run.log`. 2 min.
+
+| Suite | FRED | Venus (cand. 1) | Qwen2.5-Omni-7B |
+|---|---:|---:|---:|
+| Conversation (21) | 16/21 | 7/21 | **9/21** |
+| Single screenshots (12) | 12/12 | 7/12 | **9/12** |
+| Frames over time / audio + screen | unsupported | 3/5 | **2/3** (+2 ambient unsupported) |
+| Delegation decisions (8) | 5/8 | 5/8 | unsupported (no delegate token, no tools) |
+| Tools, injection, links, memory | 78–100% | unsupported | unsupported |
+
+- Better than Venus at answering: honest on weather/Delhi forecast, maths
+  right (math-02 "176.2857" is correct but the case only accepts
+  176.29/176.3/176.286 — false fail, case left as FRED was scored),
+  meeting + title, "build failed three tests", syntax colon.
+- Still invents: battery "75%", breakfast, "someone from marketing
+  called", time "14:30", "Of course! What would you like to order?", "I'll
+  set a timer" (no tools).
+- Markdown in answers (`**`, lists) fails the voice-format cases.
+- Misreads: spreadsheet total 3,880 vs 4,280, log missing 503, blank
+  desktop → "appears to be blank" + error talk; download took "10 s" (40).
+- Ambient cases (speak up unprompted) can't be scored: it always answers
+  when given a turn. p-01/p-02/rt-* also need fixtures.
