@@ -33,3 +33,14 @@
   reliable way to address Venus.
 - Open: the nightly GPU jobs vs an always-on Venus (priority / scheduling
   is Vatsal's call); forced-reply repetition.
+- **Nightly GPU jobs checked** (Vatsal: "does the photo tagger even use
+  the GPU?"): PhotoLocationTagger = EXIF + Nominatim/reverse_geocoder, CPU
+  only; FRED_NightlyReindex = file_index (no models), CPU/disk; only
+  DaProDrive_NightlyRecognizeWindow uses the GPU -- Nextcloud Recognize
+  face scan in Docker, TensorFlow GPU, 02:00-04:00 (its script already
+  stops FRED because "it shares the GPU"). Matches the soak slowdown; lag
+  until ~06:00 was the backlog draining. FRED's orphaned llama-server
+  (started 2026-09-27 16:20) is still holding VRAM -- left alone.
+- **Candidate 1 verdict written:** `Mark_II_Testing/Realtime_Venus/1/VERDICT.md`
+  -- viable as FRED's perception / turn-taking layer with FRED's tools and
+  gates behind it, not a drop-in replacement.
