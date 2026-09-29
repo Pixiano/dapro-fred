@@ -125,3 +125,21 @@ timestamp (TMRoPE `use_audio_in_video`). Results
   desktop → "appears to be blank" + error talk; download took "10 s" (40).
 - Ambient cases (speak up unprompted) can't be scored: it always answers
   when given a turn. p-01/p-02/rt-* also need fixtures.
+
+## Live hold-to-talk (`live_qwen.py`, 2026-09-29)
+
+Hold left Ctrl + left Alt, talk, let go. Sends raw mic audio (no STT),
+the last 8 s of screen at 1 fps (448 px) and the current screen at native
+res (≤1080p), plus the last 2 turns (audio + reply) for follow-ups. Reply
+printed and spoken by Kokoro (GPU, FRED's voice, markdown stripped);
+pressing the chord again cuts it off. Deps added: sounddevice 0.5.6,
+kokoro-onnx 0.5.0, onnxruntime-gpu 1.21.1 (same as candidate 1).
+
+- Dry run (simulated chord, real mic/screen/Kokoro): release → reply
+  **4.2 s** (3.3k input tokens, prefill-bound), first voice +0.1 s, peak
+  8.9 GB.
+- Fix found on the way: the per-segment encoder attention passed 3-D
+  tensors, so SDPA used its math kernel (fp32 score matrix: 6.4 GB for a
+  1080p screen → the VRAM cap raised OOM, as designed). 4-D inputs →
+  memory-efficient kernel, 0.05 GB. Re-verified identical.
+- Real-world test list: `../../TO_BE_TESTED.md`.

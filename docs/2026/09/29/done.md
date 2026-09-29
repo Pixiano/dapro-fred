@@ -76,3 +76,9 @@
   conversation 9/21 (16, 7), screenshots 9/12 (12, 7), frames+audio 2/3;
   no delegation/tools/memory/ambient. Details:
   `Mark_II_Testing/Qwen2.5-Omni/1/README.md`.
+- **Candidate 3 live script** `live_qwen.py` (hold Ctrl+Alt → mic audio +
+  last 8 s of screen + full-res screen → reply, Kokoro voice). Dry run:
+  4.2 s release → reply. Fixed SDPA math-kernel fallback in the encoder
+  patch (6.4 GB → 0.05 GB on a 1080p screen). Vatsal's real-world tests
+  written up as `Mark_II_Testing/TO_BE_TESTED.md` (10 tests, results grid
+  for all 5 candidates).

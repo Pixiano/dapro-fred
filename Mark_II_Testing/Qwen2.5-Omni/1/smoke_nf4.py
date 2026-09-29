@@ -60,7 +60,9 @@ def _segmented_encoder_attention():
 
     def per_segment(q, k, v, cu_seqlens):  # q/k/v: [heads, seq, dim]
         cu = cu_seqlens.tolist()
-        return torch.cat([F.scaled_dot_product_attention(q[:, a:b], k[:, a:b], v[:, a:b])
+        # 4-D (batch of 1): with 3-D inputs SDPA silently takes its math kernel,
+        # which materialises the fp32 score matrix (6.4 GB for a 1080p screen).
+        return torch.cat([F.scaled_dot_product_attention(q[None, :, a:b], k[None, :, a:b], v[None, :, a:b])[0]
                           for a, b in zip(cu[:-1], cu[1:]) if b > a], dim=1)
 
     def vision_forward(self, hidden_states, cu_seqlens, rotary_pos_emb=None):
