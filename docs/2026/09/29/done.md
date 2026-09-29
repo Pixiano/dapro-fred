@@ -82,3 +82,14 @@
   patch (6.4 GB → 0.05 GB on a 1080p screen). Vatsal's real-world tests
   written up as `Mark_II_Testing/TO_BE_TESTED.md` (10 tests, results grid
   for all 5 candidates).
+- **Disk: finished candidates NTFS-compressed** (Vatsal out of space).
+  `compact /c /s /exe:lzx` on candidates 1 and 3 (venvs, repos, models) —
+  transparent, nothing deleted, re-run with `/u` to undo. Saved ~19 GB:
+  venvs 17.6 → 8.2 GB (2.2:1), Qwen weights 22.4 → 16.9 GB, Venus weights
+  23.5 → 19.3 GB (1.2–1.3:1). Loads decompress on read (slower load, same
+  results).
+- **Candidate 5 (base MiniCPM-o 2.6) try 1 started:**
+  `Mark_II_Testing/MiniCPM-o-2.6/1/` — repo cloned, venv built (torch 2.8
+  cu128 from cache, transformers 4.44.2 = upstream pin, bnb 0.50.2, vocos,
+  vector-quantize, decord, Kokoro/onnxruntime-gpu), official weights @
+  `06849bfd` (17.4 GB) downloading, ETA ~20:35.
