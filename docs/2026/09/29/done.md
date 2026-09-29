@@ -55,3 +55,14 @@
   Venus. Venus invents unknowable facts (weather, battery, bank balance,
   time) when forced to answer. Upstream's bare prompt gives identical
   scores. Details: `Mark_II_Testing/Realtime_Venus/1/VERDICT.md`.
+- **Mark II order agreed:** 1 (done) → 3 → 5 → 4 → 2 last. Vatsal's
+  multimodal plan (shared 2026-09-27, only in the chat until now) saved
+  verbatim as `docs/2026/09/27/mark2_plan.md`.
+- **Candidate 3 (base Qwen2.5-Omni) try 1 started:**
+  `Mark_II_Testing/Qwen2.5-Omni/1/`, same procedure as candidate 1. Repo
+  cloned, venv built (torch 2.8 cu128 from the cached wheel,
+  transformers 4.52.3, bnb 0.50.2), official Qwen2.5-Omni-7B @ `ae9e1690`
+  (22.4 GB) downloading. 7B chosen as the fair match for Venus's 8B; NF4
+  on the GPU planned (Qwen's official low-VRAM mode offloads to CPU → not
+  used). Not duplex: live test needs our own turn-taking. Waiting for
+  Vatsal's go after the import.
