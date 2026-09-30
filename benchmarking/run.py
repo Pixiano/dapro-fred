@@ -129,6 +129,20 @@ class FredCurrent:
     AGENT_TOOLS = {"delegate_research": "researcher", "delegate_general": "general"}
 
     def __init__(self):
+        # FRED_LLM_MODEL=<gguf>: same FRED pipeline, different main LLM for this run
+        # (the default tier's weights swapped in memory; config/settings.py untouched).
+        if os.environ.get("FRED_LLM_MODEL"):
+            from config import settings
+            settings.MODEL_TIERS[settings.DEFAULT_TIER] = Path(os.environ["FRED_LLM_MODEL"])
+            self.name = f"fred-{Path(os.environ['FRED_LLM_MODEL']).stem}"
+        if os.environ.get("FRED_LLM_PATCH"):  # candidate's sandbox patch (module with apply(FREDOrchestrator))
+            import importlib.util
+            from orchestrator.orchestrator import FREDOrchestrator
+            spec = importlib.util.spec_from_file_location("llm_patch", os.environ["FRED_LLM_PATCH"])
+            patch = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(patch)
+            patch.apply(FREDOrchestrator)
+            log(f"sandbox patch applied: {os.environ['FRED_LLM_PATCH']}")
         self._tmp = Path(tempfile.mkdtemp(prefix="fred_bench_"))
         log(f"candidate {self.name}: scratch dir {self._tmp} (memory/indexes go here, never the real ones)")
         self.executed, self.stubs, self.orch, self.memory = [], {}, None, None

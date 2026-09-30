@@ -432,3 +432,13 @@ None for v1. Optional later, in order of payoff:
 - Moonshine streaming: https://huggingface.co/moonshine-ai/moonshine-streaming-medium · Kyutai STT: https://huggingface.co/kyutai/stt-1b-en_fr
 - emotion2vec+: https://huggingface.co/emotion2vec/emotion2vec_plus_base
 - Internal: `docs/2026/09/30/research_duplex_landscape.md`, `docs/2026/09/27/benchmark_baseline.md`, `docs/2026/09/27/mark2_plan.md`, `Mark_II_Testing/Realtime_Venus/1/VERDICT.md`, `Mark_II_Testing/MiniCPM-o-4.5/1/README.md`
+
+## Log
+
+- 2026-09-30: MiniCPM5-2B under test as FRED's main LLM (candidate 7,
+  sandbox): its tool-call markers are control tokens that llama-cpp-python
+  drops from text — any integration must detokenize with special tokens on
+  (or parse the stripped form, as the sandbox patch does). The 3.4 GB
+  router/memory embedder is the next budget item after the LLM (§7): test
+  Qwen3-Embedding-0.6B / a FRED-trained classifier on the routing +
+  memory suites.

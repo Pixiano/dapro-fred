@@ -55,3 +55,15 @@
   (chatty). Invents unknowables like Venus. Split-digit artefacts from
   joining 1 s units to fix.
 - **Component research** (agent, HF): `docs/2026/09/30/research_components.md`.
+- **Candidate 7 added: MiniCPM5-2B as FRED's main LLM — sandbox only**
+  (Vatsal: "setup as new candidate … sandbox testing only, no replacing
+  now"). `Mark_II_Testing/MiniCPM5-2B/1/`. I had first added its tool-call
+  format to `Core/orchestrator.py` — reverted (Core clean); the parser now
+  lives in the candidate's `minicpm5_patch.py`, applied only at benchmark
+  time. `benchmarking/run.py`: `FRED_LLM_MODEL` (swap the default tier's
+  weights in memory) + `FRED_LLM_PATCH`. `fetch_model.py` takes a file
+  glob now; `minicpm5` added (official GGUF @ `2079a22f`, Q8_0).
+  Finding: MiniCPM5's tool-call markers are control tokens that
+  llama-cpp-python strips from text → parsed in stripped form. Why FRED
+  needs the embedder (tool shortlist from ~110 + memory recall) and why two
+  runs can't share the GPU: see the candidate README.
