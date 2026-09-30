@@ -264,6 +264,7 @@ class FredCurrent:
     def turn(self, text, stubs=None, history=()):
         self.executed, self.stubs = [], dict(stubs or {})
         self.orch.pending_action = None
+        self.orch._carry_tools, self.orch._carry_left = [], 0  # else the last case's tools leak into this menu
         self.orch.state.messages = [m for m in self.orch.state.messages if m.get("role") == "system"]
         for role, content in history:
             self.orch.state.add_message(role, content)

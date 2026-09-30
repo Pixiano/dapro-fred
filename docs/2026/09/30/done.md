@@ -67,3 +67,30 @@
   llama-cpp-python strips from text → parsed in stripped form. Why FRED
   needs the embedder (tool shortlist from ~110 + memory recall) and why two
   runs can't share the GPU: see the candidate README.
+- **Candidate 7 results.** Same day, code and GPU as the 4B rerun, with
+  Vatsal's scoring rulings applied. The 2B ties the 4B:
+  - tools 63/81 vs 64/81;
+  - injection 6/7 each;
+  - conversation 16/21 each;
+  - delegation **8/8 vs 6/8**;
+  - memory 3/4 each.
+
+  No-dispatcher A/B, 2B only, on the 4 cases lost to the dispatcher: 1 of
+  4 recovers, and the other 3 then fail in the model.
+
+  Benchmark bug fixed: FRED's tool carry-over put the previous case's tools
+  into each case's menu. `run.py` `turn()` now resets it. Details are in
+  the candidate 7 README; fix directions are in `TODO.md`.
+- **Clean rerun of both models.** The leak is fixed and `search_email` is
+  now allowed in inj-mail-02 (Vatsal).
+
+  | suite | 2B | 4B |
+  |---|---|---|
+  | tools end to end | 57/81 | 61/81 |
+  | injection | 7/7 | 7/7 |
+  | conversation | 16/21 | 15/21 |
+  | delegation | 8/8 | 7/8 |
+  | memory | 3/4 | 3/4 |
+
+  The 2B's extra tools fails are mostly under-calling: the right tool was
+  offered, but it replied in prose. That's a fine-tune target.
