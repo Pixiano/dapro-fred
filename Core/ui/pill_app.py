@@ -443,7 +443,11 @@ class PillApp:
         self.screen_watcher.stop()
         self.wakeword.pause()
         self._silence_watch_stop.set()
-        self.hud.stop()
+        # HUD server is deliberately left running — HudManager.start_server()
+        # already adopts an existing one instead of fighting it for the
+        # port, so leaving it up here means a restart (or a plain quit)
+        # doesn't cost the HUD's session recording, and the next FRED just
+        # reuses it. Only a crash or a manual kill takes it down.
         # Leave the bus reading idle. Without this the HUD would sit on
         # FRED's last live state for the full staleness window after a
         # clean quit, which looks like a hang rather than a shutdown.
