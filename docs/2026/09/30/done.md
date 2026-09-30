@@ -12,3 +12,6 @@
   `Mark_II_Testing/MiniCPM-o-2.6/1/README.md`.
 - Candidate 5 added to `Mark_II_Testing/TO_BE_TESTED.md` (live script =
   step 4, not built yet).
+- **Candidate 5 live script** `live_minicpmo.py` (from `live_qwen.py`; 4
+  screens + audio via `chat()`). Dry run 4.2 s release → reply, peak
+  10.1 GB. Row in `TO_BE_TESTED.md` now runnable.

@@ -83,3 +83,12 @@ Results `benchmarking/results/minicpm-o-2.6-nf4_20260930_071359.json`.
   total, "download took 10 s" (40, all three candidates), no "sir".
 - Checker false fails (answers correct): math-02 "176.2857", v-12 "no
   visible errors" trips the forbidden-word regex.
+
+## Live hold-to-talk (`live_minicpmo.py`, 2026-09-30)
+
+Candidate 3's `live_qwen.py` with MiniCPM inputs: hold left Ctrl + left
+Alt, talk, let go → your raw audio + 4 screens from the last 8 s (oldest
+first, last = now, upstream slicing up to 1.8 MP) + last 2 turns → reply,
+Kokoro voice (GPU), chord again cuts it off. Dry run (simulated chord):
+release → reply **4.2 s**, first voice +0.14 s, peak 10.1 GB. Tests:
+`../../TO_BE_TESTED.md`.
