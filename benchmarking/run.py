@@ -25,6 +25,7 @@ import email
 import gc
 import glob
 import json
+import os
 import re
 import subprocess
 import sys
@@ -413,6 +414,19 @@ class VenusOmni:
         return Image.open(FIXTURES / name).convert("RGB")
 
 
+class MiniCPMo45(VenusOmni):
+    """Mark II candidate 6: base MiniCPM-o 4.5 — Venus's own base, same
+    architecture and duplex API, so candidate 1's loader/loop run it via
+    DUPLEX_MODEL. No delegation tokens (Venus added those)."""
+
+    name = "minicpm-o-4.5-nf4-duplex"
+    supports = VenusOmni.supports - {"delegation"}
+
+    def load_llm(self):
+        os.environ["DUPLEX_MODEL"] = str(ROOT.parent / "Mark_II_Testing" / "MiniCPM-o-4.5" / "1" / "models" / "MiniCPM-o-4_5")
+        super().load_llm()
+
+
 class QwenOmni:
     """Mark II candidate 3: official Qwen2.5-Omni-7B, NF4 Thinker, no talker
     (Mark_II_Testing/Qwen2.5-Omni/1, run with that folder's venv). Same FRED
@@ -533,7 +547,7 @@ class MiniCPMo(QwenOmni):
         return self._ask(units + [k["prompt"]], omni=True)
 
 
-CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni, "qwen": QwenOmni, "minicpmo": MiniCPMo}
+CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni, "qwen": QwenOmni, "minicpmo": MiniCPMo, "minicpmo45": MiniCPMo45}
 
 
 # ------------------------------------------------------------------ scoring helpers
@@ -1034,7 +1048,7 @@ def main():
     ap.add_argument("--stages", nargs="*",
                     default=["routing", "gates", "stt", "wakeword", "llm", "vision", "unsupported"])
     ap.add_argument("--candidate", choices=CANDIDATES, default="fred",
-                    help="venus|qwen|minicpmo: run with that candidate's Mark_II_Testing venv, stages llm vision unsupported")
+                    help="venus|qwen|minicpmo|minicpmo45: run with that candidate's Mark_II_Testing venv, stages llm vision unsupported")
     args = ap.parse_args()
     log(f"FRED benchmark -- stages {args.stages}")
     log(f"GPU: {subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,memory.free', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()}")

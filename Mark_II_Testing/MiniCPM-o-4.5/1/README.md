@@ -84,3 +84,42 @@ Full-Duplex-Bench v1.5 / Table 2 / Table 6, base 4.5 vs Venus-Omni:
   2025-01-14 → o 4.5 2026-02-03 (~12.5 months) → next omni likely ~Q1
   2027 (inference). Not worth waiting for; keep the backbone swappable
   (`fetch_model.py` + scripts outside `models/`).
+
+## Smoke test (2026-09-30) — PASS, via candidate 1's scripts
+
+`DUPLEX_MODEL=..\..\MiniCPM-o-4.5\1\models\MiniCPM-o-4_5 venv\Scripts\python.exe
+smoke_nf4.py --seconds 70 --batch-feed` from `Realtime_Venus/1` (same API;
+Venus's venv). SHA 34/34 first (`fetch_model.py minicpmo45 --verify-only`).
+
+- Load 25 s, **7.33 GB**, 252 `Linear4bit`, all on GPU; peak 8.26 GB.
+- Realtime 63/70 units < 1 s; listening 0.61 s, speaking 0.93 s mean.
+- Asked at 10 s → answered at 11 s, correct ("men walk onto the field,
+  shake hands, the game has begun").
+- **Unprompted at 32 s: announced the goal** ("scored a goal for his team…
+  he kicked the ball into the net") and started commenting at 59 s before
+  the 60 s question. Venus (same architecture) stayed silent until asked.
+
+## FRED benchmark, duplex mode (2026-09-30, `--candidate minicpmo45`)
+
+`MiniCPMo45` = `VenusOmni` adapter pointed at these weights (question on the
+text channel, forced like the chord; ambient cases at the 0.5 speak
+threshold). Results `benchmarking/results/minicpm-o-4.5-nf4-duplex_20260930_155129.json`.
+
+| Suite | FRED | Venus | Qwen | MiniCPM-o 2.6 | **4.5 duplex** |
+|---|---:|---:|---:|---:|---:|
+| Conversation (21) | 16 | 7 | 9 | 12 | **8** |
+| Screenshots (12) | 12 | 7 | 9 | 10 | **10** |
+| Frames / audio + screen / ambient (5) | — | 3 | 2/3 | 2/3 | **2** (f-01 ✓, t-01 ✓) |
+
+- Screenshots 10/12 in duplex (Venus 7/12, same pipeline) — reads code,
+  calendar title, "failed in three tests", clean desktop.
+- **f-01 PASS (ambient):** heard "oh come on" over the CUDA OOM screen and
+  said "Looks like you ran out of memory" unprompted. f-02 FAIL: also spoke
+  up on the neutral "let me think" ("take your time") — chattier than Venus.
+- Invents like Venus when forced: battery "71%", bank "$3,700", breakfast,
+  "It's 8:16 AM", "Sure, what would you like to order?".
+- Duplex text artefacts: digits and names split across 1 s units ("7 1%",
+  "V atsal", "123 4"); Venus showed the reverse ("Celsiusin"). Likely the
+  per-unit text decode (each 1 s unit decoded separately, then joined) —
+  unverified; investigate before judging math/number cases.
+- No delegation tokens (Venus-only).

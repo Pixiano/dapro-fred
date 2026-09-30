@@ -20,7 +20,9 @@ import torch
 from transformers import AutoModel, BitsAndBytesConfig, set_seed
 
 HERE = Path(__file__).resolve().parent
-MODEL = HERE / "models" / "Realtime-Venus-Omni"
+# Same architecture/API as base MiniCPM-o 4.5 (candidate 6 runs these scripts with
+# DUPLEX_MODEL=..\MiniCPM-o-4.5\models\MiniCPM-o-4_5).
+MODEL = Path(os.environ.get("DUPLEX_MODEL", HERE / "models" / "Realtime-Venus-Omni"))
 # OpenBMB's own skip list for MiniCPM-o 4.5 AWQ: quantize the Qwen3 LLM only.
 SKIP = ["vpm", "apm", "resampler", "audio_projection_layer", "audio_avg_pooler", "tts", "lm_head"]
 
@@ -180,7 +182,7 @@ def main():
     mu.get_video_duration = duration
     get_video_frame_audio_segments = mu.get_video_frame_audio_segments
 
-    video = MODEL / "assets" / "sample_1_real.mp4"
+    video = HERE.parents[1] / "shared" / "sample_1_real.mp4"  # moved out when Venus weights were deleted
     frames, audios, _ = get_video_frame_audio_segments(str(video), stack_frames=1, use_ffmpeg=True, adjust_audio_length=True)
     n = min(args.seconds, len(audios))
     questions = {10: "What do you see in the video so far?", 60: "Describe what just happened in one sentence."}

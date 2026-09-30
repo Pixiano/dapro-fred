@@ -48,3 +48,10 @@
   too (freed 15.7 GB → 89 GB free); venv kept for candidate 4.
 - **Duplex landscape research** (agent): more duplex models, assembled/faked duplex design, candidate 2 feasibility → `docs/2026/09/30/research_duplex_landscape.md`. Candidate 2 verdict: plausible only with workarounds (frozen LLM + small external speak/listen controller on synthetic data; tools/proactivity in FRED); full Venus-style retrain not plausible.
 - **`Mark_II_Testing/ASSEMBLED_FRED.md`** (living design doc, agent + main): ideal assembled architecture (5 layers from DuplexOmni / 4.5+Venus / Joy-Duplex, Freeze-Omni, Smart Turn, endpoint anticipation, proactive-agent work), 4.5 + MiniCPM5-2B hybrid, comparison table vs basic assembled and 4.5, VRAM (ideal ~13.3 GB with a 0.6B embedder; 4.5 + current FRED 18.6–19.9 GB = doesn't fit, with 2B brain 13.0–14.3), latency, proactivity loop, phased build. Design only.
+- **Candidate 6 (MiniCPM-o 4.5) smoke + benchmark (duplex)**: via Venus's
+  scripts (`DUPLEX_MODEL` env in `smoke_nf4.py`). 7.33 GB, realtime 63/70,
+  and it **proactively announced the goal** (Venus never did). Benchmark:
+  conversation 8/21, screenshots 10/12, ambient f-01 pass / f-02 fail
+  (chatty). Invents unknowables like Venus. Split-digit artefacts from
+  joining 1 s units to fix.
+- **Component research** (agent, HF): `docs/2026/09/30/research_components.md`.
