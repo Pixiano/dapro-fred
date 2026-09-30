@@ -11,7 +11,7 @@ Vatsal's go + the two decisions below.
 ## What's reused (disk: 60 GB free)
 
 - Base model: candidate 3's official Qwen2.5-Omni-7B @ `ae9e1690` (weights deleted for disk 2026-09-30; `fetch_model.py qwen` restores them before training)
-  (`../../Qwen2.5-Omni/1/models/`, SHA 7/7 verified) — no re-download.
+  (`../../Qwen2.5-Omni/1/models/`, SHA 7/7 verified when first downloaded).
 - Env: candidate 3's venv + `peft==0.15.2` (only addition). A separate venv
   would cost ~8.7 GB for identical packages.
 - Loader/fixes: candidate 3's `smoke_nf4.py` (NF4, encoder attention patch,
