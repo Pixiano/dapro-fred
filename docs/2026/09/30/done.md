@@ -46,3 +46,4 @@
   retried) + SHA-check; replaces the four per-folder `verify_sha.py`.
   Checked: `minicpmo26 --verify-only` 12/12. **Qwen weights + repo deleted**
   too (freed 15.7 GB → 89 GB free); venv kept for candidate 4.
+- **Duplex landscape research** (agent): more duplex models, assembled/faked duplex design, candidate 2 feasibility → `docs/2026/09/30/research_duplex_landscape.md`. Candidate 2 verdict: plausible only with workarounds (frozen LLM + small external speak/listen controller on synthetic data; tools/proactivity in FRED); full Venus-style retrain not plausible.
