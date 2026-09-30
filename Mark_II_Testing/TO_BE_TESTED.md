@@ -10,6 +10,7 @@ How to start each candidate (from its folder):
 |---|---|
 | 1 Venus | `venv\Scripts\python.exe live_duplex.py --source screen` |
 | 3 Qwen2.5-Omni | `venv\Scripts\python.exe live_qwen.py` |
+| 5 MiniCPM-o 2.6 | live script not built yet (step 4) |
 
 ## The tests
 
