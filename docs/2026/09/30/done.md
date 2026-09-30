@@ -25,3 +25,11 @@
   benchmark. Waiting on Vatsal: synthetic data writer (local Qwen3.5-4B vs
   Claude) and whether to use the real log. `Mark_II_Testing/**/data/`
   gitignored.
+- **Candidate ranking (Vatsal), likeliness to replace current FRED:**
+  1. MiniCPM-o 2.6, 2. Venus, 3. Qwen-tuned (cand. 4), 4. Qwen (maybe out).
+  Comparison table vs base FRED given in chat (to fold into the verdicts).
+- **Candidate 6 added: base MiniCPM-o 4.5** (Vatsal). Venus's own base
+  (only its LLM was post-trained) → the control for Venus; natively
+  full-duplex + proactive (1 Hz). Import started: `openbmb/MiniCPM-o-4_5`
+  @ `503e7542`, 20 GB; reuses candidate 1's venv and scripts (same
+  transformers 4.51 stack). `Mark_II_Testing/MiniCPM-o-4.5/1/`.
