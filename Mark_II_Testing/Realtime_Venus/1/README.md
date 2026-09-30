@@ -140,7 +140,7 @@ venv\Scripts\python.exe repo\download_models.py --model omni --local-dir models 
   frames, MaxSim-style token matching + MMR diversity.
 - **The paper says nothing about quantization, VRAM, or latency.**
 - Scores: StreamingBench 70.2, OVO-Bench 64.7, Daily-Omni 81.3; tool F1
-  86.0 / Pass@1 43.0; interruption response 75%. Authors' own caveat:
+  86.0 / Pass@1 43.0; interruption response 0.60 for Omni (0.75 is Venus-Audio; base MiniCPM-o 4.5 also 0.60 — corrected 2026-09-30). Authors' own caveat:
   Omni *misses* requests that need delegation (Audio over-delegates).
 
 ### How quantization is designed for this architecture

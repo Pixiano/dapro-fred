@@ -34,3 +34,28 @@ threshold, focus crop); verify each rather than assume.
 |---|---|
 | `models/MiniCPM-o-4_5/` | official checkpoint (gitignored) |
 | `../../fetch_model.py minicpmo45` | download/restore at `503e7542` + SHA-check |
+
+## What the Venus paper says about base 4.5 (arXiv 2609.13814, read 2026-09-30)
+
+Full-Duplex-Bench v1.5 / Table 2 / Table 6, base 4.5 vs Venus-Omni:
+
+| | Base 4.5 | Venus-Omni |
+|---|---:|---:|
+| responds to user interruption ↑ | 0.60 | 0.60 |
+| responds when user talks to others ↓ | 0.18 | **0.06** |
+| responds to background speech ↓ | 0.16 | **0.12** |
+| resumes after backchannel ↑ | **0.95** | 0.92 |
+| ProactiveVideoQA | **47.5** | 46.2 |
+| StreamingBench / OVO-Bench / Daily-Omni | 67.9 / 60.7 / 79.4 | **70.2 / 64.7 / 81.3** |
+
+- **Delegation is Venus-only**: Venus added `<delegate>`/`<backend>` tokens
+  (6% of 2.8M training samples). Base 4.5 has no delegation mechanism
+  (moot for us: Venus delegated 0/8 anyway).
+- Venus's gain is mostly **ignoring speech not aimed at it** (0.18 → 0.06),
+  not answering more often; base may be slightly more proactive, and worse
+  in a TV/noisy room.
+- Not covered by the paper (only our tests can answer): answer rate when
+  Vatsal speaks unforced, inventing unknowable facts when forced, small
+  screen text, prompted tool use on the base.
+- Correction: our notes had Venus-Omni interruption response at 75% — that
+  is Venus-Audio; Omni is 0.60 (fixed in the Venus README/review).
