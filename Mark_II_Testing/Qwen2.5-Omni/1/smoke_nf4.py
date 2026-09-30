@@ -21,7 +21,7 @@ from transformers import BitsAndBytesConfig, Qwen2_5OmniForConditionalGeneration
 HERE = Path(__file__).resolve().parent
 MODEL = HERE / "models" / "Qwen2.5-Omni-7B"
 FIXTURES = HERE.parents[2] / "benchmarking" / "fixtures"
-SAMPLE_VIDEO = HERE.parents[1] / "Realtime_Venus" / "1" / "models" / "Realtime-Venus-Omni" / "assets" / "sample_1_real.mp4"
+SAMPLE_VIDEO = HERE.parents[1] / "shared" / "sample_1_real.mp4"  # Venus's sample clip, kept when its weights were deleted
 # Quantize the Qwen2.5-7B LLM linears only; vision/audio encoders and the
 # output head stay BF16 (same split as candidate 1). Talker/token2wav are
 # never built (enable_audio_output=False): Kokoro is FRED's voice.

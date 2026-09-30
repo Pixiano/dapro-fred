@@ -33,3 +33,9 @@
   full-duplex + proactive (1 Hz). Import started: `openbmb/MiniCPM-o-4_5`
   @ `503e7542`, 20 GB; reuses candidate 1's venv and scripts (same
   transformers 4.51 stack). `Mark_II_Testing/MiniCPM-o-4.5/1/`.
+- **Venus weights deleted** (Vatsal: out of disk). Freed 14.7 GB (74 GB
+  free). Kept Venus's venv (candidate 6 reuses it), the torch wheel, all
+  code/results; sample clip moved to `Mark_II_Testing/shared/` and
+  candidates 3/5 smoke paths updated. Re-downloadable at pinned `ad42af5f`.
+  Not deleted: MiniCPM-o 2.6 (ranked #1, not tested live yet) and Qwen
+  weights (candidate 4's base).

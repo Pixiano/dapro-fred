@@ -621,3 +621,13 @@ Conversation 7/21 (FRED 16/21), delegation 5/8 with zero `<delegate>`
 spans, screenshots 7/12 (FRED 12/12), frames/audio 3/5; tools and memory
 unsupported. Invents facts it can't know (weather, balance, time). Full
 table and reading in `VERDICT.md`.
+
+### Weights deleted (2026-09-30, disk space)
+
+Vatsal ran out of disk: `models/Realtime-Venus-Omni/` (weights + assets,
+19 GB) and `repo/` deleted — freed 14.7 GB (it was NTFS-compressed).
+Kept: `venv/` (candidate 6, MiniCPM-o 4.5, runs on this exact stack),
+`models/wheels/` (torch 2.8 cu128 wheel every new venv installs from), all
+scripts/logs/results. `sample_1_real.mp4` moved to `../../shared/` (used by
+candidates 3 and 5's smoke tests). To bring Venus back: re-run the
+download (README top, pinned `ad42af5f`) and `verify_sha.py`.

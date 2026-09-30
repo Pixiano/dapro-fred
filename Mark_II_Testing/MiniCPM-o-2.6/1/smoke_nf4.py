@@ -22,7 +22,7 @@ from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig, set_seed
 HERE = Path(__file__).resolve().parent
 MODEL = HERE / "models" / "MiniCPM-o-2_6"
 FIXTURES = HERE.parents[2] / "benchmarking" / "fixtures"
-SAMPLE_VIDEO = HERE.parents[1] / "Realtime_Venus" / "1" / "models" / "Realtime-Venus-Omni" / "assets" / "sample_1_real.mp4"
+SAMPLE_VIDEO = HERE.parents[1] / "shared" / "sample_1_real.mp4"  # Venus's sample clip, kept when its weights were deleted
 # LLM linears only, as candidates 1 and 3 (OpenBMB's own AWQ skip list).
 SKIP = ["vpm", "apm", "resampler", "audio_projection_layer", "audio_avg_pooler", "tts", "lm_head"]
 FRED_PROMPT = "You are FRED, Vatsal's personal assistant. You can see his screen and hear him. Be brief, friendly and direct."
