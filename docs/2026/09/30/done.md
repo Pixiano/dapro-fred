@@ -94,3 +94,11 @@
 
   The 2B's extra tools fails are mostly under-calling: the right tool was
   offered, but it replied in prose. That's a fine-tune target.
+- **Benchmark fully isolated, and a new general suite.**
+  - Before each case, `run.py` now wipes the scratch long-term memory and
+    blocks FRED's live proactive message and screen title.
+  - New 10-category "FRED as assistant" suite (`--stages general`, 55
+    cases). Overall: 2B 80.0%, 4B 87.3%.
+  - Isolated full llm suite, tools: 2B 72.8%, 4B 77.8%.
+
+  Details are in the candidate 7 README.

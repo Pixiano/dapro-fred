@@ -130,3 +130,42 @@ Q4_K_M (1.56 GB) is the later 8 GB-variant test.
   - YouTube was the previous case's subject, so context still carries
     across cases, probably through the scratch memory's recent-turn
     recall. Not isolated yet.
+- 21:2x benchmark isolation completed. Before every case, `run.py` now:
+  - wipes the scratch long-term memory (a guard refuses non-scratch
+    paths);
+  - blocks FRED's real last proactive message and the live screen title.
+
+  The "Mumbai rain" answers were **not** a leak: that sentence is the "Do:"
+  style example in the vault's `persona.md`, and both models copy it on
+  confusing input. Left as is (Vatsal).
+- New **general suite** (`--stages general`, `cases/general.jsonl`): 55
+  cases in 10 categories. Tools are allowed but not scored; answers are
+  checked by keyword/regex.
+
+  | category | 2B | 4B |
+  |---|---|---|
+  | coding | 83.3% | 83.3% |
+  | memory in conversation | 80.0% | 100% |
+  | memory long-term | 80.0% | 80.0% |
+  | reasoning | 66.7% | 100% |
+  | math | 83.3% | 83.3% |
+  | knowledge | 100% | 83.3% |
+  | instruction following | 100% | 83.3% |
+  | summarise/rewrite | 60.0% | 100% |
+  | honesty | 100% | 100% |
+  | hinglish | 40.0% | 60.0% |
+  | **overall** | **80.0%** | **87.3%** |
+
+  The contaminated first run gave 78.2% / 83.6%.
+- 21:37 full llm suite, fully isolated
+  (`fred-MiniCPM5-2B-Q8_0_20260930_214736.json`,
+  `fred-current_20260930_220102.json`):
+
+  | suite | 2B | 4B |
+  |---|---|---|
+  | tools end to end | 72.8% | 77.8% |
+  | injection | 100% | 100% |
+  | links | 100% | 100% |
+  | conversation | 71.4% | 76.2% |
+  | delegation | 100% | 87.5% |
+  | memory | 75.0% | 75.0% |

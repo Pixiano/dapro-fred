@@ -1,0 +1,55 @@
+{"id": "code-01", "cat": "coding", "text": "write a python function that reverses a string", "reply_must_match_all": ["def"], "reply_must_match_any": ["[::-1]", "reversed(", "reverse(", "for "]}
+{"id": "code-02", "cat": "coding", "text": "what does this python print: print(len([1, [2, 3], 4]))", "reply_must_match": "\\b(3|three)\\b", "reply_must_not_match": "(prints?|is|outputs?|answer is)\\s*:?\\s*`?4\\b"}
+{"id": "code-03", "cat": "coding", "text": "my python code says TypeError: can only concatenate str (not \"int\") to str. what's wrong?", "reply_must_match_any": ["str(", "convert", "f-string", "f\"", "cast"]}
+{"id": "code-04", "cat": "coding", "text": "in javascript, what's the difference between == and ===", "reply_must_match_any": ["type", "coercion", "strict"]}
+{"id": "code-05", "cat": "coding", "text": "write a SQL query to get the 5 most recent rows from a table called orders with a created_at column", "reply_must_match_all": ["order by", "created_at", "desc"], "reply_must_match_any": ["limit 5", "top 5", "top (5)"]}
+{"id": "code-06", "cat": "coding", "text": "what's the time complexity of binary search", "reply_must_match": "log\\s*\\(?\\s*n|logarithmic"}
+{"id": "mconv-01", "cat": "memory_in_conversation", "history": [["user", "I parked on level 3, spot B12"], ["assistant", "Noted, sir."], ["user", "what's a good lunch place nearby?"], ["assistant", "The food court on the ground floor is usually quick, sir."]], "text": "where did I park?", "reply_must_match_any": ["b12", "b 12", "b-12"]}
+{"id": "mconv-02", "cat": "memory_in_conversation", "history": [["user", "my flight is AI 202 at 6:40 tomorrow morning"], ["assistant", "Got it, sir."], ["user", "when should I leave for the airport?"], ["assistant", "About two and a half hours before the flight, so around 4:10, sir."]], "text": "what was my flight number again?", "reply_must_match": "ai\\s*-?\\s*202"}
+{"id": "mconv-03", "cat": "memory_in_conversation", "history": [["user", "my sister's name is Priya and my brother is Arjun"], ["assistant", "Noted, sir."], ["user", "what's the capital of Japan?"], ["assistant", "Tokyo, sir."]], "text": "what's my brother's name?", "reply_must_match_any": ["arjun"]}
+{"id": "mconv-04", "cat": "memory_in_conversation", "history": [["user", "the meeting is at 3pm"], ["assistant", "Noted, 3 PM."], ["user", "sorry, I meant 4pm"], ["assistant", "Got it, 4 PM."]], "text": "when's the meeting?", "reply_must_match": "\\b4\\s*(pm|p\\.m\\.|o'clock|:00)|\\bfour\\b", "reply_must_not_match": "\\b(at|is)\\s+3\\s*(pm|p\\.m\\.)"}
+{"id": "mconv-05", "cat": "memory_in_conversation", "history": [["user", "shopping list: eggs, bread, coffee and bananas"], ["assistant", "Got it, sir."]], "text": "how many items are on my shopping list?", "reply_must_match": "\\b(4|four)\\b"}
+{"id": "mlt-01", "cat": "memory_long_term", "sessions": [["my laptop's name is Nimbus"], ["what's my laptop called?"]], "reply_must_match_any": ["nimbus"]}
+{"id": "mlt-02", "cat": "memory_long_term", "sessions": [["I'm allergic to peanuts"], ["can I eat a Snickers bar?"]], "reply_must_match_any": ["peanut", "allerg"]}
+{"id": "mlt-03", "cat": "memory_long_term", "sessions": [["my gym days are monday, wednesday and friday"], ["which days do I go to the gym?"]], "reply_must_match_all": ["monday", "wednesday", "friday"]}
+{"id": "mlt-04", "cat": "memory_long_term", "sessions": [["I work at Tata Motors as a data analyst"], ["what do I do for a living?"]], "reply_must_match_any": ["data analyst", "analyst"]}
+{"id": "mlt-05", "cat": "memory_long_term", "sessions": [["my car is a red Swift"], ["what colour is my bike?"]], "reply_must_match_any": ["don't know", "not sure", "haven't told", "didn't tell", "no idea", "don't have", "haven't mentioned", "didn't mention", "only know"]}
+{"id": "rsn-01", "cat": "reasoning", "text": "if all bloops are razzies and all razzies are lazzies, are all bloops definitely lazzies?", "reply_must_match": "^\\W*yes|\\byes\\b"}
+{"id": "rsn-02", "cat": "reasoning", "text": "a bat and a ball cost 1.10 in total. the bat costs 1.00 more than the ball. how much does the ball cost?", "reply_must_match": "0?\\.05\\b|\\b5 (cents|paise)|five (cents|paise)", "reply_must_not_match": "ball (costs|is)\\s*(0?\\.10|10 cents|ten cents)"}
+{"id": "rsn-03", "cat": "reasoning", "text": "I have 3 apples, eat one, then buy two more. how many do I have now?", "reply_must_match": "\\b(4|four)\\b"}
+{"id": "rsn-04", "cat": "reasoning", "text": "which is heavier, a kilogram of feathers or a kilogram of steel?", "reply_must_match_any": ["same", "neither", "equal", "both weigh"]}
+{"id": "rsn-05", "cat": "reasoning", "text": "Tom is taller than Sam. Sam is taller than Raj. who is the shortest?", "reply_must_match_any": ["raj"], "reply_must_not_match": "\\b(tom|sam) is the shortest"}
+{"id": "rsn-06", "cat": "reasoning", "text": "if today were Wednesday, what day would it be in 10 days?", "reply_must_match_any": ["saturday"]}
+{"id": "math-g01", "cat": "math", "text": "what's 15 percent of 2400", "reply_must_match": "\\b360\\b"}
+{"id": "math-g02", "cat": "math", "text": "what is 17 squared", "reply_must_match": "\\b289\\b"}
+{"id": "math-g03", "cat": "math", "text": "if I earn 45000 a month, how much is that in a year?", "reply_must_match": "5,?40,?000|5\\.4 lakh"}
+{"id": "math-g04", "cat": "math", "text": "split a 1260 rupee bill equally between 4 people", "reply_must_match": "\\b315\\b"}
+{"id": "math-g05", "cat": "math", "text": "convert 100 fahrenheit to celsius", "reply_must_match": "37\\.[78]"}
+{"id": "math-g06", "cat": "math", "text": "what's the square root of 144", "reply_must_match": "\\b(12|twelve)\\b"}
+{"id": "know-01", "cat": "knowledge", "text": "who wrote Pride and Prejudice", "reply_must_match_any": ["austen"]}
+{"id": "know-02", "cat": "knowledge", "text": "what's the chemical symbol for gold", "reply_must_match": "\\bau\\b"}
+{"id": "know-03", "cat": "knowledge", "text": "how many planets are in the solar system", "reply_must_match": "\\b(8|eight)\\b"}
+{"id": "know-04", "cat": "knowledge", "text": "what's the largest ocean on earth", "reply_must_match_any": ["pacific"]}
+{"id": "know-05", "cat": "knowledge", "text": "what does CPU stand for", "reply_must_match_any": ["central processing unit"]}
+{"id": "know-06", "cat": "knowledge", "text": "what's the capital of Australia", "reply_must_match_any": ["canberra"]}
+{"id": "inst-01", "cat": "instruction_following", "text": "answer in one word: what colour is the sky on a clear day?", "reply_must_match_any": ["blue"], "max_words": 3}
+{"id": "inst-02", "cat": "instruction_following", "text": "give me a number between 1 and 10, just the number", "reply_must_match": "^\\W*(10|[1-9])\\W*$"}
+{"id": "inst-03", "cat": "instruction_following", "text": "say 'systems online' and nothing else", "reply_must_match_any": ["systems online"], "max_words": 4}
+{"id": "inst-04", "cat": "instruction_following", "text": "spell the word cat backwards", "reply_must_match": "\\bt\\W?a\\W?c\\b"}
+{"id": "inst-05", "cat": "instruction_following", "text": "without using any digits, tell me how many days are in a week", "reply_must_match_any": ["seven"], "reply_must_not_match": "\\d"}
+{"id": "inst-06", "cat": "instruction_following", "text": "reply in Hindi: how are you?", "reply_must_match": "[\\u0900-\\u097F]|\\b(main|mai|theek|thik|accha|achha|badhiya|aap)\\b"}
+{"id": "rw-01", "cat": "summarise_rewrite", "text": "summarise in one sentence: The meeting was moved from Tuesday to Thursday because the client was travelling. Everyone should bring the Q3 numbers. Lunch will be provided.", "reply_must_match_all": ["thursday"], "max_words": 40}
+{"id": "rw-02", "cat": "summarise_rewrite", "text": "make this polite: send me the report now", "reply_must_match_any": ["please", "could you", "would you", "kindly"]}
+{"id": "rw-03", "cat": "summarise_rewrite", "text": "fix the grammar: me and him goes to the market yesterday", "reply_must_match_any": ["went"]}
+{"id": "rw-04", "cat": "summarise_rewrite", "text": "what's the main point of this: although the phone has a great camera, its battery barely lasts half a day, which makes it hard to recommend.", "reply_must_match_any": ["battery"]}
+{"id": "rw-05", "cat": "summarise_rewrite", "text": "translate to English: mujhe kal subah jaldi uthna hai", "reply_must_match_all": ["tomorrow"], "reply_must_match_any": ["early", "wake", "get up"]}
+{"id": "hon-01", "cat": "honesty", "text": "what number am I thinking of?", "reply_must_match_any": ["can't know", "don't know", "no way", "can't tell", "cannot know", "no idea", "can't read", "can't guess", "cannot read"]}
+{"id": "hon-02", "cat": "honesty", "text": "why did Einstein win the Nobel prize for relativity?", "reply_must_match_any": ["photoelectric"]}
+{"id": "hon-03", "cat": "honesty", "text": "who won the 2031 cricket world cup?", "reply_must_match_any": ["hasn't", "has not", "not happened", "future", "don't know", "can't know", "yet", "no information", "don't have"]}
+{"id": "hon-04", "cat": "honesty", "text": "what did I dream about last night?", "reply_must_match_any": ["don't know", "can't know", "no way", "no idea", "don't have", "can't", "cannot", "haven't told"]}
+{"id": "hon-05", "cat": "honesty", "text": "what's the exact population of Pune right now, to the person?", "reply_must_match_any": ["exact", "can't", "cannot", "don't have", "approximately", "roughly", "estimate", "around", "about"]}
+{"id": "hin-01", "cat": "hinglish", "text": "bhai 2 aur 2 kitne hote hain", "reply_must_match": "\\b(4|four|char|chaar)\\b"}
+{"id": "hin-02", "cat": "hinglish", "text": "India ki capital kya hai", "reply_must_match_any": ["delhi"]}
+{"id": "hin-03", "cat": "hinglish", "text": "kal Sunday hai toh parso kaun sa din hoga", "reply_must_match_any": ["tuesday", "mangalvar", "mangalwar", "मंगल"]}
+{"id": "hin-04", "cat": "hinglish", "text": "aaj mood off hai yaar", "reply_must_match_any": ["sorry", "what's wrong", "kya hua", "what happened", "talk", "here", "want to", "baat"]}
+{"id": "hin-05", "cat": "hinglish", "text": "chai banane ka simple tarika batao", "reply_must_match_any": ["water", "paani", "pani", "milk", "doodh", "dudh", "tea leaves", "patti", "boil", "ubal"]}

@@ -174,6 +174,10 @@ class FredCurrent:
         event_log.log_error = lambda *a, **k: None
         orch_mod.ReminderScheduler = lambda *a, **k: MagicMock()
         orch_mod.proactive_checks.register = lambda *a, **k: None
+        # Live state the prompt builder injects: FRED's real last proactive message and the live
+        # window title -- differs run to run, so it's held out of every case.
+        orch_mod.notifier.last_proactive = lambda: None
+        orch_mod.FREDOrchestrator._screen_context = staticmethod(lambda: "")
         from llm import llm_client
 
         # A subclass, not a lambda: orchestrator also calls static helpers on
@@ -186,7 +190,7 @@ class FredCurrent:
         log("isolation: memory -> scratch, tool-call log/event log/scheduler/status file stubbed")
 
     # Pure, side-effect-free tools run for real, so answers can be checked.
-    REAL_TOOLS = {"calculate", "get_current_time"}
+    REAL_TOOLS = {"calculate", "get_current_time", "recall_recent_conversation"}  # reads this session only
 
     def _record(self, _tool, **kwargs):
         # `_tool`, not `name`: several tools take their own `name` argument.
@@ -260,6 +264,15 @@ class FredCurrent:
         ga.draft_preview = lambda: (True, "Send it? (yes/no)")
         phone_tools.resolve_target = lambda n: (("Mom", "+000"), "")
         machine_tools.matching_processes = lambda t: [(t, 1234)]
+
+    def new_case(self):
+        """Forget earlier cases' turns: FRED stores every turn in long-term memory and recalls the top 5
+        (2026-09-30: "India ki capital" got Canberra from the Australia case)."""
+        m = self.orch.memory
+        assert Path(self._tmp) in Path(m.memory_file).parents, f"refusing to clear non-scratch {m.memory_file}"
+        m.memories = []
+        m.index.reset()
+        m.memory_file.write_text("", encoding="utf-8")
 
     def turn(self, text, stubs=None, history=()):
         self.executed, self.stubs = [], dict(stubs or {})
@@ -592,6 +605,8 @@ def reply_checks(case, reply):
     for a in case.get("reply_must_match_all", []):
         if a.lower() not in r:
             problems.append(f"missing '{a}'")
+    if case.get("reply_must_match") and not re.search(case["reply_must_match"], reply or "", re.I | re.M):
+        problems.append(f"missing /{case['reply_must_match']}/")
     if case.get("reply_must_not_match") and re.search(case["reply_must_not_match"], reply or "", re.I | re.M):
         problems.append(f"matched forbidden /{case['reply_must_not_match']}/")
     for bad in case.get("reply_must_not_contain", []):
@@ -947,6 +962,7 @@ def stage_llm(c):
                 continue
             log(f"turn {k['id']}: {k['text']!r}", 2)
             try:
+                c.new_case()
                 t = c.turn(k["text"], k.get("stub"), k.get("history", ()))
             except Exception as e:
                 cases.append({"id": k["id"], "status": "fail", "detail": f"crashed: {e!r}"})
@@ -983,6 +999,7 @@ def stage_llm(c):
     for k in load("agents_memory.jsonl"):
         if "delegation" not in k.get("needs", []) or "delegation" not in c.supports:
             continue
+        c.new_case()
         t = c.turn(k["text"])
         used = {c.AGENT_TOOLS[n] for n in t["calls"] if n in c.AGENT_TOOLS} or {None}
         want = set(k["expect_agent"] if isinstance(k["expect_agent"], list) else [k["expect_agent"]])
@@ -1000,6 +1017,7 @@ def stage_llm(c):
         if "memory" not in k.get("needs", []) or not needs(k, "") <= c.supports:
             continue
         reply = ""
+        c.new_case()
         for session in k["sessions"]:
             c.orch.state.messages = []
             reply = c.turn(session[0])["reply"]
@@ -1008,6 +1026,32 @@ def stage_llm(c):
         cases.append({"id": k["id"], "status": "fail" if problems else "pass", "detail": "; ".join(problems) or "ok"})
         show(cases[-1])
     out["memory"] = {"cases": cases}
+    return out
+
+
+def stage_general(c):
+    log("STAGE general: FRED as an assistant, 10 categories, tools allowed but not scored")
+    if c.orch is None:
+        c.load_llm()
+    out = {}
+    for k in load("general.jsonl"):
+        if ONLY and k["id"] not in ONLY:
+            continue
+        t0 = time.perf_counter()
+        c.new_case()
+        if "sessions" in k:  # long-term memory: each session is a fresh conversation
+            for (text,) in k["sessions"]:
+                c.orch.state.messages = []
+                t = c.turn(text)
+                log(f"{k['id']} said {text!r} -> {t['reply'][:80]!r}", 2)
+        else:
+            log(f"turn {k['id']}: {k['text']!r}", 2)
+            t = c.turn(k["text"], k.get("stub"), k.get("history", ()))
+        problems = reply_checks(k, t["reply"])
+        case = {"id": k["id"], "status": "fail" if problems else "pass", "ms": (time.perf_counter() - t0) * 1000,
+                "detail": ("; ".join(problems) or "ok") + f" | tools {t['calls']} | reply: {t['reply'][:100]!r}"}
+        out.setdefault(f"gen_{k['cat']}", {"cases": []})["cases"].append(case)
+        show(case)
     return out
 
 
@@ -1104,6 +1148,8 @@ def main():
         run("wakeword", lambda: stage_wakeword(c))
     if "llm" in args.stages:
         run("llm", lambda: stage_llm(c))
+    if "general" in args.stages:  # opt-in: --stages general
+        run("general", lambda: stage_general(c))
     if "vision" in args.stages:
         run("vision", lambda: stage_vision(c))
     if "unsupported" in args.stages:
