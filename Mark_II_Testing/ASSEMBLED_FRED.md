@@ -1,6 +1,24 @@
 # Assembled FRED — design doc (living)
 
-**Status:** design only, nothing built or downloaded. Started 2026-09-30.
+**Status:** design only, nothing built yet. Started 2026-09-30. **Chosen
+direction for Mark II** (Vatsal, 2026-09-30): go all in on the assembled
+architecture; the pre-made models are parked as references and fallbacks.
+
+### Mark II final ranking (2026-09-30, agreed with Vatsal)
+
+| # | Candidate | Basis |
+|---|---|---|
+| 1 | **Assembled FRED** (this doc) | FRED's pipeline + a text brain beat every omni model by 20–40 pts on conversation / tools / honesty [measured]; real-time half (turn clock, talker, early start) untested |
+| 2 | MiniCPM-o 4.5 (cand. 6) | best real-time: 63/70 realtime, only one that spoke up proactively; weak brain, conversation 8/21 (38%) → fallback front end |
+| 3 | MiniCPM-o 2.6 (cand. 5) | best omni brain: 12/21 (57%), screenshots 10/12, most honest |
+| 4 | MiniCPM5-2B as FRED's brain (cand. 7) | isolated: tools 72.8% vs 4B 77.8%, general 80.0% vs 87.3%; a component of #1 (2B brain / 8 GB variant), fine-tune target |
+| 5 | Qwen2.5-Omni (cand. 3) | 9/21 (43%), 9/12; needed segmented-attention + VRAM-cap fixes |
+| 6 | Realtime-Venus (cand. 1) | 7/21 (33%), 7/12; invents unknowables |
+| – | Qwen2.5-Omni-FREDtools (cand. 4), candidate 2 | not tested; dropped |
+
+Omni-model scores predate the 2026-09-30 benchmark isolation fixes and ran
+without FRED's pipeline. They are indicative, but not exactly comparable to
+the FRED rows.
 **Tags:** [confirmed: source] = read this session; [measured: file] = our
 own measurement; [inference] = reasoning or estimate, needs a measurement.
 
@@ -442,3 +460,17 @@ None for v1. Optional later, in order of payoff:
   router/memory embedder is the next budget item after the LLM (§7): test
   Qwen3-Embedding-0.6B / a FRED-trained classifier on the routing +
   memory suites.
+- 2026-09-30: Mark II closed with the ranking at the top. The assembled
+  architecture is the chosen direction.
+
+  Proposed build order (awaiting Vatsal's go):
+  - Phase 0: FRED pipeline fixes (router, dispatcher, calculator, memory
+    update).
+  - Phase 1: turn clock offline. VAD + Smart Turn v3 on recordings of
+    Vatsal. These are CPU models, so they need his OK.
+  - Phase 2: live, with barge-in.
+  - Phase 3: speculative early start.
+  - Phase 4: the L4 judge in shadow mode.
+  - Later: the 2B brain.
+
+  A small-LLM successor search (≤4B, fine-tunes especially) is running.
