@@ -68,6 +68,9 @@ def load(name):
     return [json.loads(l) for l in (CASES / name).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
+ONLY = set()  # --cases filter
+
+
 def needs(k, file):
     """Capabilities a case needs. routing_hard.jsonl and conversation cases
     expecting a tool call predate the `needs` field: both need tools."""
@@ -246,6 +249,9 @@ class FredCurrent:
                              FREDOrchestrator)
         gpu_load(f"{DEFAULT_TIER} tier", int(MODEL_TIERS[DEFAULT_TIER].stat().st_size / 2**20),
                  lambda: self.orch.llm.ensure_loaded(DEFAULT_TIER))
+        if os.environ.get("FRED_NO_DISPATCHER"):  # A/B: every turn goes through router + LLM
+            self.orch.dispatcher.match = lambda _text: None
+            log("dispatcher DISABLED for this run")
         self._real_execute = self.orch.tools.execute
         self.orch.tools.execute = self._record
         import tools.gmail_api as ga
@@ -936,6 +942,8 @@ def stage_llm(c):
                 continue
             if not needs(k, file) <= c.supports:
                 continue
+            if ONLY and k["id"] not in ONLY:
+                continue
             log(f"turn {k['id']}: {k['text']!r}", 2)
             try:
                 t = c.turn(k["text"], k.get("stub"), k.get("history", ()))
@@ -1061,9 +1069,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stages", nargs="*",
                     default=["routing", "gates", "stt", "wakeword", "llm", "vision", "unsupported"])
+    ap.add_argument("--cases", nargs="*", default=[], help="run only these case ids (llm stage)")
     ap.add_argument("--candidate", choices=CANDIDATES, default="fred",
                     help="venus|qwen|minicpmo|minicpmo45: run with that candidate's Mark_II_Testing venv, stages llm vision unsupported")
     args = ap.parse_args()
+    ONLY.update(args.cases)
     log(f"FRED benchmark -- stages {args.stages}")
     log(f"GPU: {subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,memory.free', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()}")
 

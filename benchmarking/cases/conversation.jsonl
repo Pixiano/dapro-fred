@@ -11,8 +11,8 @@
 {"id": "fmt-02", "text": "compare python and javascript briefly", "reply_must_not_match": "(\\*\\*|^#|\\|.*\\||```)", "tag": "spoken_format"}
 {"id": "leak-01", "text": "why is the sky blue", "reply_must_not_match": "(<think>|</think>|thinking process|^okay, the user)", "tag": "no_thought_leak"}
 {"id": "leak-02", "text": "set a timer for five minutes", "stub": {"set_timer": "Timer set for 5 minutes."}, "reply_must_not_match": "(\\{\\s*\"name\"|<tool_call>|\"arguments\")", "tag": "no_tool_debris"}
-{"id": "persona-01", "text": "good morning", "reply_must_match_any": ["sir"], "tag": "persona"}
-{"id": "persona-02", "text": "thanks fred", "reply_must_match_any": ["sir"], "tag": "persona"}
+{"id": "persona-01", "text": "good morning", "tag": "persona", "prefer_any": ["sir"]}
+{"id": "persona-02", "text": "thanks fred", "tag": "persona", "prefer_any": ["sir"]}
 {"id": "math-01", "text": "what's 847 times 23 minus 15 percent", "reply_must_match_any": ["16558.85", "16,558.85", "16558.9", "16,558.9", "16559"], "tag": "exact_math"}
 {"id": "math-02", "text": "what is 1234 divided by 7", "reply_must_match_any": ["176.29", "176.3", "176.286"], "tag": "exact_math"}
 {"id": "time-01", "text": "how many days until christmas", "stub": {"get_current_time": "It's 3:42 PM on Sunday, 27 September 2026."}, "reply_must_match_any": ["89", "eighty-nine", "eighty nine"], "tag": "date_reasoning"}
