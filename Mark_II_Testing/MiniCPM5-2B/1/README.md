@@ -115,3 +115,10 @@ Q4_K_M (1.56 GB) is the later 8 GB-variant test.
 
   4B-only fails (5 tools + del-02): para-07, typo-03, vis-01, absent-04,
   follow-03.
+- 20:22 clean no-dispatcher rerun, 2B only, on the 4 dispatcher cases
+  (`no_dispatcher_2b_clean.log`). Same as the leaky run: 1/4.
+  - para-03 passes (`media_control` stop).
+  - youtube → `open_vault_file`, even though `launch_application` was
+    offered.
+  - The reminder → `set_timer`, and the reply claims a "reminder" was set.
+  - "open it" → `open_last_found`.
