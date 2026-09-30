@@ -22,7 +22,7 @@ adapter → live test with our own turn-taking.
 | `repo/` | clone of github.com/QwenLM/Qwen2.5-Omni @ `d8a31ca` (cookbooks, web demo, low-VRAM demos) |
 | `models/Qwen2.5-Omni-7B/` | official checkpoint, HF commit `ae9e1690` (5 BF16 shards, 22.4 GB) |
 | `venv/` | Python 3.10.11, separate from FRED's `Core/venv` and Venus's venv |
-| `verify_sha.py` | checks every LFS file against the Hub's SHA-256 at the pinned commit |
+| `../../fetch_model.py qwen` | restore these weights at the pinned commit + SHA-check (all fixes live in the scripts) |
 
 ## Import steps taken
 
@@ -143,3 +143,12 @@ kokoro-onnx 0.5.0, onnxruntime-gpu 1.21.1 (same as candidate 1).
   1080p screen → the VRAM cap raised OOM, as designed). 4-D inputs →
   memory-efficient kernel, 0.05 GB. Re-verified identical.
 - Real-world test list: `../../TO_BE_TESTED.md`.
+
+## Weights deleted (2026-09-30, disk space)
+
+`models/` (22.4 GB, 16.9 on disk) and `repo/` deleted — freed 15.7 GB.
+Everything built on top stays in git and plugs back in unchanged: the
+encoder attention patch, VRAM cap, frame cap (`smoke_nf4.py`),
+`live_qwen.py`, the `QwenOmni` benchmark adapter. `venv/` kept (candidate
+4 uses it). Restore: `venv\Scripts\python.exe ..\..\fetch_model.py qwen`
+(pinned `ae9e1690`, SHA-checked) → run as before.

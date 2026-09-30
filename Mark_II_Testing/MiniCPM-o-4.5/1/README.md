@@ -33,4 +33,4 @@ threshold, focus crop); verify each rather than assume.
 | Path | What |
 |---|---|
 | `models/MiniCPM-o-4_5/` | official checkpoint (gitignored) |
-| `verify_sha.py` | LFS files vs the Hub's SHA-256 at `503e7542` |
+| `../../fetch_model.py minicpmo45` | download/restore at `503e7542` + SHA-check |

@@ -39,3 +39,10 @@
   candidates 3/5 smoke paths updated. Re-downloadable at pinned `ad42af5f`.
   Not deleted: MiniCPM-o 2.6 (ranked #1, not tested live yet) and Qwen
   weights (candidate 4's base).
+- **Plug-and-play bases** (Vatsal: fixes should survive deleting a base and
+  just work when it's re-downloaded). They already live outside `models/`
+  (scripts in git); added `Mark_II_Testing/fetch_model.py <venus|qwen|
+  minicpmo26|minicpmo45>` — download at the pinned commit (resumable,
+  retried) + SHA-check; replaces the four per-folder `verify_sha.py`.
+  Checked: `minicpmo26 --verify-only` 12/12. **Qwen weights + repo deleted**
+  too (freed 15.7 GB → 89 GB free); venv kept for candidate 4.

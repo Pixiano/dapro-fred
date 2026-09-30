@@ -18,7 +18,7 @@ Vatsal's go.
 | `repo/` | clone of github.com/OpenBMB/MiniCPM-o |
 | `models/MiniCPM-o-2_6/` | official checkpoint, HF commit `06849bfd` (4 BF16 shards + assets, 17.4 GB) |
 | `venv/` | Python 3.10.11, own venv |
-| `verify_sha.py` | every LFS file vs the Hub's SHA-256 at the pinned commit |
+| `../../fetch_model.py minicpmo26` | restore these weights at the pinned commit + SHA-check (all fixes live in the scripts) |
 
 ## Plan / deviations
 

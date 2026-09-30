@@ -402,7 +402,7 @@ machine. The reference implementation is `smoke_nf4.py` (`load_duplex`,
   `openbmb/MiniCPM-o-4_5`.
 - No `ffprobe` on this box: upstream's `minicpmo.utils.get_video_duration`
   shells out to it -> patched with OpenCV (only needed for video files).
-- Checkpoint integrity: `verify_sha.py` (11/11 LFS files vs the Hub).
+- Checkpoint integrity / restore: `../../fetch_model.py venus` (11/11 LFS files vs the Hub).
 
 ### Loading (`load_duplex`)
 - NF4 via bitsandbytes on the 252 Qwen3 LLM linears only; skip list =
@@ -630,4 +630,4 @@ Kept: `venv/` (candidate 6, MiniCPM-o 4.5, runs on this exact stack),
 `models/wheels/` (torch 2.8 cu128 wheel every new venv installs from), all
 scripts/logs/results. `sample_1_real.mp4` moved to `../../shared/` (used by
 candidates 3 and 5's smoke tests). To bring Venus back: re-run the
-download (README top, pinned `ad42af5f`) and `verify_sha.py`.
+`../../fetch_model.py venus` (pinned `ad42af5f`, SHA-checked).
