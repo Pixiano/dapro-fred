@@ -6,19 +6,15 @@ architecture; the pre-made models are parked as references and fallbacks.
 
 ### Mark II final ranking (2026-09-30, agreed with Vatsal)
 
-| # | Candidate | Basis |
-|---|---|---|
-| 1 | **Assembled FRED** (this doc) | FRED's pipeline + a text brain beat every omni model by 20–40 pts on conversation / tools / honesty [measured]; real-time half (turn clock, talker, early start) untested |
-| 2 | MiniCPM-o 4.5 (cand. 6) | best real-time: 63/70 realtime, only one that spoke up proactively; weak brain, conversation 8/21 (38%) → fallback front end |
-| 3 | MiniCPM-o 2.6 (cand. 5) | best omni brain: 12/21 (57%), screenshots 10/12, most honest |
-| 4 | MiniCPM5-2B as FRED's brain (cand. 4; folder `MiniCPM5-2B/`, called "candidate 7" in earlier notes) | isolated: tools 72.8% vs 4B 77.8%, general 80.0% vs 87.3%; a component of #1 (2B brain / 8 GB variant), fine-tune target |
-| 5 | Qwen2.5-Omni (cand. 3) | 9/21 (43%), 9/12; needed segmented-attention + VRAM-cap fixes |
-| 6 | Realtime-Venus (cand. 1) | 7/21 (33%), 7/12; invents unknowables |
-| – | Qwen2.5-Omni-FREDtools (cand. 7, formerly "candidate 4"; never trained), candidate 2 | not tested; dropped |
+| # | Candidate |
+|---|---|
+| 1 | Assembled FRED |
+| 2 | MiniCPM-o 4.5 |
+| 3 | Venus |
+| 4 | MiniCPM-o 2.6 |
+| 5 | Qwen2.5-Omni |
+| 6 | 2B surgical backbone replacement in Venus |
 
-Omni-model scores predate the 2026-09-30 benchmark isolation fixes and ran
-without FRED's pipeline. They are indicative, but not exactly comparable to
-the FRED rows.
 **Tags:** [confirmed: source] = read this session; [measured: file] = our
 own measurement; [inference] = reasoning or estimate, needs a measurement.
 

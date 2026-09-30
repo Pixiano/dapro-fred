@@ -102,17 +102,12 @@
   - Isolated full llm suite, tools: 2B 72.8%, 4B 77.8%.
 
   Details are in the candidate 7 README.
-- **Mark II closed. Final ranking (agreed with Vatsal):**
-  1. assembled FRED;
-  2. MiniCPM-o 4.5;
-  3. MiniCPM-o 2.6;
-  4. MiniCPM5-2B brain;
-  5. Qwen2.5-Omni;
-  6. Venus.
+- **Mark II closed. Final ranking (Vatsal):**
+  1. Assembled FRED
+  2. MiniCPM-o 4.5
+  3. Venus
+  4. MiniCPM-o 2.6
+  5. Qwen2.5-Omni
+  6. 2B surgical backbone replacement in Venus
 
-  Candidate numbers 4 and 7 are swapped (Vatsal): MiniCPM5-2B is now
-  candidate 4, and the never-trained Qwen2.5-Omni-FREDtools is candidate 7.
-  Candidates 7 and 2 are dropped. We go all in on the assembled
-  architecture; the pre-made models are parked, restorable with
-  `fetch_model.py`. Table and build order: top and Log of
-  `Mark_II_Testing/ASSEMBLED_FRED.md`.
+  Table: top of `Mark_II_Testing/ASSEMBLED_FRED.md`.
