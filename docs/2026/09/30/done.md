@@ -15,3 +15,13 @@
 - **Candidate 5 live script** `live_minicpmo.py` (from `live_qwen.py`; 4
   screens + audio via `chat()`). Dry run 4.2 s release → reply, peak
   10.1 GB. Row in `TO_BE_TESTED.md` now runnable.
+- **Candidate 4 (Qwen2.5-Omni + FRED tool fine-tune) try 1 set up:**
+  `Mark_II_Testing/Qwen2.5-Omni-FREDtools/1/`. Reuses candidate 3's
+  verified weights + venv (+ `peft==0.15.2`) — disk at 60 GB free. FRED's
+  110 tool definitions exported (13 confirm-gated). Real tool-call log:
+  295 unique (utterance → tool) pairs over 54 tools after removing every
+  holdout/benchmark utterance. Plan: QLoRA on the Thinker, tool menu from
+  FRED's router, real + synthetic data de-duplicated against the
+  benchmark. Waiting on Vatsal: synthetic data writer (local Qwen3.5-4B vs
+  Claude) and whether to use the real log. `Mark_II_Testing/**/data/`
+  gitignored.

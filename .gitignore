@@ -265,3 +265,4 @@ Mark_II_Testing/**/*.log
 Mark_II_Testing/**/*.wav
 Mark_II_Testing/**/live_events.jsonl
 Mark_II_Testing/**/selftest_*.txt
+Mark_II_Testing/**/data/
