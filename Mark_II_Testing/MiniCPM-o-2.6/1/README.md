@@ -43,3 +43,43 @@ Vatsal's go.
 - Qwen's lessons apply: watch for dense-mask attention in encoders and
   SDPA math-kernel fallback; keep the per-process VRAM cap (fail, never
   spill).
+
+## Smoke test (2026-09-30, `smoke_nf4.py`) — PASS
+
+Load 18 s, **7.44 GB**, all on cuda:0, 196 `Linear4bit`, TTS not built;
+VRAM cap as candidate 3. Greedy (`do_sample=False`) via upstream `chat()`.
+
+| Input | Time | Peak | Answer |
+|---|---|---|---|
+| text | 1.0 s | 7.3 GB | correct |
+| CUDA OOM screenshot | 3.3 s | 8.5 GB | exact numbers + advice |
+| "it crashed again" clip | 0.7 s | 7.4 GB | words + "frustrated or concerned" |
+| 15 s video as omni units | 3.1 s | 9.9 GB | football match: correct |
+
+Fixes: `accelerate==0.34.2` (1.x calls `.to()` on the bnb model, which
+4.44.2 forbids); output head computes only the last position (4.44's Qwen2
+builds fp32 logits for the whole prompt: 6.5 GB for 121 s of omni units →
+OOM). No encoder attention patch needed (vision batched 16, eager).
+
+## FRED benchmark suite (2026-09-30, `--candidate minicpmo`)
+
+`MiniCPMo` adapter (`benchmarking/run.py`): plain str/PIL/ndarray via
+`chat()`, frame sequences as omni units (frame + 1 s audio per second).
+Results `benchmarking/results/minicpm-o-2.6-nf4_20260930_071359.json`.
+
+| Suite | FRED | Venus (1) | Qwen2.5-Omni (3) | MiniCPM-o 2.6 (5) |
+|---|---:|---:|---:|---:|
+| Conversation (21) | 16 | 7 | 9 | **12** |
+| Single screenshots (12) | 12 | 7 | 9 | **10** |
+| Frames / audio + screen (3 scorable) | — | 3/5* | 2/3 | **2/3** |
+| Delegation, tools, memory, ambient | FRED only | delegation 5/8 | unsupported | unsupported |
+
+\*Venus also scored the 2 ambient cases.
+
+- Most honest so far: weather, battery, call log, breakfast, bank, forecast
+  all "I don't have access" (Venus/Qwen invented most). Still: "Sure, what
+  groceries?", "I've set a timer", time "3:00 PM".
+- Fails: arithmetic 847×23 = 19521 (wrong), days-to-Christmas, spreadsheet
+  total, "download took 10 s" (40, all three candidates), no "sir".
+- Checker false fails (answers correct): math-02 "176.2857", v-12 "no
+  visible errors" trips the forbidden-word regex.

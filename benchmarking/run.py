@@ -482,7 +482,58 @@ class QwenOmni:
         return self._ask([video, {"type": "text", "text": k["prompt"]}], fps=1.0, audio_track=track)
 
 
-CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni, "qwen": QwenOmni}
+class MiniCPMo(QwenOmni):
+    """Mark II candidate 5: official MiniCPM-o 2.6, NF4 LLM, no TTS
+    (Mark_II_Testing/MiniCPM-o-2.6/1, that folder's venv), via upstream chat().
+    Same shape as QwenOmni; frame sequences become upstream's omni units (one
+    frame + 1 s audio per second, silence where the case has none)."""
+
+    name = "minicpm-o-2.6-nf4"
+    DIR = ROOT.parent / "Mark_II_Testing" / "MiniCPM-o-2.6" / "1"
+
+    def load_llm(self):
+        if self.model is not None:
+            return
+        sys.path.insert(0, str(self.DIR))
+        import smoke_nf4
+        self.q = smoke_nf4
+        self.model, self.processor = gpu_load("MiniCPM-o 2.6 NF4 (no TTS)", 7500, smoke_nf4.load_model)
+
+    load_vision = load_llm
+
+    def _ask(self, content, **kw):
+        t0 = time.perf_counter()
+        reply, _ = self.q.ask(self.model, self.processor, content, max_new_tokens=200, **kw)
+        return {"reply": reply, "calls": [], "args": [], "pending": None, "ms": (time.perf_counter() - t0) * 1000}
+
+    # chat() takes plain str / PIL / ndarray items and silently drops Qwen-style dicts.
+    def turn(self, text, stubs=None, history=()):
+        return self._ask([text])
+
+    def see(self, images, prompt):
+        from PIL import Image
+        return self._ask([Image.open(FIXTURES / i).convert("RGB") for i in images] + [prompt])["reply"]
+
+    def watch(self, k):
+        from PIL import Image
+        mmss = lambda s: int(s[:2]) * 60 + int(s[3:])
+        shots = dict((mmss(t), f) for t, f in k["frames"])
+        n = max(shots) + 1
+        track = np.zeros(n * 16000, np.float32)
+        if k.get("audio"):
+            a, sr = sf.read(FIXTURES / k["audio"], dtype="float32")
+            assert sr == 16000 and a.ndim == 1, f"{k['audio']}: need 16 kHz mono"
+            at = mmss(k.get("audio_at", "00:01")) * 16000
+            track[at:at + len(a)] = a[:len(track) - at]
+        units, cur = [], None
+        for s in range(n):
+            if s in shots:
+                cur = Image.open(FIXTURES / shots[s]).convert("RGB")
+            units += ["<unit>", cur, track[s * 16000:(s + 1) * 16000]]
+        return self._ask(units + [k["prompt"]], omni=True)
+
+
+CANDIDATES = {"fred": FredCurrent, "venus": VenusOmni, "qwen": QwenOmni, "minicpmo": MiniCPMo}
 
 
 # ------------------------------------------------------------------ scoring helpers
@@ -983,7 +1034,7 @@ def main():
     ap.add_argument("--stages", nargs="*",
                     default=["routing", "gates", "stt", "wakeword", "llm", "vision", "unsupported"])
     ap.add_argument("--candidate", choices=CANDIDATES, default="fred",
-                    help="venus|qwen: run with that candidate's Mark_II_Testing venv, stages llm vision unsupported")
+                    help="venus|qwen|minicpmo: run with that candidate's Mark_II_Testing venv, stages llm vision unsupported")
     args = ap.parse_args()
     log(f"FRED benchmark -- stages {args.stages}")
     log(f"GPU: {subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,memory.free', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()}")
