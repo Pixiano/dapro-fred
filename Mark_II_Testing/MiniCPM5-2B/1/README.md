@@ -122,3 +122,11 @@ Q4_K_M (1.56 GB) is the later 8 GB-variant test.
     offered.
   - The reminder → `set_timer`, and the reply claims a "reminder" was set.
   - "open it" → `open_last_found`.
+- 20:3x the same test on the 4B, clean (`no_dispatcher_4b_clean.log`): 3/4.
+  - It passes the music, youtube (`open_website`) and reminder + weather
+    (`schedule_reminder`) cases.
+  - "open it" → `open_last_found`, plus `launch_application("YouTube")`
+    three times.
+  - YouTube was the previous case's subject, so context still carries
+    across cases, probably through the scratch memory's recent-turn
+    recall. Not isolated yet.
