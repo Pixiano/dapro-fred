@@ -59,3 +59,28 @@ Full-Duplex-Bench v1.5 / Table 2 / Table 6, base 4.5 vs Venus-Omni:
   screen text, prompted tool use on the base.
 - Correction: our notes had Venus-Omni interruption response at 75% — that
   is Venus-Audio; Omni is 0.60 (fixed in the Venus README/review).
+
+## Ecosystem + successor check (agent, 2026-09-30)
+
+- **Tool calling:** Qwen3 `<tool_call>` template is in the tokenizer but
+  undocumented and not exposed by any official server; a community project
+  (github.com/AlessandroBonomo28/Minicpm-o-booking-desk) reports native
+  calling fails — "the model invents the answer instead of calling" — and
+  uses a side LLM + state machine + injected `force_speak`/`force_listen`
+  (0.5–1.2 s turns). Same pattern as Venus's delegate harness and DuplexOmni
+  (arXiv 2606.09186): **tools stay in FRED, driven from outside the model.**
+- **Turn-taking evidence:** Duplex-MPE (arXiv 2609.31948, 2026-09-25) —
+  4.5 best of 5 open duplex models on when-to-speak / stay-silent / stop.
+- **Official tech report:** arXiv 2604.27393 (Omni-Flow). LoRA via
+  LLaMA-Factory/SWIFT doesn't reproduce the time-aligned duplex training →
+  fine-tuning may damage duplex.
+- **Deployment options:** our NF4-PyTorch path (proven on this card by
+  Venus, same architecture: 7.6–8.9 GB; the official Linux demo's >28 GB is
+  unquantized); fallback **llama.cpp-omni** (github.com/tc-mb/llama.cpp-omni,
+  official, Windows, full duplex, Q4_K_M ~9 GB) — no Blackwell report yet.
+  Prebuilt `ericleigh007/MiniCPM-o-4_5-BNB-Int4` exists; no NVFP4.
+- **Successor:** none announced (no o 5 / 4.6 / V 5 teaser). Recent: V 4.6
+  (2026-05-11, 0.8B edge), MiniCPM5-1B/2B (text). Omni cadence: o 2.6
+  2025-01-14 → o 4.5 2026-02-03 (~12.5 months) → next omni likely ~Q1
+  2027 (inference). Not worth waiting for; keep the backbone swappable
+  (`fetch_model.py` + scripts outside `models/`).
