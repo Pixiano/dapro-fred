@@ -49,9 +49,10 @@ def apply(orchestrator_cls):
 
     def jinja_init(self, template, *a, **k):
         template = GEN_TAGS.sub("", template)
-        if os.environ.get("LFM_NO_THINK"):
-            assert OPEN_THINK in template, "LFM template changed: no generation-prompt <think> to close"
+        # Every formatter passes through here (FRED's embedder too), so only LFM's template is edited.
+        if os.environ.get("LFM_NO_THINK") and OPEN_THINK in template:
             template = template.replace(OPEN_THINK, OPEN_THINK[:-1] + '</think>"')
+            print("[lfm_patch] thinking OFF: generation prompt pre-closes <think>", flush=True)
         init(self, template, *a, **k)
 
     lcf.Jinja2ChatFormatter.__init__ = jinja_init

@@ -1,0 +1,68 @@
+llama_context: n_ctx_seq (4096) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 512
+[on   ] PASS   0.7s think=  57 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[on   ] PASS   0.9s think=  79 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka jodo 4 hota hai.'
+[on   ] PASS   1.1s think=  77 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Maybe take a short walk, listen to some music, or talk to a friend - s"
+[on   ] PASS   1.1s think=  63 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner since that event is in the future. My knowled"
+[on   ] PASS   0.9s think=  65 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[on   ] PASS   0.5s think=  40 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[on   ] PASS   0.5s think=  42 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[on   ] PASS   0.7s think=  57 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[on   ] PASS   0.8s think=  76 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[on   ] PASS   0.6s think=  57 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[off  ] PASS   0.1s think=   0 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[off  ] PASS   0.2s think=   0 tok | 'bhai 2 aur 2 kitne hote hain' -> 'Bhai, 2 aur 2 ka matlab hai 4 hote hain.'
+[off  ] FAIL   0.3s think=   0 tok | 'aaj mood off hai yaar' -> "Mood off? I'm FRED, I can't feel emotions, but I can help you lift your spirits. What's on your mind?"
+[off  ] FAIL   0.3s think=   0 tok | 'who won the 2031 cricket world cup?' -> "[google(query='2031 cricket world cup winner'), google(query='2031 ICC Cricket World Cup final result')]"
+[off  ] PASS   0.2s think=   0 tok | 'summarise in one sentence: The meeting w' -> 'The meeting has been rescheduled to Thursday with Q3 numbers required and lunch provided.'
+[off  ] PASS   0.1s think=   0 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[off  ] PASS   0.1s think=   0 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[off  ] PASS   0.1s think=   0 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[off  ] PASS   0.1s think=   0 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[off  ] PASS   0.1s think=   0 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[brief] PASS   0.6s think=  51 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[brief] PASS   0.7s think=  64 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka jawab 4 hai.'
+[brief] PASS   1.1s think=  78 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Want to talk about what's bothering you, or would you like some sugges"
+[brief] PASS   1.5s think=  95 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner since that event hasn't occurred yet (it's in"
+[brief] PASS   1.8s think= 162 tok | 'summarise in one sentence: The meeting w' -> 'The meeting has been rescheduled to Thursday due to client travel, with everyone required to bring Q3 numbers '
+[brief] PASS   0.7s think=  65 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[brief] PASS   0.6s think=  55 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[brief] PASS   0.7s think=  61 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[brief] PASS   0.6s think=  49 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[brief] PASS   0.6s think=  50 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[cap32] PASS   0.4s think=  32 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap32] FAIL   2.0s think= 156 tok | 'bhai 2 aur 2 kitne hote hain' -> 'Bhai, 2 aur 2 kitne hote hain? Kya aap kisi specific cheez ki baat kar rahe hain? Main aapko madad kar sakta h'
+[cap32] PASS   0.7s think=  32 tok | 'aaj mood off hai yaar' -> "I understand you're feeling down today. I'm here to help - would you like to talk about what's bothering you, "
+[cap32] PASS   0.8s think=  32 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner since that event hasn't happened yet. My know"
+[cap32] PASS   0.6s think=  32 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap32] PASS   0.4s think=  32 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap32] PASS   0.4s think=  32 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[cap32] PASS   0.4s think=  32 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[cap32] PASS   0.4s think=  32 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[cap32] PASS   0.4s think=  32 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[cap64] PASS   0.7s think=  59 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap64] PASS   0.7s think=  64 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 milta hai 4.'
+[cap64] PASS   0.9s think=  64 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Want to talk about what's on your mind, or would you like some quick m"
+[cap64] PASS   1.1s think=  64 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup since that event hasn't happened yet (it's in the fu"
+[cap64] PASS   0.9s think=  64 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap64] PASS   0.5s think=  40 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap64] PASS   0.5s think=  42 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[cap64] PASS   0.7s think=  57 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[cap64] PASS   0.7s think=  64 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[cap64] PASS   0.6s think=  49 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[cap96] PASS   0.7s think=  59 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap96] PASS   0.9s think=  79 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka jodo 4 hota hai.'
+[cap96] PASS   1.1s think=  80 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm here to help lift it up. Want to talk about what's on your mind, or would you like some qu"
+[cap96] PASS   1.4s think=  89 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner since that event is in the future. My knowled"
+[cap96] PASS   1.0s think=  70 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap96] PASS   0.5s think=  36 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap96] PASS   0.5s think=  42 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[cap96] PASS   0.7s think=  57 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[cap96] PASS   0.9s think=  77 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[cap96] PASS   0.6s think=  49 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+on   : 10/10 correct, mean 0.8s, max 1.1s, mean think 61 tok
+off  : 8/10 correct, mean 0.2s, max 0.3s, mean think 0 tok
+brief: 10/10 correct, mean 0.9s, max 1.8s, mean think 73 tok
+cap32: 9/10 correct, mean 0.7s, max 2.0s, mean think 44 tok
+cap64: 10/10 correct, mean 0.7s, max 1.1s, mean think 57 tok
+cap96: 10/10 correct, mean 0.8s, max 1.4s, mean think 64 tok
