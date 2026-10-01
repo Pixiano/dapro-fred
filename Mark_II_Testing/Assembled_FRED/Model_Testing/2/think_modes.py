@@ -56,7 +56,7 @@ def capped(user, cap):
     """Hard cap: think for at most `cap` tokens, then force </think> and generate the answer."""
     p = prompt(user, "on")
     think = m.create_completion(p, max_tokens=cap, temperature=0.1, stop=["</think>"])["choices"][0]["text"]
-    answer = m.create_completion(p + think + "</think>", max_tokens=512, temperature=0.1,
+    answer = m.create_completion(p + think + CLOSE, max_tokens=512, temperature=0.1,
                                  stop=["<|im_end|>"])["choices"][0]["text"]
     return think + "</think>" + answer
 
@@ -70,10 +70,15 @@ for mode in MODES:
         if mode.startswith("cap"):
             text = capped(user, int(mode[3:]))
         else:
-            text = m.create_completion(prompt(user, mode), max_tokens=1024, temperature=0.1,
+            text = m.create_completion(prompt(user, mode), max_tokens=3000, temperature=0.1,
                                        stop=["<|im_end|>"])["choices"][0]["text"]
         secs = time.perf_counter() - t
-        think, _, answer = text.rpartition("</think>") if mode != "off" else ("", "", text)
+        if mode == "off":
+            think, answer = "", text
+        elif "</think>" in text:
+            think, _, answer = text.rpartition("</think>")
+        else:  # ran out of tokens while still thinking: no answer, so it can't pass
+            think, answer = text, ""
         ok = bool(re.search(want, answer, re.I))
         rows.append((mode, user, len(m.tokenize(think.encode(), add_bos=False)), secs, answer.strip(), ok))
         print(f"[{mode:5}] {'PASS' if ok else 'FAIL'} {secs:5.1f}s think={rows[-1][2]:4} tok | {user[:40]!r} -> {answer.strip()[:110]!r}", flush=True)

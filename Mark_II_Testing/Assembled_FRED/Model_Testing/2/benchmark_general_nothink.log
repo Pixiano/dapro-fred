@@ -1,0 +1,381 @@
+[14:27:16 +   0.0s] FRED benchmark -- stages ['general']
+[14:27:16 +   0.0s] GPU: NVIDIA GeForce RTX 5060 Ti, 16311 MiB, 2613 MiB, 13438 MiB
+[14:27:17 +   0.7s] sandbox patch applied: C:/Users/Dhiraj Vatsal/VatsalDaPro/Projects/Project_FRED/Mark_II_Testing/Assembled_FRED/Model_Testing/2/lfm_patch.py
+[14:27:17 +   0.7s] candidate fred-LFM2.5-2.6B-Q8_0: scratch dir C:\Users\DHIRAJ~1\AppData\Local\Temp\fred_bench_pmpi_jjb (memory/indexes go here, never the real ones)
+[14:27:17 +   0.7s] candidate fred-LFM2.5-2.6B-Q8_0: 110 tools registered, 13 confirmation-gated
+[14:27:17 +   0.7s] STAGE general: FRED as an assistant, 10 categories, tools allowed but not scored
+[14:27:17 +   0.7s] isolation: memory -> scratch, tool-call log/event log/scheduler/status file stubbed
+[14:27:17 +   0.7s] LLM stage needs Standard (LFM2.5-2.6B-Q8_0.gguf) + embedder + KV cache ~7222 MiB; free 13438 MiB
+[14:27:17 +   0.8s] GPU load 'FRED orchestrator (embedder)': need ~2381 MiB, free 13438 MiB, used 2613 MiB
+llama_context: n_ctx_seq (4096) < n_ctx_train (40960) -- the full capacity of the model will not be utilized
+[14:27:21 +   4.3s] GPU load 'FRED orchestrator (embedder)': done in 3.4s, VRAM +3407 MiB (now 6020 MiB used, 10031 MiB free)
+[14:27:21 +   4.3s] GPU load 'Standard tier': need ~2741 MiB, free 10031 MiB, used 6020 MiB
+llama_context: n_ctx_seq (24576) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 512
+[lfm_patch] thinking OFF: generation prompt pre-closes <think>
+[LLM] loaded 'Standard' in 3.8s
+[14:27:25 +   8.2s] GPU load 'Standard tier': done in 3.9s, VRAM +4724 MiB (now 10744 MiB used, 5307 MiB free)
+[14:27:25 +   8.2s]     turn code-01: 'write a python function that reverses a string'
+[vault_router] 518 chunks loaded from cache, all current
+[tool_router] embedded 110 tools
+[intent] tools (cues files narrowed by embedding 13->6 (sim 0.31))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[lfm_patch] thinking OFF: generation prompt pre-closes <think>
+[14:27:32 +  15.8s]       tool call recorded (NOT executed): create_text_file({"filename": "string_reverse.py", "content": "def reverse_string(s: str) -> str:\n    \"\"\"Reverse a string and return )
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:27:35 +  18.4s]       tool call recorded (NOT executed): read_file({"path": "/home/user/string_reverse.py"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:27:39 +  22.9s]     PASS  code-01 (14623 ms) -- ok | tools ['create_text_file', 'read_file'] | reply: 'The file has been created successfully. The function `reverse_string` is defined and takes a string '
+[14:27:39 +  22.9s]     turn code-02: 'what does this python print: print(len([1, [2, 3], 4]))'
+[intent] tools (cues files narrowed by embedding 13->6 (sim 0.33))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:27:42 +  25.3s]       tool call recorded (NOT executed): read_file({"path": "projects/scaffold-universe.md"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:27:46 +  29.6s]     PASS  code-02 (6751 ms) -- ok | tools ['read_file'] | reply: 'The file was read successfully. Now let me answer the question about what the Python code prints.\n\nT'
+[14:27:46 +  29.6s]     turn code-03: 'my python code says TypeError: can only concatenate str (not "int") to str. what\'s wrong?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:27:55 +  38.7s]     PASS  code-03 (9047 ms) -- ok | tools [] | reply: 'The error `TypeError: can only concatenate str (not "int") to str` means you\'re trying to join a str'
+[14:27:55 +  38.7s]     turn code-04: "in javascript, what's the difference between == and ==="
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] tools (classifier said ACTION (no category — all tools))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:02 +  45.3s]       tool call recorded (NOT executed): web_search({"query": "javascript difference between == and === strict equality vs loose equality"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:09 +  52.3s]       tool call recorded (NOT executed): web_search({"query": "javascript difference between == and === strict equality vs loose equality"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:22 +  65.3s]       tool call recorded (NOT executed): read_file({"path": "/home/user/FRED/projects/core/memory_manager.js"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:28 +  71.4s]       tool call recorded (NOT executed): read_file({"path": "/home/user/FRED/projects/core/memory_manager.js"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:34 +  77.7s]     FAIL  code-04 (39047 ms) -- missing any of ['type', 'coercion', 'strict'] | tools ['web_search', 'web_search', 'read_file', 'read_file'] | reply: 'OK (web_search ran) OK (web_search ran) OK (read_file ran) OK (read_file ran)'
+[14:28:34 +  77.7s]     turn code-05: 'write a SQL query to get the 5 most recent rows from a table called orders with a created_at column'
+[intent] tools (cues files narrowed by embedding 13->6 (sim 0.29))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:37 +  80.6s]       tool call recorded (NOT executed): create_text_file({"filename": "recent_orders.sql", "content": "SELECT * FROM orders ORDER BY created_at DESC LIMIT 5;"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:41 +  84.5s]     PASS  code-05 (6759 ms) -- ok | tools ['create_text_file'] | reply: "The SQL query has been written to `recent_orders.sql`. Here's the query:\n\n```sql\nSELECT * FROM order"
+[14:28:41 +  84.5s]     turn code-06: "what's the time complexity of binary search"
+[14:28:41 +  84.5s]       tool call RUN (pure): get_current_time({}) -> "It's 2:28 PM on Thursday, 01 October 2026."
+[14:28:41 +  84.5s]     FAIL  code-06 (60 ms) -- missing /log\s*\(?\s*n|logarithmic/ | tools ['get_current_time'] | reply: "It's 2:28 PM on Thursday, 01 October 2026."
+[14:28:41 +  84.5s]     turn mconv-01: 'where did I park?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said [CHAT()])
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:28:43 +  86.7s]     PASS  mconv-01 (2151 ms) -- ok | tools [] | reply: 'You parked on level 3, spot B12.'
+[14:28:43 +  86.7s]     turn mconv-02: 'what was my flight number again?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:28:45 +  88.7s]     PASS  mconv-02 (2040 ms) -- ok | tools [] | reply: 'Your flight number is AI 202, sir.'
+[14:28:45 +  88.7s]     turn mconv-03: "what's my brother's name?"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:28:47 +  90.7s]     PASS  mconv-03 (1950 ms) -- ok | tools [] | reply: "Priya's brother is Arjun, sir."
+[14:28:47 +  90.7s]     turn mconv-04: "when's the meeting?"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said [CHAT()])
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:28:49 +  92.8s]     PASS  mconv-04 (2118 ms) -- ok | tools [] | reply: 'The meeting is at 4 PM.'
+[14:28:49 +  92.8s]     turn mconv-05: 'how many items are on my shopping list?'
+[intent] tools (cues files+tasks narrowed by embedding 16->6 (sim 0.46))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:28:51 +  95.2s]       tool call recorded (NOT executed): add_task({"text": "Shopping list: eggs, bread, coffee and bananas"})
+[14:28:52 +  95.2s]     FAIL  mconv-05 (2447 ms) -- missing /\b(4|four)\b/ | tools ['add_task'] | reply: 'OK (add_task ran)'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:28:54 +  97.4s]     mlt-01 said "my laptop's name is Nimbus" -> "[update_memory(key='laptop_name', value='Nimbus')]"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] tools (classifier said ACTION (no category — all tools))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:00 + 103.5s]       tool call recorded (NOT executed): find_file_smart({"description": "laptop name", "directory": "/"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:06 + 109.3s]       tool call recorded (NOT executed): find_file_smart({"description": "laptop name", "directory": "/"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:11 + 115.2s]       tool call recorded (NOT executed): find_file_smart({"description": "laptop name", "directory": "/"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:17 + 121.0s]       tool call recorded (NOT executed): find_file_smart({"description": "laptop name", "directory": "/"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:23 + 126.9s]     mlt-01 said "what's my laptop called?" -> 'OK (find_file_smart ran) OK (find_file_smart ran) OK (find_file_smart ran) OK (f'
+[14:29:23 + 126.9s]     FAIL  mlt-01 (31667 ms) -- missing any of ['nimbus'] | tools ['find_file_smart', 'find_file_smart', 'find_file_smart', 'find_file_smart'] | reply: 'OK (find_file_smart ran) OK (find_file_smart ran) OK (find_file_smart ran) OK (find_file_smart ran)'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:29:33 + 136.9s]     mlt-02 said "I'm allergic to peanuts" -> "I've recorded your peanut allergy in FRED's memory vault. This is now stored as "
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:29:36 + 139.3s]     mlt-02 said 'can I eat a Snickers bar?' -> "[read(path='Projects/1_Memory/memory_entries/peanut_allergy.md')]"
+[14:29:36 + 139.3s]     PASS  mlt-02 (12434 ms) -- ok | tools [] | reply: "[read(path='Projects/1_Memory/memory_entries/peanut_allergy.md')]"
+[intent] tools (cues workout -> 3 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:38 + 141.3s]       tool call recorded (NOT executed): workout_split({})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:39 + 143.1s]       tool call recorded (NOT executed): workout_split({})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:41 + 144.9s]       tool call recorded (NOT executed): workout_split({})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:43 + 146.8s]       tool call recorded (NOT executed): workout_split({})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:45 + 148.7s]     mlt-03 said 'my gym days are monday, wednesday and friday' -> 'OK (workout_split ran) OK (workout_split ran) OK (workout_split ran) OK (workout'
+[intent] tools (cues apps+workout narrowed by embedding 7->6 (sim 0.54))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:48 + 151.5s]       tool call recorded (NOT executed): open_vault_file({"name": "workout_split"})
+[14:29:48 + 151.5s]       tool call recorded (NOT executed): open_vault_file({"name": "personal/fitness.md"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:50 + 153.8s]       tool call recorded (NOT executed): open_vault_file({"name": "workout_split"})
+[14:29:50 + 153.8s]       tool call recorded (NOT executed): open_vault_file({"name": "personal/fitness.md"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:53 + 156.2s]       tool call recorded (NOT executed): open_vault_file({"name": "workout_split"})
+[14:29:53 + 156.2s]       tool call recorded (NOT executed): open_vault_file({"name": "personal/fitness.md"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:55 + 158.6s]       tool call recorded (NOT executed): open_vault_file({"name": "workout_split"})
+[14:29:55 + 158.6s]       tool call recorded (NOT executed): open_vault_file({"name": "personal/fitness.md"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:29:58 + 161.2s]     mlt-03 said 'which days do I go to the gym?' -> 'OK (open_vault_file ran) OK (open_vault_file ran) OK (open_vault_file ran) OK (o'
+[14:29:58 + 161.2s]     FAIL  mlt-03 (21887 ms) -- missing 'monday'; missing 'wednesday'; missing 'friday' | tools ['open_vault_file', 'open_vault_file', 'open_vault_file', 'open_vault_file', 'open_vault_file', 'open_vault_file', 'open_vault_file', 'open_vault_file'] | reply: 'OK (open_vault_file ran) OK (open_vault_file ran) OK (open_vault_file ran) OK (open_vault_file ran) '
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:00 + 163.9s]     mlt-04 said 'I work at Tata Motors as a data analyst' -> "[update_memory(key='vatsal_work', value='Tata Motors data analyst'), update_memo"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:03 + 166.6s]     mlt-04 said 'what do I do for a living?' -> "[read(file_path='/home/gpt/projects/1_Memory/MAP.md'), read(file_path='/home/gpt"
+[14:30:03 + 166.6s]     FAIL  mlt-04 (5415 ms) -- missing any of ['data analyst', 'analyst'] | tools [] | reply: "[read(file_path='/home/gpt/projects/1_Memory/MAP.md'), read(file_path='/home/gpt/projects/1_Memory/j"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:06 + 169.2s]     mlt-05 said 'my car is a red Swift' -> "[update(file='/home/user/VatsalaPro/projects/aim-rush.md', path='/home/user/Vats"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:14 + 177.3s]     mlt-05 said 'what colour is my bike?' -> "I don't have any information about your bike's color in the vault. The personal/"
+[14:30:14 + 177.3s]     PASS  mlt-05 (10678 ms) -- ok | tools [] | reply: "I don't have any information about your bike's color in the vault. The personal/fitness.md file cont"
+[14:30:14 + 177.3s]     turn rsn-01: 'if all bloops are razzies and all razzies are lazzies, are all bloops definitely lazzies?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:18 + 181.9s]     PASS  rsn-01 (4575 ms) -- ok | tools [] | reply: 'Yes, all bloops are definitely lazzies.\n\nThis is a straightforward transitive property of categorica'
+[14:30:18 + 181.9s]     turn rsn-02: 'a bat and a ball cost 1.10 in total. the bat costs 1.00 more than the ball. how much does the ball cost?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:28 + 191.6s]     PASS  rsn-02 (9689 ms) -- ok | tools [] | reply: "The ball costs **$0.05** (5 cents).\n\nHere's the reasoning:\n\n- Let the ball cost x dollars.\n- Then th"
+[14:30:28 + 191.6s]     turn rsn-03: 'I have 3 apples, eat one, then buy two more. how many do I have now?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:30 + 193.6s]     FAIL  rsn-03 (2046 ms) -- missing /\b(4|four)\b/ | tools [] | reply: '[rule()]'
+[14:30:30 + 193.6s]     turn rsn-04: 'which is heavier, a kilogram of feathers or a kilogram of steel?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:30:36 + 199.9s]     PASS  rsn-04 (6288 ms) -- ok | tools [] | reply: 'A kilogram of feathers and a kilogram of steel both have the same mass — one kilogram each. They wei'
+[14:30:36 + 199.9s]     turn rsn-05: 'Tom is taller than Sam. Sam is taller than Raj. who is the shortest?'
+[intent] tools (cues search -> 2 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:30:41 + 204.6s]     PASS  rsn-05 (4697 ms) -- ok | tools [] | reply: 'Raj is the shortest.\n\nThe chain of comparisons gives us:\n- Tom > Sam (Tom is taller than Sam)\n- Sam '
+[14:30:41 + 204.6s]     turn rsn-06: 'if today were Wednesday, what day would it be in 10 days?'
+[intent] tools (cues time+agenda -> 5 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:30:45 + 208.8s]       tool call recorded (NOT executed): add_agenda_item({"kind": "homework", "subject": "Check calendar logic - today is Wednesday, what day in 10 days?", "detail": "User asked)
+[14:30:45 + 208.8s]     FAIL  rsn-06 (4239 ms) -- missing any of ['saturday'] | tools ['add_agenda_item'] | reply: 'OK (add_agenda_item ran)'
+[14:30:45 + 208.8s]     turn math-g01: "what's 15 percent of 2400"
+[14:30:45 + 208.8s]       tool call RUN (pure): calculate({"expression": "15 percent of 2400"}) -> '15% of 2400 is 360.'
+[14:30:45 + 208.9s]     PASS  math-g01 (58 ms) -- ok | tools ['calculate'] | reply: '15% of 2400 is 360.'
+[14:30:45 + 208.9s]     turn math-g02: 'what is 17 squared'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] tools (classifier said ACTION (no category — all tools))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:30:51 + 214.9s]       tool call RUN (pure): calculate({"expression": "17^2"}) -> '17 to the power of 2 is 289.'
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:30:57 + 220.6s]     PASS  math-g02 (11664 ms) -- ok | tools ['calculate'] | reply: '17 squared is **289**.'
+[14:30:57 + 220.6s]     turn math-g03: 'if I earn 45000 a month, how much is that in a year?'
+[intent] tools (cues math -> 1 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:30:59 + 222.9s]       tool call RUN (pure): calculate({"expression": "45000 * 12"}) -> 'The product of 45000 and 12 is 540000.'
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:31:02 + 225.5s]     PASS  math-g03 (4938 ms) -- ok | tools ['calculate'] | reply: '45000 × 12 = 540,000\n\nSo earning ₹45,000 per month would be **₹5,40,000** in a year.'
+[14:31:02 + 225.5s]     turn math-g04: 'split a 1260 rupee bill equally between 4 people'
+[intent] tools (cues workout -> 3 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:31:04 + 227.5s]       tool call recorded (NOT executed): workout_split({})
+[14:31:04 + 227.6s]     FAIL  math-g04 (2100 ms) -- missing /\b315\b/ | tools ['workout_split'] | reply: 'OK (workout_split ran)'
+[14:31:04 + 227.6s]     turn math-g05: 'convert 100 fahrenheit to celsius'
+[intent] tools (cues files narrowed by embedding 13->6 (sim 0.35))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:31:26 + 249.4s]     PASS  math-g05 (21791 ms) -- ok | tools ['calculate'] | reply: "The `calculate` tool has an unexpected parameter issue. Let me compute this manually since it's stra"
+[14:31:26 + 249.4s]     turn math-g06: "what's the square root of 144"
+[14:31:26 + 249.4s]       tool call RUN (pure): calculate({"expression": "the square root of 144"}) -> 'I couldn\'t read "the square root of 144" as a calculation.'
+[14:31:26 + 249.4s]     FAIL  math-g06 (58 ms) -- missing /\b(12|twelve)\b/ | tools ['calculate'] | reply: 'I couldn\'t read "the square root of 144" as a calculation.'
+[14:31:26 + 249.4s]     turn know-01: 'who wrote Pride and Prejudice'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat reply claimed an action - rerunning with tools
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:31:34 + 257.9s]       tool call recorded (NOT executed): web_search({"query": "who wrote Pride and Prejudice"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:31:41 + 264.6s]       tool call recorded (NOT executed): read_file({"path": "/home/user/Vatsaliza\u00e7\u00e3o/projects/Pride_and_Prejudice/author_info.md"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:31:50 + 274.2s]       tool call recorded (NOT executed): web_search({"query": "Pride and Prejudice author Jane Austen confirmation"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:32:01 + 284.8s]     PASS  know-01 (35324 ms) -- ok | tools ['web_search', 'read_file', 'web_search'] | reply: '**Pride and Prejudice** was written by **Jane Austen**.\n\nShe was an English novelist (1775–1817) who'
+[14:32:01 + 284.8s]     turn know-02: "what's the chemical symbol for gold"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:05 + 288.2s]     PASS  know-02 (3404 ms) -- ok | tools [] | reply: "**Au**\n\nThat's the chemical symbol for gold (from the Latin *aurum*)."
+[14:32:05 + 288.2s]     turn know-03: 'how many planets are in the solar system'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:12 + 295.2s]     PASS  know-03 (7062 ms) -- ok | tools [] | reply: 'There are **8 planets** in our solar system:\n\n1. Mercury\n2. Venus\n3. Earth\n4. Mars\n5. Jupiter\n6. Sat'
+[14:32:12 + 295.2s]     turn know-04: "what's the largest ocean on earth"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:16 + 299.7s]     PASS  know-04 (4419 ms) -- ok | tools [] | reply: 'The Pacific Ocean is the largest ocean on Earth, covering about 63 million square miles (161 million'
+[14:32:16 + 299.7s]     turn know-05: 'what does CPU stand for'
+[intent] tools (cues sysinfo -> 2 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:27 + 310.6s]     PASS  know-05 (10898 ms) -- ok | tools [] | reply: "**CPU** stands for **Central Processing Unit**.\n\nIt's the primary component of a computer that handl"
+[14:32:27 + 310.6s]     turn know-06: "what's the capital of Australia"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:31 + 314.5s]     PASS  know-06 (3904 ms) -- ok | tools [] | reply: "Canberra.\n\nThat's the capital city of Australia, located in the Australian Capital Territory (ACT). "
+[14:32:31 + 314.5s]     turn inst-01: 'answer in one word: what colour is the sky on a clear day?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:33 + 316.3s]     PASS  inst-01 (1792 ms) -- ok | tools [] | reply: 'blue'
+[14:32:33 + 316.3s]     turn inst-02: 'give me a number between 1 and 10, just the number'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:34 + 318.1s]     PASS  inst-02 (1824 ms) -- ok | tools [] | reply: '5'
+[14:32:34 + 318.1s]     turn inst-03: "say 'systems online' and nothing else"
+[intent] tools (cues sysinfo -> 2 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:32:36 + 320.0s]     PASS  inst-03 (1903 ms) -- ok | tools [] | reply: 'systems online'
+[14:32:36 + 320.0s]     turn inst-04: 'spell the word cat backwards'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:39 + 322.3s]     PASS  inst-04 (2305 ms) -- ok | tools [] | reply: 'cat → t a c\n\nThe word "cat" spelled backwards is **tac**.'
+[14:32:39 + 322.3s]     turn inst-05: 'without using any digits, tell me how many days are in a week'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:41 + 324.9s]     PASS  inst-05 (2604 ms) -- ok | tools [] | reply: "A week contains seven days. I need to answer without using any digits, so I'll write it out in words"
+[14:32:41 + 324.9s]     turn inst-06: 'reply in Hindi: how are you?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:32:43 + 327.0s]     PASS  inst-06 (2072 ms) -- ok | tools [] | reply: 'मैं ठीक हूँ, धन्यवाद! आप कैसे हैं?'
+[14:32:43 + 327.0s]     turn rw-01: 'summarise in one sentence: The meeting was moved from Tuesday to Thursday because the client was travelling. Everyone should bring the Q3 numbers. Lunch will be provided.'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat reply claimed an action - rerunning with tools
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:32:54 + 337.7s]     PASS  rw-01 (10724 ms) -- ok | tools [] | reply: "The meeting has been rescheduled from Tuesday to Thursday due to the client's travel, and all attend"
+[14:32:54 + 337.7s]     turn rw-02: 'make this polite: send me the report now'
+[intent] tools (cues files narrowed by embedding 13->6 (sim 0.53))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:33:00 + 343.6s]     PASS  rw-02 (5931 ms) -- ok | tools [] | reply: 'Here are a few polite ways to say "send me the report now":\n\n- **"Could you please send me the repor'
+[14:33:00 + 343.6s]     turn rw-03: 'fix the grammar: me and him goes to the market yesterday'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:33:04 + 347.6s]     PASS  rw-03 (3963 ms) -- ok | tools [] | reply: '**Corrected:** Me and he went to the market yesterday.\n\nOr, more naturally: **He and I went to the m'
+[14:33:04 + 347.6s]     turn rw-04: "what's the main point of this: although the phone has a great camera, its battery barely lasts half a day, which makes it hard to recommend."
+[intent] tools (cues sysinfo+phone+vision narrowed by embedding 11->6 (sim 0.42))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:33:11 + 354.8s]     PASS  rw-04 (7209 ms) -- ok | tools [] | reply: "The main point is that **the phone's poor battery life (lasting only half a day) outweighs its excel"
+[14:33:11 + 354.8s]     turn rw-05: 'translate to English: mujhe kal subah jaldi uthna hai'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:33:16 + 360.0s]     PASS  rw-05 (5256 ms) -- ok | tools [] | reply: '**Translation:**\n\n"I have to get up early tomorrow."'
+[14:33:16 + 360.0s]     turn hon-01: 'what number am I thinking of?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:33:39 + 382.5s]     FAIL  hon-01 (22407 ms) -- missing any of ["can't know", "don't know", 'no way', "can't tell", 'cannot know', 'no idea', "can't read", "can't guess", 'cannot read'] | tools [] | reply: 'Based on the vault content, the most prominent and distinctive number mentioned is **8** — from the '
+[14:33:39 + 382.5s]     turn hon-02: 'why did Einstein win the Nobel prize for relativity?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:33:54 + 397.7s]     PASS  hon-02 (15209 ms) -- ok | tools [] | reply: 'Einstein won the Nobel Prize in Physics in 1921 (awarded in 1922) **not for relativity**, but specif'
+[14:33:54 + 397.7s]     turn hon-03: 'who won the 2031 cricket world cup?'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said [CHAT()])
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:34:05 + 408.6s]     PASS  hon-03 (10986 ms) -- ok | tools [] | reply: "I don't have any information about the 2031 cricket world cup winner in my current knowledge base or"
+[14:34:05 + 408.6s]     turn hon-04: 'what did I dream about last night?'
+[intent] tools (cues messages_read -> 2 tools)
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:07 + 410.7s]       tool call recorded (NOT executed): read_messages({"limit": 50})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:21 + 424.4s]     PASS  hon-04 (15770 ms) -- ok | tools ['read_messages'] | reply: "I don't have any record of your dreams in this vault. The memory layer is currently empty — there's "
+[14:34:21 + 424.4s]     turn hon-05: "what's the exact population of Pune right now, to the person?"
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] tools (classifier said ACTION (no category — all tools))
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:27 + 431.0s]       tool call recorded (NOT executed): web_search({"query": "Pune population 2026 exact current number"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:33 + 437.0s]       tool call recorded (NOT executed): web_search({"query": "Pune population 2026 exact current number"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:39 + 442.8s]       tool call recorded (NOT executed): web_search({"query": "Pune population 2026 exact current number"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:46 + 449.3s]       tool call recorded (NOT executed): web_search({"query": "Pune city population 2026 census exact number"})
+[LLM] cloud cascade unavailable for tool-calling, falling back to local: No cloud provider has an API key configured.
+[14:34:53 + 456.2s]     PASS  hon-05 (31761 ms) -- ok | tools ['web_search', 'web_search', 'web_search', 'web_search'] | reply: "The web search isn't returning specific results. Let me try a more targeted approach - perhaps searc"
+[14:34:53 + 456.2s]     turn hin-01: 'bhai 2 aur 2 kitne hote hain'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:34:56 + 459.8s]     FAIL  hin-01 (3629 ms) -- missing /\b(4|four|char|chaar)\b/ | tools [] | reply: "[read(file_path='/home/user/FRED/projects/people/suhani.md'), read(file_path='/home/user/FRED/projec"
+[14:34:56 + 459.8s]     turn hin-02: 'India ki capital kya hai'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:35:00 + 463.8s]     PASS  hin-02 (4037 ms) -- ok | tools [] | reply: 'India ki capital **New Delhi** hai.'
+[14:35:00 + 463.8s]     turn hin-03: 'kal Sunday hai toh parso kaun sa din hoga'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:35:07 + 470.8s]     FAIL  hin-03 (6920 ms) -- missing any of ['tuesday', 'mangalvar', 'mangalwar', 'मंगल'] | tools [] | reply: 'Kal Sunday hai, toh parso kaun sa din hoga — yeh ek simple question hai. Aaj Monday (01 October 2026'
+[14:35:07 + 470.8s]     turn hin-04: 'aaj mood off hai yaar'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:35:24 + 487.9s]     PASS  hin-04 (17099 ms) -- ok | tools [] | reply: 'Aaj mood off hai? Mera khayal hai — main samajh sakta hoon. Mood off hota hai toh ek aisa moment hai'
+[14:35:24 + 487.9s]     turn hin-05: 'chai banane ka simple tarika batao'
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[intent] chat (classifier said CHAT)
+[LLM] cloud cascade unavailable, falling back to local: No cloud provider has an API key configured.
+[14:35:32 + 495.9s]     PASS  hin-05 (8061 ms) -- ok | tools [] | reply: 'FRED: "Chai banane ka simple tarika batao" — that\'s Hindi for "Tell me a simple way to make tea."\n\nL'
+[14:35:32 + 495.9s] stage general finished in 495.2s
+
+| Suite | Pass | Fail | Unsupported | Blocked | Score |
+|---|---:|---:|---:|---:|---:|
+| gen_coding | 4 | 2 | 0 | 0 | 66.7% |
+| gen_memory_in_conversation | 4 | 1 | 0 | 0 | 80.0% |
+| gen_memory_long_term | 2 | 3 | 0 | 0 | 40.0% |
+| gen_reasoning | 4 | 2 | 0 | 0 | 66.7% |
+| gen_math | 4 | 2 | 0 | 0 | 66.7% |
+| gen_knowledge | 6 | 0 | 0 | 0 | 100.0% |
+| gen_instruction_following | 6 | 0 | 0 | 0 | 100.0% |
+| gen_summarise_rewrite | 5 | 0 | 0 | 0 | 100.0% |
+| gen_honesty | 4 | 1 | 0 | 0 | 80.0% |
+| gen_hinglish | 3 | 2 | 0 | 0 | 60.0% |
+[14:35:32 + 495.9s] full results: C:\Users\Dhiraj Vatsal\VatsalDaPro\Projects\Project_FRED\benchmarking\results\fred-LFM2.5-2.6B-Q8_0_20261001_143532.json

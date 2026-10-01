@@ -1,0 +1,80 @@
+llama_context: n_ctx_seq (4096) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
+llama_kv_cache: the V embeddings have different sizes across layers and FA is not enabled - padding V cache to 512
+[on   ] PASS   1.9s think= 182 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs 5 cents.'
+[on   ] FAIL   1.1s think=  96 tok | 'if today were Wednesday, what day would ' -> 'If today is Wednesday, in 10 days it would be Friday.'
+[on   ] PASS   0.7s think=  59 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[on   ] PASS   0.9s think=  79 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka jodo 4 hote hain.'
+[on   ] PASS   1.6s think= 107 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Maybe take a break, listen to some music, or just step outside for fre"
+[on   ] PASS   1.1s think=  65 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner because it hasn't happened yet - that's a fut"
+[on   ] PASS   1.0s think=  65 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[on   ] PASS   0.5s think=  35 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[on   ] PASS   0.5s think=  42 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[on   ] PASS   0.7s think=  56 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[on   ] PASS   0.9s think=  76 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[on   ] PASS   0.6s think=  49 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[off  ] PASS   1.3s think=   0 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs 10 cents. Let me verify: if the ball is $0.10, then the bat costs $1.00 more, so $1.10, and tog'
+[off  ] FAIL   0.2s think=   0 tok | 'if today were Wednesday, what day would ' -> 'If today is Wednesday, in 10 days it would be Monday.'
+[off  ] PASS   0.1s think=   0 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[off  ] PASS   0.2s think=   0 tok | 'bhai 2 aur 2 kitne hote hain' -> 'Bhai, 2 aur 2 ka matlab hai 4 hote hain.'
+[off  ] PASS   0.5s think=   0 tok | 'aaj mood off hai yaar' -> "Mood off? I'm FRED, I don't have feelings but I can help you lift your spirits. Want to talk about what's both"
+[off  ] FAIL   0.3s think=   0 tok | 'who won the 2031 cricket world cup?' -> "[google(query='2031 cricket world cup winner'), google(query='2031 ICC Cricket World Cup final result')]"
+[off  ] PASS   0.2s think=   0 tok | 'summarise in one sentence: The meeting w' -> 'The meeting has been rescheduled to Thursday with Q3 numbers required and lunch provided.'
+[off  ] PASS   0.1s think=   0 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[off  ] PASS   0.1s think=   0 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[off  ] PASS   0.1s think=   0 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[off  ] PASS   0.1s think=   0 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[off  ] PASS   0.1s think=   0 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[brief] PASS   2.1s think= 183 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs $0.05 (5 cents). The bat costs $1.05, and together they total $1.10.'
+[brief] PASS   1.1s think=  74 tok | 'if today were Wednesday, what day would ' -> 'If today is Wednesday, adding 10 days would make it Saturday (Wednesday + 7 days = Wednesday, plus 3 more days'
+[brief] PASS   0.6s think=  51 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[brief] PASS   0.8s think=  64 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka jawab 4 hai.'
+[brief] PASS   1.1s think=  78 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Would you like to talk about what's on your mind, or maybe try some qu"
+[brief] PASS   1.4s think=  79 tok | 'who won the 2031 cricket world cup?' -> "I don't have any information about the 2031 cricket world cup winner, as that event is in the future and I don"
+[brief] PASS   1.8s think= 158 tok | 'summarise in one sentence: The meeting w' -> 'The meeting has been rescheduled to Thursday due to client travel, and everyone should bring the Q3 numbers wh'
+[brief] PASS   0.7s think=  65 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[brief] PASS   0.6s think=  48 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[brief] PASS   0.7s think=  61 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[brief] PASS   0.6s think=  53 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[brief] PASS   0.6s think=  50 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[cap32] PASS   0.9s think=  32 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs $0.05. Let me verify: if the ball is $0.05, then the bat costs $1.05 (which is $1.00 more than '
+[cap32] FAIL   0.5s think=  32 tok | 'if today were Wednesday, what day would ' -> 'If today is Wednesday, in 10 days it would be Sunday.'
+[cap32] PASS   0.5s think=  32 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap32] FAIL   2.9s think= 257 tok | 'bhai 2 aur 2 kitne hote hain' -> 'Dekhok 2 aur 2 mein 2 cheezein hain - do do.'
+[cap32] PASS   0.8s think=  32 tok | 'aaj mood off hai yaar' -> "I understand you're feeling down today. I'm here to help - would you like to talk about what's bothering you, "
+[cap32] PASS   0.9s think=  32 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner since that event hasn't happened yet. My know"
+[cap32] PASS   0.7s think=  32 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap32] PASS   0.5s think=  32 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap32] PASS   0.5s think=  32 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[cap32] PASS   0.5s think=  32 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[cap32] PASS   0.5s think=  32 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[cap32] PASS   0.4s think=  32 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[cap64] FAIL   0.7s think=  64 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs 10 cents.'
+[cap64] FAIL   0.7s think=  64 tok | 'if today were Wednesday, what day would ' -> 'It would be Tuesday.'
+[cap64] PASS   0.7s think=  59 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap64] PASS   0.8s think=  64 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka total 4 hote hain.'
+[cap64] PASS   1.0s think=  64 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Want to talk about what's on your mind, or would you like some quick m"
+[cap64] PASS   1.2s think=  64 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner since that's a future event beyond my knowled"
+[cap64] PASS   0.9s think=  64 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap64] PASS   0.5s think=  36 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap64] PASS   0.5s think=  42 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[cap64] PASS   0.7s think=  56 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[cap64] PASS   0.7s think=  64 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[cap64] PASS   0.6s think=  57 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+[cap96] PASS   1.5s think=  96 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs $0.05. The bat costs $1.05, and together they total $1.10. The intuitive answer of $0.10 is wro'
+[cap96] FAIL   0.9s think=  87 tok | 'if today were Wednesday, what day would ' -> 'It would be Friday.'
+[cap96] PASS   0.7s think=  59 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap96] PASS   0.9s think=  79 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka total 4 hote hain.'
+[cap96] PASS   1.4s think=  96 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm sorry to hear that. Take a break, maybe do something small that makes you feel better - ev"
+[cap96] PASS   1.2s think=  78 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup since that event hasn't happened yet. My knowledge o"
+[cap96] PASS   1.0s think=  65 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap96] PASS   0.5s think=  39 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap96] PASS   0.5s think=  42 tok | "what's 12 times 13" -> '12 times 13 is 156.'
+[cap96] PASS   0.8s think=  68 tok | 'my meeting starts at 3 pm and lasts 90 m' -> 'Your meeting ends at 4:30 pm.'
+[cap96] PASS   0.9s think=  76 tok | 'which is bigger, 0.8 or 0.75?' -> '0.8 is bigger than 0.75.'
+[cap96] PASS   0.7s think=  57 tok | "what's the capital of Japan" -> 'The capital of Japan is Tokyo.'
+on   : 11/12 correct, mean 1.0s, max 1.9s, mean think 76 tok
+off  : 10/12 correct, mean 0.3s, max 1.3s, mean think 0 tok
+brief: 12/12 correct, mean 1.0s, max 2.1s, mean think 80 tok
+cap32: 10/12 correct, mean 0.8s, max 2.9s, mean think 51 tok
+cap64: 10/12 correct, mean 0.7s, max 1.2s, mean think 58 tok
+cap96: 11/12 correct, mean 0.9s, max 1.5s, mean think 70 tok
