@@ -1,5 +1,6 @@
 """Standalone (no FRED pipeline): LFM2.5's three thinking modes on the same prompts.
 
+    capN  - hard cap: at most N thinking tokens, then </think> is forced
     on    - template default, the reply starts inside <think>
     off   - <think></think> pre-closed (what LFM_NO_THINK does in the benchmark)
     brief - thinking on, plus a system instruction to keep the reasoning short
@@ -7,6 +8,7 @@
     Core\\venv\\Scripts\\python.exe think_modes.py
 """
 
+import sys
 import time
 from pathlib import Path
 
@@ -34,19 +36,32 @@ def prompt(user, mode):
     return p + ("</think>" if mode == "off" else "")
 
 
+def capped(user, cap):
+    """Hard cap: think for at most `cap` tokens, then force </think> and generate the answer."""
+    p = prompt(user, "on")
+    think = m.create_completion(p, max_tokens=cap, temperature=0.1, stop=["</think>"])["choices"][0]["text"]
+    answer = m.create_completion(p + think + "</think>", max_tokens=512, temperature=0.1,
+                                 stop=["<|im_end|>"])["choices"][0]["text"]
+    return think + "</think>" + answer
+
+
 m = Llama(str(HERE / "models" / "LFM2.5-2.6B-Q8_0.gguf"), n_gpu_layers=-1, n_ctx=4096, verbose=False)
+MODES = sys.argv[1:] or ["on", "off", "brief"]  # e.g. cap32 cap64 cap128
 rows = []
-for mode in ("on", "off", "brief"):
+for mode in MODES:
     for user in PROMPTS:
         t = time.perf_counter()
-        out = m.create_completion(prompt(user, mode), max_tokens=1024, temperature=0.1, stop=["<|im_end|>"])
+        if mode.startswith("cap"):
+            text = capped(user, int(mode[3:]))
+        else:
+            text = m.create_completion(prompt(user, mode), max_tokens=1024, temperature=0.1,
+                                       stop=["<|im_end|>"])["choices"][0]["text"]
         secs = time.perf_counter() - t
-        text = out["choices"][0]["text"]
         think, _, answer = text.rpartition("</think>") if mode != "off" else ("", "", text)
         rows.append((mode, user, len(m.tokenize(think.encode(), add_bos=False)), secs, answer.strip()))
         print(f"[{mode:5}] {secs:5.1f}s think={rows[-1][2]:4} tok | {user[:40]!r} -> {answer.strip()[:110]!r}", flush=True)
 
-for mode in ("on", "off", "brief"):
+for mode in MODES:
     r = [x for x in rows if x[0] == mode]
     print(f"{mode:5}: mean {sum(x[3] for x in r) / len(r):.1f}s, max {max(x[3] for x in r):.1f}s, "
           f"mean think {sum(x[2] for x in r) / len(r):.0f} tok")

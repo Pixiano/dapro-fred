@@ -1,0 +1,27 @@
+[cap32]   1.2s think=  32 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs $0.05. Let me verify: if the ball is $0.05, then the bat costs $1.05 (which is $1.00 more than '
+[cap32]   0.5s think=  32 tok | 'if today were Wednesday, what day would ' -> 'If today is Wednesday, 10 days from now would be Sunday.'
+[cap32]   0.6s think=  32 tok | "what's 15 percent of 2400" -> '15% of 2400 is 360.'
+[cap32]   2.1s think= 150 tok | 'bhai 2 aur 2 kitne hote hain' -> 'Dua aur doon kitne hote hain? Jawab hai: 4.'
+[cap32]   0.7s think=  32 tok | 'aaj mood off hai yaar' -> "Mood off today? I'm here to help lift it up. What's on your mind?"
+[cap32]   1.3s think=  32 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup since that's a future event. My knowledge has a cuto"
+[cap32]   0.7s think=  32 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap32]   0.5s think=  32 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap64]   0.9s think=  64 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs 10 cents.'
+[cap64]   0.9s think=  64 tok | 'if today were Wednesday, what day would ' -> 'Thursday.'
+[cap64]   0.8s think=  59 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap64]   1.0s think=  64 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 ka total 4 hote hain.'
+[cap64]   1.3s think=  64 tok | 'aaj mood off hai yaar' -> "Mood off? I'm here to help lift it up. Want to chat, get some recommendations, or just vent? I'm all ears. 😊"
+[cap64]   1.3s think=  64 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup since that event hasn't happened yet. My knowledge o"
+[cap64]   1.7s think=  64 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap64]   1.2s think=  44 tok | 'good morning' -> 'Good morning! How can I help you today?'
+[cap96]   3.1s think=  96 tok | 'a bat and a ball cost 1.10 in total. the' -> 'The ball costs $0.05. The bat costs $1.05, and together they total $1.10. The intuitive answer of $0.10 is wro'
+[cap96]   2.2s think=  95 tok | 'if today were Wednesday, what day would ' -> 'If today is Wednesday, in 10 days it would be Friday.'
+[cap96]   1.6s think=  67 tok | "what's 15 percent of 2400" -> '15 percent of 2400 is 360.'
+[cap96]   1.8s think=  79 tok | 'bhai 2 aur 2 kitne hote hain' -> '2 aur 2 milta hai 4.'
+[cap96]   2.5s think=  96 tok | 'aaj mood off hai yaar' -> 'Mood off hone toh normal hai, koi baat nahi. 😊 Aaj thoda relax karo, chai par baitho ya koi aise cheezon se di'
+[cap96]   2.0s think=  96 tok | 'who won the 2031 cricket world cup?' -> "I don't have information about the 2031 cricket world cup winner, as that event is in the future and I can't p"
+[cap96]   1.3s think=  70 tok | 'summarise in one sentence: The meeting w' -> "The meeting has been rescheduled to Thursday due to the client's travel, and everyone should bring the Q3 numb"
+[cap96]   0.5s think=  36 tok | 'good morning' -> 'Good morning! How can I help you today?'
+cap32: mean 1.0s, max 2.1s, mean think 47 tok
+cap64: mean 1.1s, max 1.7s, mean think 61 tok
+cap96: mean 1.9s, max 3.1s, mean think 79 tok
