@@ -16,6 +16,9 @@ import json
 import re
 
 CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.DOTALL)
+# Measured 2026-10-01: llama-cpp-python still drops both markers from the text (despite
+# special=false in tokenizer.json), so FRED actually receives the bare list.
+BARE = re.compile(r"\[\s*[A-Za-z_]\w*\(.*\)\s*\]", re.DOTALL)
 GEN_TAGS = re.compile(r"\{%-?\s*(end)?generation\s*-?%\}")
 
 
@@ -50,15 +53,18 @@ def apply(orchestrator_cls):
     def parse_text_tool_calls(self, content):
         calls = parse(self, content)
         valid = set(self.tools.list_tools())
-        for block in CALLS.findall(content or ""):
-            for name, args in pythonic_calls(block):
-                if name in valid:
-                    calls.append({"id": f"lfm_call_{len(calls)}",
-                                  "function": {"name": name, "arguments": json.dumps(args)}})
+        blocks = CALLS.findall(content or "") or BARE.findall(content or "")
+        for block in blocks:
+            found = pythonic_calls(block)
+            if found and all(name in valid for name, _ in found):
+                calls += [{"id": f"lfm_call_{len(calls) + i}",
+                           "function": {"name": name, "arguments": json.dumps(args)}}
+                          for i, (name, args) in enumerate(found)]
         return calls
 
     def looks_like_leaked_tool_syntax(self, text):
-        return leaked(self, text) or "<|tool_call_start|>" in (text or "")
+        return (leaked(self, text) or "<|tool_call_start|>" in (text or "")
+                or bool(re.match(r"\s*\[\s*[A-Za-z_]\w*\(", text or "")))
 
     orchestrator_cls._parse_text_tool_calls = parse_text_tool_calls
     orchestrator_cls._looks_like_leaked_tool_syntax = looks_like_leaked_tool_syntax
@@ -81,6 +87,12 @@ if __name__ == "__main__":
     assert fred._parse_text_tool_calls("<|tool_call_start|>[not_a_tool(x=1)]<|tool_call_end|>") == []
     assert fred._parse_text_tool_calls("<|tool_call_start|>[get_weather(location=city)]<|tool_call_end|>") == []
     assert fred._parse_text_tool_calls("It's 30 degrees in Pune, sir.") == []
+    # what llama-cpp-python actually hands FRED (markers dropped)
+    calls = fred._parse_text_tool_calls("[set_volume(level=40), get_weather(location='Pune')]")
+    assert [c["function"]["name"] for c in calls] == ["set_volume", "get_weather"]
+    assert fred._parse_text_tool_calls("[list_tasks()]")[0]["function"]["name"] == "list_tasks"
+    assert fred._parse_text_tool_calls("Options: [print(x)] or [len(y)]") == []
+    assert fred._looks_like_leaked_tool_syntax("[get_weather(location='Pune')]")
     assert fred._looks_like_leaked_tool_syntax("<|tool_call_start|>[get_weather(")
     assert not fred._looks_like_leaked_tool_syntax("Done, sir.")
     from llama_cpp.llama_chat_format import Jinja2ChatFormatter
