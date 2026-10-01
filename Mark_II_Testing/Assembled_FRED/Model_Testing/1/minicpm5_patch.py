@@ -66,7 +66,7 @@ if __name__ == "__main__":
     import sys
     import types
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "Core"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "Core"))
     from orchestrator.orchestrator import FREDOrchestrator
     apply(FREDOrchestrator)
     fred = FREDOrchestrator.__new__(FREDOrchestrator)

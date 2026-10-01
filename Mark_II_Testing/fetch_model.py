@@ -31,7 +31,11 @@ BASES = {
     "minicpmo45": ("openbmb/MiniCPM-o-4_5", "503e754207c94da6bb26850b4469f367c9ea3582",
                    "MiniCPM-o-4.5/1/models/MiniCPM-o-4_5", None),
     "minicpm5": ("openbmb/MiniCPM5-2B-GGUF", "2079a22f3beaa4e306449978533478fe0522f4b3",
-                 "MiniCPM5-2B/1/models", "MiniCPM5-2B-Q8_0.gguf"),
+                 "Assembled_FRED/Model_Testing/1/models", "MiniCPM5-2B-Q8_0.gguf"),
+    "lfm25": ("LiquidAI/LFM2.5-2.6B-GGUF", "e7caca5d835a3901a8e0d63e94009429bafafdfc",
+              "Assembled_FRED/Model_Testing/2/models", "LFM2.5-2.6B-Q8_0.gguf"),
+    "mercury": ("mradermacher/AgentMercury-Qwen3.5-4B-GGUF", "8751c57bdd9128d03cb4968afb028410700259a4",
+                "Assembled_FRED/Model_Testing/3/models", "AgentMercury-Qwen3.5-4B.Q6_K.gguf"),
 }
 
 
