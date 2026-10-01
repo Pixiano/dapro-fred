@@ -1,11 +1,11 @@
-"""Standalone (no FRED pipeline): LFM2.5's three thinking modes on the same prompts.
+"""Standalone (no FRED pipeline): a contender's thinking modes on the same scored prompts.
 
     capN  - hard cap: at most N thinking tokens, then </think> is forced
     on    - template default, the reply starts inside <think>
     off   - <think></think> pre-closed (what LFM_NO_THINK does in the benchmark)
     brief - thinking on, plus a system instruction to keep the reasoning short
 
-    Core\\venv\\Scripts\\python.exe think_modes.py
+    Core\\venv\\Scripts\\python.exe think_modes.py lfm|mercury [modes...]
 """
 
 import re
@@ -18,9 +18,12 @@ from llama_cpp import Llama
 HERE = Path(__file__).resolve().parent
 SYSTEM = "You are FRED, a voice assistant. Answer in one or two short spoken sentences."
 BRIEF = " Think briefly - at most two short sentences of reasoning - then answer directly."
-# (prompt, regex the spoken answer must match). The 2026-10-01 bat-and-ball and weekday
-# questions were dropped (coin flips for this model at n=1); four new ones added.
+# (prompt, regex the spoken answer must match): the first 8-question set (2026-10-01)
+# plus four added when its bat-and-ball and weekday questions proved coin flips at n=1.
 PROMPTS = [
+    ("a bat and a ball cost 1.10 in total. the bat costs 1.00 more than the ball. how much does the ball cost?",
+     r"0?\.05\b|\b5 cents|five cents"),
+    ("if today were Wednesday, what day would it be in 10 days?", r"saturday"),
     ("what's 15 percent of 2400", r"\b360\b"),
     ("bhai 2 aur 2 kitne hote hain", r"\b(4|four|char|chaar)\b"),
     ("aaj mood off hai yaar", r"sorry|what's wrong|kya hua|what happened|talk|here|baat"),
@@ -35,10 +38,18 @@ PROMPTS = [
 ]
 
 
+# name: (gguf, generation-prompt opener, what "off" appends) - both from the GGUF's own chat template
+MODELS = {
+    "lfm": (HERE / "models" / "LFM2.5-2.6B-Q8_0.gguf", "<think>", "</think>"),
+    "mercury": (HERE.parent / "3" / "models" / "AgentMercury-Qwen3.5-4B.Q6_K.gguf", "<think>\n", "\n</think>\n\n"),
+}
+GGUF, OPEN, CLOSE = MODELS[sys.argv[1]]
+
+
 def prompt(user, mode):
     system = SYSTEM + (BRIEF if mode == "brief" else "")
-    p = f"<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n<think>"
-    return p + ("</think>" if mode == "off" else "")
+    p = f"<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n{OPEN}"
+    return p + (CLOSE if mode == "off" else "")
 
 
 def capped(user, cap):
@@ -50,8 +61,8 @@ def capped(user, cap):
     return think + "</think>" + answer
 
 
-m = Llama(str(HERE / "models" / "LFM2.5-2.6B-Q8_0.gguf"), n_gpu_layers=-1, n_ctx=4096, verbose=False)
-MODES = sys.argv[1:] or ["on", "off", "brief"]  # e.g. cap32 cap64 cap128
+m = Llama(str(GGUF), n_gpu_layers=-1, n_ctx=4096, verbose=False)
+MODES = sys.argv[2:] or ["on", "off", "brief", "cap32", "cap64", "cap96"]
 rows = []
 for mode in MODES:
     for user, want in PROMPTS:
