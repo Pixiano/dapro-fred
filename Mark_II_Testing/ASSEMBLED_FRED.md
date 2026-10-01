@@ -470,3 +470,13 @@ None for v1. Optional later, in order of payoff:
   - Later: the 2B brain.
 
   A small-LLM successor search (≤4B, fine-tunes especially) is running.
+- 2026-10-01 (Vatsal): the assembled architecture is the direction, but its
+  specifics aren't decided yet.
+  - **The phased build order above is cancelled**, Phase 0 included.
+  - The turn-detection models (VAD, Smart Turn v3, voice ID) may run on
+    the CPU.
+  - Weights deleted to free disk: MiniCPM-o 2.6 and 4.5, MiniCPM5-2B, and
+    Venus's `models/wheels` (~42 GB in total).
+  - Restore with `fetch_model.py minicpmo26|minicpmo45|minicpm5`. Venus's
+    wheels must be rebuilt per its README.
+  - Successor search results: `docs/2026/09/30/research_small_llm_successor.md`.
