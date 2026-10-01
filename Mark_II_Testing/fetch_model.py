@@ -36,6 +36,11 @@ BASES = {
               "Assembled_FRED/Model_Testing/2/models", "LFM2.5-2.6B-Q8_0.gguf"),
     "mercury": ("mradermacher/AgentMercury-Qwen3.5-4B-GGUF", "8751c57bdd9128d03cb4968afb028410700259a4",
                 "Assembled_FRED/Model_Testing/3/models", "AgentMercury-Qwen3.5-4B.Q6_K.gguf"),
+    "qwen3emb06": ("Qwen/Qwen3-Embedding-0.6B-GGUF", "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
+                   "Assembled_FRED/Embedder_Testing/models", "Qwen3-Embedding-0.6B-Q8_0.gguf"),
+    # no official reranker GGUF exists; community conversion (QuantFactory), used only by Embedder_Testing
+    "qwen3rerank06": ("QuantFactory/Qwen3-Reranker-0.6B-GGUF", "9bdee8f1ad01d7896a20823d5affd66c494eee8b",
+                      "Assembled_FRED/Embedder_Testing/models", "Qwen3-Reranker-0.6B.Q8_0.gguf"),
 }
 
 

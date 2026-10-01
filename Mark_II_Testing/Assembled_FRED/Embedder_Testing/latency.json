@@ -1,0 +1,59 @@
+{
+ "4B_ctx4096": {
+  "vram_delta_mib_after_load": 3379,
+  "vram_delta_mib_after_use": 3411,
+  "load_s": 3.42,
+  "short_query": {
+   "median_ms": 40.27,
+   "p95_ms": 48.14,
+   "runs": 200
+  },
+  "chunk_300tok": {
+   "median_ms": 155.33,
+   "p95_ms": 171.73,
+   "runs": 200
+  },
+  "avg_chunk_tokens": 288.7,
+  "reindex_400_chunks_s": 59.6,
+  "reindex_chunks_per_s": 6.71,
+  "reindex_1000_chunks_min": 2.49
+ },
+ "4B_ctx1024": {
+  "vram_delta_mib_after_load": 2832,
+  "vram_delta_mib_after_use": 2830,
+  "load_s": 3.29,
+  "short_query": {
+   "median_ms": 35.6,
+   "p95_ms": 38.74,
+   "runs": 200
+  },
+  "chunk_300tok": {
+   "median_ms": 152.96,
+   "p95_ms": 168.63,
+   "runs": 200
+  },
+  "avg_chunk_tokens": 288.6,
+  "reindex_400_chunks_s": 58.2,
+  "reindex_chunks_per_s": 6.88,
+  "reindex_1000_chunks_min": 2.42
+ },
+ "06B_ctx4096": {
+  "vram_delta_mib_after_load": 1345,
+  "vram_delta_mib_after_use": 1366,
+  "load_s": 2.69,
+  "short_query": {
+   "median_ms": 24.54,
+   "p95_ms": 26.11,
+   "runs": 200
+  },
+  "chunk_300tok": {
+   "median_ms": 71.46,
+   "p95_ms": 75.98,
+   "runs": 200
+  },
+  "avg_chunk_tokens": 288.4,
+  "reindex_400_chunks_s": 28.6,
+  "reindex_chunks_per_s": 14.01,
+  "reindex_1000_chunks_min": 1.19
+ }
+}
