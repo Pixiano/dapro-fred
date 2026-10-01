@@ -133,3 +133,87 @@ Short queries are the FRED-prefixed memory questions; chunks average 288 tokens;
 - Not done: no real Hinglish/voice-transcript data (per instruction no new Hinglish data), no real memory log, no fine-tuning of the 0.6B. FRED's frozen real-utterance holdout (in `Core/data`) was deliberately not read.
 - Parallelism: the three reranker passes ran as separate processes with separate caches (results independent of order); embedding passes and all latency/VRAM measurements ran with the GPU otherwise idle.
 - No vault text appears in this document or in `results.json`; per-case vault ranks are kept only in the job tmp dir.
+
+## Large tool-routing test
+
+Added 2026-10-01 after the n=65 tool-routing result (-4.6 R@1, CI about +-10) could not separate the configs. Harness: `Mark_II_Testing/Assembled_FRED/Embedder_Testing/tools_large.py`; results `tools_large.json`, dev tuning `tools_large_dev.json`, utterances `data/tools_large_utterances.json` (invented content only). Nothing in `Core/` was edited; `Core/data` (the frozen real-utterance holdout) was not read.
+
+**Configs (exactly three).** (1) 4B Q4_K_M with FRED's generic query instruction, no centering (today). (2) plain 0.6B Q8_0, same config. (3) 0.6B with a tool-specific query instruction + centering on the 110 tool vectors. No reranker, no tuned 4B.
+
+**Data.** 439 English tool utterances written for this test (every one of the 110 tools has at least 3; imperative and question forms, short spoken style, typos and ASR slips such as "op" for OTP and "R.A.M.", email-vs-WhatsApp and read-vs-send pairs, calendar/tasks/reminders, near-duplicate tools, argument-heavy requests) plus 75 negatives (chit-chat, general knowledge, opinions). Gold is any-of (a few items accept two tools). 21 candidate utterances were dropped because they matched a `TOOL_EXAMPLES` phrase or a `benchmarking/cases` utterance verbatim. Split 50/50 by category (12 functional groups), seed 20261001: DEV 220 positives + 37 negatives, TEST 219 positives (99 distinct gold tools) + 38 negatives. All TEST numbers below are the TEST half only; nothing was tuned on it.
+
+**DEV tuning (config 3 only).** Four instruction wordings x centering on/off (8 cells), picked by DEV MRR. Centering helped every wording (+7 to +9 pts R@1). Frozen: W2 + centering = "Given a short spoken command to a PC voice assistant, retrieve the tool whose description matches the action the user wants carried out". Tuned-on DEV numbers (R@1 / R@5 / MRR, n=220): config 1: 78.6 / 95.0 / 0.860; config 2: 75.9 / 95.9 / 0.839; config 3: 85.0 / 98.6 / 0.905. DEV is optimistic for config 3 because it was selected there (85.0 on DEV vs 78.5 on TEST); DEV is also an easier half for all three.
+
+### TEST results (n=219; bootstrap 95% CIs, 4000 resamples)
+
+| metric | (1) 4B today | (2) 0.6B plain | (3) 0.6B + recipe |
+|---|---|---|---|
+| R@1 | 73.5 [67.6, 79.5] | 71.2 [65.3, 77.2] | 78.5 [73.1, 84.0] |
+| R@3 | 90.9 [86.8, 94.5] | 85.4 [80.8, 90.0] | 92.2 [88.6, 95.4] |
+| R@5 | 94.1 [90.9, 96.8] | 90.0 [85.8, 93.6] | 95.9 [93.2, 98.2] |
+| MRR | 0.825 [0.784, 0.864] | 0.796 [0.750, 0.839] | 0.862 [0.824, 0.898] |
+| End-to-end tool reach (dispatcher -> cues -> embedding menu, floor 0.65) | 69.9 [63.9, 75.8] | 68.5 [62.1, 74.4] | 73.5 [67.6, 79.5] |
+| False trigger, embedder-only path (n=38, floor 0.65) | 0/38 | 0/38 | 0/38 |
+| False trigger, any path | 3/38 (7.9%) | 3/38 | 3/38 |
+
+Gap to config (1), points [95% CI] and exact paired test on the same 219 utterances (A right / B wrong vs the reverse):
+
+| gap | R@1 | R@3 | R@5 | MRR (pts) | top-1 paired | top-5 paired | reach gap | reach paired |
+|---|---|---|---|---|---|---|---|---|
+| (2) - (1) | -2.3 [-7.3, +3.2] | -5.5 [-10.0, -1.4] | -4.1 [-7.8, -0.9] | -2.9 [-6.4, +0.6] | 16 vs 21, p=0.51 | 3 vs 12, p=0.035 | -1.4 [-3.2, +0.5] | 1 vs 4, p=0.38 |
+| (3) - (1) | +5.0 [-0.9, +11.4] | +1.4 [-1.8, +4.6] | +1.8 [-0.9, +4.6] | +3.7 [0.0, +7.5] | 30 vs 19, p=0.15 | 7 vs 3, p=0.34 | +3.7 [+0.5, +7.3] | 12 vs 4, p=0.077 |
+| (3) - (2) | +7.3 [+1.4, +13.2] | +6.8 [+2.7, +11.0] | +5.9 [+2.7, +9.6] | +6.6 [+2.5, +10.6] | 30 vs 14, p=0.023 | 15 vs 2, p=0.002 | +5.0 [+2.3, +8.2] | 12 vs 1, p=0.003 |
+
+### Reading the table
+
+- **Plain 0.6B vs 4B (today): a tie on top-1, a small real loss deeper in the list.** R@1 -2.3 (CI crosses 0, p=0.51), but R@3/R@5 are -5.5/-4.1 with CIs excluding 0 (top-5 paired p=0.035). End-to-end reach differs by one-to-four utterances (p=0.38).
+- **0.6B + recipe vs 4B (today): point estimates favour the 0.6B (+5.0 R@1, +3.7 MRR), but R@1 does not clear noise** (CI includes 0, p=0.15). End-to-end reach +3.7 pts has a CI that just excludes 0 (+0.5 to +7.3) while the paired test does not (p=0.077). Honest reading: no worse than the 4B; "better" is suggestive, not established at n=219.
+- **The recipe is a real gain over plain 0.6B** (+7.3 R@1, p=0.023; R@5 +5.9, p=0.002; reach +5.0, p=0.003). The configuration lever is again larger than the model-size lever.
+- **Selection caveat:** wording and centering were chosen on DEV; the DEV-to-TEST drop (85.0 -> 78.5) shows part of the DEV gain was selection. The TEST numbers are unbiased for these frozen settings.
+
+### False triggers and the 0.65 floor
+
+- No negative reaches the floor for any config: top-1 cosine >= 0.65 on 0/38 negatives (95% upper bound about 9% at n=38). Median top-1 on negatives 0.26 / 0.32 / 0.29 vs 0.54 / 0.58 / 0.62 on positives. Score separation (AUROC of top-1, positives vs negatives): 0.982 (4B), 0.954 (plain 0.6B), 0.941 (recipe). The 4B separates tool from non-tool best, but all three are good.
+- The 3 any-path false triggers (7.9%) are the same 3 negatives for every config and come from FRED's cue regexes, not the embedder.
+- The floor 0.65 is very conservative on the embedding-only path: it admits only 12.8% (4B), 18.7% (plain 0.6B) and 41.6% (recipe, because centered scores sit higher) of positives. Reach on the 39 embedding-only test utterances is 12.8% / 7.7% / 17.9%, on the 159 cue-matched ones 83.6% / 83.0% / 87.4%; the 21 dispatcher cases are 71.4% for all (embedder not involved). The floor is therefore not the 0.6B's problem, but it leaves reach on the table for every model.
+- Secondary, floor re-calibrated on DEV negatives only (95th percentile of DEV-negative top-1): floors 0.371 / 0.466 / 0.412; reach rises to 88.6 / 85.8 / 86.8% with embedder-path false triggers of 2.6% / 5.3% / 5.3% on TEST negatives (1, 2, 2 of 38; any path 10.5 / 13.2 / 13.2%). Indicative only (n=38).
+- The shipped 0.65 floor is safe for false triggers with the recipe's centered vectors (0/38), but it was never calibrated for centered scores.
+
+### Per-category (TEST, R@1 %; R@5 is in the JSON)
+
+| category | n | 4B today | 0.6B plain | 0.6B + recipe |
+|---|---|---|---|---|
+| system/info | 27 | 96.3 | 81.5 | 96.3 |
+| audio/display | 22 | 86.4 | 86.4 | 86.4 |
+| windows/apps | 19 | 73.7 | 78.9 | 84.2 |
+| files | 29 | 69.0 | 58.6 | 75.9 |
+| email | 14 | 78.6 | 57.1 | 78.6 |
+| messaging/phone | 28 | 64.3 | 75.0 | 82.1 |
+| reminders/tasks/agenda | 29 | 62.1 | 65.5 | 62.1 |
+| self/vault/lockdown | 25 | 68.0 | 64.0 | 60.0 |
+| ac | 9 | 77.8 | 77.8 | 88.9 |
+| web/agents | 8 | 37.5 | 62.5 | 75.0 |
+| dev | 5 | 80.0 | 80.0 | 100 |
+| vision | 4 | 100 | 75.0 | 75.0 |
+
+By style (4B / plain / recipe): plain (n=87) 81.6 / 77.0 / 81.6; question (34) 64.7 / 67.6 / 70.6; typo/ASR slip (18) 77.8 / 66.7 / 83.3; confusable/short (41) 63.4 / 61.0 / 75.6; argument-heavy (39) 71.8 / 74.4 / 79.5. Most cells have n under 30, so differences of one or two items are noise. The weak spots common to all three are reminders/tasks/agenda (62-66) and self/vault/lockdown (60-68), where tool meanings overlap.
+
+### Tools most often confused (top-1 wrong; gold -> predicted)
+
+- 4B today: lockdown_engage -> confirm_lockdown_lift (3), search_email -> read_email (3), web_search -> delegate_research (2), web_search -> get_current_time (2), set_brightness -> adjust_brightness (2), search_files -> find_file_smart (2), send_message -> read_messages (2), list_contact_tiers -> send_message (2).
+- Plain 0.6B: search_email -> read_email (3), lockdown_engage -> confirm_lockdown_lift (2), add_task -> complete_task (2), check_email -> read_email (2); most-predicted wrong tools: read_email, create_text_file, call_phone.
+- 0.6B + recipe: read_file -> open_vault_file (2); the rest are singletons (launch_application -> lockdown_engage / open_path, web_search -> delegate_research, set_input_device and set_output_device -> list_audio_devices); its wrong predictions are the most diffuse of the three.
+- Recurring near-duplicate pairs across configs: search_email / read_email / check_email, lockdown_engage / confirm_lockdown_lift, web_search / delegate_research, get-vs-set-vs-adjust pairs (brightness, volume, AC), search_files / find_file_smart. These are description overlaps that an instruction cannot fully separate.
+
+### Caveats
+
+- Utterances were written by one author (the same one as the harness) and are tidy typed text, not real transcripts; real speech and the real-utterance holdout may be harder. The 18 typo/ASR items are a small slice.
+- Gold labels are judgments: several near-duplicate pairs (add_task vs add_agenda_item, search_files vs find_file_smart, set_alarm vs schedule_reminder) are only partly separable from the utterance; any-of gold covers only the obvious ties, so all configs are penalised alike on arguable cases.
+- TEST n=219 gives a single-config CI of about +-6 points and a paired-gap CI of about +-6; R@1 gaps under about 6 points are ties unless the paired test says otherwise. Per-category cells (n 4 to 29) are descriptive only.
+- Negatives n=38: false-trigger rates have wide intervals (0/38 means an upper bound near 9%).
+- Reach is dominated by FRED's regexes, not the embedder: 159 of 219 test utterances are cue-matched, 21 reach the dispatcher (6 of those 21 fire a different tool than gold, identically for all configs). Embedder differences in reach are diluted.
+- The 4B is the shipped Q4_K_M, the 0.6B is Q8_0, as in the earlier benchmark. The metric code has a self-test (`tools_large.py selftest`, which also runs the base `selftest`).
+
+### Verdict
+
+The 0.6B Q8_0 with the tool-specific instruction + centering is **safe for tool routing**: on 219 held-out utterances it is at least as good as the 4B running FRED's current settings (R@1 78.5 vs 73.5, not significantly different; reach 73.5 vs 69.9) with no embedder false triggers on 38 negatives. The plain 0.6B ties the 4B on top-1 but loses about 4 to 6 points at R@3/R@5, so the recipe carries the safety, not the model swap alone. A routing head or fine-tune is **not required** to match today; it remains the route to go further, since every config sits at 70-80% R@1 and the errors are overlap pairs (email read/search, lockdown, web/research) that a trained head or sharper tool descriptions address more cheaply than a larger embedder. Revisit only if the real-utterance holdout shows the same ceiling.

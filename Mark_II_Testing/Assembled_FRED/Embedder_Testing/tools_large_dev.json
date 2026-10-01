@@ -1,0 +1,87 @@
+{
+ "dev_n": 220,
+ "grid_0.6B": {
+  "W1|center=0": {
+   "n": 220,
+   "r1": 0.7227272727272728,
+   "r3": 0.9090909090909091,
+   "r5": 0.9363636363636364,
+   "mrr": 0.8169396282145353
+  },
+  "W1|center=1": {
+   "n": 220,
+   "r1": 0.8090909090909091,
+   "r3": 0.95,
+   "r5": 0.9818181818181818,
+   "mrr": 0.8829166666666667
+  },
+  "W2|center=0": {
+   "n": 220,
+   "r1": 0.7727272727272727,
+   "r3": 0.9227272727272727,
+   "r5": 0.9454545454545454,
+   "mrr": 0.85070695718423
+  },
+  "W2|center=1": {
+   "n": 220,
+   "r1": 0.85,
+   "r3": 0.9590909090909091,
+   "r5": 0.9863636363636363,
+   "mrr": 0.9053030303030304
+  },
+  "W3|center=0": {
+   "n": 220,
+   "r1": 0.6954545454545454,
+   "r3": 0.8636363636363636,
+   "r5": 0.9090909090909091,
+   "mrr": 0.7884319656443787
+  },
+  "W3|center=1": {
+   "n": 220,
+   "r1": 0.7818181818181819,
+   "r3": 0.9545454545454546,
+   "r5": 0.9727272727272728,
+   "mrr": 0.8670284828807556
+  },
+  "W4|center=0": {
+   "n": 220,
+   "r1": 0.7636363636363637,
+   "r3": 0.9136363636363637,
+   "r5": 0.95,
+   "mrr": 0.8441806403960554
+  },
+  "W4|center=1": {
+   "n": 220,
+   "r1": 0.8409090909090909,
+   "r3": 0.9590909090909091,
+   "r5": 0.9863636363636363,
+   "mrr": 0.900151515151515
+  }
+ },
+ "baselines_dev": {
+  "4B_ctx4096": {
+   "n": 220,
+   "r1": 0.7863636363636364,
+   "r3": 0.9227272727272727,
+   "r5": 0.95,
+   "mrr": 0.8602698982304245
+  },
+  "06B_ctx4096": {
+   "n": 220,
+   "r1": 0.759090909090909,
+   "r3": 0.9090909090909091,
+   "r5": 0.9590909090909091,
+   "mrr": 0.8393661926855706
+  }
+ },
+ "frozen": {
+  "wording": "W2",
+  "center": true
+ },
+ "words": {
+  "W1": "Given a user request to a voice assistant, retrieve the description of the tool that should handle it",
+  "W2": "Given a short spoken command to a PC voice assistant, retrieve the tool whose description matches the action the user wants carried out",
+  "W3": "Match the user's spoken request to the single assistant tool that can carry it out",
+  "W4": "Given a short spoken request, retrieve the tool description that names the operation being asked for, both the verb and the thing it acts on"
+ }
+}

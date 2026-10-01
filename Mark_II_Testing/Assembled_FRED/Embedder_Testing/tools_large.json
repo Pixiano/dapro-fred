@@ -1,0 +1,867 @@
+{
+ "meta": {
+  "frozen_wording": "W2",
+  "wording_text": "Given a short spoken command to a PC voice assistant, retrieve the tool whose description matches the action the user wants carried out",
+  "frozen_center": true,
+  "n_test_pos": 219,
+  "n_test_neg": 38,
+  "n_dev_pos": 220,
+  "n_dev_neg": 37,
+  "n_total_pos": 439,
+  "n_total_neg": 75,
+  "dropped_verbatim": 21,
+  "tools_without_utterance": [],
+  "tools_in_test": 99,
+  "semantic_floor": 0.65
+ },
+ "configs": {
+  "1_4B_fred_today": {
+   "n": 219,
+   "r1": 0.7351598173515982,
+   "r3": 0.908675799086758,
+   "r5": 0.9406392694063926,
+   "mrr": 0.825178206795275,
+   "ci95_pct": {
+    "r1": [
+     67.6,
+     79.5
+    ],
+    "r3": [
+     86.8,
+     94.5
+    ],
+    "r5": [
+     90.9,
+     96.8
+    ],
+    "mrr": [
+     78.4,
+     86.4
+    ]
+   },
+   "by_category": {
+    "ac": {
+     "n": 9,
+     "r1": 0.778,
+     "r5": 1.0
+    },
+    "audio/display": {
+     "n": 22,
+     "r1": 0.864,
+     "r5": 1.0
+    },
+    "dev": {
+     "n": 5,
+     "r1": 0.8,
+     "r5": 1.0
+    },
+    "email": {
+     "n": 14,
+     "r1": 0.786,
+     "r5": 0.929
+    },
+    "files": {
+     "n": 29,
+     "r1": 0.69,
+     "r5": 0.931
+    },
+    "messaging/phone": {
+     "n": 28,
+     "r1": 0.643,
+     "r5": 0.929
+    },
+    "reminders/tasks/agenda": {
+     "n": 29,
+     "r1": 0.621,
+     "r5": 0.966
+    },
+    "self/vault/lockdown": {
+     "n": 25,
+     "r1": 0.68,
+     "r5": 0.84
+    },
+    "system/info": {
+     "n": 27,
+     "r1": 0.963,
+     "r5": 1.0
+    },
+    "vision": {
+     "n": 4,
+     "r1": 1.0,
+     "r5": 1.0
+    },
+    "web/agents": {
+     "n": 8,
+     "r1": 0.375,
+     "r5": 0.75
+    },
+    "windows/apps": {
+     "n": 19,
+     "r1": 0.737,
+     "r5": 0.947
+    }
+   },
+   "by_style": {
+    "argument-heavy": {
+     "n": 39,
+     "r1": 0.718
+    },
+    "confusable/short": {
+     "n": 41,
+     "r1": 0.634
+    },
+    "plain": {
+     "n": 87,
+     "r1": 0.816
+    },
+    "question": {
+     "n": 34,
+     "r1": 0.647
+    },
+    "typo/ASR slip": {
+     "n": 18,
+     "r1": 0.778
+    }
+   },
+   "top_confusions": [
+    [
+     "lockdown_engage -> confirm_lockdown_lift",
+     3
+    ],
+    [
+     "search_email -> read_email",
+     3
+    ],
+    [
+     "web_search -> delegate_research",
+     2
+    ],
+    [
+     "web_search -> get_current_time",
+     2
+    ],
+    [
+     "set_brightness -> adjust_brightness",
+     2
+    ],
+    [
+     "search_files -> find_file_smart",
+     2
+    ],
+    [
+     "send_message -> read_messages",
+     2
+    ],
+    [
+     "list_contact_tiers -> send_message",
+     2
+    ],
+    [
+     "add_task -> add_agenda_item",
+     2
+    ],
+    [
+     "launch_application -> recall_recent_conversation",
+     1
+    ]
+   ],
+   "most_often_predicted_when_wrong": [
+    [
+     "confirm_lockdown_lift",
+     3
+    ],
+    [
+     "list_directory",
+     3
+    ],
+    [
+     "read_email",
+     3
+    ],
+    [
+     "send_message",
+     3
+    ],
+    [
+     "add_agenda_item",
+     3
+    ],
+    [
+     "delegate_research",
+     2
+    ],
+    [
+     "get_current_time",
+     2
+    ],
+    [
+     "set_volume",
+     2
+    ]
+   ],
+   "scores": {
+    "top1_median_pos": 0.537,
+    "top1_median_neg": 0.255,
+    "share_pos_top1_ge_floor": 0.128,
+    "share_neg_top1_ge_floor": 0.0,
+    "auroc_pos_vs_neg_top1": 0.982
+   },
+   "pipeline_floor_0.65": {
+    "reach": 0.6986301369863014,
+    "reach_ci95_pct": [
+     63.9,
+     75.8
+    ],
+    "strict_reach": 0.6986301369863014,
+    "by_path": {
+     "dispatcher": {
+      "n": 21,
+      "reach": 0.714
+     },
+     "cue": {
+      "n": 159,
+      "reach": 0.836
+     },
+     "embedding-only": {
+      "n": 39,
+      "reach": 0.128
+     }
+    },
+    "false_trigger_any_path": 0.07894736842105263,
+    "false_trigger_ci95_pct": [
+     0.0,
+     18.4
+    ],
+    "false_trigger_embedding_only": 0.0,
+    "false_trigger_embedding_only_ci95_pct": [
+     0.0,
+     0.0
+    ],
+    "false_trigger_by_cause": {
+     "dispatcher": 0,
+     "cue": 3,
+     "embedding-only": 0
+    }
+   },
+   "pipeline_dev_calibrated_floor": {
+    "floor": 0.371,
+    "reach": 0.8858447488584474,
+    "reach_ci95_pct": [
+     84.5,
+     92.7
+    ],
+    "false_trigger_embedding_only": 0.02631578947368421,
+    "false_trigger_any_path": 0.10526315789473684
+   }
+  },
+  "2_0.6B_fred_cfg": {
+   "n": 219,
+   "r1": 0.7123287671232876,
+   "r3": 0.8538812785388128,
+   "r5": 0.8995433789954338,
+   "mrr": 0.7960437693400741,
+   "ci95_pct": {
+    "r1": [
+     65.3,
+     77.2
+    ],
+    "r3": [
+     80.8,
+     90.0
+    ],
+    "r5": [
+     85.8,
+     93.6
+    ],
+    "mrr": [
+     75.0,
+     83.9
+    ]
+   },
+   "by_category": {
+    "ac": {
+     "n": 9,
+     "r1": 0.778,
+     "r5": 1.0
+    },
+    "audio/display": {
+     "n": 22,
+     "r1": 0.864,
+     "r5": 1.0
+    },
+    "dev": {
+     "n": 5,
+     "r1": 0.8,
+     "r5": 1.0
+    },
+    "email": {
+     "n": 14,
+     "r1": 0.571,
+     "r5": 1.0
+    },
+    "files": {
+     "n": 29,
+     "r1": 0.586,
+     "r5": 0.759
+    },
+    "messaging/phone": {
+     "n": 28,
+     "r1": 0.75,
+     "r5": 0.857
+    },
+    "reminders/tasks/agenda": {
+     "n": 29,
+     "r1": 0.655,
+     "r5": 0.862
+    },
+    "self/vault/lockdown": {
+     "n": 25,
+     "r1": 0.64,
+     "r5": 0.88
+    },
+    "system/info": {
+     "n": 27,
+     "r1": 0.815,
+     "r5": 1.0
+    },
+    "vision": {
+     "n": 4,
+     "r1": 0.75,
+     "r5": 1.0
+    },
+    "web/agents": {
+     "n": 8,
+     "r1": 0.625,
+     "r5": 0.75
+    },
+    "windows/apps": {
+     "n": 19,
+     "r1": 0.789,
+     "r5": 0.895
+    }
+   },
+   "by_style": {
+    "argument-heavy": {
+     "n": 39,
+     "r1": 0.744
+    },
+    "confusable/short": {
+     "n": 41,
+     "r1": 0.61
+    },
+    "plain": {
+     "n": 87,
+     "r1": 0.77
+    },
+    "question": {
+     "n": 34,
+     "r1": 0.676
+    },
+    "typo/ASR slip": {
+     "n": 18,
+     "r1": 0.667
+    }
+   },
+   "top_confusions": [
+    [
+     "search_email -> read_email",
+     3
+    ],
+    [
+     "lockdown_engage -> confirm_lockdown_lift",
+     2
+    ],
+    [
+     "add_task -> complete_task",
+     2
+    ],
+    [
+     "check_email -> read_email",
+     2
+    ],
+    [
+     "open_website -> get_weather",
+     1
+    ],
+    [
+     "launch_application -> lockdown_engage",
+     1
+    ],
+    [
+     "launch_application -> create_text_file",
+     1
+    ],
+    [
+     "web_search -> delegate_research",
+     1
+    ],
+    [
+     "web_search -> open_last_found",
+     1
+    ],
+    [
+     "get_weather -> get_network_status",
+     1
+    ]
+   ],
+   "most_often_predicted_when_wrong": [
+    [
+     "read_email",
+     5
+    ],
+    [
+     "create_text_file",
+     4
+    ],
+    [
+     "call_phone",
+     3
+    ],
+    [
+     "get_active_hours_summary",
+     3
+    ],
+    [
+     "todays_workout",
+     3
+    ],
+    [
+     "complete_task",
+     3
+    ],
+    [
+     "delegate_research",
+     2
+    ],
+    [
+     "set_volume",
+     2
+    ]
+   ],
+   "scores": {
+    "top1_median_pos": 0.578,
+    "top1_median_neg": 0.324,
+    "share_pos_top1_ge_floor": 0.187,
+    "share_neg_top1_ge_floor": 0.0,
+    "auroc_pos_vs_neg_top1": 0.954
+   },
+   "pipeline_floor_0.65": {
+    "reach": 0.684931506849315,
+    "reach_ci95_pct": [
+     62.1,
+     74.4
+    ],
+    "strict_reach": 0.684931506849315,
+    "by_path": {
+     "dispatcher": {
+      "n": 21,
+      "reach": 0.714
+     },
+     "cue": {
+      "n": 159,
+      "reach": 0.83
+     },
+     "embedding-only": {
+      "n": 39,
+      "reach": 0.077
+     }
+    },
+    "false_trigger_any_path": 0.07894736842105263,
+    "false_trigger_ci95_pct": [
+     0.0,
+     18.4
+    ],
+    "false_trigger_embedding_only": 0.0,
+    "false_trigger_embedding_only_ci95_pct": [
+     0.0,
+     0.0
+    ],
+    "false_trigger_by_cause": {
+     "dispatcher": 0,
+     "cue": 3,
+     "embedding-only": 0
+    }
+   },
+   "pipeline_dev_calibrated_floor": {
+    "floor": 0.466,
+    "reach": 0.8584474885844748,
+    "reach_ci95_pct": [
+     81.3,
+     90.4
+    ],
+    "false_trigger_embedding_only": 0.05263157894736842,
+    "false_trigger_any_path": 0.13157894736842105
+   }
+  },
+  "3_0.6B_tool_instr+center": {
+   "n": 219,
+   "r1": 0.7853881278538812,
+   "r3": 0.9223744292237442,
+   "r5": 0.958904109589041,
+   "mrr": 0.861804855469239,
+   "ci95_pct": {
+    "r1": [
+     73.1,
+     84.0
+    ],
+    "r3": [
+     88.6,
+     95.4
+    ],
+    "r5": [
+     93.2,
+     98.2
+    ],
+    "mrr": [
+     82.4,
+     89.8
+    ]
+   },
+   "by_category": {
+    "ac": {
+     "n": 9,
+     "r1": 0.889,
+     "r5": 1.0
+    },
+    "audio/display": {
+     "n": 22,
+     "r1": 0.864,
+     "r5": 1.0
+    },
+    "dev": {
+     "n": 5,
+     "r1": 1.0,
+     "r5": 1.0
+    },
+    "email": {
+     "n": 14,
+     "r1": 0.786,
+     "r5": 1.0
+    },
+    "files": {
+     "n": 29,
+     "r1": 0.759,
+     "r5": 0.966
+    },
+    "messaging/phone": {
+     "n": 28,
+     "r1": 0.821,
+     "r5": 0.964
+    },
+    "reminders/tasks/agenda": {
+     "n": 29,
+     "r1": 0.621,
+     "r5": 0.931
+    },
+    "self/vault/lockdown": {
+     "n": 25,
+     "r1": 0.6,
+     "r5": 0.84
+    },
+    "system/info": {
+     "n": 27,
+     "r1": 0.963,
+     "r5": 1.0
+    },
+    "vision": {
+     "n": 4,
+     "r1": 0.75,
+     "r5": 1.0
+    },
+    "web/agents": {
+     "n": 8,
+     "r1": 0.75,
+     "r5": 1.0
+    },
+    "windows/apps": {
+     "n": 19,
+     "r1": 0.842,
+     "r5": 0.947
+    }
+   },
+   "by_style": {
+    "argument-heavy": {
+     "n": 39,
+     "r1": 0.795
+    },
+    "confusable/short": {
+     "n": 41,
+     "r1": 0.756
+    },
+    "plain": {
+     "n": 87,
+     "r1": 0.816
+    },
+    "question": {
+     "n": 34,
+     "r1": 0.706
+    },
+    "typo/ASR slip": {
+     "n": 18,
+     "r1": 0.833
+    }
+   },
+   "top_confusions": [
+    [
+     "read_file -> open_vault_file",
+     2
+    ],
+    [
+     "launch_application -> lockdown_engage",
+     1
+    ],
+    [
+     "launch_application -> open_path",
+     1
+    ],
+    [
+     "web_search -> delegate_research",
+     1
+    ],
+    [
+     "lockdown_engage -> confirm_lockdown_lift",
+     1
+    ],
+    [
+     "confirm_lockdown_lift -> adjust_volume",
+     1
+    ],
+    [
+     "set_input_device -> list_audio_devices",
+     1
+    ],
+    [
+     "set_output_device -> list_audio_devices",
+     1
+    ],
+    [
+     "adjust_brightness -> set_brightness",
+     1
+    ],
+    [
+     "list_processes -> list_windows",
+     1
+    ]
+   ],
+   "most_often_predicted_when_wrong": [
+    [
+     "open_vault_file",
+     3
+    ],
+    [
+     "delegate_research",
+     2
+    ],
+    [
+     "list_audio_devices",
+     2
+    ],
+    [
+     "list_windows",
+     2
+    ],
+    [
+     "send_message",
+     2
+    ],
+    [
+     "take_phone_photo",
+     2
+    ],
+    [
+     "list_agenda_items",
+     2
+    ],
+    [
+     "list_tasks",
+     2
+    ]
+   ],
+   "scores": {
+    "top1_median_pos": 0.623,
+    "top1_median_neg": 0.287,
+    "share_pos_top1_ge_floor": 0.416,
+    "share_neg_top1_ge_floor": 0.0,
+    "auroc_pos_vs_neg_top1": 0.941
+   },
+   "pipeline_floor_0.65": {
+    "reach": 0.7351598173515982,
+    "reach_ci95_pct": [
+     67.6,
+     79.5
+    ],
+    "strict_reach": 0.7351598173515982,
+    "by_path": {
+     "dispatcher": {
+      "n": 21,
+      "reach": 0.714
+     },
+     "cue": {
+      "n": 159,
+      "reach": 0.874
+     },
+     "embedding-only": {
+      "n": 39,
+      "reach": 0.179
+     }
+    },
+    "false_trigger_any_path": 0.07894736842105263,
+    "false_trigger_ci95_pct": [
+     0.0,
+     18.4
+    ],
+    "false_trigger_embedding_only": 0.0,
+    "false_trigger_embedding_only_ci95_pct": [
+     0.0,
+     0.0
+    ],
+    "false_trigger_by_cause": {
+     "dispatcher": 0,
+     "cue": 3,
+     "embedding-only": 0
+    }
+   },
+   "pipeline_dev_calibrated_floor": {
+    "floor": 0.412,
+    "reach": 0.867579908675799,
+    "reach_ci95_pct": [
+     82.2,
+     91.3
+    ],
+    "false_trigger_embedding_only": 0.05263157894736842,
+    "false_trigger_any_path": 0.13157894736842105
+   }
+  }
+ },
+ "paired": {
+  "2_0.6B_fred_cfg vs 1_4B_fred_today": {
+   "R@1 gap pts [mean, lo, hi]": [
+    -2.3,
+    -7.3,
+    3.2
+   ],
+   "R@3 gap pts [mean, lo, hi]": [
+    -5.5,
+    -10.0,
+    -1.4
+   ],
+   "R@5 gap pts [mean, lo, hi]": [
+    -4.1,
+    -7.8,
+    -0.9
+   ],
+   "MRR gap pts [mean, lo, hi]": [
+    -2.9,
+    -6.4,
+    0.6
+   ],
+   "top1 paired (A=first, B=second)": {
+    "A_right_B_wrong": 16,
+    "B_right_A_wrong": 21,
+    "exact_p": 0.5114
+   },
+   "top5 paired": {
+    "A_right_B_wrong": 3,
+    "B_right_A_wrong": 12,
+    "exact_p": 0.0352
+   },
+   "pipeline reach gap pts [mean, lo, hi]": [
+    -1.4,
+    -3.2,
+    0.5
+   ],
+   "pipeline reach paired": {
+    "A_right_B_wrong": 1,
+    "B_right_A_wrong": 4,
+    "exact_p": 0.375
+   },
+   "false_trigger_embedding_only gap pts": 0.0
+  },
+  "3_0.6B_tool_instr+center vs 1_4B_fred_today": {
+   "R@1 gap pts [mean, lo, hi]": [
+    5.0,
+    -0.9,
+    11.4
+   ],
+   "R@3 gap pts [mean, lo, hi]": [
+    1.4,
+    -1.8,
+    4.6
+   ],
+   "R@5 gap pts [mean, lo, hi]": [
+    1.8,
+    -0.9,
+    4.6
+   ],
+   "MRR gap pts [mean, lo, hi]": [
+    3.7,
+    -0.0,
+    7.5
+   ],
+   "top1 paired (A=first, B=second)": {
+    "A_right_B_wrong": 30,
+    "B_right_A_wrong": 19,
+    "exact_p": 0.1524
+   },
+   "top5 paired": {
+    "A_right_B_wrong": 7,
+    "B_right_A_wrong": 3,
+    "exact_p": 0.3438
+   },
+   "pipeline reach gap pts [mean, lo, hi]": [
+    3.7,
+    0.5,
+    7.3
+   ],
+   "pipeline reach paired": {
+    "A_right_B_wrong": 12,
+    "B_right_A_wrong": 4,
+    "exact_p": 0.0768
+   },
+   "false_trigger_embedding_only gap pts": 0.0
+  },
+  "3_0.6B_tool_instr+center vs 2_0.6B_fred_cfg": {
+   "R@1 gap pts [mean, lo, hi]": [
+    7.3,
+    1.4,
+    13.2
+   ],
+   "R@3 gap pts [mean, lo, hi]": [
+    6.8,
+    2.7,
+    11.0
+   ],
+   "R@5 gap pts [mean, lo, hi]": [
+    5.9,
+    2.7,
+    9.6
+   ],
+   "MRR gap pts [mean, lo, hi]": [
+    6.6,
+    2.5,
+    10.6
+   ],
+   "top1 paired (A=first, B=second)": {
+    "A_right_B_wrong": 30,
+    "B_right_A_wrong": 14,
+    "exact_p": 0.0226
+   },
+   "top5 paired": {
+    "A_right_B_wrong": 15,
+    "B_right_A_wrong": 2,
+    "exact_p": 0.0023
+   },
+   "pipeline reach gap pts [mean, lo, hi]": [
+    5.0,
+    2.3,
+    8.2
+   ],
+   "pipeline reach paired": {
+    "A_right_B_wrong": 12,
+    "B_right_A_wrong": 1,
+    "exact_p": 0.0034
+   },
+   "false_trigger_embedding_only gap pts": 0.0
+  }
+ }
+}
