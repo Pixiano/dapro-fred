@@ -13,6 +13,7 @@ Jinja2ChatFormatter) rejects — they only mark training spans, so they are drop
 
 import ast
 import json
+import os
 import re
 
 CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.DOTALL)
@@ -20,6 +21,9 @@ CALLS = re.compile(r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>", re.DOTALL)
 # special=false in tokenizer.json), so FRED actually receives the bare list.
 BARE = re.compile(r"\[\s*[A-Za-z_]\w*\(.*\)\s*\]", re.DOTALL)
 GEN_TAGS = re.compile(r"\{%-?\s*(end)?generation\s*-?%\}")
+# The template has no thinking switch: its generation prompt always opens "<think>".
+# LFM_NO_THINK=1 pre-closes it ("<think></think>") so the reply starts at the answer.
+OPEN_THINK = r'"<|im_start|>assistant\n<think>"'
 
 
 def pythonic_calls(text):
@@ -44,7 +48,11 @@ def apply(orchestrator_cls):
     init = lcf.Jinja2ChatFormatter.__init__
 
     def jinja_init(self, template, *a, **k):
-        init(self, GEN_TAGS.sub("", template), *a, **k)
+        template = GEN_TAGS.sub("", template)
+        if os.environ.get("LFM_NO_THINK"):
+            assert OPEN_THINK in template, "LFM template changed: no generation-prompt <think> to close"
+            template = template.replace(OPEN_THINK, OPEN_THINK[:-1] + '</think>"')
+        init(self, template, *a, **k)
 
     lcf.Jinja2ChatFormatter.__init__ = jinja_init
 
@@ -97,4 +105,8 @@ if __name__ == "__main__":
     assert not fred._looks_like_leaked_tool_syntax("Done, sir.")
     from llama_cpp.llama_chat_format import Jinja2ChatFormatter
     Jinja2ChatFormatter(template="{%- generation -%}hi{%- endgeneration -%}", eos_token="", bos_token="")
+    gen = "{%- if add_generation_prompt -%}{{- " + OPEN_THINK + " -}}{%- endif -%}"
+    os.environ["LFM_NO_THINK"] = "1"
+    f = Jinja2ChatFormatter(template=gen, eos_token="", bos_token="")
+    assert f(messages=[]).prompt.endswith("<think></think>"), f(messages=[]).prompt
     print("OK")
