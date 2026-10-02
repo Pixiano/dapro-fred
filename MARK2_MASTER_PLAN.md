@@ -12,7 +12,7 @@ vendor, unverified here. **[est]** = my estimate. **[open]** = undecided.
 
 ## 0. Standing rules (read first, obey always)
 
-1. **Vatsal is the owner.** Use they/them if you ever need a pronoun for someone whose pronouns are unknown.
+1. **Vatsal is the owner.** Use he/him if you ever need a pronoun for someone whose pronouns are unknown and address as sir directly (preferable over general chats).
 2. **English is the default medium** for ASR, brain, embedder, benchmarks and training data unless told otherwise. Hinglish is minor and never a deciding factor.
 3. **GPU-only inference.** LLMs, embedders, Whisper and vision models run fully on the GPU (RTX 5060 Ti, 16 GB). If something does not fit, flag it with free vs needed VRAM; never fall back to CPU or partial offload. CPU exceptions Vatsal has allowed: Kokoro TTS, the `hey_fred` wake word, the turn-detection models (VAD, Smart Turn, voice ID) and Nemotron-3-Diarization. Windows OCR on CPU is **pending his OK**. "Other small models: discuss later." A Raspberry Pi 5 test of a tiny LLM is allowed as a test only; a permanent move needs his explicit OK.
 4. **Never kill processes** except where he said so. The only standing permission: if out of RAM/VRAM, kill FRED's own `fred_popup` + `phone_api` (both pythonw pairs). Nothing else. FRED is **currently down** (killed 2026-10-02) and **must not be restarted until the whole revamp, including the memory overhaul, is finished**.
@@ -204,7 +204,7 @@ Thinking-cap findings: generate <=N thinking tokens with stop `</think>`, then f
 ### Step 1 - Pipeline fixes **DONE 2026-10-02** (merge `3caabdf`, pushed, 658 Core tests pass)
 Fixed: dispatcher mis-routes ("time complexity", quoted-echo `say '...'`), calculator spoken maths (sqrt/cube root/squared/cubed/power, trailing "minus P percent"; math-01 = 847x23 minus 15% = 16558.85, Vatsal confirmed), false-completion guard skips wh-questions, follow-up tool carry-over (dispatcher turns now re-classify the previous user turn), time-01 checker computes days to 25 Dec from today (`days_until` field). Speed options added, **default OFF** in `Core/config/settings.py`: `THINKING_TOKEN_CAP` (suggest 96; `Core/llm/think_cap.py`, logits processor) and `DIRECT_TOOL_REPLY_MAX_CHARS` (suggest 160). These two are only tested on synthetic input, not with a model. Persona example skipped on purpose. Result on baseline: 144 -> 152 of 177 (conversation 15 -> 18/21; six general-suite flips are sampling noise); median/p90 latency unchanged (4.67/10.7 s -> 4.70/10.4 s). Accepted side effect: after a dispatcher turn, a non-social next message offers that tool. Remaining optional work: benchmark with the speed options on; measure prompt size and token counts per tool turn.
 
-### Step 2 - in parallel, after the memory overhaul's foundation
+### Step 2 - memory overhaul and benchmark (no fine-tuning yet: build the house first, test the wiring later)
 
 **2c. Memory overhaul first** (`FRED_Memory_Overhaul.md`, section 40; it must settle tool schemas before LFM training data is generated):
 1. Foundation: SQLite schema, entity system, event system, state history, provenance, daily log table, basic memory manager.
@@ -217,26 +217,18 @@ Fixed: dispatcher mis-routes ("time complexity", quoted-echo `say '...'`), calcu
 8. Deep self-analysis, separating evidence, inference, uncertainty, speculation.
 The real-time brain only does capture/recall tool calls (overhaul section 32); consolidation runs on the L5 models. Touches `Core/memory/`, so ask first.
 
-**2a. Fine-tune LFM2.5-2.6B (Vatsal chose 1k-2k examples, not 500):**
-- Method: bf16 LoRA r=16 alpha 16-32, LR 1e-4 to 2e-4, 1-3 epochs, dropout 0; targets `q_proj,k_proj,v_proj,out_proj,in_proj,w1,w2,w3`; Unsloth, TRL or LEAP Finetune. Windows is workable but WSL2 is lower risk. GGUF return path: merge to 16-bit -> `convert_hf_to_gguf.py` -> `llama-quantize` (Q6_K/Q8_0); verify with a round-trip prompt test (HF vs Q8_0 vs Q6_K).
-- Format: LFM's **native Pythonic** tool calls, never OpenAI JSON; training text character-for-character identical to the production template; **thinking kept ON**; correct `{% generation %}` / `<think>` loss masks (TRL `assistant_only_loss` needs the tags; decide empty-think vs opened-tag target and mirror exactly in llama.cpp; mismatch is the likeliest failure).
-- Data must include: single calls; **multi-tool turns** (same tool 2+ times or different tools, up to 4 calls per turn, `[f(a=..), g(b=..)]`); no-tool cases (25-35% of tool rows, main guard against over-calling); error/empty/timeout stubs; **"I don't know" cases that also state the tool fault** (failed / unreachable / returned nothing), never a bare "I don't know"; memory-grounded answers incl. 20-30% unanswerable; spoken brevity, no markdown in speech; English first. Tool schemas must match the **final** tool set incl. memory-vault tools.
-- Hold out >=10-15% per category, never trained on. Regression suite = the benchmark below. Licence for synthetic data: check provider ToS (Anthropic/OpenAI outputs restrict training competing models); safer sources are own logs (`tool_call_log`), templates, open datasets.
-- Open dataset to consider: `openbmb/UltraData-SFT-Agent-2609` (see 2d).
-
 **2b. Perfect the benchmark:**
 - Wire general2: `stage_general` in `benchmarking/run.py` is hard-wired to `general.jsonl` (~line 1037); add `GENERAL_CASES` env var or `--cases` support. `benchmarking/cases/general2.jsonl` (210 cases, 12 categories; design `docs/2026/10/01/general2_benchmark_design.md`; builder `gen_general2.py`; self-check `check_general2.py`) has not been run on any model.
 - Hand-check the 81-case tools suite (`tools_end_to_end`) for checker mistakes (like the rounding bug found earlier).
 - Mercury with the thinking cap at 96 as the control.
 - Fix remaining checker issues; hand-check MiniCPM5-2B general results (uncorrected).
 
-**2d. Small-talker fine-tune (Vatsal 2026-10-02):** fine-tune an even smaller talker (1B or below) with good tool calling on `openbmb/UltraData-SFT-Agent-2609` (483,661 trajectories, Apache-2.0; Tool-Use section 82,760). XML-style tool format needs conversion to FRED's; filter to English and FRED's tool shapes; add multi-tool and "I don't know + fault" cases; verify against the L2 test set and tools suite. Note: the MiniCPM5-2B card says its post-training used this set; the MiniCPM5-1B card does not mention it, so its tool use is unverified.
 
 ### Step 3 - Compare and choose the brain
-Run tuned LFM, Mercury (cap 96), baseline and Qwen3.8-4B-Distill (Q6_K, Q4_K_M; with/without cap) on: tools (81), conversation (21), delegation, memory, general (+general2), median/p90 latency, VRAM. Gate for LFM in section 5. Also test **Q4_K_M vs Q6_K** of the winner. Another LFM round if close and still improving.
+Run **untuned** LFM, Mercury (cap 96), baseline and Qwen3.8-4B-Distill (Q6_K, Q4_K_M; with/without cap) on: tools (81), conversation (21), delegation, memory, general (+general2), median/p90 latency, VRAM. Gate for LFM in section 5. Also test **Q4_K_M vs Q6_K** of the winner. Provisional pick only; the tuned-LFM-vs-Mercury decision is re-made in Step 7.
 
 ### Step 4 - Judge the MiniCPM5 talker/judge
-Test 1B and 2B Q4_K_M **in the full stack at the last stages** for total VRAM and latency; quality on cover lines, short replies, judge JSON (`{"speak","score","because","line"}`), and tool calls. Needs: 2B must pass >=77.8% tools and >=76.2% conversation to replace the 4B as responder (plan bar). Pi 5 pick-a-phrase test (section 4.3). Possibly the fine-tuned small talker from 2d.
+Test 1B and 2B Q4_K_M **in the full stack at the last stages** for total VRAM and latency; quality on cover lines, short replies, judge JSON (`{"speak","score","because","line"}`), and tool calls. Needs: 2B must pass >=77.8% tools and >=76.2% conversation to replace the 4B as responder (plan bar). Pi 5 pick-a-phrase test (section 4.3). The fine-tuned small talker (7b) is tested later, in Step 7.
 
 ### Step 5 - Build the assembled architecture (phased, smallest useful step first)
 - **P0 (no FRED change):** brain/talker tests above; embedder quant test; Whisper-turbo VRAM.
@@ -249,6 +241,18 @@ Prototype under `Mark_II_Testing/Assembled/` before touching `Core/`; add a `--c
 
 ### Step 6 - Polish for daily use
 Then restart FRED (only now), run all suites and the 10 real tests, the 8 h soak, tune thresholds.
+
+### Step 7 - Big fine-tunes (LAST, after the house is built and polished)
+Needs the final tool set and memory tool schemas (Step 2c) and the assembled stack (Step 5), so the training format matches production. After each tune, re-run the Step 3 comparison and the full suites; swap models only on an explicit request from Vatsal.
+
+**7a. Fine-tune LFM2.5-2.6B (Vatsal chose 1k-2k examples, not 500):**
+- Method: bf16 LoRA r=16 alpha 16-32, LR 1e-4 to 2e-4, 1-3 epochs, dropout 0; targets `q_proj,k_proj,v_proj,out_proj,in_proj,w1,w2,w3`; Unsloth, TRL or LEAP Finetune. Windows is workable but WSL2 is lower risk. GGUF return path: merge to 16-bit -> `convert_hf_to_gguf.py` -> `llama-quantize` (Q6_K/Q8_0); verify with a round-trip prompt test (HF vs Q8_0 vs Q6_K).
+- Format: LFM's **native Pythonic** tool calls, never OpenAI JSON; training text character-for-character identical to the production template; **thinking kept ON**; correct `{% generation %}` / `<think>` loss masks (TRL `assistant_only_loss` needs the tags; decide empty-think vs opened-tag target and mirror exactly in llama.cpp; mismatch is the likeliest failure).
+- Data must include: single calls; **multi-tool turns** (same tool 2+ times or different tools, up to 4 calls per turn, `[f(a=..), g(b=..)]`); no-tool cases (25-35% of tool rows, main guard against over-calling); error/empty/timeout stubs; **"I don't know" cases that also state the tool fault** (failed / unreachable / returned nothing), never a bare "I don't know"; memory-grounded answers incl. 20-30% unanswerable; spoken brevity, no markdown in speech; English first. Tool schemas must match the **final** tool set incl. memory-vault tools.
+- Hold out >=10-15% per category, never trained on. Regression suite = the benchmark below. Licence for synthetic data: check provider ToS (Anthropic/OpenAI outputs restrict training competing models); safer sources are own logs (`tool_call_log`), templates, open datasets.
+- Open dataset to consider: `openbmb/UltraData-SFT-Agent-2609` (see 7b).
+
+**7b. Small-talker fine-tune (Vatsal 2026-10-02):** fine-tune an even smaller talker (1B or below) with good tool calling on `openbmb/UltraData-SFT-Agent-2609` (483,661 trajectories, Apache-2.0; Tool-Use section 82,760). XML-style tool format needs conversion to FRED's; filter to English and FRED's tool shapes; add multi-tool and "I don't know + fault" cases; verify against the L2 test set and tools suite. Note: the MiniCPM5-2B card says its post-training used this set; the MiniCPM5-1B card does not mention it, so its tool use is unverified.
 
 ### Parallel item: embedder swap (ON HOLD, waiting for Vatsal)
 Qwen3-Embedding-0.6B Q8_0 replaces the 4B (saves ~2 GiB): tool-specific query instruction + centering for routing, no instruction for memory, no reranker/routing head/fine-tune unless a bigger tools test (n>=300) shows a >3-point gap. Also test Q6_K/Q4_K_M. After the swap: delete the vault `chunks.json` by hand and rebuild the FAISS memory index (same dimension does not self-heal); fix the 4096-vs-512 comment (llama-cpp truncates inputs to `n_batch=512`); keep `SEMANTIC_FLOOR=0.65` under review; human spot-check 20-30 real vault questions. Evidence: `docs/2026/10/01/embedder_4b_vs_06b.md`, `Embedder_Testing/`. Touches `Core/`: ask first. Fine-tune plan if needed: `finetune_embedder_06b.md`.
@@ -305,4 +309,4 @@ Co-resident VRAM depends on the 0.6B embedder and Q4 brain (both untested for ac
 1. Read sections 0 and 6; confirm FRED is still down and the repo is clean (`git status`; only `conversation_general_cases.md` untracked).
 2. Ask Vatsal before starting **memory overhaul Phase 1** (touches `Core/memory/`); design the schema first in a sandbox and publish the final memory tool schemas.
 3. In parallel (no `Core/` edits): wire general2 into `run.py`'s sandbox copy, hand-check the 81 tools cases, run Mercury cap-96 and Qwen3.8-4B-Distill Q6_K/Q4_K_M through the benchmark (VRAM must be free; check `nvidia-smi`; detached jobs).
-4. Then generate the LFM training data against the final tool schemas.
+4. LFM and small-talker fine-tunes are Step 7 (last); do not start them before the assembled build and polish.
