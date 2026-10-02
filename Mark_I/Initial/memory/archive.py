@@ -11,11 +11,14 @@ Sockets:
   - Archive(root, store): both injected. root should live outside the git repo (personal data).
   - Historical imports set kind="historical" so they are never mistaken for live observation.
 """
-import hashlib, json, shutil, threading, uuid
+import hashlib, json, logging, re, shutil, uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from store import run_hooks
+
 _SCHEMA = Path(__file__).with_name("schema_archive.sql")
+_STREAM = re.compile(r"^[a-z0-9_]{1,40}$")  # becomes a filename: no separators, no traversal
 
 
 def _now() -> str:
@@ -25,7 +28,7 @@ def _now() -> str:
 class Archive:
     def __init__(self, root, store):
         self.root, self.store, self.on_write = Path(root), store, []
-        self.lock = threading.Lock()
+        self.lock = store.lock  # one lock for the shared connection
         self.root.mkdir(parents=True, exist_ok=True)
         store.db.executescript(_SCHEMA.read_text(encoding="utf-8"))
 
@@ -35,6 +38,8 @@ class Archive:
         return sid
 
     def write(self, stream, data, session=None, ts=None, source_id=None, kind="live") -> dict:
+        if not _STREAM.match(stream):
+            raise ValueError(f"bad stream name {stream!r}: use a-z, 0-9, _")
         ts = ts or _now()
         rec = {"ts": ts, "stream": stream, "session": session, "kind": kind, "source_id": source_id, "data": data}
         day = ts[:10]
@@ -42,20 +47,23 @@ class Archive:
         line = json.dumps(rec, ensure_ascii=False, default=str) + "\n"
         with self.lock:
             path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "a", encoding="utf-8") as f:
+            with open(path, "a", encoding="utf-8", newline="\n") as f:
                 f.write(line)
             self.store.db.execute(
                 "INSERT INTO archive_files VALUES(?,?,?,1,?,?) ON CONFLICT(path) DO UPDATE SET "
                 "records=records+1, last_ts=excluded.last_ts", (path.relative_to(self.root).as_posix(), stream, day, ts, ts))
             self.store.db.commit()
-        for hook in self.on_write:
-            hook(rec)
+        run_hooks(self.on_write, rec)  # outside the lock; a failing hook never loses the record
         return rec
 
     def put_file(self, src, session=None, name=None) -> str:
         """Copy a file in by content hash (dedupes identical content) and log the reference. Returns sha256."""
         src = Path(src)
-        sha = hashlib.sha256(src.read_bytes()).hexdigest()
+        h = hashlib.sha256()
+        with open(src, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        sha = h.hexdigest()
         dst = self.root / "blobs" / sha[:2] / sha
         with self.lock:
             if not dst.exists():
@@ -76,7 +84,9 @@ class Archive:
     def verify(self) -> list:
         """Return paths whose line count disagrees with the index (empty list = archive intact)."""
         bad = []
-        for r in self.store.db.execute("SELECT path, records FROM archive_files"):
+        with self.lock:
+            rows = self.store.db.execute("SELECT path, records FROM archive_files").fetchall()
+        for r in rows:
             p = self.root / r["path"]
             n = sum(1 for _ in open(p, encoding="utf-8")) if p.exists() else -1
             if n != r["records"]:
@@ -85,12 +95,13 @@ class Archive:
 
 
 if __name__ == "__main__":  # self-check: python archive.py
+    logging.getLogger("memory").setLevel(logging.CRITICAL)  # the broken test hook logs on purpose
     import tempfile
     from store import MemoryStore
     with tempfile.TemporaryDirectory() as d:
         s = MemoryStore(":memory:")
         a = Archive(Path(d) / "archive", s)
-        seen = []; a.on_write.append(seen.append)
+        seen = []; a.on_write.append(lambda r: 1 / 0); a.on_write.append(seen.append)  # broken hook is isolated
         sid = a.new_session()
         a.write("conversation", {"role": "user", "text": "héllo"}, session=sid, ts="2026-03-04T10:00:00+00:00")
         a.write("conversation", {"role": "assistant", "text": "hi"}, session=sid, ts="2026-03-04T10:00:05+00:00")
@@ -105,4 +116,9 @@ if __name__ == "__main__":  # self-check: python archive.py
         assert s.db.execute("SELECT COUNT(*) FROM archive_blobs").fetchone()[0] == 1
         with open(Path(d) / "archive" / "2026" / "03" / "04" / "tool_call.jsonl", "a") as fh: fh.write("{}\n")
         assert a.verify() == ["2026/03/04/tool_call.jsonl"]  # tamper/loss is detected
+        for bad in ("../evil", "a/b", "A", ""):
+            try:
+                a.write(bad, {}); raise SystemExit(f"accepted {bad!r}")
+            except ValueError:
+                pass
     print("archive ok")

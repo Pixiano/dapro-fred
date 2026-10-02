@@ -21,3 +21,10 @@
 - Phase 1 finish: `store.entities()`, `store.snapshot()`, `manager.py` (`Memory(root)`).
 - Layer 1: `archive.py` + `schema_archive.sql`. Records everything as append-only `YYYY/MM/DD/<stream>.jsonl` (conversation, tool_call, session_state, speech, perception, system, error, generated, import); `put_file` stores artifacts by hash; `new_session()`; `verify()`; `kind="historical"` for imports. Self-checks pass: `python store.py|archive.py|semantic.py|manager.py`.
 - Not yet: anything writes to the archive (that is the integration step); retention/compression of old days.
+
+## Polish pass (2026-10-03)
+Fixed rough edges in everything built so far; all four self-checks pass.
+- `store.py`: one shared connection is now thread-safe (`check_same_thread=False` + a single `store.lock` that archive and semantic reuse; before, a write from another thread would have raised); foreign keys enforced, WAL on; `close()`; a failing `on_event` hook is logged and isolated instead of raising after the event was saved.
+- `archive.py`: stream names validated (`a-z0-9_`, blocks path traversal since the name becomes a filename); `put_file` hashes in 1 MB chunks (no whole-file read); `\n` line endings forced on Windows; failing `on_write` hooks isolated; `verify()` takes the lock.
+- `semantic.py`: vectors stored per (event, model) so a model swap never mixes vector spaces (cache is model-aware; `clear()` drops only the current model); proper import, stale docstring fixed.
+- `manager.py`: self-check rewritten, context-manager support, `close()` goes through the store.
