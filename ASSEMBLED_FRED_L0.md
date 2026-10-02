@@ -16,6 +16,7 @@ working language throughout.
 | 5 | Screen change detector | tile-max difference, threshold 0.990, 1 fps, no model | CPU | 0 | ms | designed from Venus/4.5 measurements |
 | 6 | Focus crop | native-resolution crop of the changed region | CPU | 0 | ms | designed (took small-text reads 0/9 to 8/9) |
 | 7 | OCR | Windows.Media.Ocr on the crop | CPU | 0 | ~50-150 ms (estimate) | to measure; CPU approval pending |
+| 7b | Complex OCR (on demand: dense documents, tables, formulas, code, PDFs) | GLM-OCR 0.9B (MIT; GGUF at `ggml-org/GLM-OCR-GGUF`) | GPU, loaded on demand and unloaded after | ~1.5 GB while loaded (estimate) | ~1.9 pages/s on the vendor's hardware | added 2026-10-02; llama.cpp run unverified |
 | 8 | Screen description | MiniCPM-V 4.6 Q4_K_M + f16 image encoder | GPU | ~1.9 GB | ~0.5 s per caption (estimate) | llama.cpp support unverified |
 | 9 | Camera presence | existing | CPU | 0 | - | existing |
 
@@ -35,7 +36,7 @@ working language throughout.
 | Candidate | Why not |
 |---|---|
 | PaliGemma-3B-pt-224 | 224 px cannot read small text; "pt" base needs per-task fine-tuning; gated; 2.9B (~5.8 GB in 16-bit), more than OCR + describer together; unverified in our llama.cpp |
-| GOT-OCR-2.0 (580M, ~1.2 GB) | Only if Windows OCR fails on real crops; costs VRAM |
+| GOT-OCR-2.0 (580M, ~1.2 GB) | Superseded by GLM-OCR for the complex-OCR tier (GLM-OCR reports 94.62 on OmniDocBench V1.5, #1 on its card; GOT-OCR is older) |
 | Gemma 4 E4B as a unified OCR + describer | Second candidate in the unification test; ~5-6 GB, so it saves no VRAM unless it also replaces the brain's vision path |
 | Qwen3.5-4B image path (100% on 12 screenshots) | Fallback describer; shares the brain's model slot (contention) |
 | Florence-2 | Fallback describer |
@@ -49,6 +50,7 @@ working language throughout.
 4. **Nemotron diarization on this PC:** runs on CPU (NeMo or the NeMo-Speech.cpp runtime) in real time? Then test offline on recordings with a TV, two speakers and overlap: adopt only if it cuts false barge-ins versus VAD + voice ID alone.
 5. **CPU approvals:** Nemotron diarization approved (Vatsal, 2026-10-02). Windows OCR on CPU: pending Vatsal's OK ("other small models: discuss later").
 6. **Silero v5** swap-in: measure against webrtcvad on the same recordings.
+7. **GLM-OCR:** runs in our llama.cpp build (or Ollama/vLLM)? Its benchmark is documents, not screenshots, so test on the 12-screenshot set plus a few dense pages and tables. Decide the trigger (user asks "read this document/table", or Windows OCR confidence is low) and that it unloads after use so it never sits in VRAM.
 
 ## Pi 5 (noted, discuss later)
 
