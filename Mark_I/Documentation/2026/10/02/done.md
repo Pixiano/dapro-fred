@@ -13,4 +13,5 @@
 - Shipped `Initial/memory/semantic.py` + `schema_embeddings.sql`: one vector per event in SQLite, numpy cosine recall, `sync()` backfill so the index cannot drift. Self-check: `python semantic.py`.
 - Sockets: injected `embed(text, is_query)` (same signature as v1.2's), `attach()` onto `on_event`.
 - Not yet: the real embedder wiring, capture/recall brain tools, project state, tool events, the router borrowing `_generate_embedding` (decide when we reach the embedder swap / tool schemas).
-- Git overhaul still waiting for explicit confirmation ("go" was ambiguous between it and Phase 2; I did Phase 2).
+- Git overhaul done after "git go": commit `052eacf`, local only, not pushed. Everything previously in the repo moved to `Old/` (2325 renames, history kept via rename detection); `Mark_I/` is the main tree. `.gitignore` moved to `Old/.gitignore` (its secret patterns are path-relative) and a new minimal root `.gitignore` was added. 7 force-tracked `Mark_II_Testing/**/*.log` files were re-added with `-f` so they stayed tracked.
+- Side effects: scheduled task `FRED_NightlyReindex` still points at old paths (fails until repointed); `Old/Core/venv` pip scripts may need a rebuild; old launchers live under `Old/`. Old master plan is now `Old/MARK2_MASTER_PLAN.md`.
