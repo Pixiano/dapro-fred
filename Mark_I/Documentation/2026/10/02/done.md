@@ -28,3 +28,8 @@ Fixed rough edges in everything built so far; all four self-checks pass.
 - `archive.py`: stream names validated (`a-z0-9_`, blocks path traversal since the name becomes a filename); `put_file` hashes in 1 MB chunks (no whole-file read); `\n` line endings forced on Windows; failing `on_write` hooks isolated; `verify()` takes the lock.
 - `semantic.py`: vectors stored per (event, model) so a model swap never mixes vector spaces (cache is model-aware; `clear()` drops only the current model); proper import, stale docstring fixed.
 - `manager.py`: self-check rewritten, context-manager support, `close()` goes through the store.
+
+## Phase 3: daily consolidation (2026-10-03)
+- `consolidate.py` + `schema_consolidation.sql`: `consolidate_day(mem, day, llm, model)` reads the day's archive + events, one LLM call returns JSON (events, state updates, contradictions, open questions, summary); writes them with a `consolidation` source, daily log with adaptive length, review queue. `run_pending()` does every unfinished past day. Self-check: `python consolidate.py`.
+- Sockets: injected `llm(prompt)->str`; `review_queue` table (contradictions/questions, status `open`) is what the weekly agent (Phase 5) reads; `consolidation_runs` makes it idempotent and retries failed days.
+- Not yet: the real nightly model, the scheduler (just `run_pending` on a timer, wired at integration), day chunking past 60k chars, tool-using agent loop (spec 15; single-call for now), relationship events (Phase 4 graph).
