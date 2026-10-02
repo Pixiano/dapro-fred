@@ -2725,6 +2725,14 @@ class FREDOrchestrator:
         self._carry_tools = list(tool_names)
         self._carry_left = self.CARRY_TOOLS_TURNS
 
+    def _previous_user_turn(self, text: str) -> str:
+        """The user message before the current one, or "" if there is none."""
+        users = [m.get("content", "") for m in getattr(getattr(self, "state", None), "messages", [])
+                 if m.get("role") == "user"]
+        if users and users[-1] == text.strip():
+            users.pop()
+        return users[-1] if users else ""
+
     def _classify_turn(self, text: str) -> tuple:
         """
         intent.classify(), plus one rule: a turn that matches no cue but
@@ -2745,6 +2753,20 @@ class FREDOrchestrator:
         needs_tools, tool_names, reason = result
 
         carry_live = bool(self._carry_left and self._carry_tools)
+
+        # Nothing carried, but the turn before may still have been a tool
+        # turn: the dispatcher runs obvious commands ("set volume to 30")
+        # without ever passing through here, so it never primed the carry,
+        # and "a bit higher" / "and in Mumbai?" then got no tools and were
+        # answered from the earlier reply. The conversation itself is the
+        # record of what the previous turn was.
+        if not carry_live and not needs_tools:
+            prev = self._previous_user_turn(text)
+            if prev:
+                prev_needs, prev_tools, _ = intent.classify(prev, llm=self.llm, router=self._tool_router())
+                if prev_needs and prev_tools:
+                    self._carry_tools, self._carry_left = list(prev_tools), 1
+                    carry_live = True
 
         if needs_tools:
             # A follow-up that classify lands on a DIFFERENT category than

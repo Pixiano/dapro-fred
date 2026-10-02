@@ -222,3 +222,31 @@ def test_primed_carry_is_bounded_the_same_as_an_ordinary_carry():
 
     needs, _, _ = o._classify_turn("mm alright I see")
     assert not needs
+
+
+def test_followup_after_a_dispatcher_turn_gets_the_tools_back():
+    """Turns the dispatcher runs ("set volume to 30") never pass through
+    _classify_turn, so nothing was carried and "a bit higher" / "and in
+    Mumbai?" were answered from the earlier reply without calling a tool.
+    The previous user message in the conversation is enough to recover."""
+    import types
+
+    for earlier, reply, follow, tool in (
+        ("set volume to 30", "Volume set to 30, sir.", "a bit higher", "adjust_volume"),
+        ("what's the weather in Pune", "27 and cloudy, sir.", "and in Mumbai?", "get_weather"),
+    ):
+        o = _bare()
+        o.state = types.SimpleNamespace(messages=[
+            {"role": "user", "content": earlier}, {"role": "assistant", "content": reply},
+            {"role": "user", "content": follow},
+        ])
+        needs, names, _ = o._classify_turn(follow)
+        assert needs and tool in names, (follow, names)
+
+    # A social aside after a tool turn still gets no tools.
+    o = _bare()
+    o.state = types.SimpleNamespace(messages=[
+        {"role": "user", "content": "set volume to 30"}, {"role": "assistant", "content": "Done."},
+        {"role": "user", "content": "thanks"},
+    ])
+    assert not o._classify_turn("thanks")[0]
