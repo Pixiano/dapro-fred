@@ -67,3 +67,16 @@ def test_quoting_docs_is_not_a_write_claim():
     reply = ("PHONE.md says calling was added in August, and settings.py "
              "set the default tier to Qwen3-8B.")
     assert not fred._unsupported_claim(reply, results)
+
+
+def test_knowledge_answers_to_wh_questions_are_not_claims():
+    # Mark II general suite, 2026-09-30: "who wrote <a novel>" and "which
+    # days do I go to the gym" were answered, then replaced by "I haven't
+    # actually done that" because "wrote"/"set" matched the claim list.
+    fred = _fred()
+    assert not fred._unsupported_claim("Jane Austen wrote it, sir.", [], "who wrote Pride and Prejudice")
+    assert not fred._unsupported_claim("Your gym days are set for Monday and Friday.", [],
+                                       "which days do I go to the gym?")
+    # The same words as a reply to a command are still caught.
+    assert fred._unsupported_claim("Deleted the file, sir.", [], "delete notes.md")
+    assert fred._unsupported_claim("Deleted the file, sir.", [], "yes")

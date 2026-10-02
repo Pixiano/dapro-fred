@@ -602,6 +602,16 @@ def normalise(text: str) -> str:
     return text.strip(" ,.!?")
 
 
+# A wh-question asks for information, never for an action: the answer
+# ("Jane Austen wrote it", "you go on Monday") can contain action verbs
+# without claiming FRED did anything.
+_INFO_QUESTION = re.compile(r"^(?:who|what|which|when|where|why|how)\b", re.IGNORECASE)
+
+
+def is_info_question(text: str) -> bool:
+    return bool(_INFO_QUESTION.match(normalise(text)))
+
+
 # "say 'systems online' and nothing else": a quoted string to parrot back.
 # The quoted words are content, not a request, so cue words inside them
 # ("online" -> sysinfo) must not offer tools. The quote has to be the

@@ -2824,7 +2824,7 @@ class FREDOrchestrator:
             # then read its own "Shall I delete ...?" from one turn back
             # and reported the deletion as done. The earlier guard lived
             # only in the tool loop below and never saw this.
-            if not self._claims_completed_action(reply):
+            if not self._claims_completed_action(reply, last_user):
                 return reply
 
             print("[intent] chat reply claimed an action - rerunning with tools")
@@ -2906,7 +2906,7 @@ class FREDOrchestrator:
                 # the small-model misfire problem that motivated the
                 # filtering stays contained to a path that has already
                 # produced a falsehood.
-                if self._unsupported_claim(content, all_results):
+                if self._unsupported_claim(content, all_results, last_user):
                     if not widened:
                         widened = True
                         print("[intent] completion claim with no tool run — widening the menu")
@@ -3280,7 +3280,7 @@ class FREDOrchestrator:
     # it is rarer than that false positive.
     _NAMED_ARTIFACT = re.compile(r"[\w\-.]+\.(?:md|txt|json|jsonl|py|csv|pdf|png|jpg|docx?|xlsx?)\b")
 
-    def _unsupported_claim(self, content: str, all_results) -> bool:
+    def _unsupported_claim(self, content: str, all_results, asked: str = "") -> bool:
         """
         True when a reply asserts an action that the tools which actually
         ran cannot account for.
@@ -3304,7 +3304,7 @@ class FREDOrchestrator:
         tool result. Matching on the basename, since a tool reports an
         absolute Windows path while the reply says a vault-relative one.
         """
-        if not self._claims_completed_action(content):
+        if not self._claims_completed_action(content, asked):
             return False
 
         if not all_results:
@@ -3336,7 +3336,7 @@ class FREDOrchestrator:
 
         return False
 
-    def _claims_completed_action(self, content: str) -> bool:
+    def _claims_completed_action(self, content: str, asked: str = "") -> bool:
         """
         True when a reply asserts it finished something. Only ever
         consulted on a turn the router said needs tools and where no tool
@@ -3351,6 +3351,13 @@ class FREDOrchestrator:
         text = (content or "").strip()
 
         if not text or text.endswith("?"):
+            return False
+
+        # `asked` is the user's turn. Answering "who wrote X" or "which days
+        # do I go to the gym" with "wrote"/"set" in the answer is knowledge,
+        # not a claim that FRED did something (Mark II general suite,
+        # 2026-09-30: both got "I haven't actually done that").
+        if intent.is_info_question(asked):
             return False
 
         # "I will not delete the file" and "I can't delete it" are honest
