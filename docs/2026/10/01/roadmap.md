@@ -17,3 +17,5 @@
 Scores to beat (177 scored cases, hand-corrected): Mercury 149, baseline Qwen3.5-4B 145, LFM2.5 143 (best per suite), MiniCPM5-2B 137.
 
 Brain candidates (2026-10-02): Mercury, tuned LFM2.5, current Qwen3.5-4B, Qwen3.8-4B-Distill (empero-ai; test Q6_K and Q4_K_M, with and without the 96-token thinking cap). Gemma 4 E4B/E2B dropped.
+
+Added 2026-10-02 (Vatsal): fine-tune a smaller talker on UltraData-SFT-Agent-2609 (483,661 trajectories, mainly the 82,760 Tool-Use samples) for good tool calling at 1B or below; details in `ASSEMBLED_FRED_L2.md`. Also test a pick-a-phrase talker on the Pi 5. Brain at Q4 and embedder quants (Q8/Q6/Q4) are marked to test in `ASSEMBLED_FRED_VRAM.md`.

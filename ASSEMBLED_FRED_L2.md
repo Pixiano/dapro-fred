@@ -49,3 +49,8 @@ SFT is the checkpoint before RL and OPD (the final model merges 16 RL experts, 5
 - The L4 judge reads up to 600 tokens every few seconds; that does not fit a Pi. The talker and judge currently share one model process, so moving only the talker means two model processes.
 - Saves about 1.1 GB on the PC.
 - Training data: the MiniCPM5-2B card says its post-training used UltraData-SFT-Agent-2609 (483,661 agent trajectories, 82,760 of them tool use, Apache-2.0). The MiniCPM5-1B card lists only UltraData-SFT-2605 and UltraData-Math and does not mention the agent set, so the 1B's tool use is unverified and must be measured.
+
+## Added to the test list (Vatsal, 2026-10-02)
+
+- **Pi 5 pick-a-phrase test:** run MiniCPM5-1B Q4_K_M on the Pi where it only chooses a pre-synthesised phrase (a few output tokens). Measure tokens per second, time to the chosen phrase, and whether it is noticeable. The GPU-only exemption applies to this test only; any permanent move needs Vatsal's explicit OK.
+- **Fine-tune a smaller talker on UltraData-SFT-Agent-2609** (483,661 trajectories, Apache-2.0), mainly the Tool-Use section (82,760 samples), to get an even smaller talker with good tool calling. Open: base model (MiniCPM5-1B or smaller), conversion of the XML-style tool format to FRED's, filtering for English and for FRED's tool shapes (multi-tool turns, "I don't know" plus the tool fault), loss masks, and a pass against the L2 test set and FRED's tool suite.
