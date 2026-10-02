@@ -15,3 +15,4 @@ Mark I (aka v2) is the clean rebuild of FRED. The predecessor (v1.x, `Core/`) is
 | Day | Files | What |
 |---|---|---|
 | 2026-10-02 | [done](2026/10/02/done.md), [memory build order](2026/10/02/memory_build_order.md) | Mark I set up; memory Phase 1 complete; Layer 1 raw archive |
+| 2026-10-03 | [done](2026/10/03/done.md), [memory system overview](2026/10/03/memory_system_overview.md) | Phases 3-4 built (daily consolidation, graph + names); full memory system explained |
