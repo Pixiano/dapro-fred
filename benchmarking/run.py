@@ -600,6 +600,19 @@ def reply_checks(case, reply):
     r = (reply or "").lower()
     problems = []
     anys = case.get("reply_must_match_any")
+    if case.get("days_until"):  # "MM-DD": expected count computed from today, not fixed in the case
+        from datetime import date
+        today = date.today()
+        month, day = map(int, case["days_until"].split("-"))
+        target = date(today.year, month, day)
+        if target < today:
+            target = date(today.year + 1, month, day)
+        n = (target - today).days
+        ones = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen " \
+               "sixteen seventeen eighteen nineteen".split()
+        tens = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
+        words = ones[n] if n < 20 else tens[n // 10] + (f"-{ones[n % 10]}" if n % 10 else "") if n < 100 else ""
+        anys = [str(n)] + ([words, words.replace("-", " ")] if words else [])
     if anys and not any(a.lower() in r for a in anys):
         problems.append(f"missing any of {anys}")
     for a in case.get("reply_must_match_all", []):
