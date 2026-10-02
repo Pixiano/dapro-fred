@@ -15,7 +15,7 @@
 {"id": "persona-02", "text": "thanks fred", "tag": "persona", "prefer_any": ["sir"]}
 {"id": "math-01", "text": "what's 847 times 23 minus 15 percent", "reply_must_match_any": ["16558.85", "16,558.85", "16558.9", "16,558.9", "16559"], "tag": "exact_math"}
 {"id": "math-02", "text": "what is 1234 divided by 7", "reply_must_match_any": ["176.29", "176.3", "176.286", "176.28", "176.2857"], "tag": "exact_math"}
-{"id": "time-01", "text": "how many days until christmas", "stub": {"get_current_time": "It's 3:42 PM on Sunday, 27 September 2026."}, "reply_must_match_any": ["89", "eighty-nine", "eighty nine"], "tag": "date_reasoning"}
+{"id": "time-01", "text": "how many days until christmas", "days_until": "12-25", "tag": "date_reasoning"}
 {"id": "follow-01", "history": [["user", "what's the weather in Pune"], ["assistant", "It's 27°C and cloudy in Pune, sir."]], "text": "and in Mumbai?", "tools": ["get_weather"], "args": {"location": "mumbai"}, "tag": "follow_up"}
 {"id": "follow-02", "history": [["user", "open notepad"], ["assistant", "Opening Notepad, sir."]], "text": "close it", "tools": ["close_window", "kill_process"], "tag": "follow_up"}
 {"id": "follow-03", "history": [["user", "set volume to 30"], ["assistant", "Volume set to 30, sir."]], "text": "a bit higher", "tools": ["adjust_volume", "set_volume"], "tag": "follow_up"}

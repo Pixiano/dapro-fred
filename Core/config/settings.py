@@ -802,6 +802,23 @@ TIER_PROMPT_MARKERS = {
 # only place that reads it.
 THINKING_LENGTH_THRESHOLD = 175
 
+# Speed settings, both OFF (0) so behaviour is unchanged until enabled.
+#
+# THINKING_TOKEN_CAP: when a local turn runs with thinking on, let the model
+# think for at most this many tokens, then force </think> and let it answer
+# (llm/think_cap.py). Suggested value 96. Only applies where enable_thinking
+# is on, i.e. user messages over THINKING_LENGTH_THRESHOLD characters, and to
+# templates whose <think>/</think> are single tokens (checked per model).
+THINKING_TOKEN_CAP = 0
+
+# DIRECT_TOOL_REPLY_MAX_CHARS: skip the second model call on a simple tool
+# turn. When exactly one tool ran, the request is not compound, and its
+# result is a single line no longer than this and not an error, the result
+# is spoken as is instead of being rephrased by the model (as
+# SELF_NARRATING_TOOLS already does for its fixed list). Costs the "sir"
+# phrasing and any summarising of the result. Suggested value 160.
+DIRECT_TOOL_REPLY_MAX_CHARS = 0
+
 # Raised 75 -> 175 same day: generate_stream() withholds the entire
 # <think></think> block from the caller by design (llm_client.py's own
 # docstring — "the fix for dead air"), so a thinking-mode turn is total

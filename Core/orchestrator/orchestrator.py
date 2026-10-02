@@ -52,6 +52,7 @@ from utils import event_log, notifier
 from utils.vault_md import flatten_tables
 from config.settings import (
     TOOLS_ENABLED,
+    DIRECT_TOOL_REPLY_MAX_CHARS,
     VAULT_CHUNK_INJECT_CHARS,
     SENSITIVE_LOCAL_ONLY,
     SECURITY_WATCH_POLL_SECONDS,
@@ -2725,6 +2726,14 @@ class FREDOrchestrator:
         self._carry_tools = list(tool_names)
         self._carry_left = self.CARRY_TOOLS_TURNS
 
+    def _previous_user_turn(self, text: str) -> str:
+        """The user message before the current one, or "" if there is none."""
+        users = [m.get("content", "") for m in getattr(getattr(self, "state", None), "messages", [])
+                 if m.get("role") == "user"]
+        if users and users[-1] == text.strip():
+            users.pop()
+        return users[-1] if users else ""
+
     def _classify_turn(self, text: str) -> tuple:
         """
         intent.classify(), plus one rule: a turn that matches no cue but
@@ -2745,6 +2754,20 @@ class FREDOrchestrator:
         needs_tools, tool_names, reason = result
 
         carry_live = bool(self._carry_left and self._carry_tools)
+
+        # Nothing carried, but the turn before may still have been a tool
+        # turn: the dispatcher runs obvious commands ("set volume to 30")
+        # without ever passing through here, so it never primed the carry,
+        # and "a bit higher" / "and in Mumbai?" then got no tools and were
+        # answered from the earlier reply. The conversation itself is the
+        # record of what the previous turn was.
+        if not carry_live and not needs_tools:
+            prev = self._previous_user_turn(text)
+            if prev:
+                prev_needs, prev_tools, _ = intent.classify(prev, llm=self.llm, router=self._tool_router())
+                if prev_needs and prev_tools:
+                    self._carry_tools, self._carry_left = list(prev_tools), 1
+                    carry_live = True
 
         if needs_tools:
             # A follow-up that classify lands on a DIFFERENT category than
@@ -2824,7 +2847,7 @@ class FREDOrchestrator:
             # then read its own "Shall I delete ...?" from one turn back
             # and reported the deletion as done. The earlier guard lived
             # only in the tool loop below and never saw this.
-            if not self._claims_completed_action(reply):
+            if not self._claims_completed_action(reply, last_user):
                 return reply
 
             print("[intent] chat reply claimed an action - rerunning with tools")
@@ -2906,7 +2929,7 @@ class FREDOrchestrator:
                 # the small-model misfire problem that motivated the
                 # filtering stays contained to a path that has already
                 # produced a falsehood.
-                if self._unsupported_claim(content, all_results):
+                if self._unsupported_claim(content, all_results, last_user):
                     if not widened:
                         widened = True
                         print("[intent] completion claim with no tool run — widening the menu")
@@ -2992,6 +3015,20 @@ class FREDOrchestrator:
                 and not intent.looks_compound(last_user)
             ):
                 return " ".join(round_results)
+
+            # Optional speed setting (default off): one tool, plain request,
+            # a short one-line non-error result -> speak it as is and skip
+            # the rephrase call. calculate keeps its own rule (see above).
+            if (
+                DIRECT_TOOL_REPLY_MAX_CHARS
+                and len(round_results) == 1
+                and "calculate" not in called_names
+                and not intent.looks_compound(last_user)
+                and "\n" not in round_results[0].strip()
+                and 0 < len(round_results[0].strip()) <= DIRECT_TOOL_REPLY_MAX_CHARS
+                and not re.match(r"\s*(?:error|couldn't|could not|failed|unable|no )", round_results[0], re.I)
+            ):
+                return round_results[0].strip()
 
             # On a compound turn, restate the original request before
             # asking again. By this point the model is looking at its own
@@ -3280,7 +3317,7 @@ class FREDOrchestrator:
     # it is rarer than that false positive.
     _NAMED_ARTIFACT = re.compile(r"[\w\-.]+\.(?:md|txt|json|jsonl|py|csv|pdf|png|jpg|docx?|xlsx?)\b")
 
-    def _unsupported_claim(self, content: str, all_results) -> bool:
+    def _unsupported_claim(self, content: str, all_results, asked: str = "") -> bool:
         """
         True when a reply asserts an action that the tools which actually
         ran cannot account for.
@@ -3304,7 +3341,7 @@ class FREDOrchestrator:
         tool result. Matching on the basename, since a tool reports an
         absolute Windows path while the reply says a vault-relative one.
         """
-        if not self._claims_completed_action(content):
+        if not self._claims_completed_action(content, asked):
             return False
 
         if not all_results:
@@ -3336,7 +3373,7 @@ class FREDOrchestrator:
 
         return False
 
-    def _claims_completed_action(self, content: str) -> bool:
+    def _claims_completed_action(self, content: str, asked: str = "") -> bool:
         """
         True when a reply asserts it finished something. Only ever
         consulted on a turn the router said needs tools and where no tool
@@ -3351,6 +3388,13 @@ class FREDOrchestrator:
         text = (content or "").strip()
 
         if not text or text.endswith("?"):
+            return False
+
+        # `asked` is the user's turn. Answering "who wrote X" or "which days
+        # do I go to the gym" with "wrote"/"set" in the answer is knowledge,
+        # not a claim that FRED did something (Mark II general suite,
+        # 2026-09-30: both got "I haven't actually done that").
+        if intent.is_info_question(asked):
             return False
 
         # "I will not delete the file" and "I can't delete it" are honest
