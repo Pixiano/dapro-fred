@@ -19,6 +19,12 @@ all other figures are estimates until the last-stage test.
 | **Total with 2B talker** | **14.0** | 2.0 GB headroom on 16 |
 | **Total with 1B talker** | **13.0** | 3.0 GB headroom |
 
+## To explore (Vatsal, 2026-10-02)
+
+- **Brain at Q4_K_M instead of Q6_K (MARKED, not decided):** the file drops from about 3.6 to about 2.7 GB for a 4B, so roughly -1 GB, taking the total to about 13.0 (2B talker) or 12.0 (1B talker). Quality cost to be measured on the benchmark suites before adopting.
+- **Embedder quant (MARKED):** test Q8_0 vs Q6_K vs Q4_K_M of Qwen3-Embedding-0.6B on the routing and memory tests; the 4B embedder is out on size.
+- Consolidation models (L5) run alone at night and are not part of this table.
+
 ## On demand / candidates (not in the total)
 
 | Item | GB | Effect |
