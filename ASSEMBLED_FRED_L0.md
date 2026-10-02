@@ -37,7 +37,7 @@ working language throughout.
 |---|---|
 | PaliGemma-3B-pt-224 | 224 px cannot read small text; "pt" base needs per-task fine-tuning; gated; 2.9B (~5.8 GB in 16-bit), more than OCR + describer together; unverified in our llama.cpp |
 | GOT-OCR-2.0 (580M, ~1.2 GB) | Superseded by GLM-OCR for the complex-OCR tier (GLM-OCR reports 94.62 on OmniDocBench V1.5, #1 on its card; GOT-OCR is older) |
-| Gemma 4 E4B as a unified OCR + describer | Second candidate in the unification test; ~5-6 GB, so it saves no VRAM unless it also replaces the brain's vision path |
+| Gemma 4 E4B as a unified OCR + describer | Dropped by Vatsal 2026-10-02: ~6 GB, no VRAM saving versus the split, weak tool use |
 | Qwen3.5-4B image path (100% on 12 screenshots) | Fallback describer; shares the brain's model slot (contention) |
 | Florence-2 | Fallback describer |
 | TEN VAD | Alternative to Silero if Silero disappoints |
@@ -46,7 +46,7 @@ working language throughout.
 
 1. **MiniCPM-V 4.6 in our llama.cpp build:** loads and describes? (unverified)
 2. **Windows OCR on real crops:** accuracy vs MiniCPM-V reading the same crops, vs GOT-OCR as the upper bound. Use the 12-screenshot set FRED already has.
-3. **Unification test:** does MiniCPM-V alone (OCR + caption) pass the grounding rule well enough to drop the separate OCR? Gemma 4 E4B as the second candidate. Default stays split until it does.
+3. **Unification test:** does MiniCPM-V alone (OCR + caption) pass the grounding rule well enough to drop the separate OCR? Default stays split until it does.
 4. **Nemotron diarization on this PC:** runs on CPU (NeMo or the NeMo-Speech.cpp runtime) in real time? Then test offline on recordings with a TV, two speakers and overlap: adopt only if it cuts false barge-ins versus VAD + voice ID alone.
 5. **CPU approvals:** Nemotron diarization approved (Vatsal, 2026-10-02). Windows OCR on CPU: pending Vatsal's OK ("other small models: discuss later").
 6. **Silero v5** swap-in: measure against webrtcvad on the same recordings.
