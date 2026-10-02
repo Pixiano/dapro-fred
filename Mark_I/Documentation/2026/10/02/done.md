@@ -15,3 +15,9 @@
 - Not yet: the real embedder wiring, capture/recall brain tools, project state, tool events, the router borrowing `_generate_embedding` (decide when we reach the embedder swap / tool schemas).
 - Git overhaul done after "git go": commit `052eacf`, local only, not pushed. Everything previously in the repo moved to `Old/` (2325 renames, history kept via rename detection); `Mark_I/` is the main tree. `.gitignore` moved to `Old/.gitignore` (its secret patterns are path-relative) and a new minimal root `.gitignore` was added. 7 force-tracked `Mark_II_Testing/**/*.log` files were re-added with `-f` so they stayed tracked.
 - Side effects: scheduled task `FRED_NightlyReindex` still points at old paths (fails until repointed); `Old/Core/venv` pip scripts may need a rebuild; old launchers live under `Old/`. Old master plan is now `Old/MARK2_MASTER_PLAN.md`.
+
+## Phase 1 completed, Layer 1 (raw archive) built
+- Order changed by Vatsal: Phase 1 complete -> Layer 1 -> Phases 3-8 -> integration (Phase 2) LAST. See `memory_build_order.md`.
+- Phase 1 finish: `store.entities()`, `store.snapshot()`, `manager.py` (`Memory(root)`).
+- Layer 1: `archive.py` + `schema_archive.sql`. Records everything as append-only `YYYY/MM/DD/<stream>.jsonl` (conversation, tool_call, session_state, speech, perception, system, error, generated, import); `put_file` stores artifacts by hash; `new_session()`; `verify()`; `kind="historical"` for imports. Self-checks pass: `python store.py|archive.py|semantic.py|manager.py`.
+- Not yet: anything writes to the archive (that is the integration step); retention/compression of old days.

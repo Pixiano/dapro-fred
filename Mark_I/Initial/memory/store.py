@@ -54,6 +54,17 @@ class MemoryStore:
         return self.db.execute("SELECT * FROM entity_states WHERE entity_id=? AND field=? ORDER BY valid_from, id",
                                (entity_id, field)).fetchall()
 
+    def entities(self, kind=None):
+        q, a = ("SELECT * FROM entities WHERE kind=? ORDER BY id", (kind,)) if kind else ("SELECT * FROM entities ORDER BY id", ())
+        return self.db.execute(q, a).fetchall()
+
+    def snapshot(self, entity_id) -> dict:
+        """Current state of an entity as {field: value}. Projects, goals, tasks, preferences are
+        entity kinds whose fields live here (spec section 9), so they need no tables of their own."""
+        rows = self.db.execute("SELECT field, value FROM entity_states WHERE entity_id=? AND valid_to IS NULL",
+                               (entity_id,)).fetchall()
+        return {r["field"]: r["value"] for r in rows}
+
     def add_event(self, type, content, entity_id=None, importance=0.5, confidence=1.0, source_id=None, ts=None) -> int:
         eid = self._ins("INSERT INTO events(ts,type,entity_id,content,importance,confidence,source_id,created_at) "
                         "VALUES(?,?,?,?,?,?,?,?)", (ts or _now(), type, entity_id, content, importance, confidence,
@@ -98,6 +109,7 @@ if __name__ == "__main__":  # self-check: python store.py
     assert h[0]["valid_to"] == "2026-02-01T00:00:00+00:00" and h[1]["valid_to"] is None
     assert s.state(p, "status")["value"] == "building"
     s.add_event("note", "hello", p, source_id=src, ts="2026-03-04T10:00:00+00:00")
+    assert s.snapshot(p) == {"status": "building"} and [e["name"] for e in s.entities("project")] == ["demo"]
     assert len(seen) == 1 and seen[0]["content"] == "hello"
     assert len(s.events_on("2026-03-04")) == 1 and not s.events_on("2026-03-05")
     s.set_daily_log("2026-03-04", "a"); s.set_daily_log("2026-03-04", "b")
