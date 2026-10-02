@@ -15,6 +15,7 @@ from utils.gpu_bootstrap import ensure_cuda_dlls
 ensure_cuda_dlls()
 
 from llama_cpp import Llama
+from llm import think_cap
 from llama_cpp.llama_chat_format import (
     Jinja2ChatFormatter,
     chat_formatter_to_chat_completion_handler,
@@ -27,6 +28,7 @@ from config.settings import (
     CHAT_FORMAT_BY_TIER,
     TIER_PROMPT_MARKERS,
     THINKING_LENGTH_THRESHOLD,
+    THINKING_TOKEN_CAP,
     MMPROJ_PATH_BY_TIER,
     CONTEXT_WINDOW,
     CONTEXT_WINDOW_BY_TIER,
@@ -996,6 +998,13 @@ class LLMClient:
             else len(last_user_text) > THINKING_LENGTH_THRESHOLD
         )
 
+        extra = {}
+        if enable_thinking and THINKING_TOKEN_CAP:
+            cap = think_cap.build(model, THINKING_TOKEN_CAP)
+            if cap:
+                from llama_cpp import LogitsProcessorList
+                extra["logits_processor"] =LogitsProcessorList([cap])
+
         return handler(
             llama=model,
             messages=messages,
@@ -1006,6 +1015,7 @@ class LLMClient:
             max_tokens=max_tokens or self.max_tokens,
             stream=stream,
             enable_thinking=enable_thinking,
+            **extra,
         )
 
     def _generate(self, model: Llama, tier: str, messages: list, max_tokens: int = None,

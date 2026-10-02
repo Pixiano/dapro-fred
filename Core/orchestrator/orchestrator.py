@@ -52,6 +52,7 @@ from utils import event_log, notifier
 from utils.vault_md import flatten_tables
 from config.settings import (
     TOOLS_ENABLED,
+    DIRECT_TOOL_REPLY_MAX_CHARS,
     VAULT_CHUNK_INJECT_CHARS,
     SENSITIVE_LOCAL_ONLY,
     SECURITY_WATCH_POLL_SECONDS,
@@ -3014,6 +3015,20 @@ class FREDOrchestrator:
                 and not intent.looks_compound(last_user)
             ):
                 return " ".join(round_results)
+
+            # Optional speed setting (default off): one tool, plain request,
+            # a short one-line non-error result -> speak it as is and skip
+            # the rephrase call. calculate keeps its own rule (see above).
+            if (
+                DIRECT_TOOL_REPLY_MAX_CHARS
+                and len(round_results) == 1
+                and "calculate" not in called_names
+                and not intent.looks_compound(last_user)
+                and "\n" not in round_results[0].strip()
+                and 0 < len(round_results[0].strip()) <= DIRECT_TOOL_REPLY_MAX_CHARS
+                and not re.match(r"\s*(?:error|couldn't|could not|failed|unable|no )", round_results[0], re.I)
+            ):
+                return round_results[0].strip()
 
             # On a compound turn, restate the original request before
             # asking again. By this point the model is looking at its own
