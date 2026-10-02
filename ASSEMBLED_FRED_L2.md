@@ -41,3 +41,11 @@ SFT is the checkpoint before RL and OPD (the final model merges 16 RL experts, 5
 2. Phrase-cache coverage of FRED's tool turns.
 3. Barge-in cancel time on this PC.
 4. VoxCPM2 vs Kokoro (VRAM, first audio, English quality).
+
+## Talker on the Pi 5 (asked 2026-10-02, not decided)
+
+- MiniCPM5-1B Q4_K_M is a 0.69 GB file, so it fits a Pi's RAM; speed on the Pi's CPU is unmeasured. My guess is single-digit to low-teens tokens per second, so a 30-token cover line would take about 3 s and would be noticed. Pre-synthesised phrases and a pick-a-phrase role (a few output tokens) would not.
+- It would need an explicit exception to the GPU-only rule (LLMs are GPU-only so far).
+- The L4 judge reads up to 600 tokens every few seconds; that does not fit a Pi. The talker and judge currently share one model process, so moving only the talker means two model processes.
+- Saves about 1.1 GB on the PC.
+- Training data: the MiniCPM5-2B card says its post-training used UltraData-SFT-Agent-2609 (483,661 agent trajectories, 82,760 of them tool use, Apache-2.0). The MiniCPM5-1B card lists only UltraData-SFT-2605 and UltraData-Math and does not mention the agent set, so the 1B's tool use is unverified and must be measured.
