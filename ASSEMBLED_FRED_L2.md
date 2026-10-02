@@ -19,6 +19,11 @@ English is the working language. Status: **draft, TTS pick open.**
 - **Speech-to-text:** Whisper (faster-whisper large-v3-turbo) is the only pick. **Confucius4-R2T2 is on hold.**
 - **Prompt Guard 22M injection filter: on hold.** The 86M original is not wanted.
 
+## Marked to test (Vatsal, 2026-10-02)
+
+- **VoxCPM2:** test real VRAM and the available quants on this GPU, plus first-audio time. Not a pick yet; Kokoro stays the current TTS.
+- **Prompt-injection filter (on hold, candidate noted):** `qualifire/prompt-injection-jailbreak-sentinel-v2` (GGUF repo `qualifire/...-GGUF`; base `rogue-security/...-v2`). A Qwen3-0.6B fine-tune (~0.6B parameters; Q4_K_M 397 MB, Q8_0 639 MB), gated, licence "other". Its "best" claim is unverified: the card is gated and I could not read it. Compare with Prompt Guard 2 22M on FRED's injection suite when the hold lifts.
+
 ## TTS: VoxCPM2 (open)
 
 - 2B parameters, 30 languages, 48 kHz, voice design and cloning, Apache-2.0, streaming.
