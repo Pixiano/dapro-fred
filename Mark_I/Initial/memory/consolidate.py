@@ -15,6 +15,8 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from graph import Graph
+
 _SCHEMA = Path(__file__).with_name("schema_consolidation.sql")
 MAX_CHARS = 60_000
 log = logging.getLogger("memory")
@@ -22,9 +24,10 @@ log = logging.getLogger("memory")
 PROMPT = """You are FRED's nightly memory consolidation agent. Review {day} and return ONLY JSON:
 {{"events": [{{"type": str, "content": str, "importance": 0-1}}],
  "states": [{{"kind": "project|goal|task|preference|person|other", "name": str, "field": str, "value": str}}],
+ "relationships": [{{"subject": {{"kind": str, "name": str}}, "relation": str, "object": {{"kind": str, "name": str}}}}],
  "contradictions": [str], "open_questions": [str],
  "summary": str}}
-Only record what the material supports; do not invent. Flag a contradiction only when new material clearly
+Only record what the material supports; do not invent. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
 conflicts with a current state shown below. Summary: plain prose covering significant events, work, decisions,
 people, learning, health/routine, notable changes, open threads. Length follows the day: <=200 words if
 uneventful, 200-500 normal, 500-800 active, <=1000 exceptional. A boring day gets a short summary.
@@ -49,8 +52,7 @@ def _state(mem):
     out = []
     for e in mem.store.entities():
         snap = mem.store.snapshot(e["id"])
-        if snap:
-            out.append(f"{e['kind']}/{e['name']}: {snap}")
+        out.append(f"{e['kind']}/{e['name']}: {snap}" if snap else f"{e['kind']}/{e['name']}")
     return "\n".join(out) or "(none)"
 
 
@@ -65,12 +67,19 @@ def consolidate_day(mem, day, llm, model="unset") -> bool:
         return False
     ts = f"{day}T23:59:59+00:00"  # extracted facts belong to the day they describe
     try:
+        g = Graph(s)
         out = json.loads(llm(PROMPT.format(day=day, state=_state(mem), material=material)))
         sid = s.add_source("consolidation", day)
         for e in out.get("events", []):
             s.add_event(e["type"], e["content"], importance=float(e.get("importance", 0.5)), source_id=sid, ts=ts)
         for st in out.get("states", []):
-            s.set_state(s.entity(st["kind"], st["name"]), st["field"], st["value"], source_id=sid, ts=ts)
+            s.set_state(g.resolve(st["kind"], st["name"], day, sid), st["field"], st["value"], source_id=sid, ts=ts)
+        for r in out.get("relationships", []):
+            try:
+                g.relate(g.resolve(r["subject"]["kind"], r["subject"]["name"], day, sid), r["relation"],
+                         g.resolve(r["object"]["kind"], r["object"]["name"], day, sid), source_id=sid, ts=ts, day=day)
+            except (ValueError, KeyError, TypeError) as ex:  # one bad row must not lose the rest of the day
+                log.warning("skipped relationship %r: %r", r, ex)
         with s.lock:
             for kind, key in (("contradiction", "contradictions"), ("question", "open_questions")):
                 for text in out.get(key, []):
@@ -102,6 +111,8 @@ if __name__ == "__main__":  # self-check: python consolidate.py
     from manager import Memory
     good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8}],
                        "states": [{"kind": "project", "name": "FRED", "field": "phase", "value": "3"}],
+                       "relationships": [{"subject": {"kind": "person", "name": "Rina"}, "relation": "works on", "object": {"kind": "project", "name": "FRED"}},
+                                         {"subject": {"kind": "person", "name": "Rinah"}, "relation": "knows", "object": {"kind": "person", "name": "Rinah"}}],
                        "contradictions": ["phase was 2"], "open_questions": ["which model?"], "summary": "Quiet build day."})
     with tempfile.TemporaryDirectory() as d, Memory(d) as m:
         m.archive.write("conversation", {"text": "let's use sqlite"}, ts="2026-01-01T10:00:00+00:00")
@@ -115,4 +126,5 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         assert run_pending(m, lambda p: good) == []                          # idempotent
         n = lambda t: m.store.db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         assert n("review_queue") == 2 and n("events") == 1
+        assert n("relationships") == 1 and n("entities") == 2            # self-link skipped, Rinah = Rina
     print("consolidate ok")

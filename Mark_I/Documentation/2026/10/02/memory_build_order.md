@@ -4,7 +4,7 @@ Spec: `Old/FRED_Memory_Overhaul.md` (predecessor doc, section 40 phases). Integr
 
 1. **Phase 1 Foundation: complete.** `store.py` (entities, events, state history, provenance, daily log, snapshot), `manager.py` (the single `Memory(root)` object). Projects/goals/tasks/preferences are entity kinds with state fields (spec section 9), not extra tables.
 2. **Layer 1 Raw archive: built.** `archive.py`. Append-only JSONL per UTC day and stream, plus content-addressed blobs for files/artifacts. Index in SQLite, `verify()` detects loss/tamper.
-3. **Phase 3 Daily consolidation: built.** `consolidate.py` (see done.md). **Phases 4-8, in order:** temporal graph, weekly meta-agent, personal model, monthly/yearly, deep self-analysis.
+3. **Phase 3 Daily consolidation: built.** `consolidate.py` (see done.md). **Phase 4 Temporal graph: built** (`graph.py`). **Phases 5-8, in order:** weekly meta-agent, personal model, monthly/yearly, deep self-analysis.
 4. **Phase 2 FRED integration: last.** Wires FRED's pipeline, event bus, capture/recall tools and the real embedder into the sockets below. `semantic.py` (event vectors + recall) is already built as a standalone piece and waits for this step.
 
 ## Sockets in place
