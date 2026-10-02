@@ -207,6 +207,33 @@ def _describe_calculation(root, value, percent_of: tuple = None) -> str:
     return ""
 
 
+_NUM = r"(\d+(?:\.\d+)?)"
+
+
+def _spoken_maths(text: str) -> str:
+    """
+    Rewrites spoken forms into plain operators before the ast parse:
+    leading filler ("what's the ..."), "square root of 144", "5 squared",
+    "2 cubed", "2 to the power of 10", and a trailing percentage.
+
+    A trailing "A plus/minus P percent" means A adjusted by P% OF A, the
+    spreadsheet reading ("847 times 23 minus 15 percent" is 19481 less
+    15% = 16558.85), applied to everything on the left. "P percent of B"
+    is handled by the caller and never reaches the trailing rule.
+    """
+    text = re.sub(r"^(?:what(?:'s| is)|calculate|compute|work out|how much is)\s+", "", text, flags=re.I)
+    text = re.sub(r"^the\s+(?=square|cube)", "", text, flags=re.I).rstrip("?. ")
+    text = re.sub(rf"square root of\s+{_NUM}", r"sqrt(\1)", text, flags=re.I)
+    text = re.sub(rf"cube root of\s+{_NUM}", r"(\1**(1/3))", text, flags=re.I)
+    text = re.sub(rf"{_NUM}\s+squared", r"(\1**2)", text, flags=re.I)
+    text = re.sub(rf"{_NUM}\s+cubed", r"(\1**3)", text, flags=re.I)
+    text = re.sub(rf"{_NUM}\s+(?:raised\s+)?to the (?:power|exponent)(?: of)?\s+{_NUM}",
+                  r"(\1**\2)", text, flags=re.I)
+    return re.sub(rf"^(.+?)\s*(plus|minus|\+|-)\s*{_NUM}\s*(?:%|percent)$",
+                  lambda m: f"({m[1]})*(1{'-' if m[2] in ('minus', '-') else '+'}{m[3]}/100)",
+                  text, flags=re.I)
+
+
 def calculate(expression: str) -> str:
     """
     Evaluate an arithmetic expression exactly, and phrase the result as a
@@ -248,6 +275,8 @@ def calculate(expression: str) -> str:
         text,
         flags=re.IGNORECASE,
     )
+
+    text = _spoken_maths(text)
 
     # Spoken forms the model tends to pass through verbatim.
     for word, symbol in (

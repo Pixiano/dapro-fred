@@ -602,11 +602,23 @@ def normalise(text: str) -> str:
     return text.strip(" ,.!?")
 
 
+# "say 'systems online' and nothing else": a quoted string to parrot back.
+# The quoted words are content, not a request, so cue words inside them
+# ("online" -> sysinfo) must not offer tools. The quote has to be the
+# whole payload ("say 'hello' to mom" is a message, not an echo).
+_ECHO = re.compile(
+    r"""^(?:just\s+|please\s+)*(?:say|repeat|reply\s+with|respond\s+with)\s+
+        ["'‘“].+["'’”]
+        (?:\s+and\s+(?:nothing|only|just)\b.*|\s+only)?[\s.!]*$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
 def looks_social(text: str) -> bool:
     stripped = normalise(text)
     if not stripped:
         return True  # nothing left after the greeting, e.g. a bare "Hey Fred"
-    return bool(_SOCIAL.match(stripped))
+    return bool(_SOCIAL.match(stripped) or _ECHO.match(stripped))
 
 
 # Matched against the RAW text, not normalise()'s output: _PREFIX strips a
@@ -733,7 +745,9 @@ def looks_compound(text: str) -> bool:
 
 def match_categories(text: str) -> list:
     """Every category whose cues appear, in declaration order."""
-    stripped = normalise(text)
+    # Idioms that contain a cue word without meaning it: "time complexity
+    # of binary search" is not a clock question.
+    stripped = re.sub(r"\b(?:time|space)\s+complexity\b", " ", normalise(text), flags=re.I)
     return [name for name, rx in _CATEGORY_RE.items() if rx.search(stripped)]
 
 

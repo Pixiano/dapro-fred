@@ -101,7 +101,10 @@ class Dispatcher:
             ),
             (
                 re.compile(
-                    r"^what(?:'s| is) the time|^what time is it",
+                    # Anchored at the end: an unanchored prefix also took
+                    # "what's the time complexity of binary search".
+                    r"^(?:what(?:'s| is) the (?:current )?time|what time is it)"
+                    r"(?:\s+(?:right )?now)?(?:\s*,?\s*(?:fred|sir|please))?\s*[?.!]*$",
                     re.IGNORECASE,
                 ),
                 self._route_get_time,
@@ -116,7 +119,8 @@ class Dispatcher:
                     r"^(?:calculate|compute|work out|solve|"
                     r"what(?:'s| is)|how much is)\s+"
                     r"(?P<expr>(?=.*\d)(?=.*(?:[+\-*/^%]|plus|minus|times|"
-                    r"multiplied|divided|percent|sqrt|square root)).+?)\??$",
+                    r"multiplied|divided|percent|sqrt|square root|cube root|"
+                    r"squared|cubed|to the power)).+?)\??$",
                     re.IGNORECASE,
                 ),
                 self._route_calculate,
