@@ -27,4 +27,4 @@
 - `alerts.py` (personal alerts in the private database; public days from `calendar_india.json`), `gen_calendar.py` (builds the calendar for 2026-2035), self-check `python alerts.py`. Vatsal's own list is kept in a private file outside the repo and loaded with `load_seed` at integration; unsure dates are stored as unsure and asked about once; FRED's own suggestions need his yes (`confirm`/`reject`).
 - Web-checked festival dates (2026-2030) fill gaps in the holidays package; Dhanteras/Bhai Dooj dropped (sources disagreed).
 - January recompute of movable days only: `recompute_year`, `run_alerts_pending(mem, fetch, today)` (tables `alert_calendar`, `alert_refreshes`); self-check in `alerts.py`.
-- FRED's own birthday: a script date scan of `Old/` found the earliest FRED file on 2025-09-18 (another early file 19 Sep); stored in the private list as 18 Sep 2025, unsure, for Vatsal to confirm.
+- FRED's own birthday: a script date scan of `Old/` found the earliest FRED file on 2025-09-18 (another early file 19 Sep); settled by Vatsal as 16 Sep 2025 (first local model download; only the 16th is used).
