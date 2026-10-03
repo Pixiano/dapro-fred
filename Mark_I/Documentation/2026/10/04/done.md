@@ -19,3 +19,8 @@
 - `inferences` got a `tier` column; the weekly agent can raise it, never lower it.
 - Not yet: pipeline wiring, spoken commands, monthly schedule (Phase 7).
 - **Added by Vatsal:** the small models make many decisions, so build **very verbose, detailed logging of every model decision and command** (prompt in, raw reply, parsed action, tool call, result, what the code accepted or overrode). Parked for a later phase, see the build order. Already logged today: `inference_log`, `model_item_log`, `model_versions`, `weekly_runs`, `consolidation_runs`.
+
+## Phase 7 designed (not built): [monthly + yearly consolidation](phase7_monthly_yearly_design.md)
+- Decisions: monthly on the 1st, yearly on Vatsal's birthday (date not given yet, stored privately, never in the repo); life chapters (monthly proposes, yearly refines, user chapters locked); yearly = same model at highest effort with a bigger budget plus a second critique pass (read as "1+3", to confirm); imported history is undated so it stays raw, no replay, a backfill mode only once dates can be trusted.
+- One engine: monthly and yearly reuse the weekly tool loop as subclasses with their own opening map, prompt and extra tools (state_at, compare_states, chapters, turning points, model_diff).
+- Built now from this decision: `consolidate.py` skips `kind="historical"` archive records, so undated imports never leak into live days. Self-check updated.

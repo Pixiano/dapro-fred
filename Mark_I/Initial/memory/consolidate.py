@@ -45,6 +45,7 @@ MATERIAL ({day}):
 def _material(mem, day):
     d = mem.archive.root / day[:4] / day[5:7] / day[8:10]
     recs = [r for p in sorted(d.glob("*.jsonl")) for r in mem.archive.read(p.stem, day)] if d.exists() else []
+    recs = [r for r in recs if r.get("kind") != "historical"]  # imported history is undated: stays raw, never mixed into live days
     lines = [f"[{r['ts']}] {r['stream']}: {json.dumps(r['data'], ensure_ascii=False)}" for r in sorted(recs, key=lambda r: r["ts"])]
     lines += [f"[{e['ts']}] event/{e['type']}: {e['content']}" for e in mem.store.events_on(day)]
     return "\n".join(lines)[:MAX_CHARS]
@@ -134,7 +135,8 @@ if __name__ == "__main__":  # self-check: python consolidate.py
                        "contradictions": ["phase was 2"], "open_questions": ["which model?"], "summary": "Quiet build day."})
     with tempfile.TemporaryDirectory() as d, Memory(d) as m:
         m.archive.write("conversation", {"text": "let's use sqlite"}, ts="2026-01-01T10:00:00+00:00")
-        assert not consolidate_day(m, "2026-01-02", lambda p: good)          # nothing to do
+        m.archive.write("import", {"text": "old chat"}, ts="2026-01-02T10:00:00+00:00", kind="historical")
+        assert not consolidate_day(m, "2026-01-02", lambda p: good)          # nothing to do (historical records are skipped)
         assert not consolidate_day(m, "2026-01-01", lambda p: "not json")    # failure recorded, no writes
         assert m.store.daily_log("2026-01-01") is None
         assert run_pending(m, lambda p: good) == ["2026-01-01"]              # retries the failed day
