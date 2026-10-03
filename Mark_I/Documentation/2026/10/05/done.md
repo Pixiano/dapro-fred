@@ -6,4 +6,12 @@
 
 ## Decision log
 - `decisionlog.py`: verbose, always-on log of every model prompt, reply, tool action, code override and model failure in the private database. Hooked into the tool loops (`Week._dlog`, `Week.call`), consolidation, recall judge, personal-model decisions and year notes. Self-check: `python decisionlog.py`. Details in the overview.
-- Still parked: more specific memory tools (decide in the final phase), yearly alerts, backfill mode.
+- Still parked: more specific memory tools (decide in the final phase), yearly alerts.
+
+## Small gaps fixed, backfill mode
+- **Long days:** `consolidate._chunks`: a day over `MAX_CHARS` goes to the model in parts; every part is validated before anything is written.
+- **Multi-hop search:** `Graph.path(a, b, at, max_hops)`; analysts get `find_connection` (weekly, monthly, yearly, self-analysis).
+- **Undo merge:** `Graph.merge` journals moved rows in `merge_moves`; `Graph.unmerge(entity)` restores them (state closures, aliases, tags, relationships, events). Merges made before this have no journal and refuse to undo.
+- **Out-of-order facts:** `MemoryStore.set_state` slots an older fact into history instead of closing the current value.
+- **Backfill mode:** `trust_dates` (Vatsal vouches for a date range, never automatic) + `backfill_pending` (oldest first; names only, no contradictions, appends to an existing live daily log, source kind `backfill`); live consolidation ignores backfilled events. Self-checks in `consolidate.py`, `graph.py`, `store.py`, `weekly.py`.
+- **Left as they are:** other-script names and nicknames still ask (asking beats guessing); old archive days are never compressed (the archive is never edited).

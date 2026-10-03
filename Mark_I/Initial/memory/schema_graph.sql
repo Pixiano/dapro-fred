@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS entity_aliases (   -- other spellings of one entity (
 CREATE TABLE IF NOT EXISTS entity_merges (    -- a merged entity is kept and marked, never deleted (reversible)
   entity_id INTEGER PRIMARY KEY REFERENCES entities(id), into_id INTEGER NOT NULL REFERENCES entities(id),
   merged_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS merge_moves (      -- what a merge moved, so unmerge can put every row back
+  id INTEGER PRIMARY KEY, entity_id INTEGER NOT NULL REFERENCES entities(id), tbl TEXT NOT NULL, key TEXT NOT NULL, extra TEXT);
 CREATE TABLE IF NOT EXISTS event_entities (   -- tags: which entities an event is about (an event can have several)
   event_id INTEGER NOT NULL REFERENCES events(id), entity_id INTEGER NOT NULL REFERENCES entities(id),
   PRIMARY KEY(event_id, entity_id));

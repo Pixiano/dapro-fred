@@ -43,6 +43,7 @@ get_daily_logs {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}
 get_entity {"name": str}   current state, state history, aliases
 get_events_about {"name": str, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}
 get_relationship_history {"a": str, "b": str}
+find_connection {"a": str, "b": str, "date": "YYYY-MM-DD"}   shortest chain of links between two people/projects/places (up to 4 hops); date optional, default now
 compare_periods {"from1": date, "to1": date, "from2": date, "to2": date}
 find_similar_events {"event_id": int, "k": 5}
 find_recurring {"event_id": int, "k": 8}   similar events from OTHER months

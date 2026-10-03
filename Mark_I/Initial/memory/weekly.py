@@ -53,6 +53,7 @@ get_daily_logs {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}
 get_entity {"name": str}   current state, state history, aliases
 get_events_about {"name": str, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}
 get_relationship_history {"a": str, "b": str}
+find_connection {"a": str, "b": str, "date": "YYYY-MM-DD"}   shortest chain of links between two people/projects/places (up to 4 hops); date optional, default now
 compare_periods {"from1": date, "to1": date, "from2": date, "to2": date}
 find_similar_events {"event_id": int, "k": 5}
 list_inferences {"status": "proposed|supported|weakened|rejected|outdated|active"}
@@ -213,6 +214,13 @@ class Week:
         name = lambda i: self.q("SELECT name FROM entities WHERE id=?", (i,))[0]["name"]
         return [{"from": name(r["subject_id"]), "relation": r["relation"], "to": name(r["object_id"]), "valid_from": r["valid_from"][:10],
                  "valid_to": (r["valid_to"] or "now")[:10]} for r in self.g.history(x[0], y[0])]
+
+    def t_find_connection(self, a, b, date=None):
+        (x, ex), (y, ey) = self._need_entity(a), self._need_entity(b)
+        if ex or ey:
+            return ex or ey
+        steps = self.g.path(x[0], y[0], f"{date}T23:59:59+00:00" if date else None)
+        return {"connected": steps is not None, "steps": steps}
 
     def t_compare_periods(self, from1, to1, from2, to2):
         def one(a, b):
@@ -452,6 +460,13 @@ if __name__ == "__main__":  # self-check: python weekly.py
         s.add_event("note", "old fred note", ts="2026-02-20T10:00:00+00:00")
         g = Graph(s); g.tag(ids[0], g.resolve("project", "FRED"))
         s.db.execute("INSERT INTO review_queue(day,kind,text) VALUES('2026-03-03','contradiction','phase was 2')"); s.db.commit()
+        fr = g.resolve("project", "FRED")
+        for who in ("Priya", "Meera"):
+            g.relate(g.resolve("person", who), "works on", fr, ts="2026-01-01T00:00:00+00:00")
+        wk = Week(m, "2026-03-08", ix)
+        c = wk.t_find_connection("Priya", "Meera")
+        assert c["connected"] and [(x["from"], x["to"]) for x in c["steps"]] == [("Priya", "FRED"), ("FRED", "Meera")]
+        assert wk.t_find_connection("Priya", "Meera", date="2025-01-01") == {"connected": False, "steps": None} and "did_you_mean" in wk.t_find_connection("Prya", "Meera")
         step = iter([
             "not json at all",                                                                                    # repaired once
             {"tool": "search_memory", "args": {"query": "fred night"}},

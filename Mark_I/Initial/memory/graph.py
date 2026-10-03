@@ -10,6 +10,7 @@ Sockets:
 Names: difflib similarity on raw and phonetic-ish forms (oo->u, ee->i ...), same kind only.
 ponytail: tuned for English/Indian names; use a real phonetic algorithm if misses pile up in the queue.
 """
+import json
 import re
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -127,28 +128,77 @@ class Graph:
                         maybe.append((word, pre.pop()))
         return found, maybe
 
+    _MOVES = {"state": ("entity_states", "entity_id"), "event": ("events", "entity_id"),
+              "rel_s": ("relationships", "subject_id"), "rel_o": ("relationships", "object_id")}
+
     def merge(self, from_id, into_id):
+        """Moves everything of from_id to into_id and journals each moved row (merge_moves) so unmerge() can undo it."""
         f, t = self.canonical(from_id), self.canonical(into_id)
         if f == t:
             return t
         s = self.s
         with s.lock:
             now = _now()
+            jr = lambda tbl, key, extra=None: s.db.execute("INSERT INTO merge_moves(entity_id,tbl,key,extra) VALUES(?,?,?,?)", (f, tbl, str(key), extra))
             for fld in {r[0] for r in s.db.execute("SELECT field FROM entity_states WHERE entity_id=? AND valid_to IS NULL", (f,))}:
                 if s.state(t, fld):  # target already has a current value: it wins, the moved one closes now
+                    for (i,) in s.db.execute("SELECT id FROM entity_states WHERE entity_id=? AND field=? AND valid_to IS NULL", (f, fld)).fetchall():
+                        jr("state_closed", i, now)
                     s.db.execute("UPDATE entity_states SET valid_to=? WHERE entity_id=? AND field=? AND valid_to IS NULL", (now, f, fld))
-            s.db.execute("UPDATE entity_states SET entity_id=? WHERE entity_id=?", (t, f))
-            s.db.execute("UPDATE events SET entity_id=? WHERE entity_id=?", (t, f))
-            s.db.execute("UPDATE relationships SET subject_id=? WHERE subject_id=?", (t, f))
-            s.db.execute("UPDATE relationships SET object_id=? WHERE object_id=?", (t, f))
+            for kind, (tbl, col) in self._MOVES.items():
+                for (i,) in s.db.execute(f"SELECT id FROM {tbl} WHERE {col}=?", (f,)).fetchall():
+                    jr(kind, i)
+                s.db.execute(f"UPDATE {tbl} SET {col}=? WHERE {col}=?", (t, f))
+            for k, al in s.db.execute("SELECT kind, alias FROM entity_aliases WHERE entity_id=?", (f,)).fetchall():
+                jr("alias", json.dumps([k, al]))
             s.db.execute("UPDATE entity_aliases SET entity_id=? WHERE entity_id=?", (t, f))
+            for (e,) in s.db.execute("SELECT event_id FROM event_entities WHERE entity_id=?", (f,)).fetchall():
+                jr("tag", e, "dup" if s.db.execute("SELECT 1 FROM event_entities WHERE event_id=? AND entity_id=?", (e, t)).fetchone() else "moved")
             s.db.execute("UPDATE OR IGNORE event_entities SET entity_id=? WHERE entity_id=?", (t, f))
             s.db.execute("DELETE FROM event_entities WHERE entity_id=?", (f,))
             row = s.db.execute("SELECT kind, name FROM entities WHERE id=?", (f,)).fetchone()
+            key = json.dumps([row["kind"], norm(row["name"])])
+            prev = s.db.execute("SELECT entity_id FROM entity_aliases WHERE kind=? AND alias=?", (row["kind"], norm(row["name"]))).fetchone()
+            jr("alias_prev", key, prev[0]) if prev else jr("alias_added", key)
             s.db.execute("INSERT INTO entity_merges VALUES(?,?,?)", (f, t, now))
             s.db.commit()
             self.add_alias(row["kind"], row["name"], t)
         return t
+
+    def unmerge(self, entity_id):
+        """Undo a merge made by merge(): every moved row goes back to the entity, the entity is live again. Rows created after the
+        merge stay where they are. Returns how many rows went back. ValueError if it was not merged or has no journal."""
+        s = self.s
+        with s.lock:
+            m = s.db.execute("SELECT into_id FROM entity_merges WHERE entity_id=?", (entity_id,)).fetchone()
+            if not m:
+                raise ValueError(f"entity {entity_id} is not merged")
+            rows = s.db.execute("SELECT * FROM merge_moves WHERE entity_id=? ORDER BY id DESC", (entity_id,)).fetchall()
+            if not rows:
+                raise ValueError(f"entity {entity_id} was merged without a journal; it cannot be undone")
+            f, t = entity_id, self.canonical(m[0])
+            for r in rows:  # newest first, so each step undoes exactly what the later one did
+                k, key, extra = r["tbl"], r["key"], r["extra"]
+                if k in self._MOVES:
+                    tbl, col = self._MOVES[k]
+                    s.db.execute(f"UPDATE {tbl} SET {col}=? WHERE id=?", (f, int(key)))
+                elif k == "state_closed":
+                    s.db.execute("UPDATE entity_states SET valid_to=NULL WHERE id=? AND valid_to=?", (int(key), extra))
+                elif k == "alias":
+                    s.db.execute("UPDATE entity_aliases SET entity_id=? WHERE kind=? AND alias=?", (f, *json.loads(key)))
+                elif k == "alias_prev":
+                    s.db.execute("UPDATE entity_aliases SET entity_id=? WHERE kind=? AND alias=?", (int(extra), *json.loads(key)))
+                elif k == "alias_added":
+                    s.db.execute("DELETE FROM entity_aliases WHERE kind=? AND alias=?", tuple(json.loads(key)))
+                elif k == "tag":
+                    if extra == "moved":
+                        s.db.execute("UPDATE event_entities SET entity_id=? WHERE event_id=? AND entity_id=?", (f, int(key), t))
+                    else:
+                        s.db.execute("INSERT OR IGNORE INTO event_entities VALUES(?,?)", (int(key), f))
+            s.db.execute("DELETE FROM merge_moves WHERE entity_id=?", (f,))
+            s.db.execute("DELETE FROM entity_merges WHERE entity_id=?", (f,))
+            s.db.commit()
+        return len(rows)
 
     # ---- relationships ----
     def relate(self, subject_id, relation, object_id, source_id=None, ts=None, confidence=1.0, day=None):
@@ -175,6 +225,33 @@ class Graph:
                                "VALUES(?,?,?,?,?,?)", (subject_id, relation, object_id, ts, confidence, source_id))
             s.db.commit()
             return cur.lastrowid
+
+    def path(self, a, b, at=None, max_hops=4):
+        """Shortest chain of links between two entities that were true at `at` (default now): a list of
+        {"from", "relation", "to", "forward"} steps, [] if they are the same entity, None if no chain within max_hops."""
+        a, b = self.canonical(a), self.canonical(b)
+        if a == b:
+            return []
+        seen, frontier = {a: None}, [a]
+        for _ in range(max_hops):
+            nxt = []
+            for e in frontier:
+                for r in self.neighbors(e, at):
+                    o = self.canonical(r["object_id"] if self.canonical(r["subject_id"]) == e else r["subject_id"])
+                    if o in seen:
+                        continue
+                    seen[o] = (e, r)
+                    if o == b:
+                        steps, cur = [], b
+                        name = lambda i: self.s.db.execute("SELECT name FROM entities WHERE id=?", (i,)).fetchone()[0]
+                        while seen[cur]:
+                            p, rel = seen[cur]
+                            steps.append({"from": name(p), "relation": rel["relation"], "to": name(cur), "forward": self.canonical(rel["subject_id"]) == p})
+                            cur = p
+                        return steps[::-1]
+                    nxt.append(o)
+            frontier = nxt
+        return None
 
     def neighbors(self, entity_id, at=None):
         """Links touching an entity that were true at `at` (ISO time; default now)."""
@@ -238,4 +315,26 @@ if __name__ == "__main__":  # self-check: python graph.py
     g.merge(ro, ri)                                                    # reversible merge: row kept, marked
     assert g.canonical(ro) == ri and g.resolve("person", "Rohan") == ri and n("entities") == n_ent
     assert [e["id"] for e in g.events_about(ri)] == [e2] and s.snapshot(ri) == {"mood": "ok"} and len(g.history(su, fred)) == 1
+    # undo the merge: everything goes back, things created after the merge stay with the merged-into entity
+    e3 = s.add_event("note", "after the merge"); g.tag(e3, ri)
+    back = g.unmerge(ro)
+    assert back >= 3 and g.canonical(ro) == ro and not s.db.execute("SELECT 1 FROM entity_merges").fetchone()
+    assert [e["id"] for e in g.events_about(ro)] == [e2] and [e["id"] for e in g.events_about(ri)] == [e3]
+    assert s.snapshot(ro) == {"mood": "ok"} and s.snapshot(ri) == {} and g.resolve("person", "Rohan") == ro
+    try:
+        g.unmerge(ro)
+        raise SystemExit("unmerge of a live entity accepted")
+    except ValueError:
+        pass
+    s.set_state(ri, "mood", "great")
+    g.merge(ro, ri)                                                    # merge again with a clashing state: the target's value wins, undo restores both
+    assert s.snapshot(ri) == {"mood": "great"}
+    g.unmerge(ro)
+    assert s.snapshot(ri) == {"mood": "great"} and s.snapshot(ro) == {"mood": "ok"} and g.canonical(ro) == ro
+    # multi-hop: Priya -works on-> FRED <-works on- Meera; Rohit knows nobody
+    g.relate(me, "works on", fred, ts="2026-01-01T00:00:00+00:00")
+    p = g.path(su, me)
+    assert [(x["from"], x["relation"], x["to"], x["forward"]) for x in p] == [("Priya", "works_on", "FRED", True), ("FRED", "works_on", "Meera", False)]
+    assert g.path(su, su) == [] and g.path(su, ri) is None and g.path(su, me, max_hops=1) is None
+    assert g.path(su, me, at="2025-01-01T00:00:00+00:00") is None       # the chain did not exist yet
     print("graph ok")

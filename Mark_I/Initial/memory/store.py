@@ -69,10 +69,23 @@ class MemoryStore:
             cur = self.state(entity_id, field)
             if cur is not None and cur["value"] == value:
                 return cur["id"]
+            if cur is not None and ts < cur["valid_from"]:  # older fact (backfilled history): slot it in, leave the current value alone
+                return self._set_past(entity_id, field, value, source_id, confidence, ts)
             self.db.execute("UPDATE entity_states SET valid_to=? WHERE entity_id=? AND field=? AND valid_to IS NULL",
                             (ts, entity_id, field))
             return self._ins("INSERT INTO entity_states(entity_id,field,value,valid_from,confidence,source_id) "
                              "VALUES(?,?,?,?,?,?)", (entity_id, field, value, ts, confidence, source_id))
+
+    def _set_past(self, entity_id, field, value, source_id, confidence, ts):
+        rows = [dict(r) for r in self.state_history(entity_id, field)]
+        pred = max((r for r in rows if r["valid_from"] <= ts), key=lambda r: (r["valid_from"], r["id"]), default=None)
+        if pred and pred["value"] == value:
+            return pred["id"]
+        succ = min((r for r in rows if r["valid_from"] > ts), key=lambda r: (r["valid_from"], r["id"]))
+        if pred and (pred["valid_to"] is None or pred["valid_to"] > ts):
+            self.db.execute("UPDATE entity_states SET valid_to=? WHERE id=?", (ts, pred["id"]))
+        return self._ins("INSERT INTO entity_states(entity_id,field,value,valid_from,valid_to,confidence,source_id) VALUES(?,?,?,?,?,?,?)",
+                         (entity_id, field, value, ts, succ["valid_from"], confidence, source_id))
 
     def state(self, entity_id, field):
         with self.lock:
@@ -153,6 +166,11 @@ if __name__ == "__main__":  # self-check: python store.py
     except sqlite3.IntegrityError:
         pass
     done = []  # shared connection works across threads
+    s.set_state(p, "status", "idea", src, ts="2025-12-01T00:00:00+00:00")        # older fact: slotted in before, the present is untouched
+    s.set_state(p, "status", "design", src, ts="2026-01-15T00:00:00+00:00")      # older fact between two rows: splits the interval
+    h = [(r["value"], r["valid_from"][:10], (r["valid_to"] or "now")[:10]) for r in s.state_history(p, "status")]
+    assert h == [("idea", "2025-12-01", "2026-01-01"), ("planning", "2026-01-01", "2026-01-15"), ("design", "2026-01-15", "2026-02-01"),
+                 ("building", "2026-02-01", "now")] and s.state(p, "status")["value"] == "building"
     t = threading.Thread(target=lambda: done.append(s.add_event("note", "from thread")))
     t.start(); t.join()
     assert done

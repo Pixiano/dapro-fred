@@ -42,7 +42,7 @@ FRED keeps a **shoebox** (everything exactly as it happened), a **filing cabinet
 - **Verbose decision logging** of every model prompt, reply, action and what the code overruled (Vatsal's request, integration phase at the latest).
 - **More specific detailed memory tools** for the consolidation models (decide in the final phase).
 - **Permanent yearly alerts** for friends, family and occasions (later phase, always confirmed with Vatsal before saving).
-- **Imported history** stays raw until dates can be trusted (backfill mode later).
+- **Imported history** stays raw until dates can be trusted; backfill mode (built 2026-10-05, see ../05/done.md) consolidates it only inside date ranges Vatsal vouches for.
 - Smaller gaps: day chunking past 60k characters, summarising an overflowing loop context, multi-hop graph queries, an "undo merge" helper, cooling one-off entities, retention of very old archive days, reranker model.
 
 ## Rough edges to settle at integration
