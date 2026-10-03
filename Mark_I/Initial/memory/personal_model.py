@@ -23,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
+from decisionlog import note, traced
 from graph import Graph
 
 log = logging.getLogger("memory")
@@ -124,7 +125,7 @@ class PersonalModel:
         text = "\n".join(f"inference_id {c['id']} [{c['category']}, tier {c['tier']}, {c['support_weeks']} weeks, conf {c['confidence']}]: {c['statement']}\n"
                          f"  support: {self._evidence(c['id'], 'support', 3)}\n  counter: {self._evidence(c['id'], 'counter', 2)}" for c in cands)
         try:
-            res = json.loads(llm(PROMPT.format(items=items, cands=text)))["items"]
+            res = json.loads(traced(self.s, "personal_model", vid, llm)(PROMPT.format(items=items, cands=text)))["items"]
         except Exception:  # bad output: nothing changes, the next run sees the same candidates
             log.exception("personal model batch failed")
             return out
@@ -133,6 +134,7 @@ class PersonalModel:
             try:
                 c = by_id.get(r["inference_id"])
                 if c is None or not self.passes(c):
+                    note(self.s, "personal_model", vid, "override", why="gate", decision=r)
                     continue  # the gate holds whatever the model said
                 if r["decision"] == "reject":
                     self._x("UPDATE inferences SET status='rejected', valid_to=? WHERE id=?", (_now()[:10], c["id"]))

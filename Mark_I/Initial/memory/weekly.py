@@ -22,6 +22,7 @@ from pathlib import Path
 import faiss
 import numpy as np
 
+from decisionlog import note
 from graph import Graph, norm
 from personal_model import DEFAULT_TIER, TIER_RANK
 
@@ -339,7 +340,15 @@ class Week:
         return {"ok": True}
 
     # ---- the loop ----
+    def _dlog(self, kind, **d):
+        note(self.s, type(self).__name__, getattr(self, "period", self.end), kind, **d)
+
     def call(self, action):
+        res = self._call(action)
+        self._dlog("override" if isinstance(res, dict) and "error" in res else "action", action=action, result=res)
+        return res
+
+    def _call(self, action):
         self.calls += 1
         try:
             tool = action["tool"]
@@ -355,6 +364,7 @@ class Week:
 
     def loop(self, llm):
         msgs = [{"role": "system", "content": self.system}, {"role": "user", "content": self.week_map() + "\n\nBegin."}]
+        self._dlog("prompt", system=self.system, map=msgs[1]["content"])
         bad = grace = 0
         while self.digest is None:
             capped = self.calls >= self.max_calls
@@ -363,7 +373,12 @@ class Week:
                 if grace > FINISH_GRACE:
                     return "incomplete", self._fallback()
                 msgs.append({"role": "user", "content": "Call limit reached. Reply now with finish and your digest, nothing else."})
-            reply = llm(msgs[:2] + msgs[2:][-KEEP_MSGS:])
+            try:
+                reply = llm(msgs[:2] + msgs[2:][-KEEP_MSGS:])
+            except Exception as ex:
+                self._dlog("model_failure", error=repr(ex))
+                raise
+            self._dlog("reply", text=reply)
             msgs.append({"role": "assistant", "content": reply})
             try:
                 action = _json(reply)
@@ -371,6 +386,7 @@ class Week:
                     raise ValueError("no tool")
             except ValueError:  # includes JSONDecodeError
                 bad += 1
+                self._dlog("model_failure", error="unusable reply", text=reply)
                 if bad >= MAX_BAD:
                     return "incomplete", self._fallback()
                 msgs.append({"role": "user", "content": 'Reply with valid JSON for exactly one tool: {"tool": "...", "args": {...}}'})

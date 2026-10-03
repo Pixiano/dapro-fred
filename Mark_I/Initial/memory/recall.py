@@ -11,6 +11,8 @@ Sockets:
 """
 import json
 
+from decisionlog import traced
+
 PROMPT = """Question: {q}
 Candidate memories:
 {cands}
@@ -22,7 +24,7 @@ Return ONLY JSON: {{"relevant": [ids that help answer the question, best first],
 def _judge(index, q, evs, llm):
     cands = "\n".join(f"{e['id']}: [{e['ts'][:10]}] {e['content']}" for e in evs)
     try:
-        out = json.loads(llm(PROMPT.format(q=q, cands=cands)))
+        out = json.loads(traced(index.store, "recall_judge", q[:60], llm)(PROMPT.format(q=q, cands=cands)))
         ok = {e["id"]: e for e in evs}
         return [ok[i] for i in out.get("relevant", []) if i in ok], out.get("retry_queries") or [], out.get("ask")
     except Exception:  # bad output: trust the retrieval order rather than fail the question

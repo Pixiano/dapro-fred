@@ -80,8 +80,9 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 - Connection to the real FRED (feeding the archive, the real embedder, the real nightly model, the timer, recall tools, a spoken "X is Y" fix).
 - Smaller gaps: very long days are cut at 60k characters, no multi-hop connection search, no "undo merge" helper, nicknames and other-script names go through the review question, old archive days are never compressed.
 
-## Planned: decision logging
-The small models make many decisions, so a very detailed record of every model prompt, reply, action and what the code overruled is planned (integration phase at the latest). Today, changes to inferences, items and runs are already logged.
+## Decision log (built 2026-10-05) - `decisionlog.py`
+- **Plain words:** the small models make many decisions, so FRED keeps a detailed diary of them in its private database (never the code repository): everything a model was asked, what it answered, every tool it used with the result, every time the code refused or overruled it (a rule about evidence, a quality gate, a refused action), and every time its answer was unusable. If a model ever reaches a wrong conclusion, you can replay exactly how.
+- **Technical:** one `decision_log` table (`at, agent, run, kind, data` JSON), kinds `prompt | reply | action | override | model_failure`; written by `note()` (never raises), `traced()` wraps the prompt-style model sockets (nightly consolidation, recall judge, personal model), the tool loops (weekly, monthly, yearly, critic, self-analysis) log inside `Week`, and code overrides are logged at the write gate and the personal-model gate; read with `show(store, agent, run, kind, limit)`; included in the sqlite backup. Full text is kept on purpose while the models are still being judged; prune by age later.
 
 ## Planned: yearly alerts
 Recurring dates for friends, family and occasions (birthdays, anniversaries) that FRED reminds you of every year. FRED will ask before saving a date it picked up in conversation. Planned for a later phase; see the build order.

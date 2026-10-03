@@ -23,6 +23,7 @@ from pathlib import Path
 from graph import norm
 from weekly import ACTIVE, MAX_CALLS, MIN_EVENTS, SYSTEM, Week, _json, _now
 
+from decisionlog import note as dlog
 log = logging.getLogger("memory")
 _HERE = Path(__file__).parent
 CH_DUP, TP_DUP, SLACK_DAYS = 0.85, 0.8, 7
@@ -287,7 +288,9 @@ class Year(Month):
         msgs = [{"role": "system", "content": NOTE_SYSTEM}, {"role": "user", "content": user}]
         for _ in range(2):  # one retry on unusable output
             try:
-                note = str(_json(llm(msgs))["note"]).strip()
+                reply = llm(msgs)
+                dlog(self.s, "YearNote", month, "reply", text=reply)
+                note = str(_json(reply)["note"]).strip()
                 if note:
                     return note
             except (ValueError, KeyError, TypeError):

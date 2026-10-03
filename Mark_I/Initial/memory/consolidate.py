@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import hygiene
+from decisionlog import note, traced
 from graph import Graph
 
 _SCHEMA = Path(__file__).with_name("schema_consolidation.sql")
@@ -71,11 +72,12 @@ def consolidate_day(mem, day, llm, model="unset") -> bool:
     ts = f"{day}T23:59:59+00:00"  # extracted facts belong to the day they describe
     try:
         g = Graph(s)
-        out = json.loads(llm(PROMPT.format(day=day, state=_state(mem), material=material)))
+        out = json.loads(traced(s, "consolidate", day, llm)(PROMPT.format(day=day, state=_state(mem), material=material)))
         sid = s.add_source("consolidation", day)
         for e in out.get("events", []):
             imp = float(e.get("importance", 0.5))
             if imp < hygiene.MIN_IMPORTANCE or hygiene.is_duplicate(s, day, e["content"]):
+                note(s, "consolidate", day, "override", why="write gate", event=e)
                 continue  # write gate: small talk and repeats stay in the archive only
             ev = s.add_event(e["type"], e["content"], importance=imp, source_id=sid, ts=ts)
             for a in e.get("about", []):
