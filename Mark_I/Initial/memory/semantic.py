@@ -159,12 +159,12 @@ if __name__ == "__main__":  # self-check: python semantic.py
     ix.model = "fake-a"; ix.clear()  # clearing one model leaves the other
     assert ix.recall("dog") == [] and ix.sync() == 3
     # hybrid: the fake embedder knows no names, keyword search must still find them
-    s.add_event("note", "Rina called about the visa")
+    s.add_event("note", "Priya called about the visa")
     ix.model = "fake-b"; ix.sync()
-    assert ix.search("visa Rina")[0]["content"] == "Rina called about the visa"
+    assert ix.search("visa Priya")[0]["content"] == "Priya called about the visa"
     ev = ix.search("visa")[0]
     s.db.execute("INSERT INTO cold_events VALUES(?,?)", (ev["id"], "now")); s.db.commit()
-    assert all(e["id"] != ev["id"] for e in ix.search("visa Rina"))          # cold: hidden
-    assert ix.search("visa Rina", include_cold=True)[0]["id"] == ev["id"]    # ...but findable, and warm again
+    assert all(e["id"] != ev["id"] for e in ix.search("visa Priya"))          # cold: hidden
+    assert ix.search("visa Priya", include_cold=True)[0]["id"] == ev["id"]    # ...but findable, and warm again
     assert s.db.execute("SELECT COUNT(*) FROM cold_events").fetchone()[0] == 0
     print("semantic index ok")

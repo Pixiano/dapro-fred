@@ -9,3 +9,11 @@ __pycache__/
 *.db
 *.sqlite
 Mark_I/Initial/data/
+
+# Memory CONTENT never lives in this repo: only the code that structures and builds it.
+# The memory root, backups and exports are kept outside the repo; these are a backstop.
+memory-backup-*/
+memory-backup-*.partial/
+*.jsonl
+Mark_I/**/archive/
+Mark_I/**/blobs/

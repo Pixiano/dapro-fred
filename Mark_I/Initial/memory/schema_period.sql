@@ -1,7 +1,8 @@
 -- Mark I memory, Phase 7 monthly + yearly consolidation (design: Documentation/2026/10/04/phase7_monthly_yearly_design.md).
 CREATE TABLE IF NOT EXISTS chapters (         -- named periods of life; end_day NULL = still open
   id INTEGER PRIMARY KEY, title TEXT NOT NULL, start_day TEXT NOT NULL, end_day TEXT, description TEXT,
-  source TEXT NOT NULL DEFAULT 'model', updated_at TEXT NOT NULL);   -- source: model | user (user chapters are locked)
+  source TEXT NOT NULL DEFAULT 'model', updated_at TEXT NOT NULL,
+  track TEXT NOT NULL DEFAULT 'general');   -- one open chapter per track; tracks run side by side (a project, social life, school...)   -- source: model | user (user chapters are locked)
 CREATE TABLE IF NOT EXISTS chapter_log (id INTEGER PRIMARY KEY, chapter_id INTEGER NOT NULL REFERENCES chapters(id),
   period TEXT, change TEXT NOT NULL, at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS turning_points (

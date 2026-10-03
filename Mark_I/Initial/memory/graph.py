@@ -107,7 +107,7 @@ class Graph:
 
     def find_in_text(self, text):
         """Entities a question names. Returns (found {id: name}, maybe [(word, id)]). A word is *found* when it is
-        an alias or exact name; *maybe* when a Capitalised word is the start of exactly one name ("Su" -> Rina):
+        an alias or exact name; *maybe* when a Capitalised word is the start of exactly one name ("Pri" -> Priya):
         never used silently, the caller asks the user first.
         ponytail: capitalisation is the name signal; drop it if speech-to-text stops capitalising."""
         s, found, maybe = self.s, {}, []
@@ -197,13 +197,13 @@ if __name__ == "__main__":  # self-check: python graph.py
     s = MemoryStore(":memory:")
     g = Graph(s)
     n = lambda t: s.db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-    su = g.resolve("person", "Rina")
-    assert g.resolve("person", "  rina ") == su                      # case/space
-    assert g.resolve("person", "Rinah") == su                        # close spelling -> alias, no new entity
+    su = g.resolve("person", "Priya")
+    assert g.resolve("person", "  priya ") == su                      # case/space
+    assert g.resolve("person", "Preeya") == su                        # close spelling -> alias, no new entity
     assert n("entity_aliases") == 1 and n("entities") == 1
     ro, ri = g.resolve("person", "Rohan"), g.resolve("person", "Rohit")
     assert ro != ri                                                    # different people stay different
-    assert g.resolve("project", "Rina") != su                        # kinds never mix
+    assert g.resolve("project", "Priya") != su                        # kinds never mix
     fred = g.resolve("project", "FRED")
     assert g.relate(su, "works on", fred, ts="2026-01-01T00:00:00+00:00")
     assert g.relate(su, "works_on", fred) is None                      # duplicate = no-op
@@ -227,7 +227,7 @@ if __name__ == "__main__":  # self-check: python graph.py
     assert [e["content"] for e in g.events_about(me)] == ["likes cyan"]
     found, maybe = g.find_in_text("Whats Mee's fav colour?")
     assert found == {} and maybe == [("Mee", me)]                      # unknown nickname: ask, never assume
-    assert g.find_in_text("Su called")[1] == []                        # ambiguous (person + project Rina): no guess
+    assert g.find_in_text("Pri called")[1] == []                        # ambiguous (person + project Priya): no guess
     g.confirm_alias("Mee", me)                                         # user said yes
     assert g.find_in_text("Whats Mee's fav colour?") == ({me: "Meera"}, [])
     assert g.find_in_text("a meeting at noon")[1] == []                # lower-case words are not names

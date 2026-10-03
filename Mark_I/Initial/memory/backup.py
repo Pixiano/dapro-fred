@@ -8,6 +8,11 @@
 Parts: archive events facts graph logs inferences model chapters digests review runs database (parts=None = all).
 since/until narrow the time-based parts (archive, events, logs, digests, review, runs); facts, graph, model, inferences
 and chapters are "state of the world" and always whole.
+Formats: every part always gets its native file and the .md. Beyond that, each part has the format that suits it best:
+the relationship graph and the life-chapter timeline default to a PNG picture (a node-and-arrow drawing, a per-track
+timeline) instead of a PDF; everything else defaults to a PDF. Override per part with formats={"graph": ["md", "pdf", "png"]};
+pdf=False switches PDFs off everywhere. PNGs need pillow + networkx (already in the environment); without them the PNG is
+skipped with a note.
 Safety: the output folder must be OUTSIDE any git repo (backups hold personal data); each backup goes into its own
 timestamped folder and is built as <name>.partial, renamed only when complete, so a crash never leaves a half backup
 that looks finished. Nothing existing is ever overwritten or deleted. Tables that do not exist yet are skipped.
@@ -27,6 +32,10 @@ from pathlib import Path
 logging.getLogger("fontTools").setLevel(logging.ERROR)  # font subsetting is chatty and harmless
 PARTS = ("archive", "events", "facts", "graph", "logs", "inferences", "model", "chapters", "digests", "review", "runs", "database")
 PDF_MAX_CHARS = 400_000
+DEFAULT_FORMATS = {p: ("md", "pdf") for p in PARTS}
+DEFAULT_FORMATS.update(graph=("md", "png"), chapters=("md", "png"))
+FORMATS = {"md", "pdf", "png"}
+MAX_NODES = 80  # the graph picture shows the best-connected entities; the .md and .json always list everything
 MD_RECORD_CHARS = 20_000  # one archive record longer than this is cut in the .md only (the native copy is whole)
 _FONT_DIRS = [Path("C:/Windows/Fonts"), Path("/usr/share/fonts/truetype/dejavu"), Path("/Library/Fonts"), Path("/System/Library/Fonts/Supplemental")]
 _FONTS = {"body": ["arial.ttf", "segoeui.ttf", "DejaVuSans.ttf", "Arial.ttf"], "bold": ["arialbd.ttf", "segoeuib.ttf", "DejaVuSans-Bold.ttf", "Arial Bold.ttf"],
@@ -95,7 +104,7 @@ def _facts(db, since, until):
 
 
 def _graph(db, since, until):
-    rel = _rows(db, "SELECT r.*, a.name AS subject, b.name AS object FROM relationships r JOIN entities a ON a.id=r.subject_id JOIN entities b ON b.id=r.object_id "
+    rel = _rows(db, "SELECT r.*, a.name AS subject, a.kind AS subject_kind, b.name AS object, b.kind AS object_kind FROM relationships r JOIN entities a ON a.id=r.subject_id JOIN entities b ON b.id=r.object_id "
                     "ORDER BY r.valid_from, r.id")
     al = _rows(db, "SELECT a.*, e.name AS entity FROM entity_aliases a JOIN entities e ON e.id=a.entity_id ORDER BY e.name, a.alias")
     mg = _rows(db, "SELECT m.*, a.name AS merged, b.name AS into_name FROM entity_merges m JOIN entities a ON a.id=m.entity_id JOIN entities b ON b.id=m.into_id")
@@ -147,9 +156,13 @@ def _chapters(db, since, until):
     tp = _rows(db, "SELECT * FROM turning_points ORDER BY day")
     ev = _rows(db, "SELECT * FROM turning_point_evidence")
     lg = _rows(db, "SELECT * FROM chapter_log ORDER BY id")
-    md = ["# Life chapters and turning points\n", "## Chapters\n",
-          "\n".join(f"- **{c['title']}** ({c['start_day']} to {c['end_day'] or 'now'}{', yours' if c['source'] == 'user' else ''}): {c['description'] or ''}" for c in ch) or "_(none)_",
-          "\n## Turning points\n", "\n".join(f"- **{t['day']} {t['title']}** [{t['kind'] or ''}]: {t['description'] or ''}" for t in tp) or "_(none)_"]
+    md = ["# Life chapters and turning points\n", "Chapters run on parallel tracks (a project, social life, school...); several can be open at once.\n"]
+    for track in sorted({c.get("track", "general") for c in ch}):
+        md.append(f"\n## Track: {track}\n")
+        md += [f"- **{c['title']}** ({c['start_day']} to {c['end_day'] or 'now'}{', yours' if c['source'] == 'user' else ''}): {c['description'] or ''}"
+               for c in ch if c.get("track", "general") == track]
+    md += ["" if ch else "_(no chapters)_", "\n## Turning points\n",
+           "\n".join(f"- **{t['day']} {t['title']}** [{t['kind'] or ''}]: {t['description'] or ''}" for t in tp) or "_(none)_"]
     return {"chapters": ch, "turning_points": tp, "turning_point_evidence": ev, "chapter_log": lg}, "\n".join(md) + "\n"
 
 
@@ -268,6 +281,160 @@ def _pdf(md, path, title):
     return not unicode_ok
 
 
+# ---- pictures (pillow + networkx) ----
+_KIND_COLOR = {"person": "#3b82f6", "project": "#16a34a", "place": "#f59e0b", "goal": "#a855f7", "task": "#06b6d4", "preference": "#ec4899"}
+_TRACK_COLORS = ["#2563eb", "#16a34a", "#d97706", "#9333ea", "#0891b2", "#db2777", "#65a30d", "#dc2626"]
+
+
+def _pil_font(size, bold=False):
+    from PIL import ImageFont
+    p = _font("bold" if bold else "body")
+    return ImageFont.truetype(p, size) if p else ImageFont.load_default(size)
+
+
+def _dashed(dr, a, b, color, width, dash=14):
+    import math
+    L = math.dist(a, b) or 1
+    for i in range(0, int(L // dash) + 1, 2):
+        s, e = i * dash / L, min((i + 1) * dash / L, 1)
+        dr.line([(a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s), (a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e)], fill=color, width=width)
+
+
+def _png_graph(tables, path):
+    """Node-and-arrow drawing of the relationship graph. Solid dark = true now, dashed pale = ended."""
+    import math
+    import networkx as nx
+    from PIL import Image, ImageDraw
+    rel = tables["relationships"]
+    W, H, R = 2200, 1500, 34
+    img = Image.new("RGB", (W, H), "white")
+    dr = ImageDraw.Draw(img)
+    dr.text((40, 28), "Relationship graph", font=_pil_font(34, True), fill="#0f172a")
+    if not rel:
+        dr.text((40, 100), "(no relationships yet)", font=_pil_font(22), fill="#475569")
+        img.save(path)
+        return
+    G, kinds = nx.Graph(), {}
+    for r in rel:
+        G.add_edge(r["subject"], r["object"])
+        kinds[r["subject"]], kinds[r["object"]] = r.get("subject_kind", ""), r.get("object_kind", "")
+    total = G.number_of_nodes()
+    if total > MAX_NODES:
+        keep = {n for n, _ in sorted(G.degree, key=lambda x: -x[1])[:MAX_NODES]}
+        G = G.subgraph(keep).copy()
+    pos = nx.spring_layout(G, seed=1, k=1.8 / max(1, G.number_of_nodes()) ** 0.5, iterations=250)
+    xs, ys = [p[0] for p in pos.values()], [p[1] for p in pos.values()]
+    fx = lambda v: 140 + (v - min(xs)) / ((max(xs) - min(xs)) or 1) * (W - 280) if len(xs) > 1 else W / 2
+    fy = lambda v: 190 + (v - min(ys)) / ((max(ys) - min(ys)) or 1) * (H - 380) if len(ys) > 1 else H / 2
+    P = {n: (fx(p[0]), fy(p[1])) for n, p in pos.items()}
+    seen, small = {}, _pil_font(15)
+    for r in sorted(rel, key=lambda r: r["valid_to"] is None):  # ended edges first, current ones drawn on top
+        a, b = r["subject"], r["object"]
+        if a not in P or b not in P:
+            continue
+        cur = r["valid_to"] is None
+        color, width = ("#334155", 3) if cur else ("#cbd5e1", 2)
+        p1, p2 = P[a], P[b]
+        d = math.dist(p1, p2) or 1
+        q2 = (p2[0] - (p2[0] - p1[0]) / d * R, p2[1] - (p2[1] - p1[1]) / d * R)
+        (dr.line([p1, q2], fill=color, width=width) if cur else _dashed(dr, p1, q2, color, width))
+        ux, uy = (p2[0] - p1[0]) / d, (p2[1] - p1[1]) / d
+        dr.polygon([q2, (q2[0] - ux * 18 - uy * 8, q2[1] - uy * 18 + ux * 8), (q2[0] - ux * 18 + uy * 8, q2[1] - uy * 18 - ux * 8)], fill=color)
+        k = seen.setdefault(frozenset((a, b)), 0)
+        seen[frozenset((a, b))] = k + 1
+        mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2 + k * 18 - 9
+        dr.text((mx, my), r["relation"].replace("_", " "), font=small, fill="#0f172a" if cur else "#94a3b8", anchor="mm", stroke_width=3, stroke_fill="white")
+    for n, (x, y) in P.items():
+        dr.ellipse([x - R, y - R, x + R, y + R], fill=_KIND_COLOR.get(kinds.get(n), "#64748b"), outline="#0f172a", width=2)
+        dr.text((x, y + R + 8), n, font=_pil_font(19, True), fill="#0f172a", anchor="mt", stroke_width=3, stroke_fill="white")
+    lx = 40
+    for kd in sorted({kinds[n] for n in P}):
+        dr.ellipse([lx, H - 70, lx + 22, H - 48], fill=_KIND_COLOR.get(kd, "#64748b"), outline="#0f172a")
+        dr.text((lx + 32, H - 59), kd or "other", font=_pil_font(18), fill="#0f172a", anchor="lm")
+        lx += 40 + 12 * len(kd or "other") + 30
+    dr.text((W - 40, H - 59), f"solid = true now, dashed pale = ended   |   {total} entities, {len(rel)} relationships"
+            + (f"   |   showing the {MAX_NODES} best connected" if total > MAX_NODES else ""), font=_pil_font(17), fill="#475569", anchor="rm")
+    img.save(path)
+
+
+def _png_timeline(tables, path):
+    """Chapters as horizontal bars, one row group per track (parallel chapters sit side by side; chapters that overlap
+    inside one track stack in lanes), turning points as diamonds."""
+    from datetime import date
+    from PIL import Image, ImageDraw
+    ch, tp = tables["chapters"], tables.get("turning_points", [])
+    W = 2200
+    if not ch:
+        img = Image.new("RGB", (W, 260), "white")
+        d = ImageDraw.Draw(img)
+        d.text((40, 28), "Life chapters", font=_pil_font(34, True), fill="#0f172a")
+        d.text((40, 100), "(no chapters yet)", font=_pil_font(22), fill="#475569")
+        img.save(path)
+        return
+    D = date.fromisoformat
+    today = _now().date()
+    days = [D(c["start_day"]) for c in ch] + [D(c["end_day"]) for c in ch if c["end_day"]] + [D(t["day"]) for t in tp]
+    lo, hi = min(days), max(days + [today])
+    span = max(1, (hi - lo).days)
+    tr_of = lambda c: c.get("track", "general")
+    tracks = sorted({tr_of(c) for c in ch}, key=lambda t: min(c["start_day"] for c in ch if tr_of(c) == t))
+    lane, nlanes = {}, {}
+    for tr in tracks:  # greedy lane assignment inside a track
+        ends = []
+        for i, c in sorted(enumerate(ch), key=lambda x: x[1]["start_day"]):
+            if tr_of(c) != tr:
+                continue
+            s_, e_ = D(c["start_day"]), (D(c["end_day"]) if c["end_day"] else hi)
+            for k, en in enumerate(ends):
+                if s_ > en:
+                    ends[k], lane[i] = e_, k
+                    break
+            else:
+                ends.append(e_)
+                lane[i] = len(ends) - 1
+        nlanes[tr] = max(1, len(ends))
+    L, RM, top, row = 230, 60, 190, 62
+    H = top + sum(nlanes.values()) * row + 130
+    img = Image.new("RGB", (W, H), "white")
+    dr = ImageDraw.Draw(img)
+    X = lambda d: L + (d - lo).days / span * (W - L - RM)
+    dr.text((40, 28), "Life chapters and turning points", font=_pil_font(34, True), fill="#0f172a")
+    y, m = lo.year, lo.month
+    while date(y, m, 1) <= hi:  # month grid, labelled every third month
+        x = X(max(date(y, m, 1), lo))
+        dr.line([(x, top - 30), (x, H - 90)], fill="#e2e8f0", width=1)
+        if m in (1, 4, 7, 10) or (y, m) == (lo.year, lo.month):
+            dr.text((x + 4, top - 52), f"{y}-{m:02d}", font=_pil_font(15), fill="#64748b")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    y0 = top
+    for n, tr in enumerate(tracks):
+        color = _TRACK_COLORS[n % len(_TRACK_COLORS)]
+        dr.text((40, y0 + 22), tr, font=_pil_font(21, True), fill=color, anchor="lm")
+        for i, c in enumerate(ch):
+            if tr_of(c) != tr:
+                continue
+            yy = y0 + lane[i] * row
+            x1, x2 = X(D(c["start_day"])), X(D(c["end_day"]) if c["end_day"] else hi)
+            x2 = max(x2, x1 + 6)
+            dr.rounded_rectangle([x1, yy, x2, yy + 46], radius=8, fill=color, outline="#0f172a" if c["source"] == "user" else color, width=4 if c["source"] == "user" else 1)
+            if not c["end_day"]:
+                dr.polygon([(x2, yy), (x2 + 18, yy + 23), (x2, yy + 46)], fill=color)
+            label, f = c["title"], _pil_font(17, True)
+            fits = dr.textlength(label, font=f) < (x2 - x1 - 12)
+            dr.text((x1 + 8, yy + 23) if fits else (x2 + 26, yy + 23), label, font=f, fill="white" if fits else "#0f172a", anchor="lm")
+        y0 += nlanes[tr] * row
+    for t in tp:
+        x, yy = X(D(t["day"])), H - 110
+        dr.polygon([(x, yy - 12), (x + 12, yy), (x, yy + 12), (x - 12, yy)], fill="#dc2626", outline="#0f172a")
+        dr.text((x, yy + 18), t["title"][:28], font=_pil_font(14), fill="#0f172a", anchor="mt")
+    dr.text((40, H - 40), "bars = chapters, one row group per track (several can run at once)   |   outlined = yours   |   arrow = still open   |   red diamonds = turning points",
+            font=_pil_font(16), fill="#475569")
+    img.save(path)
+
+
+_PNG = {"graph": _png_graph, "chapters": _png_timeline}
+
+
 # ---- the public API ----
 def _guard(out_dir):
     out = Path(out_dir).resolve()
@@ -285,11 +452,15 @@ def _sha(path):
     return h.hexdigest()
 
 
-def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=True):
+def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=True, formats=None):
     parts = list(PARTS) if parts in (None, "all") else list(parts)
     bad = [p for p in parts if p not in PARTS]
     if bad:
         raise ValueError(f"unknown part(s) {bad}; choose from {list(PARTS)}")
+    formats = {p: set(f) for p, f in (formats or {}).items()}
+    bad = [p for p in formats if p not in PARTS] + [f for fs in formats.values() for f in fs if f not in FORMATS]
+    if bad:
+        raise ValueError(f"unknown part or format in formats: {bad}; formats are {sorted(FORMATS)}")
     out = _guard(out_dir)
     stamp = _now().strftime("%Y%m%dT%H%M%SZ")
     final = out / f"memory-backup-{stamp}" if parts == list(PARTS) else out / f"memory-backup-{stamp}-{'+'.join(parts)}"
@@ -303,6 +474,10 @@ def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=Tru
             for part in parts:
                 d = work / part
                 d.mkdir()
+                tables = None
+                fm = set(formats.get(part) or DEFAULT_FORMATS[part])
+                if not pdf:
+                    fm.discard("pdf")
                 if part == "archive":
                     md, n, nb = _archive(mem, work, since, until, blobs)
                     native = {"records": n, "blobs": nb}
@@ -319,11 +494,19 @@ def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=Tru
                     native = {k: len(v) for k, v in tables.items()}
                 if md is not None:
                     d.joinpath(f"{part}.md").write_text(md, encoding="utf-8", newline="\n")
-                    if pdf:
+                    if "png" in fm and part not in _PNG:
+                        notes.append(f"{part}: no picture view exists for this part, png skipped")
+                    elif "png" in fm:
+                        try:
+                            _PNG[part](tables, d / f"{part}.png")
+                        except ImportError:
+                            notes.append(f"{part}.png skipped: install pillow and networkx")
+                    if "pdf" in fm:
                         try:
                             if _pdf(md, d / f"{part}.pdf", f"FRED memory: {part}"):
                                 notes.append(f"{part}.pdf: no Unicode font found, non-Latin characters replaced with ? (the .md is exact)")
                         except ImportError:
+                            fm.discard("pdf")
                             pdf = False
                             notes.append("PDF skipped: install fpdf2 (pip install fpdf2)")
                 info[part] = native
@@ -362,9 +545,11 @@ if __name__ == "__main__" and len(sys.argv) > 2:  # CLI
     ap.add_argument("--until")
     ap.add_argument("--no-pdf", action="store_true")
     ap.add_argument("--no-blobs", action="store_true")
+    ap.add_argument("--format", action="append", default=[], metavar="PART=md,pdf,png", help="override a part's formats, e.g. graph=md,png,pdf")
     a = ap.parse_args()
     with Memory(a.root) as m:
-        r = backup(m, a.out, a.parts or None, a.since, a.until, not a.no_pdf, not a.no_blobs)
+        fmts = {k: v.split(",") for k, v in (f.split("=", 1) for f in a.format)}
+        r = backup(m, a.out, a.parts or None, a.since, a.until, not a.no_pdf, not a.no_blobs, fmts or None)
     print(r["dir"], *r["notes"], sep="\n")
     sys.exit(0)
 
@@ -383,7 +568,7 @@ if __name__ == "__main__":  # self-check: python backup.py
         blob = Path(d) / "note.txt"
         blob.write_text("blob content", encoding="utf-8")
         m.archive.put_file(blob)
-        su, fred = g.resolve("person", "Rina"), g.resolve("project", "FRED")
+        su, fred = g.resolve("person", "Priya"), g.resolve("project", "FRED")
         s.set_state(fred, "phase", "1", ts="2026-02-01T00:00:00+00:00")
         s.set_state(fred, "phase", "2", ts="2026-03-01T00:00:00+00:00")
         ev = s.add_event("note", "works on fred | at night", ts="2026-03-01T22:00:00+00:00")
@@ -393,6 +578,15 @@ if __name__ == "__main__":  # self-check: python backup.py
         s.set_daily_log("2026-03-01", "A quiet day.")
         from weekly import Week
         Week(m, '2026-03-08', None)  # creates the weekly tables
+        from period import Month
+        Month(m, "2026-03", None)  # creates the chapter tables
+        for ti, st, en, tr, sc in (("FRED v2 build", "2026-02-01", None, "fred", "model"), ("Exam season", "2026-03-01", "2026-04-15", "school", "model"),
+                                   ("Own earlier chapter", "2026-01-01", "2026-02-28", "general", "user")):
+            s.db.execute("INSERT INTO chapters(title,start_day,end_day,description,source,updated_at,track) VALUES(?,?,?,?,?,?,?)", (ti, st, en, "", sc, "x", tr))
+        s.db.execute("INSERT INTO turning_points(day,title,description,kind,period,created_at) VALUES('2026-03-01','Moved to phase 2','','project','2026-03','x')")
+        g.relate(fred, "part_of", g.resolve("project", "Mark I"), ts="2026-02-01T00:00:00+00:00")
+        g.relate(su, "lives_in", g.resolve("place", "Pune"), ts="2026-02-01T00:00:00+00:00")
+        g.relate(su, "lives_in", g.resolve("place", "Delhi"), ts="2026-06-01T00:00:00+00:00")  # closes the Pune one: drawn dashed
         s.db.execute("INSERT INTO weekly_digests VALUES('2026-03-08','week digest','x')")
         s.db.commit()
         out = Path(d) / "backups"
@@ -401,6 +595,11 @@ if __name__ == "__main__":  # self-check: python backup.py
         assert got.name.startswith("memory-backup-") and not got.name.endswith(".partial") and verify_backup(got) == []
         for part in ("events", "facts", "graph", "logs", "inferences", "model", "chapters", "digests", "review", "runs"):
             assert (got / part / f"{part}.json").exists() and (got / part / f"{part}.md").exists(), part
+        PNG = b"\x89PNG\r\n\x1a\n"
+        assert (got / "graph" / "graph.png").read_bytes()[:8] == PNG and (got / "chapters" / "chapters.png").read_bytes()[:8] == PNG   # pictures by default
+        assert (got / "graph" / "graph.png").stat().st_size > 5000 and not (got / "graph" / "graph.pdf").exists()                     # ...instead of a PDF
+        ct = (got / "chapters" / "chapters.md").read_text(encoding="utf-8")
+        assert "## Track: fred" in ct and "## Track: school" in ct and "(yours)" not in ct and "yours" in ct
         assert (got / "database" / "memory.sqlite").exists() and (got / "archive" / "archive.md").exists()
         assert not r["notes"] or "no Unicode font" in r["notes"][0]
         if not r["notes"]:
@@ -408,7 +607,7 @@ if __name__ == "__main__":  # self-check: python backup.py
         assert (got / "archive/2026/03/01/conversation.jsonl").read_bytes() == (m.archive.root / "2026/03/01/conversation.jsonl").read_bytes()  # byte-identical
         assert any(k.startswith("archive/blobs/") for k in r["files"])                                                                  # blobs copied
         assert "FRED" in (got / "facts" / "facts.md").read_text(encoding="utf-8") and "1 (2026-02-01 to 2026-03-01)" in (got / "facts" / "facts.md").read_text(encoding="utf-8")
-        assert "Rina | works_on | FRED" in (got / "graph" / "graph.md").read_text(encoding="utf-8")
+        assert "Priya | works_on | FRED" in (got / "graph" / "graph.md").read_text(encoding="utf-8")
         assert "(historical)" in (got / "archive" / "archive.md").read_text(encoding="utf-8")
         # a part, with a date range, no pdf, no blobs
         r2 = backup(m, out, ["events", "archive"], since="2026-03-05", pdf=False, blobs=False)
@@ -417,6 +616,19 @@ if __name__ == "__main__":  # self-check: python backup.py
         assert "march 9 event" in (g2 / "events" / "events.md").read_text(encoding="utf-8") and "works on fred" not in (g2 / "events" / "events.md").read_text(encoding="utf-8")
         assert not (g2 / "archive/2026/03/01").exists() and (g2 / "archive/2026/03/09/conversation.jsonl").exists()
         assert not any(k.startswith("archive/blobs/") for k in r2["files"])
+        # formats: override per part, pdf off still gives pictures, bad formats refused, no picture for a text part
+        r4 = backup(m, out, ["graph", "events"], formats={"graph": ["md", "pdf", "png"], "events": ["md"]})
+        g4 = Path(r4["dir"])
+        assert (g4 / "graph" / "graph.png").exists() and (g4 / "graph" / "graph.pdf").exists() and not (g4 / "events" / "events.pdf").exists()
+        r5 = backup(m, out, ["graph"], pdf=False)
+        assert (Path(r5["dir"]) / "graph" / "graph.png").exists() and not list(Path(r5["dir"]).rglob("*.pdf"))
+        r6 = backup(m, out, ["logs"], formats={"logs": ["md", "png"]})
+        assert any("no picture view" in n for n in r6["notes"]) and not (Path(r6["dir"]) / "logs" / "logs.png").exists()
+        try:
+            backup(m, out, ["graph"], formats={"graph": ["gif"]})
+            raise SystemExit("bad format accepted")
+        except ValueError:
+            pass
         # tamper detection, unknown part, repo guard, no leftover partial folders
         (got / "logs" / "logs.md").write_text("tampered", encoding="utf-8")
         assert verify_backup(got) == ["changed: logs/logs.md"]

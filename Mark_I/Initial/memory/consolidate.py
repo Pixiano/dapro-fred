@@ -125,13 +125,13 @@ if __name__ == "__main__":  # self-check: python consolidate.py
     logging.getLogger("memory").setLevel(logging.CRITICAL)
     import tempfile
     from manager import Memory
-    good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8, "about": [{"kind": "person", "name": "Rinah"}]},
+    good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8, "about": [{"kind": "person", "name": "Preeya"}]},
                           {"type": "decision", "content": "Chose  sqlite", "importance": 0.8},   # duplicate
                           {"type": "note", "content": "said hi", "importance": 0.1}],            # below the gate
                        "states": [{"kind": "project", "name": "FRED", "field": "phase", "value": "3"}],
-                       "aliases": [{"kind": "person", "name": "Rina", "alias": "Su"}],
-                       "relationships": [{"subject": {"kind": "person", "name": "Rina"}, "relation": "works on", "object": {"kind": "project", "name": "FRED"}},
-                                         {"subject": {"kind": "person", "name": "Rinah"}, "relation": "knows", "object": {"kind": "person", "name": "Rinah"}}],
+                       "aliases": [{"kind": "person", "name": "Priya", "alias": "Pri"}],
+                       "relationships": [{"subject": {"kind": "person", "name": "Priya"}, "relation": "works on", "object": {"kind": "project", "name": "FRED"}},
+                                         {"subject": {"kind": "person", "name": "Preeya"}, "relation": "knows", "object": {"kind": "person", "name": "Preeya"}}],
                        "contradictions": ["phase was 2"], "open_questions": ["which model?"], "summary": "Quiet build day."})
     with tempfile.TemporaryDirectory() as d, Memory(d) as m:
         m.archive.write("conversation", {"text": "let's use sqlite"}, ts="2026-01-01T10:00:00+00:00")
@@ -146,6 +146,6 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         assert run_pending(m, lambda p: good) == []                          # idempotent
         n = lambda t: m.store.db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         assert n("review_queue") == 2 and n("events") == 1
-        assert n("event_entities") == 1 and m.store.db.execute("SELECT alias FROM entity_aliases WHERE alias='su'").fetchone()
-        assert n("relationships") == 1 and n("entities") == 2            # self-link skipped, Rinah = Rina
+        assert n("event_entities") == 1 and m.store.db.execute("SELECT alias FROM entity_aliases WHERE alias='pri'").fetchone()
+        assert n("relationships") == 1 and n("entities") == 2            # self-link skipped, Preeya = Priya
     print("consolidate ok")

@@ -27,7 +27,7 @@ from personal_model import DEFAULT_TIER, TIER_RANK
 
 log = logging.getLogger("memory")
 _HERE = Path(__file__).parent
-CATS = {"project", "routine", "decision", "relationship", "trait_hypothesis"}
+CATS = {"project", "routine", "decision", "relationship", "trait_hypothesis", "recurrence"}
 STATUSES = {"proposed", "supported", "weakened", "rejected", "outdated"}
 ACTIVE = ("proposed", "supported", "weakened")
 RULINGS = {"apparent", "historical_change", "real", "unknown"}
@@ -39,6 +39,7 @@ SYSTEM = """You are FRED's weekly analyst. You see one week of Vatsal's life onl
 
 METHOD (required). For every conclusion: state it as a hypothesis; search for supporting evidence; search for counter-evidence; decide keep, weaken or reject; only then write it. Prefer update_inference on an existing inference over creating a duplicate. Use compare_periods to compare this week with earlier ones. Observed facts are not inferences.
 EVIDENCE. Every inference must cite supporting event ids (from tool results); no evidence, no inference. List alternative explanations. Confidence says how well the evidence supports it, not how interesting it is. One week is thin data: say so.
+RECURRENCE. Something that appeared earlier and reappears later, with the connection made explicit. Category recurrence needs supporting events from at least two different calendar months.
 TRAITS, VALUES, MOTIVATIONS. Allowed only with category "trait_hypothesis": status proposed, confidence at most 0.5, at least two supporting events. Never state them in the digest.
 REVIEW ITEMS. Rule on each open review item with rule_review_item: apparent (different circumstances), historical_change (he genuinely changed), real (two current beliefs cannot both be true; do not resolve it yourself) or unknown.
 DO NOT INVENT. If memory shows no pattern, say so. A quiet week gets a short digest.
@@ -55,7 +56,7 @@ compare_periods {"from1": date, "to1": date, "from2": date, "to2": date}
 find_similar_events {"event_id": int, "k": 5}
 list_inferences {"status": "proposed|supported|weakened|rejected|outdated|active"}
 get_inference {"id": int}
-create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str], "tier": "light|normal|deep"}   tier = how big a claim this is (light: trivial and observable, normal, deep: about who he is); you may raise it above the default for the category, never lower it
+create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis|recurrence", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str], "tier": "light|normal|deep"}   tier = how big a claim this is (light: trivial and observable, normal, deep: about who he is); you may raise it above the default for the category, never lower it
 update_inference {"id": int, "status": str, "confidence": 0-1, "add_support": [int], "add_counter": [int], "note": str}
 rule_review_item {"id": int, "ruling": "apparent|historical_change|real|unknown", "note": str}
 finish {"digest": str}   plain prose, sections only if there is something to say: The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about, Please check (real contradictions). No traits or personality guesses. Length follows the week.
@@ -257,6 +258,8 @@ class Week:
         if not sup:
             return {"error": "no valid supporting_event_ids: an inference needs real evidence, search for events first"}
         conf = min(1.0, max(0.0, float(confidence)))
+        if category == "recurrence" and len({e["ts"][:7] for e in self.q("SELECT ts FROM events WHERE id IN (%s)" % ",".join("?" * len(sup)), sup)}) < 2:
+            return {"error": "a recurrence needs supporting events from at least two different calendar months"}
         if category == "trait_hypothesis":
             if len(sup) < 2:
                 return {"error": "a trait_hypothesis needs at least two supporting events"}
