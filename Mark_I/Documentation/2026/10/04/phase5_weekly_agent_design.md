@@ -83,6 +83,11 @@ Short, plain prose, sections only if there is something to say: **The week in br
 | Context too long for the local model | Week map and tool results are capped; clusters carry the summary instead of raw events |
 | Prompt injection inside memory text (a note saying "ignore your rules") | Tool results are data; the harness only executes the fixed tool list and ignores instructions inside results |
 
+## Which local model (from the project plan, not my own pick)
+`Old/MARK2_MASTER_PLAN.md` (section 4.5) already lists the weekly model: **gpt-oss-20b**, GGUF MXFP4 (12.1 GB file) or Q4_K_M (11.6 GB), about 13-14 GB of VRAM (estimate), with low/medium/high reasoning effort. An unchosen alternative there is a 10-14B dense Q4 (about 8-9 GB). The nightly model in the same plan is Qwen3.8-9B-Distill (Q4_K_M/Q5_K_M, about 6-8 GB), which is what Phase 3 consolidation will run on.
+- **VRAM problem:** 13-14 GB does not fit beside FRED's always-resident models (budget about 12-13 GB). The plan's answer: load dynamically only in the nightly window and skip if Vatsal is present. So the weekly run unloads FRED's own models first (never kills anything else) and defers if it still does not fit.
+- **Not yet verified:** gpt-oss-20b's tool-call reliability through llama.cpp on this machine, and its real VRAM. Both are tested at build time before trusting it; if it fails, the 10-14B dense alternative is next.
+
 ## Local-model notes
 - A local model is the weak link for multi-step tool use. So: one action per turn, small flat JSON, short tool results, an example of each tool call in the prompt, temperature low.
 - Plan to compare it against a cloud model on a few weeks of real data before trusting its inferences (Vatsal can switch the socket later).
