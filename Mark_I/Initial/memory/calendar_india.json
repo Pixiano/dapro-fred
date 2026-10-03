@@ -304,6 +304,12 @@
  "movable": {
   "2026": [
    [
+    "2026-02-15",
+    "Maha Shivratri",
+    0,
+    "Web-checked (missing from the package); some sources discussed the 16th."
+   ],
+   [
     "2026-03-04",
     "Holi",
     1,
@@ -346,16 +352,28 @@
     "Moon-sighting dependent: can be a day off."
    ],
    [
+    "2026-08-28",
+    "Raksha Bandhan",
+    0,
+    "Web-checked; can differ by a day by region."
+   ],
+   [
     "2026-09-04",
     "Janmashtami",
     0,
     ""
    ],
    [
+    "2026-09-14",
+    "Ganesh Chaturthi",
+    0,
+    "Web-checked; ten days of celebration follow."
+   ],
+   [
     "2026-10-11",
     "Navratri begins",
     1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
+    "Nine nights up to Dussehra; web-checked, can differ by a day by region."
    ],
    [
     "2026-10-20",
@@ -364,22 +382,10 @@
     ""
    ],
    [
-    "2026-11-06",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2026-11-08",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2026-11-10",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2026-11-24",
@@ -438,16 +444,28 @@
     ""
    ],
    [
+    "2027-08-17",
+    "Raksha Bandhan",
+    0,
+    "Web-checked; can differ by a day by region."
+   ],
+   [
     "2027-08-25",
     "Janmashtami",
     0,
     ""
    ],
    [
+    "2027-09-03",
+    "Ganesh Chaturthi",
+    0,
+    "Web-checked; ten days of celebration follow."
+   ],
+   [
     "2027-09-30",
     "Navratri begins",
     1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
+    "Nine nights up to Dussehra; web-checked, can differ by a day by region."
    ],
    [
     "2027-10-09",
@@ -456,22 +474,10 @@
     ""
    ],
    [
-    "2027-10-27",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2027-10-29",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2027-10-31",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2027-11-14",
@@ -530,16 +536,28 @@
     ""
    ],
    [
+    "2028-08-06",
+    "Raksha Bandhan",
+    0,
+    "Web-checked; can differ by a day by region."
+   ],
+   [
     "2028-08-13",
     "Janmashtami",
     0,
     ""
    ],
    [
-    "2028-09-18",
+    "2028-08-23",
+    "Ganesh Chaturthi",
+    0,
+    "Web-checked; ten days of celebration follow."
+   ],
+   [
+    "2028-09-19",
     "Navratri begins",
     1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
+    "Nine nights up to Dussehra; web-checked, can differ by a day by region."
    ],
    [
     "2028-09-27",
@@ -548,22 +566,10 @@
     ""
    ],
    [
-    "2028-10-15",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2028-10-17",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2028-10-19",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2028-11-02",
@@ -598,6 +604,12 @@
     ""
    ],
    [
+    "2029-04-22",
+    "Ram Navami",
+    0,
+    "One web source; verify when the year comes."
+   ],
+   [
     "2029-04-25",
     "Eid al-Adha",
     0,
@@ -616,16 +628,28 @@
     ""
    ],
    [
+    "2029-07-26",
+    "Raksha Bandhan",
+    0,
+    "Web-checked; can differ by a day by region."
+   ],
+   [
+    "2029-08-12",
+    "Ganesh Chaturthi",
+    0,
+    "Web-checked; ten days of celebration follow."
+   ],
+   [
     "2029-09-01",
     "Janmashtami",
     0,
     ""
    ],
    [
-    "2029-10-07",
+    "2029-10-08",
     "Navratri begins",
     1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
+    "Nine nights up to Dussehra; web-checked, can differ by a day by region."
    ],
    [
     "2029-10-16",
@@ -634,22 +658,10 @@
     ""
    ],
    [
-    "2029-11-03",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2029-11-05",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2029-11-07",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2029-11-21",
@@ -708,16 +720,28 @@
     ""
    ],
    [
+    "2030-07-15",
+    "Raksha Bandhan",
+    0,
+    "Web-checked; can differ by a day by region."
+   ],
+   [
+    "2030-08-01",
+    "Ganesh Chaturthi",
+    0,
+    "Web-checked; ten days of celebration follow."
+   ],
+   [
     "2030-08-21",
     "Janmashtami",
     0,
     ""
    ],
    [
-    "2030-09-27",
+    "2030-09-28",
     "Navratri begins",
     1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
+    "Nine nights up to Dussehra; web-checked, can differ by a day by region."
    ],
    [
     "2030-10-06",
@@ -726,22 +750,10 @@
     ""
    ],
    [
-    "2030-10-24",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2030-10-26",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2030-10-28",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2030-11-10",
@@ -806,34 +818,16 @@
     ""
    ],
    [
-    "2031-10-16",
-    "Navratri begins",
-    1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
-   ],
-   [
     "2031-10-25",
     "Dussehra (Vijayadashami)",
     1,
     ""
    ],
    [
-    "2031-11-12",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2031-11-14",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2031-11-16",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2031-11-28",
@@ -898,34 +892,16 @@
     ""
    ],
    [
-    "2032-10-05",
-    "Navratri begins",
-    1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
-   ],
-   [
     "2032-10-14",
     "Dussehra (Vijayadashami)",
     1,
     ""
    ],
    [
-    "2032-10-31",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2032-11-02",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2032-11-04",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2032-11-17",
@@ -990,34 +966,16 @@
     ""
    ],
    [
-    "2033-09-24",
-    "Navratri begins",
-    1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
-   ],
-   [
     "2033-10-03",
     "Dussehra (Vijayadashami)",
     1,
     ""
    ],
    [
-    "2033-10-20",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2033-10-22",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2033-10-24",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2033-11-06",
@@ -1082,34 +1040,16 @@
     ""
    ],
    [
-    "2034-10-13",
-    "Navratri begins",
-    1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
-   ],
-   [
     "2034-10-22",
     "Dussehra (Vijayadashami)",
     1,
     ""
    ],
    [
-    "2034-11-08",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2034-11-10",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2034-11-12",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2034-11-25",
@@ -1174,34 +1114,16 @@
     ""
    ],
    [
-    "2035-10-02",
-    "Navratri begins",
-    1,
-    "Nine nights up to Dussehra; the first day can differ by a day by region."
-   ],
-   [
     "2035-10-11",
     "Dussehra (Vijayadashami)",
     1,
     ""
    ],
    [
-    "2035-10-28",
-    "Dhanteras",
-    0,
-    "Counted from Diwali; can differ by a day by region."
-   ],
-   [
     "2035-10-30",
     "Diwali",
     1,
     ""
-   ],
-   [
-    "2035-11-01",
-    "Bhai Dooj",
-    0,
-    "Counted from Diwali; can differ by a day by region."
    ],
    [
     "2035-11-15",

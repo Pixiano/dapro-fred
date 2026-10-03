@@ -1,14 +1,16 @@
 """Builds calendar_india.json (public days for alerts.py). Developer tool, run when the file runs out of years:
     pip install holidays   (only needed to run this script, not by the memory system)
     python gen_calendar.py [first_year] [last_year]      (default 2026 2035; the holidays package covers 2001-2035)
-Movable festivals come from the holidays package (Hindu/Islamic/Christian dates); Navratri's first day, Dhanteras and Bhai Dooj are derived
-from Dussehra and Diwali (9 days before, 2 days before, 2 days after), so they can be a day off in some regions or years: the note says so.
-Not covered (no reliable source): Raksha Bandhan, Ganesh Chaturthi, Onam and other tithi-based days. Add them by hand per year if wanted.
+Movable festivals come from the holidays package (Hindu/Islamic/Christian dates), plus WEB_CHECKED below: dates for festivals the package lacks
+(Navratri's first day, Raksha Bandhan, Ganesh Chaturthi, and gaps in the package), taken from web searches on 2026-10-05 only where several sources
+agreed. Dhanteras and Bhai Dooj are left out (rules of thumb off by a day in some years, and the searches contradicted each other); so are Onam and
+other tithi-based days. Years without a checked date simply show nothing for that festival.
+Every January alerts.run_alerts_pending recomputes the movable dates of the new year through a socket (alerts.recompute_year), so this file
+only has to be right for the near term; regenerate it when it runs out of years.
 Nothing personal belongs in this file: personal dates live in the private memory database (alerts.py).
 """
 import json
 import sys
-from datetime import date, timedelta
 from pathlib import Path
 
 # (month, day, title, kind, important, note): days that never move
@@ -57,6 +59,16 @@ MOVABLE = {"Holi": ("Holi", 1), "Shivaratri": ("Maha Shivratri", 0), "Ram Navami
            "Id-ul-Fitr": ("Eid al-Fitr", 0), "Eid al-Fitr": ("Eid al-Fitr", 0), "Id-ul-Zuha": ("Eid al-Adha", 0), "Eid al-Adha": ("Eid al-Adha", 0), "Good Friday": ("Good Friday", 0)}
 
 
+# (iso date, title, important, note): web-checked 2026-10-05; Navratri/Rakhi/Ganesh agreed across sources for 2026-2030
+WEB_CHECKED = (
+    [[d, "Navratri begins", 1, "Nine nights up to Dussehra; web-checked, can differ by a day by region."] for d in
+     ("2026-10-11", "2027-09-30", "2028-09-19", "2029-10-08", "2030-09-28")]
+    + [[d, "Raksha Bandhan", 0, "Web-checked; can differ by a day by region."] for d in ("2026-08-28", "2027-08-17", "2028-08-06", "2029-07-26", "2030-07-15")]
+    + [[d, "Ganesh Chaturthi", 0, "Web-checked; ten days of celebration follow."] for d in ("2026-09-14", "2027-09-03", "2028-08-23", "2029-08-12", "2030-08-01")]
+    + [["2026-02-15", "Maha Shivratri", 0, "Web-checked (missing from the package); some sources discussed the 16th."],
+       ["2029-04-22", "Ram Navami", 0, "One web source; verify when the year comes."]])
+
+
 def build(first, last):
     import holidays
     movable = {}
@@ -68,12 +80,8 @@ def build(first, last):
                     est = "estimated" in name.lower() or name.endswith("(estimated)") or key.startswith(("Id", "Eid"))
                     rows.append([d.isoformat(), title, imp, "Moon-sighting dependent: can be a day off." if est else ""])
                     break
-        dates = {r[1]: date.fromisoformat(r[0]) for r in rows}
-        if "Dussehra (Vijayadashami)" in dates:
-            rows.append([(dates["Dussehra (Vijayadashami)"] - timedelta(days=9)).isoformat(), "Navratri begins", 1, "Nine nights up to Dussehra; the first day can differ by a day by region."])
-        if "Diwali" in dates:
-            for off, title in ((-2, "Dhanteras"), (2, "Bhai Dooj")):
-                rows.append([(dates["Diwali"] + timedelta(days=off)).isoformat(), title, 0, "Counted from Diwali; can differ by a day by region."])
+        have = {(r[0][:4], r[1]) for r in rows}
+        rows += [r for r in WEB_CHECKED if r[0][:4] == str(y) and (str(y), r[1]) not in have]
         movable[str(y)] = sorted(rows)
     return {"generated_for": [first, last], "fixed": [list(f) for f in FIXED], "movable": movable}
 
