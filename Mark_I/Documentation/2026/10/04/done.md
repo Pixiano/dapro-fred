@@ -26,3 +26,5 @@
 - Built now from this decision: `consolidate.py` skips `kind="historical"` archive records, so undated imports never leak into live days. Self-check updated.
 
 - Phase 7 design updated: the yearly agent is a map-and-reduce (12 month passes writing year notes, then the whole-year run, then the critic pass) per Vatsal's idea; the effort choice was confirmed as highest effort plus the critic pass; the birthday anchor was given and is stored privately (not in this repo).
+
+- **Added by Vatsal (parked for a later phase):** permanent yearly alerts for friends, family and occasions (birthdays, anniversaries, etc). Noted in the build order, not built.

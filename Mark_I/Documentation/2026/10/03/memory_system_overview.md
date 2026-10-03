@@ -76,6 +76,9 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 ## Planned: decision logging
 The small models make many decisions, so a very detailed record of every model prompt, reply, action and what the code overruled is planned (integration phase at the latest). Today, changes to inferences, items and runs are already logged.
 
+## Planned: yearly alerts
+Recurring dates for friends, family and occasions (birthdays, anniversaries) that FRED reminds you of every year. FRED will ask before saving a date it picked up in conversation. Planned for a later phase; see the build order.
+
 ## Safety rules built in
 - Nothing is overwritten or deleted. Facts get end dates and merges are reversible.
 - Every fact keeps its source.
