@@ -55,6 +55,10 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 2. At night, the **night editor** reads the day plus what is already known, and updates the diary, facts and connections. Anything doubtful goes to the **review list**.
 3. Later, when asked a question, FRED can **search** by meaning, look up **current facts**, check **who connects to whom at a given time**, or read the **diary** for a day.
 
+## Designed but not built: the weekly analyst (Phase 5, 2026-10-04)
+- **Plain words:** once a week, on Sunday night, a model reads the week like an analyst. It gets a one-page map of the week first (topics, changes, open questions), then investigates by searching memory for evidence for and against its own guesses. It keeps, weakens or drops each guess, rules on the pile of "check later" items, and writes a short weekly digest that you can ask for. Guesses about personality (traits, values, motivations) are only ever kept as hypotheses, they grow into something FRED relies on only after showing up for several weeks, and FRED never recites them or asks you about them: they quietly shape how it answers.
+- **Technical:** tool loop with memory-only tools on a local GPU model, one JSON action per turn, hard safety cap, `inferences` store with evidence and support_weeks, week map from FAISS clusters. Full design: `2026/10/04/phase5_weekly_agent_design.md`.
+
 ## What is not there yet
 - Connection to the real FRED (feeding the archive, the real embedder, the real nightly model, the timer, recall tools, a spoken "X is Y" fix).
 - Phase 5: weekly meta-agent that works through the review list and spots patterns across a week.
