@@ -37,3 +37,11 @@
 - Self-check: `python period.py` (scripted fake model covers map content, every refusal rule, chapter closing, user-chapter lock, turning point rules, pm hook, idempotence, 12 notes with a gap and a bad reply, critic limits, waiting and missing-anchor cases).
 - Summary of everything through Phase 7: [summary_through_phase7.md](summary_through_phase7.md).
 - Noted for integration: two model call shapes (`llm(prompt)` vs `llm(messages)`), one adapter covers both.
+
+## Backups: `backup.py` (2026-10-04)
+- Back up the whole memory or any part. Parts: archive, events, facts, graph, logs, inferences, model, chapters, digests, review, runs, database. Each part is written as **native** (lossless and restorable: `.json`, the archive's own `.jsonl` day files byte-identical plus blobs, or a consistent `memory.sqlite` snapshot) + **`.md`** (readable, complete) + **`.pdf`** (most compatible).
+- `backup(mem, out_dir, parts=None, since, until, pdf, blobs)`, `verify_backup(dir)` (hashes against `manifest.json`), CLI `python backup.py ROOT OUT [parts] [--since --until --no-pdf --no-blobs]`.
+- Safety: output folder must be outside any git repo (personal data); each backup in its own timestamped folder, built as `.partial` and renamed only when complete; nothing is overwritten or deleted; tables that do not exist yet are skipped; time ranges apply to the time-based parts only (state-of-the-world parts are always whole).
+- PDF uses fpdf2 (the one new dependency, installed, listed in `Initial/memory/requirements.txt`) with system Arial/Segoe UI; characters those fonts lack (for example Devanagari) can show as boxes in the PDF only, the .md and native files keep the exact text. PDF is capped at 400k characters per part with a note pointing at the .md.
+- Self-check: `python backup.py` (all parts, byte-identical archive copy, blobs, date range, tamper detection, unknown part, git-repo guard, missing tables). The PDF was checked for a valid header and size only: no PDF renderer is installed here, so look at one in your own viewer once.
+- Not yet: restore (the native files are restorable; a restore command comes if needed), scheduled backups, encryption of backups (they are plain files, keep them somewhere private).

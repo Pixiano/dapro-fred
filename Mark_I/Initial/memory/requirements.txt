@@ -1,0 +1,4 @@
+# Mark I memory dependencies (everything else is the Python standard library)
+numpy
+faiss-cpu   # or faiss-gpu; the memory index only needs exact search
+fpdf2   # only for PDF backups (backup.py)
