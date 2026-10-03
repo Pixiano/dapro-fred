@@ -6,7 +6,7 @@
 
 ## Decision log
 - `decisionlog.py`: verbose, always-on log of every model prompt, reply, tool action, code override and model failure in the private database. Hooked into the tool loops (`Week._dlog`, `Week.call`), consolidation, recall judge, personal-model decisions and year notes. Self-check: `python decisionlog.py`. Details in the overview.
-- Still parked: more specific memory tools (decide in the final phase), yearly alerts.
+- Still parked: more specific memory tools (decide in the final phase).
 
 ## Small gaps fixed, backfill mode
 - **Long days:** `consolidate._chunks`: a day over `MAX_CHARS` goes to the model in parts; every part is validated before anything is written.
@@ -19,3 +19,10 @@
 ## Backups: encryption, restore, schedule
 - `backup.py`: `password=` seals a backup into one `.fredbak` (AES-256-GCM chunks, scrypt key; tamper, truncation and wrong password detected); `verify_backup(path, password)`; `restore(src, dest_root, password)` rebuilds a memory folder from a full backup (manifest verified first, refuses a non-empty destination, `.partial` then rename, integrity check, reports archive files the backup lacked); `run_backup_pending(mem, out_dir, every_days, password)` is the timer entry point (full backup, no PDFs, only when the newest is older than every_days; nothing is deleted automatically); CLI `restore | verify | scheduled | --encrypt` with the password from `FRED_BACKUP_PASSWORD` or a prompt. Self-check in `backup.py` (round trip from folder and from sealed file, wrong password, bit flip, truncation, chunk boundaries, schedule).
 - Left out on purpose: restoring a single part into a live memory, automatic pruning of old backups, key files/keyrings (the integration step decides where the password lives).
+
+## Backups: restore one part, cleanup, default folder
+- `restore_part(mem, src, part, password, overwrite)`, `prune_backups(out_dir, keep)`, `run_backup_pending(..., keep=8)` prunes after a successful backup, `DEFAULT_BACKUP_DIR = ~/FRED_Backups`, CLI `restore-part` and `prune`. Plain backups stay the default; encryption is opt-in per backup and the password is never stored by FRED (given through the environment or a prompt). Self-checks in `backup.py`.
+
+## Yearly alerts
+- `alerts.py` (personal alerts in the private database; public days from `calendar_india.json`), `gen_calendar.py` (builds the calendar for 2026-2035), self-check `python alerts.py`. Vatsal's own list is kept in a private file outside the repo and loaded with `load_seed` at integration; unsure dates are stored as unsure and asked about once; FRED's own suggestions need his yes (`confirm`/`reject`).
+- FRED's own birthday is not set yet: `oldest_date(folder)` was written to find the oldest file date of a folder, but the Attic only holds files from July 2026 (see the chat), so the date waits for Vatsal's decision.

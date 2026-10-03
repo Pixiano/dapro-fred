@@ -1,0 +1,1220 @@
+{
+ "generated_for": [
+  2026,
+  2035
+ ],
+ "fixed": [
+  [
+   1,
+   1,
+   "New Year's Day",
+   "festival",
+   1,
+   ""
+  ],
+  [
+   1,
+   4,
+   "World Braille Day",
+   "fun_fact",
+   0,
+   "Louis Braille was born on this day in 1809."
+  ],
+  [
+   1,
+   12,
+   "National Youth Day (India)",
+   "fun_fact",
+   0,
+   "Swami Vivekananda's birthday."
+  ],
+  [
+   1,
+   14,
+   "Makar Sankranti / Uttarayan (the kite festival)",
+   "festival",
+   1,
+   "Kite flying; Pongal in the south. Occasionally falls on the 15th."
+  ],
+  [
+   1,
+   26,
+   "Republic Day (India)",
+   "festival",
+   1,
+   "The Constitution came into force in 1950."
+  ],
+  [
+   2,
+   11,
+   "International Day of Women and Girls in Science",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   2,
+   28,
+   "National Science Day (India)",
+   "fun_fact",
+   0,
+   "Marks C. V. Raman's announcement of the Raman effect in 1928."
+  ],
+  [
+   2,
+   29,
+   "Leap Day",
+   "fun_fact",
+   0,
+   "Only in leap years: a year divisible by 4, except century years not divisible by 400."
+  ],
+  [
+   3,
+   8,
+   "International Women's Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   3,
+   14,
+   "Pi Day",
+   "fun_fact",
+   0,
+   "3.14; also Albert Einstein's birthday."
+  ],
+  [
+   3,
+   22,
+   "World Water Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   4,
+   1,
+   "April Fools' Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   4,
+   12,
+   "International Day of Human Space Flight",
+   "fun_fact",
+   0,
+   "Yuri Gagarin became the first person in space in 1961."
+  ],
+  [
+   4,
+   14,
+   "Dr. B. R. Ambedkar Jayanti",
+   "festival",
+   0,
+   ""
+  ],
+  [
+   4,
+   22,
+   "Earth Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   5,
+   4,
+   "Star Wars Day",
+   "fun_fact",
+   0,
+   "May the Fourth be with you."
+  ],
+  [
+   5,
+   11,
+   "National Technology Day (India)",
+   "fun_fact",
+   0,
+   "Marks the Pokhran tests of 1998 and the first Indian-built aircraft test flight."
+  ],
+  [
+   6,
+   5,
+   "World Environment Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   6,
+   21,
+   "International Yoga Day",
+   "fun_fact",
+   0,
+   "Also the longest day of the year in the north."
+  ],
+  [
+   6,
+   23,
+   "Alan Turing's birthday",
+   "fun_fact",
+   0,
+   "Born in 1912; the father of theoretical computer science."
+  ],
+  [
+   7,
+   11,
+   "World Population Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   7,
+   20,
+   "Moon landing anniversary",
+   "fun_fact",
+   0,
+   "Apollo 11 landed in 1969."
+  ],
+  [
+   8,
+   12,
+   "International Youth Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   8,
+   15,
+   "Independence Day (India)",
+   "festival",
+   1,
+   ""
+  ],
+  [
+   8,
+   23,
+   "National Space Day (India)",
+   "fun_fact",
+   0,
+   "Chandrayaan-3 landed near the Moon's south pole in 2023."
+  ],
+  [
+   9,
+   5,
+   "Teachers' Day (India)",
+   "fun_fact",
+   0,
+   "Dr. Sarvepalli Radhakrishnan's birthday."
+  ],
+  [
+   9,
+   15,
+   "Engineers' Day (India)",
+   "fun_fact",
+   0,
+   "M. Visvesvaraya's birthday."
+  ],
+  [
+   9,
+   21,
+   "International Day of Peace",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   10,
+   2,
+   "Gandhi Jayanti",
+   "festival",
+   0,
+   ""
+  ],
+  [
+   10,
+   15,
+   "World Students' Day",
+   "fun_fact",
+   0,
+   "A. P. J. Abdul Kalam's birthday."
+  ],
+  [
+   10,
+   31,
+   "Halloween",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   11,
+   10,
+   "World Science Day for Peace and Development",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   11,
+   14,
+   "Children's Day (India)",
+   "fun_fact",
+   0,
+   "Jawaharlal Nehru's birthday."
+  ],
+  [
+   12,
+   10,
+   "Human Rights Day",
+   "fun_fact",
+   0,
+   ""
+  ],
+  [
+   12,
+   22,
+   "National Mathematics Day (India)",
+   "fun_fact",
+   0,
+   "Srinivasa Ramanujan was born in 1887."
+  ],
+  [
+   12,
+   25,
+   "Christmas",
+   "festival",
+   1,
+   ""
+  ],
+  [
+   12,
+   31,
+   "New Year's Eve",
+   "festival",
+   0,
+   ""
+  ]
+ ],
+ "movable": {
+  "2026": [
+   [
+    "2026-03-04",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2026-03-21",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2026-03-26",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2026-03-31",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2026-04-03",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2026-05-01",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2026-05-27",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2026-09-04",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2026-10-11",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2026-10-20",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2026-11-06",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2026-11-08",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2026-11-10",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2026-11-24",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2027": [
+   [
+    "2027-03-06",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2027-03-10",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2027-03-22",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2027-03-26",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2027-04-15",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2027-04-18",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2027-05-17",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2027-05-20",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2027-08-25",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2027-09-30",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2027-10-09",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2027-10-27",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2027-10-29",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2027-10-31",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2027-11-14",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2028": [
+   [
+    "2028-02-23",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2028-02-27",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2028-03-11",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2028-04-03",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2028-04-07",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2028-04-14",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2028-05-06",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2028-05-08",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2028-08-13",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2028-09-18",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2028-09-27",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2028-10-15",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2028-10-17",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2028-10-19",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2028-11-02",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2029": [
+   [
+    "2029-02-11",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2029-02-15",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2029-03-01",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2029-03-30",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2029-04-25",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2029-04-26",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2029-05-27",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2029-09-01",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2029-10-07",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2029-10-16",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2029-11-03",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2029-11-05",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2029-11-07",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2029-11-21",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2030": [
+   [
+    "2030-02-05",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2030-03-02",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2030-03-20",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2030-04-12",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2030-04-14",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2030-04-16",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2030-04-19",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2030-05-17",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2030-08-21",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2030-09-27",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2030-10-06",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2030-10-24",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2030-10-26",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2030-10-28",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2030-11-10",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2031": [
+   [
+    "2031-01-25",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2031-02-20",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2031-03-09",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2031-04-01",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2031-04-03",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2031-04-05",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2031-04-11",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2031-05-07",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2031-08-10",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2031-10-16",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2031-10-25",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2031-11-12",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2031-11-14",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2031-11-16",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2031-11-28",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2032": [
+   [
+    "2032-01-15",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2032-03-10",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2032-03-23",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2032-03-26",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2032-03-27",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2032-04-19",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2032-04-23",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2032-05-25",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2032-08-28",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2032-10-05",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2032-10-14",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2032-10-31",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2032-11-02",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2032-11-04",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2032-11-17",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ]
+  ],
+  "2033": [
+   [
+    "2033-01-03",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2033-02-27",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2033-03-12",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2033-03-16",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2033-04-07",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2033-04-12",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2033-04-15",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2033-05-14",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2033-08-17",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2033-09-24",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2033-10-03",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2033-10-20",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2033-10-22",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2033-10-24",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2033-11-06",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2033-12-24",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ]
+  ],
+  "2034": [
+   [
+    "2034-02-17",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2034-03-02",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2034-03-05",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2034-03-28",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2034-04-01",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2034-04-07",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2034-05-03",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2034-09-06",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2034-10-13",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2034-10-22",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2034-11-08",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2034-11-10",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2034-11-12",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2034-11-25",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2034-12-13",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ]
+  ],
+  "2035": [
+   [
+    "2035-02-19",
+    "Eid al-Adha",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ],
+   [
+    "2035-03-08",
+    "Maha Shivratri",
+    0,
+    ""
+   ],
+   [
+    "2035-03-23",
+    "Good Friday",
+    0,
+    ""
+   ],
+   [
+    "2035-03-24",
+    "Holi",
+    1,
+    ""
+   ],
+   [
+    "2035-04-16",
+    "Ram Navami",
+    0,
+    ""
+   ],
+   [
+    "2035-04-20",
+    "Mahavir Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2035-05-22",
+    "Buddha Purnima",
+    0,
+    ""
+   ],
+   [
+    "2035-08-26",
+    "Janmashtami",
+    0,
+    ""
+   ],
+   [
+    "2035-10-02",
+    "Navratri begins",
+    1,
+    "Nine nights up to Dussehra; the first day can differ by a day by region."
+   ],
+   [
+    "2035-10-11",
+    "Dussehra (Vijayadashami)",
+    1,
+    ""
+   ],
+   [
+    "2035-10-28",
+    "Dhanteras",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2035-10-30",
+    "Diwali",
+    1,
+    ""
+   ],
+   [
+    "2035-11-01",
+    "Bhai Dooj",
+    0,
+    "Counted from Diwali; can differ by a day by region."
+   ],
+   [
+    "2035-11-15",
+    "Guru Nanak Jayanti",
+    0,
+    ""
+   ],
+   [
+    "2035-12-02",
+    "Eid al-Fitr",
+    0,
+    "Moon-sighting dependent: can be a day off."
+   ]
+  ]
+ }
+}

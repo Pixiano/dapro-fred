@@ -5,6 +5,7 @@
   verify_backup(dir) -> list of problems (empty = every file matches the manifest's hashes)
   CLI: python backup.py ROOT OUT_DIR [part ...] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--no-pdf] [--no-blobs] [--format PART=md,png] [--encrypt]
        python backup.py restore SRC DEST_ROOT | verify SRC | scheduled ROOT OUT_DIR [--every-days N] [--encrypt]
+       python backup.py restore-part ROOT SRC PART [--overwrite] | prune OUT_DIR KEEP
        (--encrypt / an encrypted SRC: password from the FRED_BACKUP_PASSWORD environment variable, else asked; never on the command line)
 
 Parts: archive events facts graph logs inferences model chapters digests review runs database (parts=None = all).
@@ -21,10 +22,16 @@ The password is never stored: lose it and the backup is gone. verify_backup(path
 restore(src, dest_root, password=None) rebuilds a memory folder from a FULL backup (needs the database part; the archive part is
 restored if present): it verifies the manifest first, never touches an existing memory (dest_root must not exist or be empty), builds
 in <dest>.partial and renames when the sqlite integrity check and the archive file check pass.
-run_backup_pending(mem, out_dir, every_days=7, password=None, today=None) is the timer entry point: a full backup (no PDFs) if the
-newest one in out_dir is older than every_days, else nothing. Old backups are never deleted automatically.
-ponytail: restore is whole-memory only (a single part's .json/.md is for reading, not for merging into a live database); every
-scheduled backup is a full copy (use since= or prune by hand if the archive gets huge).
+run_backup_pending(mem, out_dir=None, every_days=7, password=None, today=None, keep=8) is the timer entry point: a full backup (no PDFs)
+if the newest one in out_dir is older than every_days, else nothing; afterwards only the newest `keep` full backups are kept
+(prune_backups; part backups and any other file in the folder are never touched; keep=None switches cleanup off). Plain (no password) is
+the default; the password is only for backups you choose to encrypt, and FRED never stores it.
+restore_part(mem, src, part, password=None, overwrite=False) puts ONE part of a backup back into a live memory without deleting anything:
+rows or archive files that are missing are added; rows that differ are reported and, only with overwrite=True, updated; archive files
+are never rewritten except to extend a shorter copy with the backup's longer one.
+Default backup folder: ~/FRED_Backups (DEFAULT_BACKUP_DIR).
+ponytail: every scheduled backup is a full copy (use since= or lower keep if the archive gets huge); restore_part brings back missing
+rows, it does not delete rows the backup does not have.
 Safety: the output folder must be OUTSIDE any git repo (backups hold personal data); each backup goes into its own
 timestamped folder and is built as <name>.partial, renamed only when complete, so a crash never leaves a half backup
 that looks finished. Nothing existing is ever overwritten or deleted. Tables that do not exist yet are skipped.
@@ -42,12 +49,14 @@ import sqlite3
 import sys
 import tarfile
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logging.getLogger("fontTools").setLevel(logging.ERROR)  # font subsetting is chatty and harmless
 PARTS = ("archive", "events", "facts", "graph", "logs", "inferences", "model", "chapters", "digests", "review", "runs", "database")
 PDF_MAX_CHARS = 400_000
+DEFAULT_BACKUP_DIR = Path.home() / "FRED_Backups"  # outside the project folder; backup() still refuses any git repo
 DEFAULT_FORMATS = {p: ("md", "pdf") for p in PARTS}
 DEFAULT_FORMATS.update(graph=("md", "png"), chapters=("md", "png"))
 FORMATS = {"md", "pdf", "png"}
@@ -468,7 +477,7 @@ def _sha(path):
     return h.hexdigest()
 
 
-def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=True, formats=None, password=None):
+def backup(mem, out_dir=None, parts=None, since=None, until=None, pdf=True, blobs=True, formats=None, password=None):
     parts = list(PARTS) if parts in (None, "all") else list(parts)
     bad = [p for p in parts if p not in PARTS]
     if bad:
@@ -477,7 +486,7 @@ def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=Tru
     bad = [p for p in formats if p not in PARTS] + [f for fs in formats.values() for f in fs if f not in FORMATS]
     if bad:
         raise ValueError(f"unknown part or format in formats: {bad}; formats are {sorted(FORMATS)}")
-    out = _guard(out_dir)
+    out = _guard(out_dir or DEFAULT_BACKUP_DIR)
     stamp = _now().strftime("%Y%m%dT%H%M%SZ")
     final = out / f"memory-backup-{stamp}" if parts == list(PARTS) else out / f"memory-backup-{stamp}-{'+'.join(parts)}"
     if password is not None:
@@ -689,6 +698,132 @@ def restore(src, dest_root, password=None):
     return {"root": str(dest), "events": events, "archive_days": len(files) - len(missing), "missing": missing}
 
 
+# ---- restore one part into a live memory ----
+def _opened(src, tmp, password):
+    src = Path(src)
+    folder = _unseal(src, tmp, password) if src.is_file() else src
+    bad = verify_backup(folder)
+    if bad:
+        raise ValueError(f"the backup does not match its manifest, nothing restored: {bad[:5]}")
+    return folder
+
+
+def restore_part(mem, src, part, password=None, overwrite=False):
+    """Puts one part of a backup (folder or .fredbak) back into the live memory `mem`. Nothing is deleted. Returns a summary dict.
+    Table parts: missing rows are inserted (by primary key); a row that exists but differs is counted in "differs" and only updated if
+    overwrite=True. After restoring events, re-run SemanticIndex.sync() so the restored events get their search vectors."""
+    if part == "database":
+        raise ValueError("the database part is the whole database: use restore() into a fresh folder")
+    if part not in PARTS:
+        raise ValueError(f"unknown part {part!r}; choose from {list(PARTS)}")
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = _opened(src, tmp, password)
+        if part not in json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["parts"]:
+            raise ValueError(f"this backup does not contain the {part} part")
+        return _restore_archive(mem, folder) if part == "archive" else _restore_tables(mem, folder, part, overwrite)
+
+
+def _restore_tables(mem, folder, part, overwrite):
+    tables = json.loads((folder / part / f"{part}.json").read_text(encoding="utf-8"))
+    s, out = mem.store, {"part": part, "inserted": {}, "differs": 0, "updated": 0, "skipped_tables": []}
+    with s.lock:
+        s.db.commit()
+        s.db.execute("PRAGMA foreign_keys=OFF")  # rows arrive table by table; the check at the end reports anything dangling
+        try:
+            for tbl, rows in tables.items():
+                info = s.db.execute(f"PRAGMA table_info({tbl})").fetchall() if re.fullmatch(r"[a-z_]+", tbl) else []
+                if not info:
+                    out["skipped_tables"].append(tbl)
+                    continue
+                cols = [r["name"] for r in info]
+                pk = [r["name"] for r in sorted((r for r in info if r["pk"]), key=lambda r: r["pk"])] or cols
+                n = 0
+                for row in rows:
+                    use = [c for c in cols if c in row]
+                    if not set(pk) <= set(use):
+                        continue
+                    where = " AND ".join(f"{c} IS ?" for c in pk)
+                    cur = s.db.execute(f"SELECT {','.join(use)} FROM {tbl} WHERE {where}", [row[c] for c in pk]).fetchone()
+                    if cur is None:
+                        s.db.execute(f"INSERT INTO {tbl}({','.join(use)}) VALUES({','.join('?' * len(use))})", [row[c] for c in use])
+                        n += 1
+                    elif tuple(cur) != tuple(row[c] for c in use):
+                        out["differs"] += 1
+                        rest = [c for c in use if c not in pk]
+                        if overwrite and rest:
+                            s.db.execute(f"UPDATE {tbl} SET {','.join(c + '=?' for c in rest)} WHERE {where}", [row[c] for c in rest] + [row[c] for c in pk])
+                            out["updated"] += 1
+                out["inserted"][tbl] = n
+            s.db.commit()
+            out["fk_problems"] = len(s.db.execute("PRAGMA foreign_key_check").fetchall())
+        except BaseException:
+            s.db.rollback()
+            raise
+        finally:
+            s.db.execute("PRAGMA foreign_keys=ON")
+    return out
+
+
+def _restore_archive(mem, folder):
+    root, src, s = mem.archive.root, folder / "archive", mem.store
+    out = {"part": "archive", "files_added": 0, "files_extended": 0, "files_same": 0, "blobs_added": 0, "conflicts": []}
+    snap = folder / "database" / "memory.sqlite"
+    for p in sorted(src.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*.jsonl")):
+        rel = p.relative_to(src)
+        live, new = root / rel, p.read_bytes()
+        if live.exists():
+            cur = live.read_bytes()
+            if cur.startswith(new):  # identical, or the live copy already has more
+                out["files_same"] += 1
+                continue
+            if not new.startswith(cur):  # two different histories: never pick one
+                out["conflicts"].append(rel.as_posix())
+                continue
+            out["files_extended"] += 1
+        else:
+            out["files_added"] += 1
+        live.parent.mkdir(parents=True, exist_ok=True)
+        live.write_bytes(new)
+        recs = [json.loads(l) for l in new.decode("utf-8").splitlines() if l]
+        with s.lock:
+            s.db.execute("INSERT OR REPLACE INTO archive_files VALUES(?,?,?,?,?,?)",
+                         (rel.as_posix(), rel.stem, "-".join(rel.parts[:3]), len(recs), min(r["ts"] for r in recs), max(r["ts"] for r in recs)))
+            s.db.commit()
+    for p in sorted(x for x in (src / "blobs").rglob("*") if x.is_file()) if (src / "blobs").exists() else []:
+        rel = p.relative_to(src)
+        if (root / rel).exists() or _sha(p) != p.name:
+            if _sha(p) != p.name:
+                out["conflicts"].append(rel.as_posix())
+            continue
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(p, root / rel)
+        row = None
+        if snap.exists():
+            sdb = sqlite3.connect(snap)
+            row = sdb.execute("SELECT * FROM archive_blobs WHERE sha256=?", (p.name,)).fetchone()
+            sdb.close()
+        with s.lock:
+            s.db.execute("INSERT OR IGNORE INTO archive_blobs VALUES(?,?,?,?,?,?)", row or (p.name, rel.as_posix(), p.stat().st_size, p.name, None, _now().isoformat(timespec="seconds")))
+            s.db.commit()
+        out["blobs_added"] += 1
+    return out
+
+
+# ---- cleanup ----
+def prune_backups(out_dir, keep):
+    """Keeps the newest `keep` FULL backups in out_dir (folders or .fredbak) and removes the older ones. Only names that look exactly
+    like our full backups are ever touched. Returns the removed names."""
+    if keep < 1:
+        raise ValueError("keep at least one backup")
+    out = Path(out_dir)
+    found = sorted((m.group(1), p.name, p) for p in (out.iterdir() if out.is_dir() else []) if (m := _STAMP.fullmatch(p.name)))
+    gone = []
+    for _, name, p in found[:-keep]:
+        shutil.rmtree(p) if p.is_dir() else p.unlink()
+        gone.append(name)
+    return gone
+
+
 # ---- schedule ----
 _STAMP = re.compile(r"memory-backup-(\d{8}T\d{6}Z)(\.fredbak)?$")  # full backups only (part backups carry a -part suffix)
 
@@ -700,14 +835,17 @@ def last_backup(out_dir):
     return datetime.strptime(max(stamps), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc) if stamps else None
 
 
-def run_backup_pending(mem, out_dir, every_days=7, password=None, today=None):
+def run_backup_pending(mem, out_dir=None, every_days=7, password=None, today=None, keep=8):
     """The timer entry point (integration runs it nightly or at start-up): a full backup, no PDFs, if the newest full one in out_dir is
-    older than every_days. Returns the path made, or None. Errors propagate: a backup that cannot be made must be seen, not swallowed."""
+    older than every_days. Returns the path made, or None; the newest `keep` full backups stay, older ones go. Errors propagate: a backup that cannot be made must be seen, not swallowed."""
+    out_dir = out_dir or DEFAULT_BACKUP_DIR
     now = today or _now()
     last = last_backup(out_dir)
     if last and (now - last).total_seconds() < every_days * 86400:
         return None
     r = backup(mem, out_dir, pdf=False, password=password)
+    if keep:
+        prune_backups(out_dir, keep)  # after the new one exists, so a failed backup never costs an old one
     return r["file"] or r["dir"]
 
 
@@ -716,7 +854,7 @@ def _cli_password(needed):
     return (os.environ.get("FRED_BACKUP_PASSWORD") or getpass.getpass("Backup password: ")) if needed else None
 
 
-if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[1] in ("restore", "verify", "scheduled"):  # CLI: restore / verify / scheduled
+if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[1] in ("restore", "verify", "scheduled", "restore-part", "prune"):  # CLI: restore / verify / scheduled
     cmd, rest = sys.argv[1], sys.argv[2:]
     days = int(rest[rest.index("--every-days") + 1]) if "--every-days" in rest else 7
     pos = [x for i, x in enumerate(rest) if not x.startswith("--") and not (i and rest[i - 1] == "--every-days")]
@@ -725,6 +863,12 @@ if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[1] in ("restore", "
         print(verify_backup(pos[0], _cli_password(enc)) or "ok")
     elif cmd == "restore":
         print(restore(pos[0], pos[1], _cli_password(enc)))
+    elif cmd == "restore-part":  # restore-part ROOT SRC PART [--overwrite]
+        from manager import Memory
+        with Memory(pos[0]) as m:
+            print(restore_part(m, pos[1], pos[2], _cli_password(enc), "--overwrite" in rest))
+    elif cmd == "prune":  # prune OUT_DIR KEEP
+        print(prune_backups(pos[0], int(pos[1])) or "nothing to remove")
     else:
         from manager import Memory
         with Memory(pos[0]) as m:
@@ -934,4 +1078,75 @@ if __name__ == "__main__":  # self-check: python backup.py
         assert run_backup_pending(m, sch, 7, pw, today=_now() + timedelta(days=8)) is not None         # a week later it runs again
         assert not list(Path(d).glob("sched/*.partial")) and all(n.name.startswith("memory-backup-") for n in sch.iterdir())
         assert last_backup(out) is not None and last_backup(Path(d) / "nothing-here") is None          # part backups (-events+archive...) are not counted as the last full one
+        # ---- restore ONE part into a live memory; cleanup ----
+        full = backup(m, Path(d) / "parts-src", pdf=False)["dir"]
+        with Memory(Path(d) / "live") as lm:
+            ls = lm.store
+            Graph(ls)
+            Week(lm, "2026-03-08", None)
+            Month(lm, "2026-03", None)
+            lm.archive.write("conversation", {"text": "only in live"}, ts="2026-04-01T10:00:00+00:00")
+            # logs: nothing there -> the backup's rows come back; a second run changes nothing
+            r1 = restore_part(lm, full, "logs")
+            assert r1["inserted"] == {"daily_logs": 1} and ls.daily_log("2026-03-01") == "A quiet day." and r1["fk_problems"] == 0
+            assert restore_part(lm, full, "logs")["inserted"] == {"daily_logs": 0}
+            # a row that differs is reported, never silently overwritten; overwrite=True updates it (and still deletes nothing)
+            ls.set_daily_log("2026-03-01", "Edited later.")
+            ls.set_daily_log("2026-05-05", "Only in live.")
+            r2 = restore_part(lm, full, "logs")
+            assert r2["differs"] == 1 and r2["updated"] == 0 and ls.daily_log("2026-03-01") == "Edited later."
+            r3 = restore_part(lm, full, "logs", overwrite=True)
+            assert r3["updated"] == 1 and ls.daily_log("2026-03-01") == "A quiet day." and ls.daily_log("2026-05-05") == "Only in live."
+            # a part with several linked tables: facts first, then events, tags and graph (ids line up because they come from the same backup)
+            for p in ("facts", "events", "graph", "chapters", "digests"):
+                restore_part(lm, full, p)
+            assert ls.db.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2 and ls.db.execute("SELECT COUNT(*) FROM relationships").fetchone()[0] == 4
+            assert ls.db.execute("SELECT COUNT(*) FROM event_entities").fetchone()[0] == 1 and ls.db.execute("SELECT COUNT(*) FROM chapters").fetchone()[0] == 3
+            assert ls.db.execute("SELECT track FROM chapters WHERE title='Exam season'").fetchone()[0] == "school"
+            assert ls.db.execute("PRAGMA foreign_key_check").fetchall() == [] and ls.db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+            # archive: missing days and blobs come back, live-only data stays, a different history is a conflict
+            ra = restore_part(lm, full, "archive")
+            assert ra["files_added"] >= 3 and ra["blobs_added"] == 1 and ra["conflicts"] == []
+            assert [r_["data"]["text"] for r_ in lm.archive.read("conversation", "2026-04-01")] == ["only in live"]
+            assert lm.archive.read("conversation", "2026-03-09")[0]["data"]["text"] == "later" and lm.archive.verify() == []
+            assert ls.db.execute("SELECT COUNT(*) FROM archive_blobs").fetchone()[0] == 1
+            assert restore_part(lm, full, "archive")["files_added"] == 0
+            f9 = lm.archive.root / "2026/03/09/conversation.jsonl"
+            f9.write_text(f9.read_text(encoding="utf-8").replace("later", "LATER"), encoding="utf-8")
+            assert restore_part(lm, full, "archive")["conflicts"] == ["2026/03/09/conversation.jsonl"] and "LATER" in f9.read_text(encoding="utf-8")
+            f1 = lm.archive.root / "2026/03/01/conversation.jsonl"
+            f1.write_text("", encoding="utf-8")                                                          # a shorter copy is extended with the backup's longer one
+            assert restore_part(lm, full, "archive")["files_extended"] >= 1 and f1.read_bytes() == (Path(full) / "archive/2026/03/01/conversation.jsonl").read_bytes()
+            # from a sealed backup, and the refusals
+            assert restore_part(lm, sealed, "logs", pw)["inserted"] == {"daily_logs": 0}
+            for bad_call in (lambda: restore_part(lm, full, "database"), lambda: restore_part(lm, full, "nonsense"), lambda: restore_part(lm, g2, "logs"),
+                             lambda: restore_part(lm, sealed, "logs", "wrong password!")):
+                try:
+                    bad_call()
+                    raise SystemExit("bad restore_part accepted")
+                except ValueError:
+                    pass
+        # ---- cleanup: only full backups beyond `keep`, nothing else ----
+        pr = Path(d) / "prune"
+        pr.mkdir()
+        for stamp in ("20260101T000000Z", "20260201T000000Z", "20260301T000000Z", "20260401T000000Z"):
+            (pr / f"memory-backup-{stamp}").mkdir()
+        (pr / "memory-backup-20260115T000000Z.fredbak").write_bytes(b"x")
+        (pr / "memory-backup-20260101T000000Z-events+logs").mkdir()   # part backup: never touched
+        (pr / "notes.txt").write_text("mine", encoding="utf-8")
+        assert prune_backups(pr, 3) == ["memory-backup-20260101T000000Z", "memory-backup-20260115T000000Z.fredbak"]
+        assert sorted(p.name for p in pr.iterdir()) == ["memory-backup-20260101T000000Z-events+logs", "memory-backup-20260201T000000Z", "memory-backup-20260301T000000Z",
+                                                        "memory-backup-20260401T000000Z", "notes.txt"]
+        assert prune_backups(pr, 3) == []
+        try:
+            prune_backups(pr, 0)
+            raise SystemExit("keep=0 accepted")
+        except ValueError:
+            pass
+        sch2 = Path(d) / "sched2"
+        for i in range(3):
+            time.sleep(1.1)
+            assert run_backup_pending(m, sch2, 0, None, keep=2)                                                # plain (no password) is the default
+        assert len([p for p in sch2.iterdir() if p.is_dir()]) == 2 and not list(sch2.glob("*.fredbak"))
+        assert DEFAULT_BACKUP_DIR == Path.home() / "FRED_Backups" and not any((p / ".git").exists() for p in DEFAULT_BACKUP_DIR.parents)
     print("backup ok")
