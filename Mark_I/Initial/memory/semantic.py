@@ -103,7 +103,7 @@ class SemanticIndex:
         evs = self._events([i for i in ids if i not in cold][:k])
         return [evs[i] for i in ids if i in evs]
 
-    def search(self, query, k=5, include_cold=False):
+    def search(self, query, k=5, include_cold=False, touch=True):
         """Hybrid: vector + keyword, reciprocal rank fusion (k=60). Returned events are marked recalled."""
         score, evs = {}, {}
         for hits in (self.recall(query, k * 3, include_cold), self.keyword(query, k * 3, include_cold)):
@@ -111,7 +111,8 @@ class SemanticIndex:
                 score[ev["id"]] = score.get(ev["id"], 0) + 1 / (60 + rank)
                 evs[ev["id"]] = ev
         top = sorted(score, key=score.get, reverse=True)[:k]
-        self.touch(top)
+        if touch:
+            self.touch(top)
         return [dict(evs[i], score=score[i]) for i in top]
 
     def touch(self, event_ids):

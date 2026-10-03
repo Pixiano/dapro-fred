@@ -11,3 +11,8 @@
 - All thresholds are knobs to tune after a week or more of real use; the real test is living with FRED.
 - Not yet: reranking step (LLM or small reranker, integration), cooling of one-off entities, scheduling `run_hygiene` after `run_pending`, an IVF/HNSW index beyond ~1M events.
 - Answered: the best store for conversation memory is not one type. It is the archive (truth) + vectors (meaning) + keywords (names) + graph/states (structured facts), fused, which is what this is.
+
+## Judged recall (`recall.py`)
+- `judged_search(index, query, llm)`: take the top 20 candidates, the model keeps the useful ones (junk dropped, and only kept events are marked recalled). If none are useful it retries once, wider: the model's own rephrasings, cold events included, pool of 40. If still nothing, it returns a question asking the user for a name, date or keyword instead of guessing. Bad model output falls back to the plain top results. Self-check: `python recall.py`.
+- `SemanticIndex.search(touch=False)` added so candidates are not marked warm before they are judged.
+- Not yet: the real model behind `llm` (integration); more than one retry round.

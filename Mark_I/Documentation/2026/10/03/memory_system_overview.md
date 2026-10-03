@@ -42,6 +42,10 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 - **Plain words:** search now uses two methods together: meaning (finds "began working on speech" for "started the voice project") and exact words (finds the name "Rina" even when meaning-search stumbles). To stop clutter, only meaningful things become events, repeats are skipped, and old unimportant things are shelved ("cold"): hidden from normal search but not deleted, and brought back if asked for again. Stale questions and shaky connections also expire.
 - **Technical:** FAISS flat index (cache) over SQLite vectors + FTS5, reciprocal rank fusion; `hygiene.py` write gate, cold marking, review expiry, weak-link closing. Thresholds are knobs to tune with real use.
 
+### 8. Judged recall (added later 2026-10-03)
+- **Plain words:** after searching, the model reads the top 20 results and throws out the useless ones. If nothing useful is left, it searches again more widely using its own better wording and includes shelved memories. If that still fails, FRED asks you for a name, date or keyword instead of guessing.
+- **Technical:** `recall.py` `judged_search`: judge pool, one wider retry (rephrasings, cold included), then an `ask`. Only kept events are marked recalled. A bad model answer falls back to the plain top results.
+
 ## How a day flows through it (once integrated)
 1. During the day, everything FRED sees and does is written to the **archive**, and important things become **events** (searchable by meaning).
 2. At night, the **night editor** reads the day plus what is already known, and updates the diary, facts and connections. Anything doubtful goes to the **review list**.
