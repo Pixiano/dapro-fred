@@ -115,6 +115,18 @@ class SemanticIndex:
             self.touch(top)
         return [dict(evs[i], score=score[i]) for i in top]
 
+    def similar(self, event_id, k=5):
+        """Events whose vectors are closest to this event's (itself excluded), for the current model."""
+        with self.store.lock:
+            r = self.store.db.execute("SELECT vec FROM embeddings WHERE event_id=? AND model=?", (event_id, self.model)).fetchone()
+        ids, ix = self._index()
+        if not r or not ids:
+            return []
+        D, I = ix.search(np.frombuffer(r[0], np.float32)[None], min(len(ids), k + 1))
+        hits = [(ids[i], float(d)) for d, i in zip(D[0], I[0]) if i >= 0 and ids[i] != event_id][:k]
+        evs = self._events([h[0] for h in hits])
+        return [dict(evs[e], score=s) for e, s in hits]
+
     def touch(self, event_ids):
         """Mark recalled now; a recalled cold event turns warm again."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")

@@ -24,7 +24,8 @@ WEAK_CONF, WEAK_DAYS = 0.4, 30         # links below this confidence, older than
 def ensure(store):
     graph.Graph(store)  # review_queue + relationships
     with store.lock:
-        store.db.executescript((Path(__file__).with_name("schema_hygiene.sql")).read_text(encoding="utf-8"))
+        for f in ("schema_hygiene.sql", "schema_weekly.sql"):  # weekly: a ruling of "real" shields a review item from expiry
+            store.db.executescript(Path(__file__).with_name(f).read_text(encoding="utf-8"))
 
 
 def is_duplicate(store, day, content) -> bool:
@@ -44,7 +45,8 @@ def run_hygiene(mem, now=None) -> dict:
             "AND id NOT IN (SELECT event_id FROM event_recalls WHERE last_recalled >= ?)",
             (now.isoformat(timespec="seconds"), iso(COLD_DAYS), KEEP_IMPORTANCE, iso(COLD_DAYS)))
         out["cooled"] = cur.rowcount
-        out["expired"] = s.db.execute("UPDATE review_queue SET status='expired' WHERE status='open' AND day < ?",
+        out["expired"] = s.db.execute("UPDATE review_queue SET status='expired' WHERE status='open' AND day < ? AND id NOT IN "
+            "(SELECT item_id FROM review_rulings WHERE ruling='real')",
                                       (iso(REVIEW_DAYS)[:10],)).rowcount
         out["weak_links_closed"] = s.db.execute(
             "UPDATE relationships SET valid_to=? WHERE valid_to IS NULL AND confidence < ? AND valid_from < ?",

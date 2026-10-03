@@ -4,7 +4,7 @@ Spec: `Old/FRED_Memory_Overhaul.md` (predecessor doc, section 40 phases). Integr
 
 1. **Phase 1 Foundation: complete.** `store.py` (entities, events, state history, provenance, daily log, snapshot), `manager.py` (the single `Memory(root)` object). Projects/goals/tasks/preferences are entity kinds with state fields (spec section 9), not extra tables.
 2. **Layer 1 Raw archive: built.** `archive.py`. Append-only JSONL per UTC day and stream, plus content-addressed blobs for files/artifacts. Index in SQLite, `verify()` detects loss/tamper.
-3. **Phase 3 Daily consolidation: built.** `consolidate.py` (see done.md). **Phase 4 Temporal graph: built** (`graph.py`). Hygiene + hybrid search: built (see 10/03). **Phases 5-8, in order:** weekly meta-agent, personal model, monthly/yearly, deep self-analysis.
+3. **Phase 3 Daily consolidation: built.** `consolidate.py` (see done.md). **Phase 4 Temporal graph: built** (`graph.py`). Hygiene + hybrid search: built (see 10/03). **Phase 5 Weekly meta-agent: built** (`weekly.py`). **Phases 6-8, in order:** weekly meta-agent, personal model, monthly/yearly, deep self-analysis.
 4. **Phase 2 FRED integration: last.** Wires FRED's pipeline, event bus, capture/recall tools and the real embedder into the sockets below. `semantic.py` (event vectors + recall) is already built as a standalone piece and waits for this step.
 
 ## Sockets in place
@@ -12,3 +12,6 @@ Spec: `Old/FRED_Memory_Overhaul.md` (predecessor doc, section 40 phases). Integr
 - `Archive.write(stream, data, session, ts, source_id, kind)`: every producer's single call. `on_write` hooks for extraction.
 - `MemoryStore.add_source/add_event/set_state`, `on_event` hooks.
 - `SemanticIndex(store, embed)`: injected embedder.
+
+## Decide in the final phase (integration)
+- **More specific, detailed memory tools** for the consolidation models (nightly, weekly, monthly...). They only ever see memory tools, listed directly in their system prompt (no embedding router, that is for FRED's ~110 real tools). Today the weekly agent has 14 general ones; add finer ones once real weeks show what it keeps struggling to look up. (Vatsal, 2026-10-04)
