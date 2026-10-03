@@ -5,6 +5,8 @@ Sockets:
   - judged_search(index, query, llm, k, pool): llm(prompt)->str returning JSON, injected like consolidate's.
     Returns {"events": [...], "ask": str|None}. Only events the model kept are marked recalled, so the
     candidates it threw away do not stay warm. Bad model output falls back to the plain top-k, never an error.
+  - say(text): optional callback, the talker model's voice. Called with a short status line ("digging deeper")
+    before the wider retry, so the user hears progress during the slow part. A failing callback is ignored.
   - One retry round only. ponytail: loop with a budget if one retry proves too few.
 """
 import json
@@ -27,12 +29,16 @@ def _judge(index, q, evs, llm):
         return None, [], None
 
 
-def judged_search(index, query, llm, k=5, pool=20) -> dict:
+def judged_search(index, query, llm, k=5, pool=20, say=None) -> dict:
     evs = index.search(query, pool, touch=False)
     kept, retries, ask = _judge(index, query, evs, llm) if evs else ([], [], None)
     if kept is None:
         kept = evs[:k]
     elif not kept:  # wider, targeted second try: model's wording, cold events included, bigger pool
+        try:
+            say and say("Nothing obvious yet, digging deeper...")
+        except Exception:
+            pass
         wide = {}
         for rq in [query] + [r for r in retries if isinstance(r, str)][:3]:
             for e in index.search(rq, pool * 2, include_cold=True, touch=False):
@@ -65,4 +71,11 @@ if __name__ == "__main__":  # self-check: python recall.py
     r = judged_search(ix, "zzz", lambda p: json.dumps({"relevant": [], "ask": "Which person?"}))
     assert r["events"] == [] and r["ask"] == "Which person?"          # nothing found: ask the user
     assert judged_search(ix, "dog", lambda p: "garbage", k=2)["events"]  # bad model output: plain top-k
+    s.db.execute("INSERT OR IGNORE INTO cold_events SELECT id, 'x' FROM events WHERE content LIKE 'visa%'"); s.db.commit()  # recalled above, so re-cool
+    said = []
+    judged_search(ix, "paperwork", retry, say=said.append)
+    assert said == ["Nothing obvious yet, digging deeper..."]
+    judged_search(ix, "dog", pick("barked"), say=said.append)           # found first time: stays quiet
+    assert len(said) == 1
+    judged_search(ix, "zzz", retry, say=lambda s: 1 / 0)                 # broken talker must not break recall
     print("recall ok")

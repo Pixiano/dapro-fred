@@ -43,7 +43,7 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 - **Technical:** FAISS flat index (cache) over SQLite vectors + FTS5, reciprocal rank fusion; `hygiene.py` write gate, cold marking, review expiry, weak-link closing. Thresholds are knobs to tune with real use.
 
 ### 8. Judged recall (added later 2026-10-03)
-- **Plain words:** after searching, the model reads the top 20 results and throws out the useless ones. If nothing useful is left, it searches again more widely using its own better wording and includes shelved memories. If that still fails, FRED asks you for a name, date or keyword instead of guessing.
+- **Plain words:** after searching, the model reads the top 20 results and throws out the useless ones. If nothing useful is left, it searches again more widely using its own better wording and includes shelved memories. If that still fails, FRED asks you for a name, date or keyword instead of guessing. While it searches harder, the talker tells you ("digging deeper...") so you are not left in silence.
 - **Technical:** `recall.py` `judged_search`: judge pool, one wider retry (rephrasings, cold included), then an `ask`. Only kept events are marked recalled. A bad model answer falls back to the plain top results.
 
 ## How a day flows through it (once integrated)

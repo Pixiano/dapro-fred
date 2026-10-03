@@ -16,3 +16,4 @@
 - `judged_search(index, query, llm)`: take the top 20 candidates, the model keeps the useful ones (junk dropped, and only kept events are marked recalled). If none are useful it retries once, wider: the model's own rephrasings, cold events included, pool of 40. If still nothing, it returns a question asking the user for a name, date or keyword instead of guessing. Bad model output falls back to the plain top results. Self-check: `python recall.py`.
 - `SemanticIndex.search(touch=False)` added so candidates are not marked warm before they are judged.
 - Not yet: the real model behind `llm` (integration); more than one retry round.
+- `judged_search(..., say=callback)`: the talker model's voice. It is told "Nothing obvious yet, digging deeper..." before the wider retry (not when the first pass works). A failing callback is ignored. At integration the talker also speaks the final "ask" question from the result.
