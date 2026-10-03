@@ -3,7 +3,9 @@
 
   backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=True) -> {"dir": path, "files": {...}}
   verify_backup(dir) -> list of problems (empty = every file matches the manifest's hashes)
-  CLI: python backup.py ROOT OUT_DIR [part ...] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--no-pdf] [--no-blobs]
+  CLI: python backup.py ROOT OUT_DIR [part ...] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--no-pdf] [--no-blobs] [--format PART=md,png] [--encrypt]
+       python backup.py restore SRC DEST_ROOT | verify SRC | scheduled ROOT OUT_DIR [--every-days N] [--encrypt]
+       (--encrypt / an encrypted SRC: password from the FRED_BACKUP_PASSWORD environment variable, else asked; never on the command line)
 
 Parts: archive events facts graph logs inferences model chapters digests review runs database (parts=None = all).
 since/until narrow the time-based parts (archive, events, logs, digests, review, runs); facts, graph, model, inferences
@@ -13,6 +15,16 @@ the relationship graph and the life-chapter timeline default to a PNG picture (a
 timeline) instead of a PDF; everything else defaults to a PDF. Override per part with formats={"graph": ["md", "pdf", "png"]};
 pdf=False switches PDFs off everywhere. PNGs need pillow + networkx (already in the environment); without them the PNG is
 skipped with a note.
+Encrypted backups: backup(..., password="...") seals the finished backup into ONE file (<name>.fredbak): the folder is tarred and
+encrypted with AES-256-GCM in 1 MiB chunks (key from the password with scrypt; wrong password, damage and truncation are all detected).
+The password is never stored: lose it and the backup is gone. verify_backup(path, password) and restore() accept either form.
+restore(src, dest_root, password=None) rebuilds a memory folder from a FULL backup (needs the database part; the archive part is
+restored if present): it verifies the manifest first, never touches an existing memory (dest_root must not exist or be empty), builds
+in <dest>.partial and renames when the sqlite integrity check and the archive file check pass.
+run_backup_pending(mem, out_dir, every_days=7, password=None, today=None) is the timer entry point: a full backup (no PDFs) if the
+newest one in out_dir is older than every_days, else nothing. Old backups are never deleted automatically.
+ponytail: restore is whole-memory only (a single part's .json/.md is for reading, not for merging into a live database); every
+scheduled backup is a full copy (use since= or prune by hand if the archive gets huge).
 Safety: the output folder must be OUTSIDE any git repo (backups hold personal data); each backup goes into its own
 timestamped folder and is built as <name>.partial, renamed only when complete, so a crash never leaves a half backup
 that looks finished. Nothing existing is ever overwritten or deleted. Tables that do not exist yet are skipped.
@@ -23,10 +35,14 @@ ponytail: PDF is capped at PDF_MAX_CHARS per part with a note pointing at the .m
 import hashlib
 import json
 import logging
+import os
+import re
 import shutil
 import sqlite3
 import sys
-from datetime import datetime, timezone
+import tarfile
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logging.getLogger("fontTools").setLevel(logging.ERROR)  # font subsetting is chatty and harmless
@@ -452,7 +468,7 @@ def _sha(path):
     return h.hexdigest()
 
 
-def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=True, formats=None):
+def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=True, formats=None, password=None):
     parts = list(PARTS) if parts in (None, "all") else list(parts)
     bad = [p for p in parts if p not in PARTS]
     if bad:
@@ -464,7 +480,9 @@ def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=Tru
     out = _guard(out_dir)
     stamp = _now().strftime("%Y%m%dT%H%M%SZ")
     final = out / f"memory-backup-{stamp}" if parts == list(PARTS) else out / f"memory-backup-{stamp}-{'+'.join(parts)}"
-    if final.exists():
+    if password is not None:
+        _check_password(password)
+    if final.exists() or final.with_name(final.name + ".fredbak").exists():
         raise FileExistsError(final)
     work = final.with_name(final.name + ".partial")
     work.mkdir(parents=True)
@@ -514,14 +532,22 @@ def backup(mem, out_dir, parts=None, since=None, until=None, pdf=True, blobs=Tru
         (work / "manifest.json").write_text(json.dumps({
             "created_at": _now().isoformat(timespec="seconds"), "parts": parts, "since": since, "until": until, "counts": info, "notes": notes,
             "warning": "Contains personal data. Keep outside the git repo and protect like the memory itself.", "files": files}, indent=1), encoding="utf-8")
+        if password is not None:
+            sealed = _seal(work, final, password)
+            shutil.rmtree(work)
+            return {"dir": None, "file": str(sealed), "files": files, "counts": info, "notes": notes}
         work.rename(final)
     except BaseException:
         shutil.rmtree(work, ignore_errors=True)  # only our own half-built folder
         raise
-    return {"dir": str(final), "files": files, "counts": info, "notes": notes}
+    return {"dir": str(final), "file": None, "files": files, "counts": info, "notes": notes}
 
 
-def verify_backup(path):
+def verify_backup(path, password=None):
+    """Problems found (empty list = every file matches the manifest). path is a backup folder or a .fredbak file (needs the password)."""
+    if Path(path).is_file():
+        with tempfile.TemporaryDirectory() as tmp:
+            return verify_backup(_unseal(path, tmp, password))
     root = Path(path)
     man = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     bad = []
@@ -534,6 +560,177 @@ def verify_backup(path):
     return bad
 
 
+# ---- encryption: one sealed file ----
+_MAGIC, _CHUNK = b"FREDBK1\n", 1 << 20
+
+
+def _check_password(pw):
+    if not isinstance(pw, str) or len(pw) < 8:
+        raise ValueError("the backup password must be at least 8 characters")
+
+
+def _key(password, salt):
+    return hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2 ** 15, r=8, p=1, maxmem=128 * 1024 * 1024, dklen=32)
+
+
+def encrypt_file(src, dst, password):
+    """AES-256-GCM, 1 MiB chunks; each chunk's nonce carries its index and its AAD says whether it is the last, so reordering,
+    dropping or truncating chunks fails authentication."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    _check_password(password)
+    salt, prefix = os.urandom(16), os.urandom(4)
+    aes = AESGCM(_key(password, salt))
+    with open(src, "rb") as f, open(dst, "wb") as o:
+        o.write(_MAGIC + salt + prefix)
+        chunk, i = f.read(_CHUNK), 0
+        while True:
+            nxt = f.read(_CHUNK)
+            ct = aes.encrypt(prefix + i.to_bytes(8, "big"), chunk, b"L" if not nxt else b"M")
+            o.write(len(ct).to_bytes(4, "big") + ct)
+            if not nxt:
+                break
+            chunk, i = nxt, i + 1
+
+
+def decrypt_file(src, dst, password):
+    """Raises ValueError on a wrong password, a damaged file or a truncated one."""
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    with open(src, "rb") as f, open(dst, "wb") as o:
+        head = f.read(len(_MAGIC) + 20)
+        if len(head) < len(_MAGIC) + 20 or not head.startswith(_MAGIC):
+            raise ValueError("not a FRED encrypted backup")
+        aes = AESGCM(_key(password or "", head[len(_MAGIC):len(_MAGIC) + 16]))
+        prefix, i, n = head[-4:], 0, f.read(4)
+        try:
+            while n:
+                ct = f.read(int.from_bytes(n, "big"))
+                nxt = f.read(4)
+                o.write(aes.decrypt(prefix + i.to_bytes(8, "big"), ct, b"L" if not nxt else b"M"))
+                n, i = nxt, i + 1
+            if i == 0:
+                raise ValueError("empty backup file")
+        except InvalidTag:
+            raise ValueError("wrong password, or the backup file is damaged, truncated or tampered with") from None
+
+
+def _seal(work, final, password):
+    """Tar the finished backup folder, encrypt it into <final>.fredbak (via .partial), remove the plaintext tar. Returns the file."""
+    out = final.with_name(final.name + ".fredbak")
+    tmp_tar, part = work.with_name(work.name + ".tar"), out.with_name(out.name + ".partial")
+    try:
+        with tarfile.open(tmp_tar, "w") as t:
+            t.add(work, arcname=final.name)
+        encrypt_file(tmp_tar, part, password)
+        part.rename(out)
+    finally:
+        tmp_tar.unlink(missing_ok=True)
+        part.unlink(missing_ok=True)
+    return out
+
+
+def _unseal(file, tmp_dir, password):
+    """Decrypt a .fredbak into tmp_dir and unpack it; returns the backup folder. Refuses archive members that escape tmp_dir."""
+    tar = Path(tmp_dir) / "sealed.tar"
+    decrypt_file(file, tar, password)
+    base = Path(tmp_dir).resolve()
+    with tarfile.open(tar) as t:
+        for mbr in t.getmembers():
+            if not (mbr.isfile() or mbr.isdir()) or not (base / mbr.name).resolve().is_relative_to(base):
+                raise ValueError(f"unsafe entry in the backup: {mbr.name}")
+        t.extractall(base)
+    tar.unlink()
+    (folder,) = [p for p in base.iterdir() if p.is_dir()]
+    return folder
+
+
+# ---- restore ----
+def restore(src, dest_root, password=None):
+    """Rebuild a memory folder (Memory(dest_root) opens it) from a full backup folder or .fredbak. dest_root must not exist or be empty.
+    Returns {"root", "events", "archive_days", "missing"}; missing = archive files the database knows about but the backup did not contain
+    (normal for a backup made with since/until or without blobs)."""
+    dest = Path(dest_root).resolve()
+    if dest.exists() and (not dest.is_dir() or any(dest.iterdir())):
+        raise FileExistsError(f"{dest} already exists and is not empty; restore never overwrites a memory")
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(src)
+        folder = _unseal(src, tmp, password) if src.is_file() else src
+        bad = verify_backup(folder)
+        if bad:
+            raise ValueError(f"the backup does not match its manifest, nothing restored: {bad[:5]}")
+        if not (folder / "database" / "memory.sqlite").exists():
+            raise ValueError("this backup has no database part, so it cannot restore a memory (make a full backup)")
+        work = dest.with_name(dest.name + ".partial")
+        if work.exists():
+            raise FileExistsError(f"{work} is left over from an earlier restore; look at it and remove it by hand")
+        try:
+            work.mkdir(parents=True)
+            shutil.copyfile(folder / "database" / "memory.sqlite", work / "memory.sqlite")
+            for p in (folder / "archive").glob("*") if (folder / "archive").exists() else []:
+                if p.is_dir() and (re.fullmatch(r"\d{4}", p.name) or p.name == "blobs"):
+                    shutil.copytree(p, work / "archive" / p.name)
+            db = sqlite3.connect(work / "memory.sqlite")
+            try:
+                if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise ValueError("the restored database failed its integrity check")
+                files = [r[0] for r in db.execute("SELECT path FROM archive_files")] if db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name='archive_files'").fetchone() else []
+                events = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            finally:
+                db.close()
+            arch = work / "archive"
+            missing = [f for f in files if not (arch / f).exists() and not (work / f).exists()]
+            if dest.exists():
+                dest.rmdir()
+            work.rename(dest)
+        except BaseException:
+            shutil.rmtree(work, ignore_errors=True)
+            raise
+    return {"root": str(dest), "events": events, "archive_days": len(files) - len(missing), "missing": missing}
+
+
+# ---- schedule ----
+_STAMP = re.compile(r"memory-backup-(\d{8}T\d{6}Z)(\.fredbak)?$")  # full backups only (part backups carry a -part suffix)
+
+
+def last_backup(out_dir):
+    """UTC time of the newest full backup in out_dir (folder or .fredbak), or None."""
+    out = Path(out_dir)
+    stamps = [m.group(1) for p in (out.iterdir() if out.is_dir() else []) if (m := _STAMP.fullmatch(p.name))]
+    return datetime.strptime(max(stamps), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc) if stamps else None
+
+
+def run_backup_pending(mem, out_dir, every_days=7, password=None, today=None):
+    """The timer entry point (integration runs it nightly or at start-up): a full backup, no PDFs, if the newest full one in out_dir is
+    older than every_days. Returns the path made, or None. Errors propagate: a backup that cannot be made must be seen, not swallowed."""
+    now = today or _now()
+    last = last_backup(out_dir)
+    if last and (now - last).total_seconds() < every_days * 86400:
+        return None
+    r = backup(mem, out_dir, pdf=False, password=password)
+    return r["file"] or r["dir"]
+
+
+def _cli_password(needed):
+    import getpass
+    return (os.environ.get("FRED_BACKUP_PASSWORD") or getpass.getpass("Backup password: ")) if needed else None
+
+
+if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[1] in ("restore", "verify", "scheduled"):  # CLI: restore / verify / scheduled
+    cmd, rest = sys.argv[1], sys.argv[2:]
+    days = int(rest[rest.index("--every-days") + 1]) if "--every-days" in rest else 7
+    pos = [x for i, x in enumerate(rest) if not x.startswith("--") and not (i and rest[i - 1] == "--every-days")]
+    enc = "--encrypt" in rest or (cmd != "scheduled" and pos[0].endswith(".fredbak"))
+    if cmd == "verify":
+        print(verify_backup(pos[0], _cli_password(enc)) or "ok")
+    elif cmd == "restore":
+        print(restore(pos[0], pos[1], _cli_password(enc)))
+    else:
+        from manager import Memory
+        with Memory(pos[0]) as m:
+            print(run_backup_pending(m, pos[1], days, _cli_password(enc)) or "nothing to do")
+    sys.exit(0)
+
 if __name__ == "__main__" and len(sys.argv) > 2:  # CLI
     import argparse
     from manager import Memory
@@ -545,12 +742,13 @@ if __name__ == "__main__" and len(sys.argv) > 2:  # CLI
     ap.add_argument("--until")
     ap.add_argument("--no-pdf", action="store_true")
     ap.add_argument("--no-blobs", action="store_true")
+    ap.add_argument("--encrypt", action="store_true", help="seal into one encrypted .fredbak file")
     ap.add_argument("--format", action="append", default=[], metavar="PART=md,pdf,png", help="override a part's formats, e.g. graph=md,png,pdf")
     a = ap.parse_args()
     with Memory(a.root) as m:
         fmts = {k: v.split(",") for k, v in (f.split("=", 1) for f in a.format)}
-        r = backup(m, a.out, a.parts or None, a.since, a.until, not a.no_pdf, not a.no_blobs, fmts or None)
-    print(r["dir"], *r["notes"], sep="\n")
+        r = backup(m, a.out, a.parts or None, a.since, a.until, not a.no_pdf, not a.no_blobs, fmts or None, _cli_password(a.encrypt))
+    print(r["file"] or r["dir"], *r["notes"], sep="\n")
     sys.exit(0)
 
 if __name__ == "__main__":  # self-check: python backup.py
@@ -647,4 +845,93 @@ if __name__ == "__main__":  # self-check: python backup.py
         r3 = backup(m2, out, ["inferences", "chapters", "runs"], pdf=False)
         assert verify_backup(r3["dir"]) == []
         m2.close()
+        # ---- encryption ----
+        pw = "correct horse battery"
+        enc_out = Path(d) / "enc"
+        re_ = backup(m, enc_out, pdf=False, password=pw)
+        sealed = Path(re_["file"])
+        assert re_["dir"] is None and sealed.suffix == ".fredbak" and not list(enc_out.glob("*.partial")) and not list(enc_out.glob("*.tar"))
+        assert [p.name for p in enc_out.iterdir()] == [sealed.name]                                  # only the sealed file is left, no plaintext folder
+        raw = sealed.read_bytes()
+        assert raw.startswith(b"FREDBK1\n") and b"works on fred" not in raw and b"memory.sqlite" not in raw and b"Priya" not in raw   # nothing readable
+        assert verify_backup(sealed, pw) == []
+        for bad_pw in ("wrong password here", None):
+            try:
+                verify_backup(sealed, bad_pw)
+                raise SystemExit("wrong password accepted")
+            except ValueError as ex:
+                assert "wrong password" in str(ex)
+        flipped = bytearray(raw)
+        flipped[len(raw) // 2] ^= 1
+        (enc_out / "flipped.fredbak").write_bytes(bytes(flipped))
+        (enc_out / "truncated.fredbak").write_bytes(raw[:-40])
+        (enc_out / "notours.fredbak").write_bytes(b"hello")
+        for name in ("flipped", "truncated", "notours"):
+            try:
+                verify_backup(enc_out / f"{name}.fredbak", pw)
+                raise SystemExit(f"{name} accepted")
+            except ValueError:
+                pass
+        try:
+            backup(m, enc_out, ["logs"], password="short")
+            raise SystemExit("short password accepted")
+        except ValueError:
+            pass
+        assert not any(p.name.endswith(".partial") for p in enc_out.iterdir())
+        # multi-chunk round trip (more than one 1 MiB chunk, plus an empty file)
+        big = Path(d) / "big.bin"
+        big.write_bytes(os.urandom(2_500_000))
+        encrypt_file(big, Path(d) / "big.enc", pw)
+        decrypt_file(Path(d) / "big.enc", Path(d) / "big.out", pw)
+        assert (Path(d) / "big.out").read_bytes() == big.read_bytes()
+        (Path(d) / "empty.bin").write_bytes(b"")
+        encrypt_file(Path(d) / "empty.bin", Path(d) / "empty.enc", pw)
+        decrypt_file(Path(d) / "empty.enc", Path(d) / "empty.out", pw)
+        assert (Path(d) / "empty.out").read_bytes() == b""
+        # ---- restore: from the plain folder and from the sealed file, into a fresh place, never over an existing memory ----
+        for src, pass_ in ((got.parent / Path(r["dir"]).name, None), (sealed, pw)):
+            if src == got.parent / Path(r["dir"]).name:
+                (got / "logs" / "logs.md").write_text(_logs(m.store.db, None, None)[1], encoding="utf-8")  # undo the earlier tamper so this one verifies
+                man = json.loads((got / "manifest.json").read_text(encoding="utf-8"))
+                man["files"]["logs/logs.md"] = {"sha256": _sha(got / "logs" / "logs.md"), "bytes": (got / "logs" / "logs.md").stat().st_size}
+                (got / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
+            dest = Path(d) / f"restored-{pass_ is not None}"
+            res = restore(src, dest, pass_)
+            assert res["root"] == str(dest.resolve()) and res["events"] == 2 and res["missing"] == [] and res["archive_days"] >= 2
+            with Memory(dest) as rm:
+                assert rm.store.db.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2
+                assert rm.store.daily_log("2026-03-01") == "A quiet day."
+                assert [r_["data"]["text"] for r_ in rm.archive.read("conversation", "2026-03-09")] == ["later"]
+                assert rm.archive.read("import", "2026-03-01")[0]["kind"] == "historical"
+                assert (rm.archive.root / "2026/03/01/conversation.jsonl").read_bytes() == (m.archive.root / "2026/03/01/conversation.jsonl").read_bytes()
+                assert any(p.is_file() for p in (rm.archive.root / "blobs").rglob("*"))
+        try:
+            restore(sealed, Path(d) / "restored-True", pw)
+            raise SystemExit("restore over an existing memory accepted")
+        except FileExistsError:
+            pass
+        try:
+            restore(sealed, Path(d) / "wrongpw", "not the password")
+            raise SystemExit("restore with the wrong password accepted")
+        except ValueError:
+            assert not (Path(d) / "wrongpw").exists() and not (Path(d) / "wrongpw.partial").exists()
+        try:
+            restore(g2, Path(d) / "partial-restore")                                                   # a part backup without the database part
+            raise SystemExit("restore from a part backup accepted")
+        except ValueError:
+            assert not (Path(d) / "partial-restore").exists()
+        (Path(d) / "empty-dest").mkdir()
+        assert restore(sealed, Path(d) / "empty-dest", pw)["events"] == 2                              # an empty folder is fine
+        # ---- schedule ----
+        sch = Path(d) / "sched"
+        now = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        assert last_backup(sch) is None
+        first = run_backup_pending(m, sch, 7, pw, today=now)
+        assert first and first.endswith(".fredbak") and last_backup(sch) is not None
+        assert run_backup_pending(m, sch, 7, pw, today=_now()) is None                                 # just made one: nothing to do
+        import time
+        time.sleep(1.1)                                                                                # backup names carry the second
+        assert run_backup_pending(m, sch, 7, pw, today=_now() + timedelta(days=8)) is not None         # a week later it runs again
+        assert not list(Path(d).glob("sched/*.partial")) and all(n.name.startswith("memory-backup-") for n in sch.iterdir())
+        assert last_backup(out) is not None and last_backup(Path(d) / "nothing-here") is None          # part backups (-events+archive...) are not counted as the last full one
     print("backup ok")

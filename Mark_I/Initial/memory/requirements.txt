@@ -4,3 +4,4 @@ faiss-cpu   # or faiss-gpu; the memory index only needs exact search
 fpdf2   # PDF backups (backup.py)
 pillow   # PNG pictures in backups (backup.py)
 networkx   # graph layout for the relationship-graph picture (backup.py)
+cryptography   # encrypted backups (backup.py)
