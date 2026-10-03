@@ -3,9 +3,9 @@
 Status: DESIGN ONLY, not built. Decisions from Vatsal's answers.
 
 ## Decisions (Vatsal)
-- **Schedule:** monthly on the 1st (night); yearly on Vatsal's birthday. The birthday (MM-DD) is personal data: stored only in the private memory database, never in the repo. **Open: Vatsal has not given the date yet.**
+- **Schedule:** monthly on the 1st (night); yearly on Vatsal's birthday. The birthday anchor is personal data: given by Vatsal on 2026-10-04, stored only in the private memory database (a `settings` row, written at integration) and in Claude's private memory, never in the repo.
 - **Life chapters timeline:** the monthly agent proposes named periods ("FRED v2 build, Sep-Oct 2026"), the yearly agent refines them. Chapters can be corrected by Vatsal (his version is locked, like personal-model items).
-- **Yearly depth:** same model (gpt-oss-20b, the biggest local one that fits), highest reasoning effort, bigger budget, **plus a second critique pass** (read as "1+3": Vatsal wrote "1+4" but that question had three options; confirm).
+- **Yearly depth:** same model (gpt-oss-20b, the biggest local one that fits), highest reasoning effort, bigger budget, **plus a second critique pass** (confirmed: Vatsal meant the first option merged with the critic pass).
 - **Imported history:** not properly dated, so it is NOT replayed. It stays raw in the archive (`kind="historical"`). A backfill mode can be built later, only once dates can be established reliably. Until then every consolidation level ignores historical records, so undated imports cannot pollute live months. (This one protection is implemented now in `consolidate.py`.)
 
 ## In plain words
@@ -24,15 +24,18 @@ Produces:
 - Inference updates under the same evidence rules as the weekly agent.
 - After a successful monthly run, the scheduler calls the personal model's **full** update (Phase 6). A failing rebuild does not fail the monthly run.
 
-## Yearly agent
-Opening map: the 12 monthly digests (gaps flagged), all chapters and turning points of the year, personal-model items at the start vs end of the year (what was added, changed, demoted), inferences with long histories and their `support_weeks`, goal/project entities with their state history (started, abandoned, revived), month-to-month topic comparison for recurring cycles.
-Extra tools: the monthly set, `get_monthly_digests(year)`, `model_diff(date1,date2)`, `refine_chapter(...)` (merge, rename, set an end), `list_turning_points(from,to)`.
-Produces: a year-in-review digest (phases of the year, stable and changed traits, major decisions and consequences, relationships that changed substantially, recurring cycles, abandoned and revived goals, changes in self-concept), refined chapters, trait/value hypotheses as inferences (still `proposed`, only the personal-model review promotes them), and no change to anything Vatsal locked.
-**Two passes.** Pass A (analyst) writes a draft and its inferences. Pass B (critic, fresh context) receives the draft and its cited evidence and must look for counter-evidence and alternative explanations for each major claim; it can weaken or reject inferences (`update_inference`), annotate claims, and call `revise_digest`. The final digest is the revised one. Both passes are logged separately.
-Budget: highest reasoning effort, call cap about 3x the weekly one per pass. Digest and trait material stays user-pulled and traits never appear in digests (same as the weekly rule).
+## Yearly agent: 12 month runs, then one whole-year run (Vatsal's idea, 13+ runs)
+Reading twelve monthly reviews at once is too much for a small local model, so the yearly review is a map-and-reduce:
+1. **Twelve month passes (one run each, oldest first).** Each reads one monthly review plus that month's turning points, chapter changes and state/personal-model changes, and the *notes so far*. It writes a short **year note** for that month: what changed relative to the earlier months, what stayed stable, decisions and their consequences, goals started, dropped or revived, signs of a cycle. Notes are stored (`year_notes`), so the pass is resumable and a failed month is retried alone.
+2. **The whole-year run (the 13th).** It gets the 12 year notes as its opening map (never raw events) and investigates with the tools to answer "how did Vatsal change this year?": phases of the year, stable and changed traits, major decisions and consequences, relationships that changed substantially, recurring cycles, abandoned and revived goals, changes in self-concept. It refines the chapters, records trait/value hypotheses as inferences (still `proposed`, only the personal-model review promotes them) and writes the digest.
+3. **The critic pass (the 14th).** A fresh context receives the draft digest and its cited evidence and must look for counter-evidence and alternative explanations for each major claim. It can weaken or reject inferences, annotate claims and `revise_digest`; its weakening or rejection stands. The final digest is the revised one.
+Window: the run on the birthday anchor uses the 12 most recent *completed* monthly reviews (the month containing the anchor is not finished yet), plus that month's weekly digests so far as a "latest" input; about three weeks of overlap either way is accepted, it is not worth cutting months in half.
+Map inputs for the whole-year run additionally include: all chapters and turning points of the year, personal-model items at the start vs end of the year, inferences with long histories (`support_weeks`), goal/project entities with their state history.
+Extra tools: the monthly set, `get_year_notes()`, `get_monthly_digests(year)`, `model_diff(date1,date2)`, `refine_chapter(...)`, `list_turning_points(from,to)`.
+Budget: highest reasoning effort for the whole-year and critic runs, call cap about 3x the weekly one each; the 12 month passes are small runs. Traits never appear in digests (same as the weekly rule).
 
 ## New tables (schema_period.sql, when built)
-`chapters`, `chapter_log`, `turning_points`, `turning_point_evidence`, `monthly_runs`/`yearly_runs` (idempotent per period), `period_digests(period, kind monthly|yearly, summary)`; the yearly anchor lives in a small `settings` table in the private DB.
+`chapters`, `chapter_log`, `turning_points`, `turning_point_evidence`, `year_notes(year, month, note)`, `monthly_runs`/`yearly_runs` (idempotent per period, per-month note runs resumable), `period_digests(period, kind monthly|yearly, summary)`; the yearly anchor lives in a small `settings` table in the private DB.
 
 ## Failure cases
 | Case | Handling |
@@ -49,12 +52,12 @@ Budget: highest reasoning effort, call cap about 3x the weekly one per pass. Dig
 | Personal-model rebuild fails after monthly | Logged, monthly stays done, rebuild retried next run |
 | Imported historical records | Excluded from every level until dates can be trusted |
 | Yearly anchor date missing | Yearly run waits and flags it; never guesses |
+| One of the 12 month passes fails | That note is retried alone; the whole-year run starts only when all 12 notes exist, or flags the gap if a monthly review is missing |
 
 ## Sockets
 `llm(messages)` injected; `run_monthly(mem, month, llm, index, model)`; `run_yearly(mem, anchor_day, llm, index, model)`; scheduler functions that check "is it the 1st / is it the anchor day" belong to integration.
 
 ## Open for build time
-- The birthday date (MM-DD); confirmation of "1+3".
 - Tier/threshold for what counts as a turning point (start: model proposes, code requires evidence, tune on real months).
 - Call caps, map size caps, and the gpt-oss reasoning-effort setting per run.
 - Spoken access ("how was last month?", "what was I doing last summer?") and temporal retrieval over chapters: integration.

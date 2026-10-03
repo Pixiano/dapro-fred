@@ -24,3 +24,5 @@
 - Decisions: monthly on the 1st, yearly on Vatsal's birthday (date not given yet, stored privately, never in the repo); life chapters (monthly proposes, yearly refines, user chapters locked); yearly = same model at highest effort with a bigger budget plus a second critique pass (read as "1+3", to confirm); imported history is undated so it stays raw, no replay, a backfill mode only once dates can be trusted.
 - One engine: monthly and yearly reuse the weekly tool loop as subclasses with their own opening map, prompt and extra tools (state_at, compare_states, chapters, turning points, model_diff).
 - Built now from this decision: `consolidate.py` skips `kind="historical"` archive records, so undated imports never leak into live days. Self-check updated.
+
+- Phase 7 design updated: the yearly agent is a map-and-reduce (12 month passes writing year notes, then the whole-year run, then the critic pass) per Vatsal's idea; the effort choice was confirmed as highest effort plus the critic pass; the birthday anchor was given and is stored privately (not in this repo).
