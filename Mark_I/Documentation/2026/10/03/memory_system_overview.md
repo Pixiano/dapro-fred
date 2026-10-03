@@ -60,10 +60,17 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 - **Technical:** tool loop, one JSON action per turn, 14 memory-only tools written directly into the system prompt (no embedding tool router, since there are only a dozen), week map from FAISS clusters, `inferences` + evidence + alternatives + change log, `support_weeks` gate, hard call cap with a fallback digest, idempotent per week, runs on the local gpt-oss-20b through an injected `llm(messages)`. Design: `2026/10/04/phase5_weekly_agent_design.md`.
 - **Still open:** more specific tools for the consolidation models are to be decided in the final phase.
 
+### 11. The personal model (Phase 6, built 2026-10-04) - `personal_model.py`
+- **Plain words:** a short list of things FRED has learned about you: priorities, how you work, habits, preferences, patterns in your decisions. Each item is backed by evidence and is only added once it has held up long enough. Small and obvious things take a week, most things about four weeks, and big claims about who you are (traits, values, motivations) take about eight. If later evidence turns against an item, it is shelved. FRED does not recite this list or put it in every answer. Only when what you say is close to an item does it quietly get added to what FRED considers for that reply. If you ask to see it, FRED shows it, and if you say something is wrong, your version replaces it, is locked, and the guess behind it is dropped for good. It is refreshed lightly every week and rebuilt more thoroughly every month.
+- **Technical:** `model_items` (+ log, versions, embeddings), a code gate (tier weeks 1/4/8, 2+ supporting events, counter-evidence at most a third of support) that no model decision can bypass, batched JSON wording call, light/full update modes, demotion by code, `relevant(text)` via embeddings (cut-off 0.45, top 3, nothing when nothing is close), `show/correct/add/remove`. Design: `2026/10/04/phase6_personal_model_design.md`.
+
 ## What is not there yet
 - Connection to the real FRED (feeding the archive, the real embedder, the real nightly model, the timer, recall tools, a spoken "X is Y" fix).
-- Phase 6: personal model (what you are like, with evidence). Phase 7: monthly and yearly summaries. Phase 8: deep self-analysis.
+- Phase 7: monthly and yearly summaries (and scheduling the full model rebuild). Phase 8: deep self-analysis.
 - Smaller gaps: very long days are cut at 60k characters, no multi-hop connection search, no "undo merge" helper, nicknames and other-script names go through the review question, old archive days are never compressed.
+
+## Planned: decision logging
+The small models make many decisions, so a very detailed record of every model prompt, reply, action and what the code overruled is planned (integration phase at the latest). Today, changes to inferences, items and runs are already logged.
 
 ## Safety rules built in
 - Nothing is overwritten or deleted. Facts get end dates and merges are reversible.

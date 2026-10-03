@@ -23,6 +23,7 @@ import faiss
 import numpy as np
 
 from graph import Graph, norm
+from personal_model import DEFAULT_TIER, TIER_RANK
 
 log = logging.getLogger("memory")
 _HERE = Path(__file__).parent
@@ -54,7 +55,7 @@ compare_periods {"from1": date, "to1": date, "from2": date, "to2": date}
 find_similar_events {"event_id": int, "k": 5}
 list_inferences {"status": "proposed|supported|weakened|rejected|outdated|active"}
 get_inference {"id": int}
-create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str]}
+create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str], "tier": "light|normal|deep"}   tier = how big a claim this is (light: trivial and observable, normal, deep: about who he is); you may raise it above the default for the category, never lower it
 update_inference {"id": int, "status": str, "confidence": 0-1, "add_support": [int], "add_counter": [int], "note": str}
 rule_review_item {"id": int, "ruling": "apparent|historical_change|real|unknown", "note": str}
 finish {"digest": str}   plain prose, sections only if there is something to say: The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about, Please check (real contradictions). No traits or personality guesses. Length follows the week.
@@ -241,7 +242,7 @@ class Week:
     def _log(self, iid, change):
         self.q("INSERT INTO inference_log(inference_id,week,change,at) VALUES(?,?,?,?)", (iid, self.end, change, _now()))
 
-    def t_create_inference(self, statement, category, confidence, supporting_event_ids=(), counter_event_ids=(), alternatives=()):
+    def t_create_inference(self, statement, category, confidence, supporting_event_ids=(), counter_event_ids=(), alternatives=(), tier=None):
         statement = (statement or "").strip()
         if not statement or category not in CATS:
             return {"error": f"need a statement and a category in {sorted(CATS)}"}
@@ -253,12 +254,13 @@ class Week:
             if len(sup) < 2:
                 return {"error": "a trait_hypothesis needs at least two supporting events"}
             conf = min(conf, TRAIT_MAX_CONF)
+        tier = tier if tier in TIER_RANK and TIER_RANK[tier] > TIER_RANK[DEFAULT_TIER[category]] else DEFAULT_TIER[category]
         for r in self.q("SELECT id, statement FROM inferences WHERE status IN (%s)" % ",".join("?" * len(ACTIVE)), ACTIVE):
             if SequenceMatcher(None, norm(statement), norm(r["statement"])).ratio() >= DUP_SIM:
                 return {"error": f"this duplicates active inference #{r['id']}: use update_inference on it"}
         with self.s.lock:
-            cur = self.s.db.execute("INSERT INTO inferences(statement,category,confidence,created_at,valid_from,last_reviewed_week) VALUES(?,?,?,?,?,?)",
-                                    (statement, category, conf, _now(), self.start, self.end))
+            cur = self.s.db.execute("INSERT INTO inferences(statement,category,confidence,tier,created_at,valid_from,last_reviewed_week) VALUES(?,?,?,?,?,?,?)",
+                                    (statement, category, conf, tier, _now(), self.start, self.end))
             iid = cur.lastrowid
             for e in sup:
                 self.s.db.execute("INSERT OR IGNORE INTO inference_evidence VALUES(?,?,'support')", (iid, e))
@@ -267,8 +269,8 @@ class Week:
             for a in alternatives or []:
                 self.s.db.execute("INSERT INTO inference_alternatives VALUES(?,?)", (iid, str(a)))
             self.s.db.commit()
-        self._log(iid, f"created ({category}, conf {conf})")
-        return {"id": iid, "confidence": conf}
+        self._log(iid, f"created ({category}, tier {tier}, conf {conf})")
+        return {"id": iid, "confidence": conf, "tier": tier}
 
     def t_update_inference(self, id, status=None, confidence=None, add_support=(), add_counter=(), note=""):
         r = self.q("SELECT * FROM inferences WHERE id=?", (id,))

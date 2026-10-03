@@ -13,3 +13,9 @@
 - `SemanticIndex.similar(event_id)` added. Self-check: `python weekly.py` (scripted fake model covers bad JSON, unknown entity, fake evidence, trait with one event, duplicate, finish warning, `real` ruling, idempotence, expiry shield, support_weeks, trait promotion block, runaway loop, quiet week).
 - Not yet: the real gpt-oss-20b behind `llm` (integration; Vatsal tested the model separately and it works), the Sunday timer, VRAM load/unload window, summarising an overflowing loop context.
 - **Added by Vatsal:** the consolidation models (nightly, weekly, monthly, ...) get only the memory tools; more specific and detailed memory tools may be added later. Marked in the final phase (integration) to decide, see [memory build order](../02/memory_build_order.md).
+
+## Phase 6 built: `personal_model.py` + `schema_model.sql` ([design](phase6_personal_model_design.md))
+- Items built from weekly inferences behind a code gate (tier weeks 1/4/8, >= 2 supporting events, counter-evidence <= 1/3 of support); model wording call in batches; light/full update modes; demotion by code; delivery by `relevant(text)` (automatic, no model call, nothing injected when nothing is close); `show/correct/add/remove` with locked user items. Self-check: `python personal_model.py`.
+- `inferences` got a `tier` column; the weekly agent can raise it, never lower it.
+- Not yet: pipeline wiring, spoken commands, monthly schedule (Phase 7).
+- **Added by Vatsal:** the small models make many decisions, so build **very verbose, detailed logging of every model decision and command** (prompt in, raw reply, parsed action, tool call, result, what the code accepted or overrode). Parked for a later phase, see the build order. Already logged today: `inference_log`, `model_item_log`, `model_versions`, `weekly_runs`, `consolidation_runs`.

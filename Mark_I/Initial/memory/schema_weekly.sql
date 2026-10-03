@@ -1,7 +1,7 @@
 -- Mark I memory, Phase 5 weekly meta-agent (spec sections 11, 14.3; design: Documentation/2026/10/04).
 CREATE TABLE IF NOT EXISTS inferences (
   id INTEGER PRIMARY KEY, statement TEXT NOT NULL, category TEXT NOT NULL, confidence REAL NOT NULL,
-  status TEXT NOT NULL DEFAULT 'proposed', created_at TEXT NOT NULL, valid_from TEXT, valid_to TEXT,
+  status TEXT NOT NULL DEFAULT 'proposed', tier TEXT NOT NULL DEFAULT 'normal', created_at TEXT NOT NULL, valid_from TEXT, valid_to TEXT,
   last_reviewed_week TEXT, support_weeks INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS inference_evidence (
   inference_id INTEGER NOT NULL REFERENCES inferences(id), event_id INTEGER NOT NULL REFERENCES events(id),
