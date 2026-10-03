@@ -15,6 +15,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import hygiene
 from graph import Graph
 
 _SCHEMA = Path(__file__).with_name("schema_consolidation.sql")
@@ -71,7 +72,10 @@ def consolidate_day(mem, day, llm, model="unset") -> bool:
         out = json.loads(llm(PROMPT.format(day=day, state=_state(mem), material=material)))
         sid = s.add_source("consolidation", day)
         for e in out.get("events", []):
-            s.add_event(e["type"], e["content"], importance=float(e.get("importance", 0.5)), source_id=sid, ts=ts)
+            imp = float(e.get("importance", 0.5))
+            if imp < hygiene.MIN_IMPORTANCE or hygiene.is_duplicate(s, day, e["content"]):
+                continue  # write gate: small talk and repeats stay in the archive only
+            s.add_event(e["type"], e["content"], importance=imp, source_id=sid, ts=ts)
         for st in out.get("states", []):
             s.set_state(g.resolve(st["kind"], st["name"], day, sid), st["field"], st["value"], source_id=sid, ts=ts)
         for r in out.get("relationships", []):
@@ -109,7 +113,9 @@ if __name__ == "__main__":  # self-check: python consolidate.py
     logging.getLogger("memory").setLevel(logging.CRITICAL)
     import tempfile
     from manager import Memory
-    good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8}],
+    good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8},
+                          {"type": "decision", "content": "Chose  sqlite", "importance": 0.8},   # duplicate
+                          {"type": "note", "content": "said hi", "importance": 0.1}],            # below the gate
                        "states": [{"kind": "project", "name": "FRED", "field": "phase", "value": "3"}],
                        "relationships": [{"subject": {"kind": "person", "name": "Rina"}, "relation": "works on", "object": {"kind": "project", "name": "FRED"}},
                                          {"subject": {"kind": "person", "name": "Rinah"}, "relation": "knows", "object": {"kind": "person", "name": "Rinah"}}],

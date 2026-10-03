@@ -38,6 +38,10 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 - **Plain words:** speech-to-text may write "Rina" one day and "Rinah" the next. FRED treats clearly-the-same spellings as one person and remembers both spellings. If it is only maybe the same, it asks you instead of guessing, because merging two real people is worse than keeping one split. A mistaken merge can be undone because nothing is deleted.
 - **Technical:** `resolve(kind, name)`: alias or exact match (case and spacing ignored) -> similarity >= 0.85 on raw and phonetic-ish forms (auto-alias) -> >= 0.65 (new entity plus a review question) -> new. Same kind only. `merge()` moves rows and marks the old entity merged.
 
+### 7. Hybrid search and tidying (added later 2026-10-03)
+- **Plain words:** search now uses two methods together: meaning (finds "began working on speech" for "started the voice project") and exact words (finds the name "Rina" even when meaning-search stumbles). To stop clutter, only meaningful things become events, repeats are skipped, and old unimportant things are shelved ("cold"): hidden from normal search but not deleted, and brought back if asked for again. Stale questions and shaky connections also expire.
+- **Technical:** FAISS flat index (cache) over SQLite vectors + FTS5, reciprocal rank fusion; `hygiene.py` write gate, cold marking, review expiry, weak-link closing. Thresholds are knobs to tune with real use.
+
 ## How a day flows through it (once integrated)
 1. During the day, everything FRED sees and does is written to the **archive**, and important things become **events** (searchable by meaning).
 2. At night, the **night editor** reads the day plus what is already known, and updates the diary, facts and connections. Anything doubtful goes to the **review list**.
