@@ -28,3 +28,12 @@
 - Phase 7 design updated: the yearly agent is a map-and-reduce (12 month passes writing year notes, then the whole-year run, then the critic pass) per Vatsal's idea; the effort choice was confirmed as highest effort plus the critic pass; the birthday anchor was given and is stored privately (not in this repo).
 
 - **Added by Vatsal (parked for a later phase):** permanent yearly alerts for friends, family and occasions (birthdays, anniversaries, etc). Noted in the build order, not built.
+
+## Phase 7 built: `period.py` + `schema_period.sql` ([design](phase7_monthly_yearly_design.md))
+- `Month` and `Year` subclass `weekly.Week` (one loop engine); `weekly.py` was refactored slightly so the map is built from `map_sections()` and the prompt, call cap and map size are per-instance.
+- Monthly: opening map with weekly reviews (daily logs for uncovered days), start-vs-end state diff, decisions, inference changes, personal-model updates, open chapter; extra tools state_at, compare_states, list_decisions, chapters (one open at a time, user chapters locked, near-duplicates refused), turning points (need real events within the period plus a week of slack, duplicates refused). `run_monthly` is idempotent, quiet months skip the loop, `pm_update(end_day)` hook for the full personal-model rebuild (its failure does not fail the month).
+- Yearly: 12 month passes (one short call each, notes saved, one retry, resumable, gap months get a fixed note), the whole-year tool loop (3x call cap, own tools), then the `Critic` pass (may only weaken/reject, cannot add inferences, chapters or turning points). Draft saved before the critic, so a critic failure resumes cheaply; critic failure falls back to the draft marked incomplete. No monthly reviews yet -> status `waiting`.
+- Anchor: `set_anchor/get_anchor` (private DB `settings` table); `run_yearly_pending` never guesses a missing anchor. The real anchor value is not in the repo; it will be written into the private DB at integration.
+- Self-check: `python period.py` (scripted fake model covers map content, every refusal rule, chapter closing, user-chapter lock, turning point rules, pm hook, idempotence, 12 notes with a gap and a bad reply, critic limits, waiting and missing-anchor cases).
+- Summary of everything through Phase 7: [summary_through_phase7.md](summary_through_phase7.md).
+- Noted for integration: two model call shapes (`llm(prompt)` vs `llm(messages)`), one adapter covers both.

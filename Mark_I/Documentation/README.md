@@ -16,4 +16,4 @@ Mark I (aka v2) is the clean rebuild of FRED. The predecessor (v1.x, `Core/`) is
 |---|---|---|
 | 2026-10-02 | [done](2026/10/02/done.md), [memory build order](2026/10/02/memory_build_order.md) | Mark I set up; memory Phase 1 complete; Layer 1 raw archive |
 | 2026-10-03 | [done](2026/10/03/done.md), [memory system overview](2026/10/03/memory_system_overview.md) | Phases 3-4 built (daily consolidation, graph + names); full memory system explained |
-| 2026-10-04 | [done](2026/10/04/done.md), [phase 5 design](2026/10/04/phase5_weekly_agent_design.md) | Weekly meta-agent designed (not built) |
+| 2026-10-04 | [done](2026/10/04/done.md), [phase 5 design](2026/10/04/phase5_weekly_agent_design.md), [phase 6 design](2026/10/04/phase6_personal_model_design.md), [phase 7 design](2026/10/04/phase7_monthly_yearly_design.md), [summary through phase 7](2026/10/04/summary_through_phase7.md) | Phases 5-7 built (weekly, personal model, monthly/yearly), designs, and the summary through Phase 7 |

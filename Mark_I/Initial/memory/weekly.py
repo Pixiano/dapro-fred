@@ -82,6 +82,7 @@ class Week:
             self.s.db.executescript((_HERE / "schema_weekly.sql").read_text(encoding="utf-8"))
         self.start = (datetime.fromisoformat(end_day) - timedelta(days=6)).strftime("%Y-%m-%d")
         self.digest, self.calls, self.finish_warned = None, 0, False
+        self.system, self.max_calls, self.map_chars = SYSTEM, MAX_CALLS, MAP_CHARS  # subclasses swap these
 
     # ---- helpers ----
     def q(self, sql, args=()):
@@ -112,9 +113,10 @@ class Week:
         return [], {"error": f"unknown entity {name!r}", "did_you_mean": near}
 
     # ---- the week map (built by code, no model) ----
-    def week_map(self):
+    def map_sections(self):
+        """(header, [(title, body)]): monthly and yearly agents reshape this; the loop only needs week_map()."""
         evs = self.events()
-        out = [f"WEEK {self.start} to {self.end}: {len(evs)} events."]
+        out = []
         out.append("DAILY LOGS:\n" + ("\n".join(f"{r['day']}: {r['summary']}" for r in self.q(
             "SELECT day, summary FROM daily_logs WHERE day BETWEEN ? AND ? ORDER BY day", (self.start, self.end))) or "(none)"))
         out.append("TOPICS (clusters of this week's events, with the closest earlier match):\n" + self._clusters(evs))
@@ -131,7 +133,12 @@ class Week:
         inf = self.q(f"SELECT id, statement, category, status, confidence, support_weeks FROM inferences WHERE status IN ({','.join('?' * len(ACTIVE))})", ACTIVE)
         out.append("ACTIVE INFERENCES:\n" + ("\n".join(f"#{r['id']} [{r['category']}, {r['status']}, conf {r['confidence']}, weeks {r['support_weeks']}] {r['statement']}"
                                                        for r in inf) or "(none)"))
-        return "\n\n".join(out)[:MAP_CHARS]
+        head = f"WEEK {self.start} to {self.end}: {len(evs)} events."
+        return head, [tuple(s.split(":\n", 1)) for s in out]
+
+    def week_map(self):
+        head, secs = self.map_sections()
+        return "\n\n".join([head] + [f"{t}:\n{b}" for t, b in secs])[:self.map_chars]
 
     def _clusters(self, evs):
         model = self.index.model
@@ -344,10 +351,10 @@ class Week:
             return {"error": f"tool failed: {ex!r}"}
 
     def loop(self, llm):
-        msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": self.week_map() + "\n\nBegin."}]
+        msgs = [{"role": "system", "content": self.system}, {"role": "user", "content": self.week_map() + "\n\nBegin."}]
         bad = grace = 0
         while self.digest is None:
-            capped = self.calls >= MAX_CALLS
+            capped = self.calls >= self.max_calls
             if capped:
                 grace += 1
                 if grace > FINISH_GRACE:
