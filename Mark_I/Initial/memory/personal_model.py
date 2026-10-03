@@ -202,6 +202,18 @@ class PersonalModel:
         self._log(iid, f"added by user: {text.strip()}")
         return iid
 
+    def add_analysis(self, text, confidence):
+        """A deep-analysis inference that passed its own code gate (selfanalysis.py). Returns the item id, or None if already there.
+        ponytail: no automatic demotion for these (they have no weekly inference behind them); the user's remove/correct is the way out."""
+        text = text.strip()
+        if self.q("SELECT 1 FROM model_items WHERE text=? AND status='active'", (text,)):
+            return None
+        now = _now()
+        iid = self._x("INSERT INTO model_items(category,text,confidence,tier,source,created_at,updated_at) VALUES('trait_hypothesis',?,?,'deep','analysis',?,?)",
+                      (text, min(float(confidence), MAX_CONF["deep"]), now, now))
+        self._log(iid, f"added by deep analysis: {text}")
+        return iid
+
     def correct(self, item_id, text):
         """The user says an item is wrong. His wording replaces it and is locked; the inference behind it is rejected."""
         r = self.q("SELECT * FROM model_items WHERE id=?", (item_id,))

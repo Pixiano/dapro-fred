@@ -51,4 +51,4 @@ FRED keeps a **shoebox** (everything exactly as it happened), a **filing cabinet
 - **Monthly and yearly are subclasses of the weekly loop**, so a change there is felt everywhere (intended, one engine).
 
 ## Next
-Phase 8, deep self-analysis (spec section 40). After that, integration.
+Phase 8, deep self-analysis (spec section 40), built 2026-10-05: see ../05/. After that, integration.
