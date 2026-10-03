@@ -46,6 +46,10 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 - **Plain words:** after searching, the model reads the top 20 results and throws out the useless ones. If nothing useful is left, it searches again more widely using its own better wording and includes shelved memories. If that still fails, FRED asks you for a name, date or keyword instead of guessing. While it searches harder, the talker tells you ("digging deeper...") so you are not left in silence.
 - **Technical:** `recall.py` `judged_search`: judge pool, one wider retry (rephrasings, cold included), then an `ask`. Only kept events are marked recalled. A bad model answer falls back to the plain top results.
 
+### 9. Tags and nicknames (added later 2026-10-03)
+- **Plain words:** every memory is tagged with who or what it is about. So asking "What's Su's favourite colour?" works even though the note never says "Su": FRED pulls everything tagged with Rina. If you use a nickname FRED does not know yet, it asks "Do you mean Rina?" and remembers your yes. It never assumes, and if two names fit, it doesn't guess.
+- **Technical:** `event_entities` tags written by the nightly run, `Graph.find_in_text` (alias/exact = found, unique capitalised prefix = ask), `events_about`, `confirm_alias`; `judged_search(graph=...)` merges tagged events and saved facts into the candidates.
+
 ## How a day flows through it (once integrated)
 1. During the day, everything FRED sees and does is written to the **archive**, and important things become **events** (searchable by meaning).
 2. At night, the **night editor** reads the day plus what is already known, and updates the diary, facts and connections. Anything doubtful goes to the **review list**.

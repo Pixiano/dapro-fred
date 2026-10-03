@@ -11,3 +11,7 @@ CREATE TABLE IF NOT EXISTS entity_aliases (   -- other spellings of one entity (
 CREATE TABLE IF NOT EXISTS entity_merges (    -- a merged entity is kept and marked, never deleted (reversible)
   entity_id INTEGER PRIMARY KEY REFERENCES entities(id), into_id INTEGER NOT NULL REFERENCES entities(id),
   merged_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS event_entities (   -- tags: which entities an event is about (an event can have several)
+  event_id INTEGER NOT NULL REFERENCES events(id), entity_id INTEGER NOT NULL REFERENCES entities(id),
+  PRIMARY KEY(event_id, entity_id));
+CREATE INDEX IF NOT EXISTS ix_tag_entity ON event_entities(entity_id);

@@ -29,8 +29,20 @@ def _judge(index, q, evs, llm):
         return None, [], None
 
 
-def judged_search(index, query, llm, k=5, pool=20, say=None) -> dict:
-    evs = index.search(query, pool, touch=False)
+def judged_search(index, query, llm, k=5, pool=20, say=None, graph=None) -> dict:
+    extra, facts = {}, {}
+    if graph:  # names in the question: unsure -> ask first; sure -> pull everything tagged with them
+        found, maybe = graph.find_in_text(query)
+        if maybe:
+            w, eid = maybe[0]
+            name = graph.s.db.execute("SELECT name FROM entities WHERE id=?", (eid,)).fetchone()[0]
+            return {"events": [], "facts": {}, "maybe": maybe, "ask": f"Do you mean {name} when you say '{w}'?"}
+        for eid, name in found.items():
+            snap = graph.s.snapshot(eid)
+            if snap:
+                facts[name] = snap
+            extra.update({e["id"]: e for e in graph.events_about(eid)})
+    evs = list({e["id"]: e for e in index.search(query, pool, touch=False) + list(extra.values())}.values())
     kept, retries, ask = _judge(index, query, evs, llm) if evs else ([], [], None)
     if kept is None:
         kept = evs[:k]
@@ -43,11 +55,13 @@ def judged_search(index, query, llm, k=5, pool=20, say=None) -> dict:
         for rq in [query] + [r for r in retries if isinstance(r, str)][:3]:
             for e in index.search(rq, pool * 2, include_cold=True, touch=False):
                 wide.setdefault(e["id"], e)
+        for eid in (found if graph else {}):
+            wide.update({e["id"]: e for e in graph.events_about(eid, 40, include_cold=True)})
         kept = (_judge(index, query, list(wide.values()), llm)[0] or []) if wide else []
-        ask = None if kept else (ask or "I could not find that. Can you give me a name, date or keyword to search for?")
+        ask = None if kept or facts else (ask or "I could not find that. Can you give me a name, date or keyword to search for?")
     kept = kept[:k]
     index.touch([e["id"] for e in kept])
-    return {"events": kept, "ask": ask}
+    return {"events": kept, "ask": ask, "facts": facts}
 
 
 if __name__ == "__main__":  # self-check: python recall.py
@@ -78,4 +92,16 @@ if __name__ == "__main__":  # self-check: python recall.py
     judged_search(ix, "dog", pick("barked"), say=said.append)           # found first time: stays quiet
     assert len(said) == 1
     judged_search(ix, "zzz", retry, say=lambda s: 1 / 0)                 # broken talker must not break recall
+    from graph import Graph
+    g = Graph(s)                                                       # tags: "Mee's fav colour" never says Meera
+    me = g.resolve("person", "Meera")
+    g.tag(s.add_event("note", "her favourite shade is cyan"), me)
+    s.set_state(me, "favourite_colour", "cyan")
+    keep_cyan = lambda p: json.dumps({"relevant": [int(l.split(":")[0]) for l in p.splitlines() if "cyan" in l and l[:1].isdigit()]})
+    q = "Whats Mee's fav colour?"
+    r = judged_search(ix, q, keep_cyan, graph=g)
+    assert r["events"] == [] and r["maybe"] and "Meera" in r["ask"]    # unsure: asks first, searches nothing
+    g.confirm_alias(*r["maybe"][0])
+    r = judged_search(ix, q, keep_cyan, graph=g)
+    assert r["events"][0]["content"] == "her favourite shade is cyan" and r["facts"] == {"Meera": {"favourite_colour": "cyan"}}
     print("recall ok")

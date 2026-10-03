@@ -23,12 +23,13 @@ MAX_CHARS = 60_000
 log = logging.getLogger("memory")
 
 PROMPT = """You are FRED's nightly memory consolidation agent. Review {day} and return ONLY JSON:
-{{"events": [{{"type": str, "content": str, "importance": 0-1}}],
+{{"events": [{{"type": str, "content": str, "importance": 0-1, "about": [{{"kind": str, "name": str}}]}}],
  "states": [{{"kind": "project|goal|task|preference|person|other", "name": str, "field": str, "value": str}}],
  "relationships": [{{"subject": {{"kind": str, "name": str}}, "relation": str, "object": {{"kind": str, "name": str}}}}],
+ "aliases": [{{"kind": str, "name": str, "alias": str}}],
  "contradictions": [str], "open_questions": [str],
  "summary": str}}
-Only record what the material supports; do not invent. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
+Only record what the material supports; do not invent. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
 conflicts with a current state shown below. Summary: plain prose covering significant events, work, decisions,
 people, learning, health/routine, notable changes, open threads. Length follows the day: <=200 words if
 uneventful, 200-500 normal, 500-800 active, <=1000 exceptional. A boring day gets a short summary.
@@ -75,9 +76,19 @@ def consolidate_day(mem, day, llm, model="unset") -> bool:
             imp = float(e.get("importance", 0.5))
             if imp < hygiene.MIN_IMPORTANCE or hygiene.is_duplicate(s, day, e["content"]):
                 continue  # write gate: small talk and repeats stay in the archive only
-            s.add_event(e["type"], e["content"], importance=imp, source_id=sid, ts=ts)
+            ev = s.add_event(e["type"], e["content"], importance=imp, source_id=sid, ts=ts)
+            for a in e.get("about", []):
+                try:
+                    g.tag(ev, g.resolve(a["kind"], a["name"], day, sid))
+                except (ValueError, KeyError, TypeError) as ex:
+                    log.warning("skipped tag %r: %r", a, ex)
         for st in out.get("states", []):
             s.set_state(g.resolve(st["kind"], st["name"], day, sid), st["field"], st["value"], source_id=sid, ts=ts)
+        for a in out.get("aliases", []):
+            try:
+                g.add_alias(a["kind"], a["alias"], g.resolve(a["kind"], a["name"], day, sid))
+            except (ValueError, KeyError, TypeError) as ex:
+                log.warning("skipped alias %r: %r", a, ex)
         for r in out.get("relationships", []):
             try:
                 g.relate(g.resolve(r["subject"]["kind"], r["subject"]["name"], day, sid), r["relation"],
@@ -113,10 +124,11 @@ if __name__ == "__main__":  # self-check: python consolidate.py
     logging.getLogger("memory").setLevel(logging.CRITICAL)
     import tempfile
     from manager import Memory
-    good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8},
+    good = json.dumps({"events": [{"type": "decision", "content": "chose SQLite", "importance": 0.8, "about": [{"kind": "person", "name": "Rinah"}]},
                           {"type": "decision", "content": "Chose  sqlite", "importance": 0.8},   # duplicate
                           {"type": "note", "content": "said hi", "importance": 0.1}],            # below the gate
                        "states": [{"kind": "project", "name": "FRED", "field": "phase", "value": "3"}],
+                       "aliases": [{"kind": "person", "name": "Rina", "alias": "Su"}],
                        "relationships": [{"subject": {"kind": "person", "name": "Rina"}, "relation": "works on", "object": {"kind": "project", "name": "FRED"}},
                                          {"subject": {"kind": "person", "name": "Rinah"}, "relation": "knows", "object": {"kind": "person", "name": "Rinah"}}],
                        "contradictions": ["phase was 2"], "open_questions": ["which model?"], "summary": "Quiet build day."})
@@ -132,5 +144,6 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         assert run_pending(m, lambda p: good) == []                          # idempotent
         n = lambda t: m.store.db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         assert n("review_queue") == 2 and n("events") == 1
+        assert n("event_entities") == 1 and m.store.db.execute("SELECT alias FROM entity_aliases WHERE alias='su'").fetchone()
         assert n("relationships") == 1 and n("entities") == 2            # self-link skipped, Rinah = Rina
     print("consolidate ok")

@@ -10,6 +10,7 @@ Sockets:
 Names: difflib similarity on raw and phonetic-ish forms (oo->u, ee->i ...), same kind only.
 ponytail: tuned for English/Indian names; use a real phonetic algorithm if misses pile up in the queue.
 """
+import re
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -40,7 +41,7 @@ class Graph:
     def __init__(self, store):
         self.s = store
         with store.lock:
-            for f in ("schema_consolidation.sql", "schema_graph.sql"):
+            for f in ("schema_consolidation.sql", "schema_hygiene.sql", "schema_graph.sql"):
                 store.db.executescript((_HERE / f).read_text(encoding="utf-8"))
 
     # ---- names ----
@@ -84,6 +85,48 @@ class Graph:
                 self._queue(day or _now()[:10], "question", f"Is {kind} '{name}' the same as '{best['name']}'?", source_id)
             return eid
 
+    def confirm_alias(self, word, entity_id):
+        """The user said yes to "do you mean X?": remember the word as another name for X."""
+        e = self.canonical(entity_id)
+        with self.s.lock:
+            kind = self.s.db.execute("SELECT kind FROM entities WHERE id=?", (e,)).fetchone()[0]
+        self.add_alias(kind, word, e)
+
+    def tag(self, event_id, entity_id):
+        with self.s.lock:
+            self.s.db.execute("INSERT OR IGNORE INTO event_entities VALUES(?,?)", (event_id, self.canonical(entity_id)))
+            self.s.db.commit()
+
+    def events_about(self, entity_id, limit=20, include_cold=False):
+        """Events tagged with this entity, most important then newest first."""
+        with self.s.lock:
+            return [dict(r) for r in self.s.db.execute(
+                "SELECT e.* FROM events e JOIN event_entities t ON t.event_id=e.id WHERE t.entity_id=? "
+                + ("" if include_cold else "AND e.id NOT IN (SELECT event_id FROM cold_events) ")
+                + "ORDER BY e.importance DESC, e.ts DESC LIMIT ?", (self.canonical(entity_id), limit))]
+
+    def find_in_text(self, text):
+        """Entities a question names. Returns (found {id: name}, maybe [(word, id)]). A word is *found* when it is
+        an alias or exact name; *maybe* when a Capitalised word is the start of exactly one name ("Su" -> Rina):
+        never used silently, the caller asks the user first.
+        ponytail: capitalisation is the name signal; drop it if speech-to-text stops capitalising."""
+        s, found, maybe = self.s, {}, []
+        with s.lock:
+            live = [(e["id"], e["name"]) for e in s.entities()
+                    if not s.db.execute("SELECT 1 FROM entity_merges WHERE entity_id=?", (e["id"],)).fetchone()]
+            for w in re.findall(r"[\w']+", text):
+                word = re.sub(r"['’]s$", "", w)
+                n = norm(word)
+                r = s.db.execute("SELECT entity_id FROM entity_aliases WHERE alias=?", (n,)).fetchone()
+                hit = self.canonical(r[0]) if r else next((i for i, nm in live if norm(nm) == n), None)
+                if hit:
+                    found[hit] = next(nm for i, nm in live if i == hit)
+                elif len(n) >= 2 and word[0].isupper():
+                    pre = {i for i, nm in live if any(t.startswith(n) for t in norm(nm).split())}
+                    if len(pre) == 1:
+                        maybe.append((word, pre.pop()))
+        return found, maybe
+
     def merge(self, from_id, into_id):
         f, t = self.canonical(from_id), self.canonical(into_id)
         if f == t:
@@ -99,6 +142,8 @@ class Graph:
             s.db.execute("UPDATE relationships SET subject_id=? WHERE subject_id=?", (t, f))
             s.db.execute("UPDATE relationships SET object_id=? WHERE object_id=?", (t, f))
             s.db.execute("UPDATE entity_aliases SET entity_id=? WHERE entity_id=?", (t, f))
+            s.db.execute("UPDATE OR IGNORE event_entities SET entity_id=? WHERE entity_id=?", (t, f))
+            s.db.execute("DELETE FROM event_entities WHERE entity_id=?", (f,))
             row = s.db.execute("SELECT kind, name FROM entities WHERE id=?", (f,)).fetchone()
             s.db.execute("INSERT INTO entity_merges VALUES(?,?,?)", (f, t, now))
             s.db.commit()
@@ -175,10 +220,22 @@ if __name__ == "__main__":  # self-check: python graph.py
         raise SystemExit("self-link accepted")
     except ValueError:
         pass
+    # tags + finding names in a question
+    me = g.resolve("person", "Meera")
+    e1 = s.add_event("note", "likes cyan")
+    g.tag(e1, me)
+    assert [e["content"] for e in g.events_about(me)] == ["likes cyan"]
+    found, maybe = g.find_in_text("Whats Mee's fav colour?")
+    assert found == {} and maybe == [("Mee", me)]                      # unknown nickname: ask, never assume
+    assert g.find_in_text("Su called")[1] == []                        # ambiguous (person + project Rina): no guess
+    g.confirm_alias("Mee", me)                                         # user said yes
+    assert g.find_in_text("Whats Mee's fav colour?") == ({me: "Meera"}, [])
+    assert g.find_in_text("a meeting at noon")[1] == []                # lower-case words are not names
     s.set_state(ro, "mood", "ok")
     s.add_event("note", "hi", entity_id=ro)
     n_ent = n("entities")
+    g.tag(e2 := s.add_event('note', 'x'), ro)
     g.merge(ro, ri)                                                    # reversible merge: row kept, marked
     assert g.canonical(ro) == ri and g.resolve("person", "Rohan") == ri and n("entities") == n_ent
-    assert s.snapshot(ri) == {"mood": "ok"} and len(g.history(su, fred)) == 1
+    assert [e["id"] for e in g.events_about(ri)] == [e2] and s.snapshot(ri) == {"mood": "ok"} and len(g.history(su, fred)) == 1
     print("graph ok")

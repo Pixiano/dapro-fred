@@ -17,3 +17,10 @@
 - `SemanticIndex.search(touch=False)` added so candidates are not marked warm before they are judged.
 - Not yet: the real model behind `llm` (integration); more than one retry round.
 - `judged_search(..., say=callback)`: the talker model's voice. It is told "Nothing obvious yet, digging deeper..." before the wider retry (not when the first pass works). A failing callback is ignored. At integration the talker also speaks the final "ask" question from the result.
+
+## Entity tags + nickname handling ("Whats Su's fav colour?")
+- Problem: the question never says "Rina", so text search misses the memory. Fix is tags, not better text matching.
+- `event_entities` table (an event can be tagged with several entities). The nightly model now labels each event with who it is about (`about`), and returns `aliases` only when the user explicitly said a nickname; a mere suspicion goes to `open_questions`.
+- Question time (`judged_search(..., graph=g)`): names are found by alias or exact name; everything tagged with them is added to the candidates (plus their saved facts, returned as `facts`). A capitalised word that starts exactly one known name ("Su" -> Rina) is never used silently: the result carries `ask` ("Do you mean Rina when you say 'Su'?") and `maybe`; on yes the caller runs `graph.confirm_alias(word, id)` and the nickname works from then on. Ambiguous prefixes (two entities) are not guessed.
+- `merge()` also moves tags. Self-checks: `python graph.py|recall.py|consolidate.py`.
+- Not yet: the talker speaking the question and calling confirm on the user's yes (integration); tagging old events retroactively (only nightly runs tag).
