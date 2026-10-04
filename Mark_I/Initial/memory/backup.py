@@ -211,8 +211,13 @@ def _review(db, since, until):
     q, a = _in("day", since, until)
     rv = _rows(db, "SELECT * FROM review_queue WHERE 1=1" + q + " ORDER BY id", a)
     rl = _rows(db, "SELECT * FROM review_rulings")
-    md = ["# Review queue (contradictions and open questions)\n", _table(rv, ["id", "day", "kind", "status", "text"]), "\n## Rulings\n", _table(rl, ["item_id", "ruling", "week", "note"])]
-    return {"review_queue": rv, "review_rulings": rl}, "\n".join(md)
+    pr = _rows(db, "SELECT * FROM proposals ORDER BY id")   # curation proposals, rejected and unanswered ones included
+    ra = _rows(db, "SELECT * FROM retired_aliases ORDER BY at")
+    md = ["# Review queue (contradictions and open questions)\n", _table(rv, ["id", "day", "kind", "status", "text"]), "\n## Rulings\n", _table(rl, ["item_id", "ruling", "week", "note"]),
+          "\n## Curation proposals (status proposed = still waiting, rejected = Vatsal said no)\n",
+          _table(pr, ["id", "kind", "status", "tier", "confidence", "reason", "payload", "agent", "run", "created_at", "decided_at"]),
+          "\n## Retired nicknames\n", _table(ra, ["kind", "alias", "entity_id", "at", "restored"])]
+    return {"review_queue": rv, "review_rulings": rl, "proposals": pr, "retired_aliases": ra}, "\n".join(md)
 
 
 def _runs(db, since, until):

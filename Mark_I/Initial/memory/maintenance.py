@@ -5,7 +5,7 @@ Why: the memory agents run in the background and cannot wait for an answer. They
              status 'applied', shown in report() so Vatsal can undo it. Everything else:
   tier ask   waits, status 'proposed'. FRED raises it in conversation (ask_next: a couple per day, each at most MAX_ASKS times) and
              Vatsal's answer is answer(mem, id, yes); or he goes through them with `python maintenance.py review <memory folder>`.
-Unanswered proposals do nothing and expire after EXPIRE_DAYS. Something Vatsal rejected is never proposed again. Nothing is deleted:
+Unanswered proposals do nothing and wait as long as it takes (they never expire). Something Vatsal rejected stays on file (history) and is never proposed again. Nothing is deleted:
 a split moves tags (undoable), a retired nickname is kept in retired_aliases, a stale fact is closed with an end date.
 
 Sockets: the agent is a tool loop like the weekly one (llm(messages) -> str); run_maintenance_pending is for the timer; integration
@@ -26,7 +26,7 @@ log = logging.getLogger("memory")
 _HERE = Path(__file__).parent
 KINDS = ("merge", "split", "retire_alias", "stale_fact")
 AUTO_CONF, AUTO_MAX = 0.9, 3
-MAX_ASKS, EXPIRE_DAYS = 2, 60
+MAX_ASKS = 2
 
 MAINT_SYSTEM = """You are FRED's memory maintenance agent. You look after the quality of Vatsal's memory: duplicate or confused entities, wrong nicknames, facts gone stale, claims without sources, holes in the record. You see it only through tools. You never change memory directly: you PROPOSE, and Vatsal confirms (an undoable merge you are very sure of may be applied by the code).
 
@@ -291,13 +291,12 @@ def report(mem):
     return "Done automatically (say 'undo' to reverse):\n" + "\n".join(f"- #{r['id']}: " + describe(mem, r).split("? (")[0].replace("Are ", "Merged ").replace(" the same", "") + "." for r in rows)
 
 
-def expire(mem, days=EXPIRE_DAYS, today=None):
+def history(mem, status=None):
+    """Every proposal ever made (or only those with this status, e.g. "rejected"), oldest first, as plain questions with the outcome."""
     ensure(mem.store)
-    cut = ((today or datetime.now(timezone.utc).date()) - timedelta(days=days)).isoformat()
     with mem.store.lock:
-        n = mem.store.db.execute("UPDATE proposals SET status='expired', decided_at=? WHERE status='proposed' AND substr(created_at,1,10) < ?", (_now(), cut)).rowcount
-        mem.store.db.commit()
-    return n
+        rows = [dict(r) for r in mem.store.db.execute("SELECT * FROM proposals" + (" WHERE status=?" if status else "") + " ORDER BY id", (status,) if status else ())]
+    return [{"id": r["id"], "kind": r["kind"], "status": r["status"], "question": describe(mem, r), "created": r["created_at"][:10], "decided": (r["decided_at"] or "")[:10]} for r in rows]
 
 
 # ---- the maintenance agent ----
@@ -361,17 +360,14 @@ def run_maintenance(mem, end_day, llm, index, model="unset"):
 
 
 def run_maintenance_pending(mem, llm, index, model="unset", today=None, every_days=7):
-    """The timer entry point: a pass when the last finished one is older than every_days, then expire old proposals.
-    Returns the summary or None."""
+    """The timer entry point: a pass when the last finished one is older than every_days. Returns the summary or None."""
     ensure(mem.store)
     t = today or datetime.now(timezone.utc).date()
     with mem.store.lock:
         last = mem.store.db.execute("SELECT MAX(day) d FROM maintenance_runs WHERE status IN ('done','incomplete')").fetchone()["d"]
     if last and (t - datetime.fromisoformat(last).date()).days < every_days:
         return None
-    out = run_maintenance(mem, t.isoformat(), llm, index, model)
-    expire(mem, today=t)
-    return out
+    return run_maintenance(mem, t.isoformat(), llm, index, model)
 
 
 def review(mem, ask=input, out=print):
@@ -486,8 +482,9 @@ if __name__ == "__main__":
         assert len(pending(m)) == n_wait                                                             # still waiting, just not nagged
         answers = iter(["s", "y", "n", "q"])
         assert review(m, ask=lambda _: next(answers), out=lambda *_: None) == 2
-        left = len(pending(m))
-        assert expire(m, today=date(2027, 1, 1)) == left and left > 0 and pending(m) == []              # unanswered ones expire
+        assert len(pending(m)) > 0 and all(h["status"] == "proposed" for h in history(m, "proposed"))   # unanswered ones wait, they never expire
+        rej = history(m, "rejected")
+        assert len(rej) == 2 and all(h["decided"] for h in rej) and len(history(m)) > len(rej)         # rejected ones stay on file
         # the tools, through the agent loop
         w2 = Maintenance(m, "2026-09-30", ix)
         w2.backup_dir = d + "/none"
@@ -507,7 +504,7 @@ if __name__ == "__main__":
         assert w2.t_dedupe_events("2026-09-10")[0]["similarity"] >= 0.75
         s.db.execute("INSERT INTO entities(kind,name,created_at) VALUES('place','Nowhere','x')"); s.db.commit()
         assert "place/Nowhere" in w2.t_orphan_report()["entities_with_nothing"]
-        assert w2.t_backup_status()["last"] is None and w2.t_queue_summary()["proposals_waiting_for_Vatsal"] == 0
+        assert w2.t_backup_status()["last"] is None and w2.t_queue_summary()["proposals_waiting_for_Vatsal"] == len(pending(m))
         w2.t_confidence_audit()
         note(s, "Week", "2026-09-27", "reply", text="hello")
         assert w2.t_decision_replay("2026-09-27")[0]["kind"] == "reply"
@@ -530,4 +527,13 @@ if __name__ == "__main__":
         assert run_maintenance_pending(m, llm, ix, today=date(2026, 10, 8)) is None                  # not due: 4 days
         steps = iter([{"tool": "finish", "args": {"summary": "again"}}])
         assert run_maintenance_pending(m, llm, ix, today=date(2026, 10, 12)) == "again"
+        # backup: the review part carries proposals (rejected and waiting ones included) and retired nicknames, and restores them
+        from backup import backup, restore_part
+        bk = backup(m, Path(d) / "bk", ["review"], pdf=False)
+        md = (Path(bk["dir"]) / "review" / "review.md").read_text(encoding="utf-8")
+        assert "rejected" in md and "Curation proposals" in md
+        with Memory(Path(d) / "fresh") as m3:
+            ensure(m3.store)  # a live memory has these tables already
+            r = restore_part(m3, bk["dir"], "review")
+            assert r["inserted"]["proposals"] == s.db.execute("SELECT COUNT(*) FROM proposals").fetchone()[0] > 0 and r["inserted"]["retired_aliases"] == 1
     print("maintenance ok")
