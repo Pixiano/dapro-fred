@@ -108,6 +108,11 @@ if __name__ == "__main__":
     logging.getLogger("memory").setLevel(logging.ERROR)
     Path(run).mkdir(parents=True, exist_ok=True)
     consolidate.USER = "Arin"   # the synthetic year is Arin's, not Vatsal's
+    import memtools
+    for mod in (weekly, period, memtools):   # the agents' prompts name the user: show them the synthetic one
+        for k, v in list(vars(mod).items()):
+            if k.isupper() and isinstance(v, str) and "Vatsal" in v:
+                setattr(mod, k, v.replace("Vatsal", "Arin"))
     m, ix, days, ex, run = open_run(run, folder)
     calls = run / "calls.jsonl"
     t0 = time.time()

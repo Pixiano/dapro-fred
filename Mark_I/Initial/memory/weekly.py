@@ -42,7 +42,7 @@ SYSTEM = """You are FRED's weekly analyst. You see one week of Vatsal's life onl
 
 METHOD (required). For every conclusion: state it as a hypothesis; search for supporting evidence; search for counter-evidence; decide keep, weaken or reject; only then write it. Prefer update_inference on an existing inference over creating a duplicate. Use compare_periods to compare this week with earlier ones. Observed facts are not inferences.
 EVIDENCE. Every inference must cite supporting event ids (from tool results); no evidence, no inference. List alternative explanations. Confidence says how well the evidence supports it, not how interesting it is. One week is thin data: say so.
-RECURRENCE. Something that appeared earlier and reappears later, with the connection made explicit. Category recurrence needs supporting events from at least two different calendar months.
+RECURRENCE. Something that appeared earlier and reappears later, with the connection made explicit. Category recurrence needs supporting events from at least two different calendar months. A recurrence is the same kind of thing happening AGAIN after a gap, never the start and the end of one episode.
 TRAITS, VALUES, MOTIVATIONS. Allowed only with category "trait_hypothesis": status proposed, confidence at most 0.5, at least two supporting events. Never state them in the digest.
 CHECKLIST (required before finish): for the routines, projects, decisions and relationships of this period, search for support AND counter-evidence, then create_inference, or state that you found none. Whether two names are the same person is a review question, never an inference. Finish is refused until every open review item is ruled and you have explored with at least 3 search/compare calls.
 REVIEW ITEMS. Rule on each open review item with rule_review_item: apparent (different circumstances), historical_change (he genuinely changed), real (two current beliefs cannot both be true; do not resolve it yourself) or unknown.
@@ -64,7 +64,7 @@ get_inference {"id": int}
 create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis|recurrence", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str], "tier": "light|normal|deep"}   tier = how big a claim this is (light: trivial and observable, normal, deep: about who he is); you may raise it above the default for the category, never lower it
 update_inference {"id": int, "status": str, "confidence": 0-1, "add_support": [int], "add_counter": [int], "note": str}
 rule_review_item {"id": int, "ruling": "apparent|historical_change|real|unknown", "note": str}
-finish {"digest": str}   plain prose, sections only if there is something to say: The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about. The code adds the review counts and the "Please check" list itself: do not write them. No traits or personality guesses. Length follows the week.
+finish {"digest": str}   plain prose, sections only if there is something to say: The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about. The code adds the review counts and the "Please check" list itself: do not write them, and never write that no contradictions remain. No traits or personality guesses. Length follows the week.
 Before finish, check every open review item and every active inference. Errors come back as {"error": ...}: fix the call and retry."""
 
 
@@ -95,7 +95,7 @@ class Week(MemTools):
         with self.s.lock:
             self.s.db.executescript((_HERE / "schema_weekly.sql").read_text(encoding="utf-8"))
         self.start = (datetime.fromisoformat(end_day) - timedelta(days=6)).strftime("%Y-%m-%d")
-        self.digest, self.calls, self.finish_warned, self.explored = None, 0, False, 0
+        self.digest, self.calls, self.finish_warned, self.explored, self._seen = None, 0, False, 0, set()
         self.system, self.max_calls, self.map_chars = SYSTEM, MAX_CALLS, MAP_CHARS  # subclasses swap these
 
     # ---- helpers ----
@@ -382,9 +382,11 @@ class Week(MemTools):
                 return {"error": gap}
         rl = self.q("SELECT r.item_id, r.ruling, q.text FROM review_rulings r JOIN review_queue q ON q.id=r.item_id WHERE r.week=? ORDER BY r.item_id", (self.end,))
         foot = f"\n\n[Review: {len(rl)} item(s) ruled" + "".join(f", {n} {k}" for k in sorted(RULINGS) if (n := sum(r["ruling"] == k for r in rl))) + "]"
-        if real := [f"#{r['item_id']} {r['text']}" for r in rl if r["ruling"] == "real"]:
-            foot += "\nPlease check (ruled real):\n" + "\n".join("- " + x for x in real)
-        self.digest = digest.strip() + foot   # counts and the real-contradiction list come from the code, not from the model
+        real = self.q("SELECT DISTINCT q.id, q.text FROM review_rulings r JOIN review_queue q ON q.id=r.item_id WHERE r.ruling='real' AND q.status='open' "
+                      "AND q.day <= ? ORDER BY q.id", (self.end,))
+        if real:
+            foot += "\nPlease check (ruled real, still open):\n" + "\n".join(f"- #{r['id']} {r['text']}" for r in real)
+        self.digest = digest.split("\n\n[Review:")[0].strip() + foot   # an older footer inside the text (a critic copies the draft) is replaced, not doubled   # counts and the real-contradiction list come from the code, not from the model
         return {"ok": True}
 
     # ---- the loop ----
@@ -392,7 +394,12 @@ class Week(MemTools):
         note(self.s, type(self).__name__, getattr(self, "period", self.end), kind, **d)
 
     def call(self, action):
-        res = self._call(action)
+        key = json.dumps(action, sort_keys=True, default=str)
+        if isinstance(action, dict) and action.get("tool") in self.explore_tools and key in self._seen:
+            res = {"error": "identical call already made: use its earlier result or ask something different"}
+        else:
+            self._seen.add(key)
+            res = self._call(action)
         if isinstance(action, dict) and action.get("tool") in self.explore_tools and not (isinstance(res, dict) and "error" in res):
             self.explored += 1
         self._dlog("override" if isinstance(res, dict) and "error" in res else "action", action=action, result=res)
@@ -531,7 +538,7 @@ if __name__ == "__main__":  # self-check: python weekly.py
             a = next(step)
             return a if isinstance(a, str) else "```json\n" + json.dumps(a) + "\n```"
         digest = run_weekly(m, "2026-03-08", llm, ix, "fake")
-        assert digest.startswith("Busy FRED week, mostly nights.") and "1 item(s) ruled, 1 real" in digest and "Please check (ruled real)" in digest and "phase was 2" in digest  # footer built by the code
+        assert digest.startswith("Busy FRED week, mostly nights.") and "1 item(s) ruled, 1 real" in digest and "Please check (ruled real, still open)" in digest and "phase was 2" in digest  # footer built by the code
         s.add_event("note", "fred night future event", ts="2026-03-20T22:00:00+00:00")   # after the week: no tool may show it
         wf = Week(m, "2026-03-08", ix)
         assert all(x["date"] <= "2026-03-08" for x in wf.t_search_memory("fred night", k=20)) and wf.events("2026-03-01", "2026-03-30")[-1]["ts"][:10] <= "2026-03-08"
