@@ -37,3 +37,8 @@
 
 ## Synthetic year and oracle run
 - An Opus agent wrote 120 days of invented chat with a 16-trap answer key (`Mark_I/Initial/memory/testdata/synthetic_year/`). `python run_synthetic.py` replays it through the pipeline with an oracle model and scores the code-decided traps: all pass. It exposed that one-letter-apart names (Pranay/Pranav) were still auto-merged; fixed in `graph._variant`. The local-model runs (daily, weekly, monthly, yearly, self-analysis on this data) are not done yet and wait for Vatsal's go.
+
+## Local-model runs and fixes (2026-10-04)
+- Ran the synthetic year through the real local models in small slices (nightly 3 x 14 days, weekly 4 weeks, monthly 4 months) with an agent judging each stage against the key. Findings and fixes are in the overview ("First runs on the real local models"). A separate research agent shortlisted under-20B models; its notes are not in the repo.
+- Spoken name corrections (`corrections` in the nightly output, `Graph.correct`), tests in graph.py and consolidate.py, the key's 21 Jan correction, a harness check.
+- Still open: the yearly stage on the real model, reruns of weekly (medium) and monthly (high) on the fixed code, a nightly slice that crosses the 21 Jan correction, and trying other models (Qwen3.5-9B, Gemma 4 12B) against the current ones.

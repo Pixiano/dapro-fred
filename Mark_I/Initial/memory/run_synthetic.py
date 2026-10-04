@@ -66,6 +66,13 @@ def score(m, truth):
                 f.append(f"{al!r} does not resolve to {grp['canonical']}")
     put("aliases_resolve_to_one_entity", f, len(truth["entity_groups"]))
     f = []
+    for grp in truth["entity_groups"]:   # a misheard name that was corrected: its early events now belong to the right person
+        for bad in grp.get("misheard_as", []):
+            base = eid(grp["kind"], grp["canonical"])
+            if base is None or not any(f"heard as {bad.lower()}" in e["content"].lower() for e in g.events_about(base, 500)):
+                f.append(f"{bad!r} was not merged into {grp['canonical']}")
+    put("misheard_name_merged_after_correction", f, sum(len(g_.get("misheard_as", [])) for g_ in truth["entity_groups"]))
+    f = []
     for p in truth["must_stay_separate"]:
         a, b = g.resolve("person", p["a"]), g.resolve("person", p["b"])   # resolve like any later mention would (creates the entity if the key never extracted it)
         if g.canonical(a) == g.canonical(b):

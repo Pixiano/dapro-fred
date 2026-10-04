@@ -75,7 +75,8 @@ if __name__ == "__main__":  # self-check: python decisionlog.py
         ix.attach()
         s.add_event("note", "something happened", importance=0.5, ts="2026-03-05T10:00:00+00:00")
         w = Week(m, "2026-03-08", ix)
-        assert w.loop(lambda msgs: next(replies)) == ("done", "quiet")
+        status, digest = w.loop(lambda msgs: next(replies))
+        assert status == "done" and digest.startswith("quiet")                       # the finish carries a footer built by the code
         kinds = [r["kind"] for r in show(s, agent="Week")]
         assert kinds.count("prompt") == 1 and kinds.count("reply") == 3 and kinds.count("override") == 1 and kinds.count("model_failure") == 1 and kinds.count("action") == 1
         assert "unknown tool" in json.dumps(show(s, kind="override")[0]["data"])

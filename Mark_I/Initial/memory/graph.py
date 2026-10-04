@@ -12,6 +12,7 @@ ponytail: tuned for English/Indian names; use a real phonetic algorithm if misse
 """
 import json
 import re
+import sqlite3
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -67,7 +68,7 @@ class Graph:
     def __init__(self, store):
         self.s = store
         with store.lock:
-            for f in ("schema_consolidation.sql", "schema_hygiene.sql", "schema_graph.sql"):
+            for f in ("schema_consolidation.sql", "schema_hygiene.sql", "schema_graph.sql", "schema_maintenance.sql"):
                 store.db.executescript((_HERE / f).read_text(encoding="utf-8"))
             ensure_column(store.db, "relationships", "last_seen TEXT")
 
@@ -105,6 +106,8 @@ class Graph:
             r = s.db.execute("SELECT entity_id FROM entity_aliases WHERE kind=? AND alias=?", (kind, n)).fetchone()
             if r:
                 return self.canonical(r[0])
+            if s.db.execute("SELECT 1 FROM retired_aliases WHERE kind=? AND alias=? AND restored=0", (kind, n)).fetchone():
+                return s.entity(kind, name.strip())   # the user corrected this word away from another person: it now names someone else
             live = [e for e in s.entities(kind)
                     if not s.db.execute("SELECT 1 FROM entity_merges WHERE entity_id=?", (e["id"],)).fetchone()]
             for e in live:
@@ -119,6 +122,34 @@ class Graph:
             if score >= ASK:
                 self._queue(day or _now()[:10], "question", f"Is {kind} '{name}' the same as '{best['name']}'?", source_id)
             return eid
+
+    def correct(self, kind, wrong, right, day=None, source_id=None):
+        """The user said the name `wrong` was a mistake for `right` ("my sister is Nitya, not Navya"). The entity named `wrong` is merged into `right`
+        (journaled, unmerge() undoes it), then renamed and its name retired so the SAME word can later name a different person. A word that is
+        only an alias of another entity is re-pointed instead. Returns what was done, or None if there was nothing to correct."""
+        s, nw, nr = self.s, norm(wrong), norm(right)
+        if not nw or not nr or nw == nr:
+            return None
+        with s.lock:
+            named = next((e for e in s.entities(kind) if norm(e["name"]) == nw
+                          and not s.db.execute("SELECT 1 FROM entity_merges WHERE entity_id=?", (e["id"],)).fetchone()), None)
+            als = s.db.execute("SELECT entity_id FROM entity_aliases WHERE kind=? AND alias=?", (kind, nw)).fetchone()
+            if not named and not als:
+                return None
+            rid = self.resolve(kind, right, day, source_id)
+            if named and self.canonical(named["id"]) != self.canonical(rid):
+                t = self.merge(named["id"], rid)
+                new = f"{named['name']} [heard as {right.strip()}]"
+                s.db.execute("UPDATE entities SET name=? WHERE id=?", (new, named["id"]))
+                s.db.execute("DELETE FROM entity_aliases WHERE kind=? AND alias=? AND entity_id=?", (kind, nw, t))
+                s.db.execute("INSERT OR REPLACE INTO retired_aliases(kind,alias,entity_id,reason,at) VALUES(?,?,?,?,?)",
+                             (kind, nw, named["id"], f"renamed on correction: {named['name']}", _now()))
+                s.db.commit()
+                return {"merged": named["id"], "into": t}
+            if als and self.canonical(als[0]) != self.canonical(rid):
+                self.add_alias(kind, wrong, rid, force=True)
+                return {"repointed": nw, "to": self.canonical(rid)}
+        return None
 
     def confirm_alias(self, word, entity_id):
         """The user said yes to "do you mean X?": remember the word as another name for X."""
@@ -242,6 +273,13 @@ class Graph:
                         s.db.execute("INSERT OR IGNORE INTO event_entities VALUES(?,?)", (int(key), f))
             s.db.execute("DELETE FROM merge_moves WHERE entity_id=?", (f,))
             s.db.execute("DELETE FROM entity_merges WHERE entity_id=?", (f,))
+            for rowid, reason in s.db.execute("SELECT rowid, reason FROM retired_aliases WHERE entity_id=? AND reason LIKE 'renamed on correction: %' "
+                                              "AND restored=0", (f,)).fetchall():   # a corrected name comes back with its entity (unless someone else took it)
+                try:
+                    s.db.execute("UPDATE entities SET name=? WHERE id=?", (reason.split(": ", 1)[1], f))
+                except sqlite3.IntegrityError:
+                    continue
+                s.db.execute("UPDATE retired_aliases SET restored=1 WHERE rowid=?", (rowid,))
             s.db.commit()
         return len(rows)
 
@@ -394,6 +432,14 @@ if __name__ == "__main__":  # self-check: python graph.py
     assert g.resolve("person", "Pranav") != pa and g.resolve("person", "Rahil") != g.resolve("person", "Rahul")   # one letter apart is a different person
     ni = g.resolve("person", "Nitya")
     assert g.resolve("person", "Nithya") == ni                                                                    # h/doubled letters are only spelling
+    nv = g.resolve("person", "Navya")                                                                             # a correction: the heard-as name merges into the right one
+    assert nv != ni and g.correct("person", "Navya", "Nitya") == {"merged": nv, "into": ni} and g.correct("person", "Navya", "Nitya") is None
+    assert g.resolve("person", "Nitya") == ni and not s.db.execute("SELECT 1 FROM entity_aliases WHERE alias='navya'").fetchone()
+    g.unmerge(nv)
+    assert s.db.execute("SELECT name FROM entities WHERE id=?", (nv,)).fetchone()[0] == "Navya"                  # undo brings the name back
+    g.correct("person", "Navya", "Nitya")
+    nv2 = g.resolve("person", "Navya")                                                                            # the freed word names someone else, no 'same as?' question
+    assert nv2 not in (nv, ni) and g.canonical(nv2) == nv2 and not s.db.execute("SELECT 1 FROM review_queue WHERE text LIKE '%Navya%Nitya%'").fetchone()
     zk, zr = g.resolve("person", "Zara Khan"), g.resolve("person", "Zoya Rao")
     g.confirm_alias("Mom", zk)
     assert g.add_alias("person", "Mom", zr) is False and g.resolve("person", "Mom") == zk          # refused, queued as a question

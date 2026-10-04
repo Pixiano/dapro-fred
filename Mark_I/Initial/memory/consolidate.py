@@ -38,9 +38,10 @@ PROMPT = """You are FRED's nightly memory consolidation agent. Review {day} and 
  "states": [{{"kind": "project|goal|task|preference|person|other", "name": str, "field": str, "value": str}}],
  "relationships": [{{"subject": {{"kind": str, "name": str}}, "relation": str, "object": {{"kind": str, "name": str}}}}],
  "aliases": [{{"kind": str, "name": str, "alias": str}}],
+ "corrections": [{{"kind": str, "wrong": str, "right": str}}],
  "contradictions": [str], "open_questions": [str],
  "summary": str}}
-Only record what the material supports; do not invent. The user is {user}: what they say about themselves ("I", "my") is about person "{user}", always under that exact name, never "user". Events and states are about the user's life, plans, people, projects, decisions and stated facts. Do NOT record what FRED explained, general knowledge or homework answers as events or states. Entity kinds are only person, place, project, pet, org, task, goal (likes, dislikes and habits are states on the person, never entities): no topic, concept, subject or time-check entities. A state value is a lasting fact, never a relative time ("tomorrow", "today"); a one-off plan is an event with its date. Flag a contradiction only when a new value for the same entity and field differs from CURRENT STATE. At most ONE open_question per day, only for a possible same-person pair, a clash with a stored fact or a clear mishearing, never trivia or next steps. Write each contradiction as "ENTITY FIELD: current state says X, but now Y" quoting CURRENT STATE; anything else is not a contradiction. One standalone fact per event; merge the steps of one decision into one event; usually 1-2 events a day, at most 4; no weather or filler. A relationship reads "subject RELATION object" = the subject IS the RELATION of the object ("Mom parent_of {user}", "Mr. Okhande mentor_of {user}", "{user} tutors Chintu"); keep the direction right. Record each person's relation to {user} the first time they appear, with relations only from: parent_of, sibling_of, cousin_of, friend_of, teammate_of, mentor_of, tutors, helps_with, works_on, works_at, lives_in, studies_at, owns, pet_of. Name a person by their formal form (Mom for mumma/ma, Mr. Okhande for "Okhande sir"), and put the other spoken forms in aliases when the user said them. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
+Only record what the material supports; do not invent. The user is {user}: what they say about themselves ("I", "my") is about person "{user}", always under that exact name, never "user". Events and states are about the user's life, plans, people, projects, decisions and stated facts. Do NOT record what FRED explained, general knowledge or homework answers as events or states. Entity kinds are only person, place, project, pet, org, task, goal (likes, dislikes and habits are states on the person, never entities): no topic, concept, subject or time-check entities. A state value is a lasting fact, never a relative time ("tomorrow", "today"); a one-off plan is an event with its date. Flag a contradiction only when a new value for the same entity and field differs from CURRENT STATE. At most ONE open_question per day, only for a possible same-person pair, a clash with a stored fact or a clear mishearing, never trivia or next steps. Write each contradiction as "ENTITY FIELD: current state says X, but now Y" quoting CURRENT STATE; anything else is not a contradiction. One standalone fact per event; merge the steps of one decision into one event; usually 1-2 events a day, at most 4; no weather or filler. A relationship reads "subject RELATION object" = the subject IS the RELATION of the object ("Mom parent_of {user}", "Mr. Okhande mentor_of {user}", "{user} tutors Chintu"); keep the direction right. Record each person's relation to {user} the first time they appear, with relations only from: parent_of, sibling_of, cousin_of, friend_of, teammate_of, mentor_of, tutors, helps_with, works_on, works_at, lives_in, studies_at, owns, pet_of. Name a person by their formal form (Mom for mumma/ma, Mr. Okhande for "Okhande sir"), and put the other spoken forms in aliases when the user said them. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. corrections: ONLY when {user} explicitly fixes a name used before ("my sister is Nitya, not Navya"): wrong = the old name, right = the correct one, both exactly as written in the material. A different person who merely has a similar name is not a correction. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
 conflicts with a current state shown below. Summary: plain prose covering significant events, work, decisions,
 people, learning, health/routine, notable changes, open threads. Length follows the day: <=200 words if
 uneventful, 200-500 normal, 500-800 active, <=1000 exceptional. A boring day gets a short summary.
@@ -135,6 +136,7 @@ def _clean(out):
     out["relationships"] = [r for r in out["relationships"] if ok(r["subject"]) and ok(r["object"]) and r["relation"] in RELATIONS]
     out["contradictions"] = [c for c in out.get("contradictions", []) if "current state says" in c]   # a contradiction must quote the stored fact it clashes with
     out["open_questions"] = out.get("open_questions", [])[:MAX_QUESTIONS]
+    out["corrections"] = [c for c in out.get("corrections", []) if c["kind"].strip().lower() in KINDS]
     return out
 
 
@@ -145,7 +147,7 @@ def _valid(out):
     str(out["summary"])
     is_s = lambda *xs: all(isinstance(x, str) and x.strip() for x in xs)
     ent = lambda d: isinstance(d, dict) and is_s(d.get("kind"), d.get("name"))
-    for key in ("events", "states", "aliases", "relationships", "contradictions", "open_questions"):
+    for key in ("events", "states", "aliases", "relationships", "contradictions", "open_questions", "corrections"):
         if not isinstance(out.get(key, []), list):
             raise ValueError(f"{key} must be a list")
     for e in out.get("events", []):
@@ -166,10 +168,21 @@ def _valid(out):
     for key in ("contradictions", "open_questions"):
         if not all(isinstance(x, str) for x in out.get(key, [])):
             raise ValueError(f"{key} must be text")
+    for c in out.get("corrections", []):
+        if not (isinstance(c, dict) and is_s(c.get("kind"), c.get("wrong"), c.get("right"))):
+            raise ValueError(f"bad correction {c!r}")
 
 
-def _apply(s, g, out, day, ts, sid, agent, run, historical):
+def _apply(s, g, out, day, ts, sid, agent, run, historical, material=""):
     """Writes one model answer. Returns its summary."""
+    low = " ".join(material.lower().split())
+    for c in out.get("corrections", []):  # first, so the rest of the answer already sees the corrected names
+        wrong, right = c["wrong"].strip(), c["right"].strip()
+        if " ".join(wrong.lower().split()) not in low or " ".join(right.lower().split()) not in low:
+            note(s, agent, run, "override", why="correction names not in the material", correction=c)
+            continue  # the model may not invent a correction: both names must be in what was actually said
+        res = g.correct(c["kind"].strip().lower(), wrong, right, day, sid)
+        note(s, agent, run, "action", correction=c, result=res)
     for e in out.get("events", []):
         imp = float(e.get("importance", 0.5))
         if imp < hygiene.MIN_IMPORTANCE or hygiene.is_duplicate(s, day, e["content"]):
@@ -230,7 +243,7 @@ def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
             _valid(out)  # a malformed part fails the whole day before any write
             outs.append(_clean(out))
         sid = s.add_source("backfill" if historical else "consolidation", day)
-        summary = "\n\n".join(_apply(s, g, o, day, ts, sid, agent, key, historical) for o in outs)
+        summary = "\n\n".join(_apply(s, g, o, day, ts, sid, agent, key, historical, material) for o in outs)
         old = s.daily_log(day) if historical else None
         s.set_daily_log(day, f"{old}\n\n(Imported history) {summary}" if old else summary)
         status, detail = "done", None
@@ -356,6 +369,19 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         assert backfill_pending(m, hl) == ["2026-01-01"]
         assert m.store.daily_log("2026-01-01") == "Quiet build day.\n\n(Imported history) Early days."
         assert m.archive.read("import", "2025-05-01")[0]["kind"] == "historical"                  # the raw record itself is never touched
+    with tempfile.TemporaryDirectory() as d2, Memory(d2) as m2:   # spoken name correction: merged, the word freed, the model cannot invent one
+        m2.archive.write("conversation", {"text": "my sister Navya took my charger"}, ts="2026-02-01T10:00:00+00:00")
+        m2.archive.write("conversation", {"text": "my sister is called Nitya, not Navya. Navya from tuition is nice"}, ts="2026-02-02T10:00:00+00:00")
+        mk = lambda txt, who, corr=(): json.dumps({"events": [{"type": "note", "content": txt, "importance": 0.8, "about": [{"kind": "person", "name": who}]}],
+                                                  "corrections": list(corr), "summary": "s"})
+        assert consolidate_day(m2, "2026-02-01", lambda p: mk("Navya took a charger", "Navya"))
+        corr = [{"kind": "person", "wrong": "Navya", "right": "Nitya"}, {"kind": "person", "wrong": "Zed", "right": "Nitya"}]   # Zed never appears: ignored
+        assert consolidate_day(m2, "2026-02-02", lambda p: mk("tuition Navya is nice", "Navya", corr))
+        g2 = Graph(m2.store)
+        ids = {r["name"]: r["id"] for r in m2.store.entities("person")}
+        assert {"Nitya", "Navya", "Navya [heard as Nitya]"} <= set(ids) and "Zed" not in ids
+        about = lambda n: [e["content"] for e in g2.events_about(ids[n])]
+        assert about("Nitya") == ["Navya took a charger"] and about("Navya") == ["tuition Navya is nice"]
     c = _clean({"events": [{"type": "n", "content": "x", "about": [{"kind": "Person", "name": "user"}, {"kind": "concept", "name": "friction"}, {"kind": "person", "name": "Chhotu/PF"}]}],
                 "states": [{"kind": "person", "name": "user", "field": "exam", "value": "tomorrow"}, {"kind": "person", "name": "user", "field": "phone", "value": "Redmi"}],
                 "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "I"}, "relation": "knows", "object": {"kind": "education", "name": "physics"}}],
