@@ -21,7 +21,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from graph import norm
-from weekly import ACTIVE, MAX_CALLS, MIN_EVENTS, SYSTEM, Week, _json, _now
+from weekly import ACTIVE, EXPLORE, MAX_CALLS, MIN_EVENTS, SYSTEM, Week, _json, _now
 
 from decisionlog import note as dlog
 log = logging.getLogger("memory")
@@ -61,6 +61,9 @@ _BODY = SYSTEM.split("\n", 1)[1]
 _BODY = _swap(_BODY, "The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about. The code adds the review counts",
               "{SECTIONS}. The code adds the review counts")
 _BODY = _swap(_BODY, "Length follows the week.", "Length follows the {PERIOD}.")
+_BODY = _swap(_BODY, "compare this week with earlier ones", "compare this {PERIOD} with earlier ones")
+_BODY = _swap(_BODY, "One week is thin data: say so.", "A short period is thin data: say so.")
+_BODY = _swap(_BODY, "A quiet week gets a short digest.", "A quiet {PERIOD} gets a short digest.")
 _TOOLS = '''get_weekly_digests {"from": date, "to": date}   the weekly reviews
 state_at {"name": str, "date": "YYYY-MM-DD"}   an entity's fields on a day
 compare_states {"date1": date, "date2": date}   everything that changed between two days
@@ -90,7 +93,7 @@ MONTH_SYSTEM = _build(
     "You are FRED's monthly analyst. You see one month of Vatsal's life only through memory tools. Your job: answer what actually changed this month.",
     "The month in brief, Turning points, Changed priorities, Project evolution, Relationship evolution, Behavioural changes, Emerging patterns, Weakened patterns, Unresolved questions",
     "month", _TOOLS,
-    "COMPARE how things stood at the start of the month with how they stand at the end (the map shows the differences), then explain the difference through the events, decisions and outcomes in between. TURNING POINTS are moments where direction changed, each with real supporting events. CHAPTERS are named periods of life (for example 'FRED v2 build'). Life runs in parallel: when two or three big projects and something social happened in the same weeks, keep one chapter per track side by side instead of forcing the month into one. Extend or close the open chapter of a track when the month shows it ended, start a new one on that track when a new period began.")
+    "COMPARE how things stood at the start of the month with how they stand at the end (the map shows the differences), then explain the difference through the events, decisions and outcomes in between. TURNING POINTS are moments where direction changed, each with real supporting events. CHAPTERS are named periods of life (for example 'FRED v2 build'). Life runs in parallel: when two or three big projects and something social happened in the same weeks, keep one chapter per track side by side instead of forcing the month into one. Extend or close the open chapter of a track when the month shows it ended, start a new one on that track when a new period began. RECORD, do not just describe: call create_turning_point for every turning point you write in the digest, and upsert_chapter or refine_chapter for each life track; ground the month with get_weekly_digests and get_daily_logs first.")
 YEAR_SYSTEM = _build(
     "You are FRED's yearly analyst. You see one year of Vatsal's life through twelve month notes and memory tools. Your job: answer how Vatsal changed this year.",
     "The year in brief, Phases of the year, What stayed stable, What changed, Decisions and consequences, People, Goals dropped or revived, Recurring cycles",
@@ -116,7 +119,13 @@ Reply with JSON only: {"note": str}"""
 
 
 class Month(Week):
-    min_explore = 0
+    min_explore = 2
+    explore_tools = EXPLORE | {"state_at", "compare_states", "get_weekly_digests", "list_decisions", "find_recurring"}
+
+    def _gap(self):
+        if not self.q("SELECT 1 FROM turning_points WHERE period=?", (self.period,)):
+            return ("no turning points recorded: call create_turning_point for each turning point you describe (with real supporting event ids) and "
+                    "upsert_chapter for each life track; if this month truly had none, call finish again")
     def __init__(self, mem, month, index, start=None, end=None, period=None):
         s, e = month_bounds(month) if month else (start, end)
         super().__init__(mem, e, index)
@@ -177,9 +186,10 @@ class Month(Week):
 
     # ---- extra tools ----
     def t_get_weekly_digests(self, **a):
-        return self.q("SELECT week, summary FROM weekly_digests WHERE week BETWEEN ? AND ? ORDER BY week", (a["from"], a["to"]))
+        return self.q("SELECT week, summary FROM weekly_digests WHERE week BETWEEN ? AND ? ORDER BY week", (a["from"], min(a["to"], self.end)))
 
     def t_state_at(self, name, date):
+        date = min(date, self.end)
         ids, err = self._need_entity(name)
         if err:
             return err
@@ -190,10 +200,10 @@ class Month(Week):
         return out
 
     def t_compare_states(self, date1, date2):
-        return self._state_diff(date1, date2)[:80]
+        return self._state_diff(min(date1, self.end), min(date2, self.end))[:80]
 
     def t_list_decisions(self, **a):
-        return [self._ev(e) for e in self.q("SELECT * FROM events WHERE type='decision' AND substr(ts,1,10) BETWEEN ? AND ? ORDER BY ts", (a["from"], a["to"]))][:40]
+        return [self._ev(e) for e in self.q("SELECT * FROM events WHERE type='decision' AND substr(ts,1,10) BETWEEN ? AND ? ORDER BY ts", (a["from"], min(a["to"], self.end)))][:40]
 
     def t_list_chapters(self):
         return self.q("SELECT id, track, title, start_day, end_day, description, source FROM chapters ORDER BY track, start_day")
@@ -269,6 +279,10 @@ class Month(Week):
 
 class Year(Month):
     """The whole-year run. anchor_day = the day the run is for; the window is the 12 completed months before its month."""
+    min_explore = 0
+
+    def _gap(self):
+        return None
 
     def __init__(self, mem, anchor_day, index):
         self.months = [month_add(anchor_day[:7], i - 12) for i in range(12)]

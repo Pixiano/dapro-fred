@@ -81,7 +81,13 @@ def _json(text):
 
 
 class Week(MemTools):
-    min_explore = MIN_EXPLORE  # search/compare calls required before finish (the monthly/yearly agents have their own tools and set 0)
+    min_explore = MIN_EXPLORE  # search/compare calls required before finish (the monthly/yearly agents have their own tools and counts)
+    explore_tools = EXPLORE
+    gap_warned = False
+
+    def _gap(self):
+        """Something structural the period run must have produced before it may finish (None = nothing); said once, then the model may insist."""
+        return None
 
     def __init__(self, mem, end_day, index):
         self.mem, self.s, self.index, self.end = mem, mem.store, index, end_day
@@ -339,8 +345,13 @@ class Week(MemTools):
     def t_rule_review_item(self, id, ruling, note=""):
         if ruling not in RULINGS:
             return {"error": f"ruling must be one of {sorted(RULINGS)}"}
-        if not self.q("SELECT 1 FROM review_queue WHERE id=? AND status='open' AND day <= ?", (id, self.end)):
+        if self.q("SELECT 1 FROM review_rulings WHERE item_id=? AND week=? AND ruling=?", (id, self.end, ruling)):
+            return {"id": id, "ruling": ruling, "note": "already ruled this way"}   # a retry loop must not look like an error
+        row = self.q("SELECT kind FROM review_queue WHERE id=? AND status='open' AND day <= ?", (id, self.end))
+        if not row:
             return {"error": f"no open review item {id}"}
+        if ruling == "real" and row[0]["kind"] != "contradiction":
+            return {"error": "real applies only to contradiction items; a question is apparent, historical_change or unknown"}
         if self.q("SELECT 1 FROM review_rulings WHERE item_id=? AND ruling='real'", (id,)):
             return {"error": "this was ruled a real contradiction; only Vatsal closes it"}
         with self.s.lock:
@@ -366,6 +377,9 @@ class Week(MemTools):
                         "hint": "rule_review_item each open item (unknown is allowed) and update_inference each active inference (a note is enough), then finish"}
             if self.explored < self.min_explore and len(self.events()) >= MIN_EVENTS:
                 return {"error": f"explore first: only {self.explored} of {self.min_explore} search/compare calls so far. Look for support AND counter-evidence of this period's main routines, projects and relationships, then create_inference or say you found none"}
+            if (gap := self._gap()) and not self.gap_warned:
+                self.gap_warned = True
+                return {"error": gap}
         rl = self.q("SELECT r.item_id, r.ruling, q.text FROM review_rulings r JOIN review_queue q ON q.id=r.item_id WHERE r.week=? ORDER BY r.item_id", (self.end,))
         foot = f"\n\n[Review: {len(rl)} item(s) ruled" + "".join(f", {n} {k}" for k in sorted(RULINGS) if (n := sum(r["ruling"] == k for r in rl))) + "]"
         if real := [f"#{r['item_id']} {r['text']}" for r in rl if r["ruling"] == "real"]:
@@ -379,7 +393,7 @@ class Week(MemTools):
 
     def call(self, action):
         res = self._call(action)
-        if isinstance(action, dict) and action.get("tool") in EXPLORE and not (isinstance(res, dict) and "error" in res):
+        if isinstance(action, dict) and action.get("tool") in self.explore_tools and not (isinstance(res, dict) and "error" in res):
             self.explored += 1
         self._dlog("override" if isinstance(res, dict) and "error" in res else "action", action=action, result=res)
         return res
@@ -539,6 +553,11 @@ if __name__ == "__main__":  # self-check: python weekly.py
         wm = Week(m, "2026-03-15", ix).week_map()
         assert len(wm) <= MAP_CHARS + 50 and "OPEN REVIEW ITEMS" in wm and "ACTIVE INFERENCES" in wm and "(... cut)" in wm
         assert "only Vatsal closes" in Week(m, "2026-03-15", ix).t_rule_review_item(1, "apparent")["error"]   # a real ruling is not overwritten
+        s.db.execute("INSERT INTO review_queue(day,kind,text) VALUES('2026-03-04','question','same person?')"); s.db.commit()
+        qid = s.db.execute("SELECT MAX(id) FROM review_queue").fetchone()[0]
+        w3 = Week(m, "2026-03-15", ix)
+        assert "only to contradiction" in w3.t_rule_review_item(qid, "real")["error"]                    # a question is never a real contradiction
+        assert w3.t_rule_review_item(qid, "apparent")["closed"] and w3.t_rule_review_item(qid, "apparent")["note"] == "already ruled this way"
         w2 = Week(m, "2026-03-15", ix)
         assert w2.t_update_inference(1, add_support=[ids[3]], note="again")["support_weeks"] == 1        # re-citing OLD evidence does not make a week
         n1, n2 = (s.add_event("note", f"fred night work {k}", ts=f"2026-03-1{k}T22:00:00+00:00") for k in (0, 1))

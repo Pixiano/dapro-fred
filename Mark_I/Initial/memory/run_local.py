@@ -47,6 +47,9 @@ ACTION = {"type": "json_schema", "json_schema": {"name": "action", "strict": Tru
     "tool": {"type": "string"}, "args": {"type": "object"}}, "required": ["tool", "args"]}}}   # gpt-oss otherwise answers on a channel LM Studio drops: empty content
 
 
+NOTE = {"type": "json_schema", "json_schema": {"name": "note", "strict": True, "schema": {"type": "object", "properties": {"note": {"type": "string"}}, "required": ["note"]}}}
+
+
 def make_llm(cfg, stage, log_to, effort=None, want_json=False):
     """llm(prompt or messages) -> text. Thinking text is dropped; want_json cuts the answer down to its outermost {...}."""
     def llm(x):
@@ -54,7 +57,8 @@ def make_llm(cfg, stage, log_to, effort=None, want_json=False):
         body = dict(cfg, messages=msgs)
         if effort:
             body["reasoning_effort"] = effort
-            body["response_format"] = ACTION   # the tool loops (weekly/monthly/yearly) all speak one JSON action per turn
+            first = msgs[0]["content"] if msgs and isinstance(msgs[0], dict) else ""
+            body["response_format"] = NOTE if first.startswith("You write ONE short YEAR NOTE") else ACTION   # tool loops speak one JSON action per turn; year notes one {"note"}
         t = time.time()
         r = _post("/chat/completions", body)
         text = r["choices"][0]["message"].get("content") or ""
