@@ -24,6 +24,7 @@ import numpy as np
 
 from decisionlog import note
 from graph import Graph, norm
+from memtools import MemTools, tool_text
 from personal_model import DEFAULT_TIER, TIER_RANK
 
 log = logging.getLogger("memory")
@@ -77,7 +78,7 @@ def _json(text):
     return obj
 
 
-class Week:
+class Week(MemTools):
     def __init__(self, mem, end_day, index):
         self.mem, self.s, self.index, self.end = mem, mem.store, index, end_day
         self.g = Graph(self.s)
@@ -371,8 +372,8 @@ class Week:
             return {"error": f"tool failed: {ex!r}"}
 
     def loop(self, llm):
-        msgs = [{"role": "system", "content": self.system}, {"role": "user", "content": self.week_map() + "\n\nBegin."}]
-        self._dlog("prompt", system=self.system, map=msgs[1]["content"])
+        msgs = [{"role": "system", "content": self.system + tool_text(self)}, {"role": "user", "content": self.week_map() + "\n\nBegin."}]
+        self._dlog("prompt", system=msgs[0]["content"], map=msgs[1]["content"])
         bad = grace = 0
         while self.digest is None:
             capped = self.calls >= self.max_calls

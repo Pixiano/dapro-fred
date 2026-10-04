@@ -28,3 +28,6 @@
 - Web-checked festival dates (2026-2030) fill gaps in the holidays package; Dhanteras/Bhai Dooj dropped (sources disagreed).
 - January recompute of movable days only: `recompute_year`, `run_alerts_pending(mem, fetch, today)` (tables `alert_calendar`, `alert_refreshes`); self-check in `alerts.py`.
 - FRED's own birthday: a script date scan of `Old/` found the earliest FRED file on 2025-09-18 (another early file 19 Sep); settled by Vatsal as 16 Sep 2025 (first local model download; only the 16th is used).
+
+## Curation tools and proposal queue
+- 14 new tools for the memory agents (`memtools.py`: ten read-only quality tools in every agent, four proposal tools for the critic and the new maintenance agent) and the proposal engine with tiering (`maintenance.py`): sure, undoable merges apply themselves and are reported; everything else waits for Vatsal (asked in conversation or via `python maintenance.py review`). Unanswered proposals expire, rejected ones never return, nothing is deleted. Self-check: `python maintenance.py`. History of the example name was also scrubbed from Mark I commits and force-pushed on request (2026-10-05).

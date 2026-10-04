@@ -348,6 +348,7 @@ class Year(Month):
 
 class Critic(Year):
     """Pass B: attacks the analyst's draft. May only weaken evidence-backed claims, never add or write anything else."""
+    can_propose = True  # may queue curation proposals (merge, split, retire alias, stale fact)
 
     def __init__(self, mem, anchor_day, index, draft):
         super().__init__(mem, anchor_day, index)
