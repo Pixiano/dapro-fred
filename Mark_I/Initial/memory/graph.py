@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from store import ensure_column, to_utc
+
 EXCLUSIVE = {"lives_in", "works_at", "status", "partner_of"}  # extend as needed
 AUTO, ASK = 0.85, 0.65  # similarity >= AUTO links as alias, >= ASK queues a question
 _HERE = Path(__file__).parent
@@ -30,12 +32,34 @@ def norm(name):
     return " ".join(name.lower().split())
 
 
+def _ph(s):
+    for x, y in _PHON:
+        s = s.replace(x, y)
+    return s
+
+
 def _sim(a, b):
-    def ph(s):
-        for x, y in _PHON:
-            s = s.replace(x, y)
-        return s
-    return max(SequenceMatcher(None, a, b).ratio(), SequenceMatcher(None, ph(a), ph(b)).ratio())
+    return max(SequenceMatcher(None, a, b).ratio(), SequenceMatcher(None, _ph(a), _ph(b)).ratio())
+
+
+def _lev(a, b):
+    prev = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        cur = [i]
+        for j, y in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x != y)))
+        prev = cur
+    return cur[-1] if a else len(b)
+
+
+def _variant(a, b):
+    """True only for a plain spelling variant of one name (never another person's): both names at least 5 letters (6 for a plain typo), neither a
+    prefix/suffix extension of the other (Manish/Manisha, Nikhil/Nikhila, Sara/Sarah are different people), and one typo away, or two
+    when the phonetic forms agree (Soohani/Suhani). Anything merely similar is asked about, not merged."""
+    if min(len(a), len(b)) < 5 or a.startswith(b) or b.startswith(a) or a.endswith(b) or b.endswith(a):
+        return False
+    d = _lev(a, b)
+    return (d <= 1 and min(len(a), len(b)) >= 6) or (d <= 2 and _ph(a) == _ph(b))
 
 
 class Graph:
@@ -44,6 +68,7 @@ class Graph:
         with store.lock:
             for f in ("schema_consolidation.sql", "schema_hygiene.sql", "schema_graph.sql"):
                 store.db.executescript((_HERE / f).read_text(encoding="utf-8"))
+            ensure_column(store.db, "relationships", "last_seen TEXT")
 
     # ---- names ----
     def canonical(self, eid):
@@ -52,10 +77,18 @@ class Graph:
                 eid = r[0]
         return eid
 
-    def add_alias(self, kind, alias, entity_id):
+    def add_alias(self, kind, alias, entity_id, force=False):
+        """Another name for an entity. A name that already belongs to a DIFFERENT entity is never re-pointed unless force=True (a
+        decision by Vatsal or a merge): the request becomes a review question instead. Returns True if the alias is now set."""
         with self.s.lock:
+            old = self.s.db.execute("SELECT entity_id FROM entity_aliases WHERE kind=? AND alias=?", (kind, norm(alias))).fetchone()
+            if old and self.canonical(old[0]) != self.canonical(entity_id) and not force:
+                self._queue(_now()[:10], "question", f"The name '{alias}' already belongs to entity {self.canonical(old[0])}; a request to point it at "
+                            f"entity {self.canonical(entity_id)} was NOT applied.", None)
+                return False
             self.s.db.execute("INSERT OR REPLACE INTO entity_aliases VALUES(?,?,?)", (kind, norm(alias), entity_id))
             self.s.db.commit()
+            return True
 
     def _queue(self, day, kind, text, source_id):
         with self.s.lock:
@@ -78,7 +111,7 @@ class Graph:
                     return e["id"]
             best = max(live, key=lambda e: _sim(n, norm(e["name"])), default=None)
             score = _sim(n, norm(best["name"])) if best else 0
-            if score >= AUTO:
+            if best and _variant(n, norm(best["name"])):
                 self.add_alias(kind, name, best["id"])
                 return best["id"]
             eid = s.entity(kind, name.strip())
@@ -91,7 +124,7 @@ class Graph:
         e = self.canonical(entity_id)
         with self.s.lock:
             kind = self.s.db.execute("SELECT kind FROM entities WHERE id=?", (e,)).fetchone()[0]
-        self.add_alias(kind, word, e)
+        self.add_alias(kind, word, e, force=True)
 
     def tag(self, event_id, entity_id):
         with self.s.lock:
@@ -145,10 +178,17 @@ class Graph:
                     for (i,) in s.db.execute("SELECT id FROM entity_states WHERE entity_id=? AND field=? AND valid_to IS NULL", (f, fld)).fetchall():
                         jr("state_closed", i, now)
                     s.db.execute("UPDATE entity_states SET valid_to=? WHERE entity_id=? AND field=? AND valid_to IS NULL", (now, f, fld))
+            for rel in EXCLUSIVE:  # the target already has this link open: the merged entity's own copy closes now (undo reopens it)
+                if s.db.execute("SELECT 1 FROM relationships WHERE subject_id=? AND relation=? AND valid_to IS NULL", (t, rel)).fetchone():
+                    for (i,) in s.db.execute("SELECT id FROM relationships WHERE subject_id=? AND relation=? AND valid_to IS NULL", (f, rel)).fetchall():
+                        jr("rel_closed", i, now)
+                        s.db.execute("UPDATE relationships SET valid_to=? WHERE id=?", (now, i))
+            skip = {"rel_s": " AND object_id!=?", "rel_o": " AND subject_id!=?"}  # a link between the two merged entities would become a self-loop
             for kind, (tbl, col) in self._MOVES.items():
-                for (i,) in s.db.execute(f"SELECT id FROM {tbl} WHERE {col}=?", (f,)).fetchall():
+                ids = [r[0] for r in s.db.execute(f"SELECT id FROM {tbl} WHERE {col}=?" + skip.get(kind, ""), (f, t) if kind in skip else (f,)).fetchall()]
+                for i in ids:
                     jr(kind, i)
-                s.db.execute(f"UPDATE {tbl} SET {col}=? WHERE {col}=?", (t, f))
+                    s.db.execute(f"UPDATE {tbl} SET {col}=? WHERE id=?", (t, i))
             for k, al in s.db.execute("SELECT kind, alias FROM entity_aliases WHERE entity_id=?", (f,)).fetchall():
                 jr("alias", json.dumps([k, al]))
             s.db.execute("UPDATE entity_aliases SET entity_id=? WHERE entity_id=?", (t, f))
@@ -162,7 +202,7 @@ class Graph:
             jr("alias_prev", key, prev[0]) if prev else jr("alias_added", key)
             s.db.execute("INSERT INTO entity_merges VALUES(?,?,?)", (f, t, now))
             s.db.commit()
-            self.add_alias(row["kind"], row["name"], t)
+            self.add_alias(row["kind"], row["name"], t, force=True)
         return t
 
     def unmerge(self, entity_id):
@@ -182,8 +222,12 @@ class Graph:
                 if k in self._MOVES:
                     tbl, col = self._MOVES[k]
                     s.db.execute(f"UPDATE {tbl} SET {col}=? WHERE id=?", (f, int(key)))
-                elif k == "state_closed":
-                    s.db.execute("UPDATE entity_states SET valid_to=NULL WHERE id=? AND valid_to=?", (int(key), extra))
+                elif k == "state_closed":  # reopen only if no other value became current meanwhile (state() and snapshot() must agree)
+                    s.db.execute("UPDATE entity_states SET valid_to=NULL WHERE id=? AND valid_to=? AND NOT EXISTS (SELECT 1 FROM entity_states x "
+                                 "WHERE x.entity_id=entity_states.entity_id AND x.field=entity_states.field AND x.valid_to IS NULL)", (int(key), extra))
+                elif k == "rel_closed":
+                    s.db.execute("UPDATE relationships SET valid_to=NULL WHERE id=? AND valid_to=? AND NOT EXISTS (SELECT 1 FROM relationships x "
+                                 "WHERE x.subject_id=relationships.subject_id AND x.relation=relationships.relation AND x.valid_to IS NULL)", (int(key), extra))
                 elif k == "alias":
                     s.db.execute("UPDATE entity_aliases SET entity_id=? WHERE kind=? AND alias=?", (f, *json.loads(key)))
                 elif k == "alias_prev":
@@ -207,14 +251,18 @@ class Graph:
         relation = norm(relation).replace(" ", "_")
         if subject_id == object_id or not relation:
             raise ValueError("a relationship needs two different entities and a relation")
-        ts, s = ts or _now(), self.s
+        ts, s = to_utc(ts) if ts else _now(), self.s
         with s.lock:
             open_rows = s.db.execute("SELECT * FROM relationships WHERE subject_id=? AND relation=? AND valid_to IS NULL",
                                      (subject_id, relation)).fetchall()
-            if any(r["object_id"] == object_id for r in open_rows):
+            same = [r for r in open_rows if r["object_id"] == object_id]
+            if same:
+                if ts > (same[0]["last_seen"] or same[0]["valid_from"]):  # stated again: remember when
+                    s.db.execute("UPDATE relationships SET last_seen=? WHERE id=?", (ts, same[0]["id"]))
+                    s.db.commit()
                 return None
             if relation in EXCLUSIVE and open_rows:
-                if ts < open_rows[0]["valid_from"]:  # an older fact would overlap the current one: ask, don't guess
+                if ts < max(open_rows[0]["valid_from"], open_rows[0]["last_seen"] or ""):  # an older fact would overlap the current one: ask, don't guess
                     self._queue(day or ts[:10], "contradiction",
                                 f"Older {relation} fact (entity {subject_id} -> {object_id}, {ts}) overlaps the current one; not applied.",
                                 source_id)
@@ -337,4 +385,13 @@ if __name__ == "__main__":  # self-check: python graph.py
     assert [(x["from"], x["relation"], x["to"], x["forward"]) for x in p] == [("Priya", "works_on", "FRED", True), ("FRED", "works_on", "Meera", False)]
     assert g.path(su, su) == [] and g.path(su, ri) is None and g.path(su, me, max_hops=1) is None
     assert g.path(su, me, at="2025-01-01T00:00:00+00:00") is None       # the chain did not exist yet
+    # review fixes: different people are asked about, never silently merged; a confirmed alias cannot be re-pointed by a model
+    for known, new in (("Manish", "Manisha"), ("Nikhil", "Nikhila"), ("Aditya", "Aditi"), ("Mohan", "Mohana"), ("Sara", "Sarah")):
+        a1 = g.resolve("person", known)
+        assert g.resolve("person", new) != a1, (known, new)
+    zk, zr = g.resolve("person", "Zara Khan"), g.resolve("person", "Zoya Rao")
+    g.confirm_alias("Mom", zk)
+    assert g.add_alias("person", "Mom", zr) is False and g.resolve("person", "Mom") == zk          # refused, queued as a question
+    assert s.db.execute("SELECT COUNT(*) FROM review_queue WHERE text LIKE 'The name ''Mom'' already belongs%'").fetchone()[0] == 1
+    assert g.add_alias("person", "Mom", zr, force=True) and g.resolve("person", "Mom") == zr        # Vatsal's own decision may
     print("graph ok")

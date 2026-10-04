@@ -75,17 +75,66 @@ def _chunks(text):
     return out + [cur] if cur else out
 
 
-def _state(mem):
-    out = []
-    for e in mem.store.entities():
-        snap = mem.store.snapshot(e["id"])
-        out.append(f"{e['kind']}/{e['name']}: {snap}" if snap else f"{e['kind']}/{e['name']}")
+STATE_CHARS = 8000  # the entity list in the prompt must not outgrow the model's window as memory grows
+
+
+def _pick(mem, material, line):
+    """Entities the day's material names come first, then the newest ones, until the budget is used."""
+    ents = mem.store.entities()
+    low = material.lower()
+    hit = [e for e in ents if e["name"].lower() in low]
+    rest = [e for e in reversed(ents) if e not in hit]
+    out, used = [], 0
+    for e in hit + rest:
+        ln = line(e)
+        if used + len(ln) > STATE_CHARS and out:
+            out.append(f"(... {len(ents) - len(out)} more entities not shown)")
+            break
+        out.append(ln)
+        used += len(ln) + 1
     return "\n".join(out) or "(none)"
 
 
-def _names(mem):
-    return "(names only: this day is imported history, so today's state is not shown and nothing is a contradiction)\n" + "\n".join(
-        f"{e['kind']}/{e['name']}" for e in mem.store.entities())
+def _state(mem, material=""):
+    def line(e):
+        snap = mem.store.snapshot(e["id"])
+        return f"{e['kind']}/{e['name']}: {snap}" if snap else f"{e['kind']}/{e['name']}"
+    return _pick(mem, material, line)
+
+
+def _names(mem, material=""):
+    return "(names only: this day is imported history, so today's state is not shown and nothing is a contradiction)\n" + _pick(
+        mem, material, lambda e: f"{e['kind']}/{e['name']}")
+
+
+def _valid(out):
+    """Structure check of one model answer BEFORE any write, so a malformed item cannot leave a day half-applied."""
+    if not isinstance(out, dict):
+        raise ValueError("model answer is not an object")
+    str(out["summary"])
+    is_s = lambda *xs: all(isinstance(x, str) and x.strip() for x in xs)
+    ent = lambda d: isinstance(d, dict) and is_s(d.get("kind"), d.get("name"))
+    for key in ("events", "states", "aliases", "relationships", "contradictions", "open_questions"):
+        if not isinstance(out.get(key, []), list):
+            raise ValueError(f"{key} must be a list")
+    for e in out.get("events", []):
+        if not (isinstance(e, dict) and is_s(e.get("type"), e.get("content"))):
+            raise ValueError(f"bad event {e!r}")
+        float(e.get("importance", 0.5))
+        if not (isinstance(e.get("about", []), list) and all(ent(a) for a in e.get("about", []))):
+            raise ValueError(f"bad event tags {e!r}")
+    for st in out.get("states", []):
+        if not (ent(st) and is_s(st.get("field")) and isinstance(st.get("value"), (str, int, float))):
+            raise ValueError(f"bad state {st!r}")
+    for a in out.get("aliases", []):
+        if not (ent(a) and is_s(a.get("alias"))):
+            raise ValueError(f"bad alias {a!r}")
+    for r in out.get("relationships", []):
+        if not (isinstance(r, dict) and ent(r.get("subject")) and ent(r.get("object")) and is_s(r.get("relation"))):
+            raise ValueError(f"bad relationship {r!r}")
+    for key in ("contradictions", "open_questions"):
+        if not all(isinstance(x, str) for x in out.get(key, [])):
+            raise ValueError(f"{key} must be text")
 
 
 def _apply(s, g, out, day, ts, sid, agent, run, historical):
@@ -119,7 +168,8 @@ def _apply(s, g, out, day, ts, sid, agent, run, historical):
             if historical and kind == "contradiction":
                 continue  # old facts cannot contradict the present
             for text in out.get(key, []):
-                s.db.execute("INSERT INTO review_queue(day,kind,text,source_id) VALUES(?,?,?,?)", (day, kind, text, sid))
+                s.db.execute("INSERT INTO review_queue(day,kind,text,source_id) SELECT ?,?,?,? WHERE NOT EXISTS "
+                             "(SELECT 1 FROM review_queue WHERE day=? AND kind=? AND text=? AND status='open')", (day, kind, text, sid, day, kind, text))  # a retry must not duplicate
         s.db.commit()
     return out["summary"]
 
@@ -133,18 +183,20 @@ def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
     with s.lock:
         s.db.executescript(_SCHEMA.read_text(encoding="utf-8"))
         done = s.db.execute("SELECT 1 FROM consolidation_runs WHERE day=? AND status='done'", (key,)).fetchone()
-    material = _material(mem, day, historical)
-    if done or not material:
-        return False
+    if done:
+        return False  # nothing is read for a finished day
     ts = f"{day}T23:59:59+00:00"  # extracted facts belong to the day they describe
     try:
+        material = _material(mem, day, historical)
+        if not material:
+            return False
         g = Graph(s)
-        parts, state = _chunks(material), _names(mem) if historical else _state(mem)
+        parts, state = _chunks(material), _names(mem, material) if historical else _state(mem, material)
         outs = []
         for i, part in enumerate(parts):
             head = f"(PART {i + 1} of {len(parts)} of this day)\n" if len(parts) > 1 else ""
             out = json.loads(traced(s, agent, key, llm)(PROMPT.format(day=day, state=state, material=head + part)))
-            str(out["summary"])  # a part without a summary fails the whole day before any write
+            _valid(out)  # a malformed part fails the whole day before any write
             outs.append(out)
         sid = s.add_source("backfill" if historical else "consolidation", day)
         summary = "\n\n".join(_apply(s, g, o, day, ts, sid, agent, key, historical) for o in outs)

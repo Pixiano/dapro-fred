@@ -24,6 +24,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def to_utc(ts):
+    """The one door for times: any ISO timestamp WITH an offset becomes ISO UTC (+00:00); naive or garbage times are refused,
+    because comparing local and UTC strings silently mis-orders facts and mis-buckets days."""
+    dt = datetime.fromisoformat(str(ts).strip().replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        raise ValueError(f"timestamp {ts!r} has no timezone offset: pass UTC (e.g. 2026-01-02T03:04:05+00:00)")
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def ensure_column(db, table, column_def):
+    """Adds a column to a table made by an older schema (CREATE TABLE IF NOT EXISTS never alters one)."""
+    name = column_def.split()[0]
+    if name not in [r[1] for r in db.execute(f"PRAGMA table_info({table})")]:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+
+
 def run_hooks(hooks, arg):
     for hook in list(hooks):
         try:
@@ -39,6 +55,7 @@ class MemoryStore:
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA journal_mode=WAL")  # no-op for :memory:
         self.db.executescript(_SCHEMA.read_text(encoding="utf-8"))
+        ensure_column(self.db, "entity_states", "last_seen TEXT")  # latest time this value was stated again (re-confirmed)
         self.lock = threading.RLock()
         self.on_event = []
 
@@ -64,17 +81,35 @@ class MemoryStore:
 
     def set_state(self, entity_id, field, value, source_id=None, confidence=1.0, ts=None):
         """Close the open row for (entity, field) if the value changed, then open a new one. One transaction."""
-        ts = ts or _now()
+        ts = to_utc(ts) if ts else _now()
         with self.lock:
             cur = self.state(entity_id, field)
             if cur is not None and cur["value"] == value:
+                if ts > (cur["last_seen"] or cur["valid_from"]):  # stated again: remember when, so an older import cannot overwrite the present
+                    self.db.execute("UPDATE entity_states SET last_seen=? WHERE id=?", (ts, cur["id"]))
+                    self.db.commit()
                 return cur["id"]
-            if cur is not None and ts < cur["valid_from"]:  # older fact (backfilled history): slot it in, leave the current value alone
+            if cur is not None and cur["last_seen"] and cur["valid_from"] <= ts <= cur["last_seen"]:
+                # the current value was re-confirmed after this older, different fact: two accounts of the same time, ask instead of guessing
+                self._ask(ts[:10], f"Fact conflict: entity {entity_id} {field} = {value!r} (dated {ts[:10]}) clashes with the current value "
+                                   f"{cur['value']!r}, confirmed up to {cur['last_seen'][:10]}; not applied.", source_id)
+                return None
+            if (cur is not None and ts < cur["valid_from"]) or (cur is None and any(r["valid_from"] > ts for r in self.state_history(entity_id, field))):
+                # older fact (backfilled history, or earlier than a closed later row): slot it in, leave the present alone
                 return self._set_past(entity_id, field, value, source_id, confidence, ts)
             self.db.execute("UPDATE entity_states SET valid_to=? WHERE entity_id=? AND field=? AND valid_to IS NULL",
                             (ts, entity_id, field))
             return self._ins("INSERT INTO entity_states(entity_id,field,value,valid_from,confidence,source_id) "
                              "VALUES(?,?,?,?,?,?)", (entity_id, field, value, ts, confidence, source_id))
+
+    def _ask(self, day, text, source_id=None):
+        with self.lock:
+            try:
+                self.db.execute("INSERT INTO review_queue(day,kind,text,source_id) VALUES(?,?,?,?)", ("" + day, "contradiction", text, source_id))
+            except sqlite3.OperationalError:  # the queue table belongs to a later schema; make it
+                self.db.executescript(Path(__file__).with_name("schema_consolidation.sql").read_text(encoding="utf-8"))
+                self.db.execute("INSERT INTO review_queue(day,kind,text,source_id) VALUES(?,?,?,?)", (day, "contradiction", text, source_id))
+            self.db.commit()
 
     def _set_past(self, entity_id, field, value, source_id, confidence, ts):
         rows = [dict(r) for r in self.state_history(entity_id, field)]
@@ -108,7 +143,7 @@ class MemoryStore:
     def add_event(self, type, content, entity_id=None, importance=0.5, confidence=1.0, source_id=None, ts=None) -> int:
         with self.lock:
             eid = self._ins("INSERT INTO events(ts,type,entity_id,content,importance,confidence,source_id,created_at) "
-                            "VALUES(?,?,?,?,?,?,?,?)", (ts or _now(), type, entity_id, content, importance, confidence,
+                            "VALUES(?,?,?,?,?,?,?,?)", (to_utc(ts) if ts else _now(), type, entity_id, content, importance, confidence,
                                                         source_id, _now()))
             ev = dict(self.db.execute("SELECT * FROM events WHERE id=?", (eid,)).fetchone())
         run_hooks(self.on_event, ev)
@@ -148,7 +183,7 @@ if __name__ == "__main__":  # self-check: python store.py
     p = s.entity("project", "demo")
     assert s.entity("project", "demo") == p
     s.set_state(p, "status", "planning", src, ts="2026-01-01T00:00:00+00:00")
-    s.set_state(p, "status", "planning", src)  # same value: no new row
+    s.set_state(p, "status", "planning", src, ts="2026-01-20T00:00:00+00:00")  # same value: no new row, only re-confirmed
     s.set_state(p, "status", "building", src, ts="2026-02-01T00:00:00+00:00")
     h = s.state_history(p, "status")
     assert [r["value"] for r in h] == ["planning", "building"]
@@ -174,4 +209,23 @@ if __name__ == "__main__":  # self-check: python store.py
     t = threading.Thread(target=lambda: done.append(s.add_event("note", "from thread")))
     t.start(); t.join()
     assert done
+    # review fixes: an older import must not overwrite a value that was confirmed later; times are UTC
+    x = s.entity("person", "Xavier")
+    s.set_state(x, "city", "Pune", ts="2026-01-01T00:00:00+00:00")
+    s.set_state(x, "city", "Pune", ts="2026-09-01T00:00:00+00:00")                       # stated again in September
+    assert s.set_state(x, "city", "Delhi", ts="2026-05-01T00:00:00+00:00") is None       # an older, different fact clashes: asked, not applied
+    assert s.state(x, "city")["value"] == "Pune" and [r["value"] for r in s.state_history(x, "city")] == ["Pune"]
+    assert s.db.execute("SELECT COUNT(*) FROM review_queue WHERE text LIKE 'Fact conflict%'").fetchone()[0] == 1
+    s.set_state(x, "city", "Mumbai", ts="2026-10-01T00:00:00+00:00")                      # a genuinely newer value still changes it
+    assert s.state(x, "city")["value"] == "Mumbai"
+    y = s.entity("person", "Yash")
+    s.set_state(y, "job", "student", ts="2026-03-01T00:00:00+00:00")
+    s.db.execute("UPDATE entity_states SET valid_to='2026-09-01T00:00:00+00:00' WHERE entity_id=?", (y,)); s.db.commit()   # closed (as a stale flag does)
+    s.set_state(y, "job", "intern", ts="2026-01-01T00:00:00+00:00")                         # an older fact must not become the open current value
+    assert s.state(y, "job") is None and [r["value"] for r in s.state_history(y, "job")] == ["intern", "student"]
+    assert s.add_event("note", "ist event", ts="2026-03-05T01:30:00+05:30") and s.events_on("2026-03-04")[-1]["content"] == "ist event"
+    try:
+        s.add_event("note", "naive", ts="2026-03-05T01:30:00"); raise SystemExit("naive time accepted")
+    except ValueError:
+        pass
     print("memory store ok")

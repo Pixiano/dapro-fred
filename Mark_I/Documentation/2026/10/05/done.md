@@ -31,3 +31,6 @@
 
 ## Curation tools and proposal queue
 - 14 new tools for the memory agents (`memtools.py`: ten read-only quality tools in every agent, four proposal tools for the critic and the new maintenance agent) and the proposal engine with tiering (`maintenance.py`): sure, undoable merges apply themselves and are reported; everything else waits for Vatsal (asked in conversation or via `python maintenance.py review`). Unanswered proposals never expire, rejected ones stay on file and never return (`history`), they are in the backup's review part (md/pdf, restorable), nothing is deleted. Self-check: `python maintenance.py`. History of the example name was also scrubbed from Mark I commits and force-pushed on request (2026-10-05).
+
+## Review hardening
+- A larger model (Opus) reviewed all the memory code adversarially (27 findings, 23 reproduced with probe scripts). Fixed: 1 critical, 6 high, 12 medium and several low ones, each with a regression assertion in the module self-checks; the list and what was left alone is in the overview ("Review hardening"). Re-running the review's own probe scripts now shows the intended refusals.

@@ -94,7 +94,7 @@ class MemTools:
         folder = Path(self.mem.archive.root) / day[:4] / day[5:7] / day[8:10]
         want, found = _words(content), []
         for f in sorted(folder.glob("*.jsonl")) if folder.is_dir() else []:
-            for line in f.read_text(encoding="utf-8", errors="ignore").splitlines():
+            for line in f.read_text(encoding="utf-8", errors="ignore").split("\n"):
                 try:
                     rec = json.loads(line)
                 except ValueError:

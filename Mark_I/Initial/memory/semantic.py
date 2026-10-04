@@ -40,7 +40,12 @@ class SemanticIndex:
         with self.store.lock:
             self.store.db.execute("INSERT OR REPLACE INTO embeddings VALUES(?,?,?)", (event_id, self.model, v.tobytes()))
             self.store.db.commit()
-        self._m = None
+            m = self._m  # keep the cached index: append the new vector (rebuilding 50k vectors on every new event cost ~0.5 s per recall)
+            if m is not None and m[0] == self.model and m[2] is not None and event_id not in m[1]:
+                m[2].add(v[None].astype(np.float32))
+                m[1].append(event_id)
+            else:
+                self._m = None
 
     def sync(self) -> int:
         """Embed every event that has no vector for the current model. Returns how many."""
@@ -59,16 +64,16 @@ class SemanticIndex:
         self._m = None
 
     def _index(self):
-        if self._m is None or self._m[0] != self.model:
-            with self.store.lock:
+        with self.store.lock:  # built and cached under the lock: an add() on another thread cannot be missed
+            if self._m is None or self._m[0] != self.model:
                 rows = self.store.db.execute("SELECT event_id, vec FROM embeddings WHERE model=?", (self.model,)).fetchall()
-            ix = None
-            if rows:
-                m = np.array([np.frombuffer(r[1], np.float32) for r in rows])
-                ix = faiss.IndexFlatIP(m.shape[1])
-                ix.add(m)
-            self._m = (self.model, [r[0] for r in rows], ix)
-        return self._m[1], self._m[2]
+                ix = None
+                if rows:
+                    m = np.array([np.frombuffer(r[1], np.float32) for r in rows])
+                    ix = faiss.IndexFlatIP(m.shape[1])
+                    ix.add(m)
+                self._m = (self.model, [r[0] for r in rows], ix)
+            return self._m[1], self._m[2]
 
     def _events(self, ids):
         with self.store.lock:

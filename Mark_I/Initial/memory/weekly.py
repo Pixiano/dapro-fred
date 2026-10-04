@@ -142,7 +142,14 @@ class Week(MemTools):
 
     def week_map(self):
         head, secs = self.map_sections()
-        return "\n\n".join([head] + [f"{t}:\n{b}" for t, b in secs])[:self.map_chars]
+        # every section gets a fair share: short ones whole, long ones cut. (Cutting the joined text starved everything after the daily logs.)
+        parts, total = [f"{t}:\n{b}" for t, b in secs], self.map_chars - len(head) - 2
+        order, out, left = sorted(range(len(parts)), key=lambda i: len(parts[i])), [None] * len(parts), total
+        for k, i in enumerate(order):
+            share = max(200, left // (len(parts) - k))
+            out[i] = parts[i] if len(parts[i]) <= share else parts[i][:share] + "\n(... cut)"
+            left -= len(out[i])
+        return "\n\n".join([head] + out)
 
     def _clusters(self, evs):
         model = self.index.model
@@ -307,7 +314,10 @@ class Week(MemTools):
         conf = r["confidence"] if confidence is None else min(1.0, max(0.0, float(confidence)))
         if r["category"] == "trait_hypothesis":
             conf = min(conf, TRAIT_MAX_CONF)
-        weeks = r["support_weeks"] + (1 if sup and r["last_reviewed_week"] != self.end and (status or r["status"]) in ("proposed", "supported") else 0)
+        linked = {x["event_id"] for x in self.q("SELECT event_id FROM inference_evidence WHERE inference_id=? AND role='support'", (id,))}
+        fresh = [e for e in self.events() if e["id"] in sup and e["id"] not in linked]  # a week counts only for NEW evidence dated inside it
+        counted = any(self.start <= e["ts"][:10] <= self.end for e in self.q("SELECT ts FROM events WHERE id IN (%s)" % ",".join("?" * len(linked)), tuple(linked))) if linked else False
+        weeks = r["support_weeks"] + (1 if fresh and not counted and (status or r["status"]) in ("proposed", "supported") else 0)
         with self.s.lock:
             self.s.db.execute("UPDATE inferences SET status=?, confidence=?, last_reviewed_week=?, support_weeks=?, valid_to=? WHERE id=?",
                               (status or r["status"], conf, self.end, weeks, self.end if status in ("rejected", "outdated") else r["valid_to"], id))
@@ -324,6 +334,8 @@ class Week(MemTools):
             return {"error": f"ruling must be one of {sorted(RULINGS)}"}
         if not self.q("SELECT 1 FROM review_queue WHERE id=? AND status='open'", (id,)):
             return {"error": f"no open review item {id}"}
+        if self.q("SELECT 1 FROM review_rulings WHERE item_id=? AND ruling='real'", (id,)):
+            return {"error": "this was ruled a real contradiction; only Vatsal closes it"}
         with self.s.lock:
             self.s.db.execute("INSERT OR REPLACE INTO review_rulings VALUES(?,?,?,?)", (id, ruling, self.end, note))
             if ruling in ("apparent", "historical_change"):
@@ -332,7 +344,7 @@ class Week(MemTools):
         return {"id": id, "ruling": ruling, "closed": ruling in ("apparent", "historical_change")}
 
     def _unfinished(self):
-        items = self.q("SELECT id FROM review_queue WHERE status='open' AND id NOT IN (SELECT item_id FROM review_rulings WHERE week=?)", (self.end,))
+        items = self.q("SELECT id FROM review_queue WHERE status='open' AND id NOT IN (SELECT item_id FROM review_rulings WHERE week=? OR ruling='real')", (self.end,))
         infs = self.q("SELECT id FROM inferences WHERE status IN (%s) AND (last_reviewed_week IS NULL OR last_reviewed_week != ?)" % ",".join("?" * len(ACTIVE)),
                       (*ACTIVE, self.end))
         return [r["id"] for r in items], [r["id"] for r in infs]
@@ -415,10 +427,11 @@ class Week(MemTools):
         return "(Weekly analysis incomplete; daily logs follow.)\n" + "\n".join(f"{r['day']}: {r['summary']}" for r in logs)
 
 
-def run_weekly(mem, end_day, llm, index, model="unset"):
-    """Returns the digest, or None if skipped (already done) or the run failed (it retries next time)."""
+def run_weekly(mem, end_day, llm, index, model="unset", force=False):
+    """Returns the digest, or None if skipped (already done, or finished incomplete: its fallback digest stands unless force=True) or the
+    run failed (it retries next time)."""
     w = Week(mem, end_day, index)
-    if w.q("SELECT 1 FROM weekly_runs WHERE week=? AND status='done'", (end_day,)):
+    if not force and w.q("SELECT 1 FROM weekly_runs WHERE week=? AND status IN ('done','incomplete')", (end_day,)):
         return None
     status, detail = "done", None
     try:
@@ -501,9 +514,16 @@ if __name__ == "__main__":  # self-check: python weekly.py
         hygiene.run_hygiene(m, datetime(2027, 1, 1, tzinfo=timezone.utc))
         assert s.db.execute("SELECT status FROM review_queue").fetchone()[0] == "open"                  # real items never expire
         # next week: re-confirming bumps support_weeks; trait can never become supported; cap forces a finish
+        # the week map gives every section a share, so long daily logs cannot push out the review items and inferences
+        s.db.execute("INSERT INTO daily_logs VALUES('2026-03-10', ?, 'x')", ("long log " * 3000,)); s.db.commit()
+        wm = Week(m, "2026-03-15", ix).week_map()
+        assert len(wm) <= MAP_CHARS + 50 and "OPEN REVIEW ITEMS" in wm and "ACTIVE INFERENCES" in wm and "(... cut)" in wm
+        assert "only Vatsal closes" in Week(m, "2026-03-15", ix).t_rule_review_item(1, "apparent")["error"]   # a real ruling is not overwritten
         w2 = Week(m, "2026-03-15", ix)
-        assert w2.t_update_inference(1, add_support=[ids[3]], note="again")["support_weeks"] == 2
-        assert w2.t_update_inference(1, add_support=[ids[4]])["support_weeks"] == 2                      # same week twice: counted once
+        assert w2.t_update_inference(1, add_support=[ids[3]], note="again")["support_weeks"] == 1        # re-citing OLD evidence does not make a week
+        n1, n2 = (s.add_event("note", f"fred night work {k}", ts=f"2026-03-1{k}T22:00:00+00:00") for k in (0, 1))
+        assert w2.t_update_inference(1, add_support=[n1], note="again")["support_weeks"] == 2            # new evidence dated inside the week does
+        assert w2.t_update_inference(1, add_support=[n2])["support_weeks"] == 2                          # same week twice: counted once
         s.db.execute("INSERT INTO inferences(statement,category,confidence,created_at) VALUES('x','trait_hypothesis',0.4,'now')"); s.db.commit()
         assert "error" in w2.t_update_inference(2, status="supported")
         runaway = lambda msgs: json.dumps({"tool": "list_inferences", "args": {}})

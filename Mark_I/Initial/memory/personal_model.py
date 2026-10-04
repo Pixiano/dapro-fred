@@ -208,7 +208,11 @@ class PersonalModel:
         """A deep-analysis inference that passed its own code gate (selfanalysis.py). Returns the item id, or None if already there.
         ponytail: no automatic demotion for these (they have no weekly inference behind them); the user's remove/correct is the way out."""
         text = text.strip()
-        if self.q("SELECT 1 FROM model_items WHERE text=? AND status='active'", (text,)):
+        norm = lambda s: " ".join(s.lower().split())
+        gone = {norm(r["text"]) for r in self.q("SELECT text FROM model_items WHERE status='removed'")}   # what Vatsal removed or corrected stays gone
+        gone |= {norm(r["change"].split("(was: ", 1)[1].rstrip(")")) for r in self.q("SELECT change FROM model_item_log WHERE change LIKE 'corrected by user (was: %'")}
+        gone |= {norm(r["text"]) for r in self.q("SELECT text FROM model_items WHERE status='active'")}
+        if norm(text) in gone:
             return None
         now = _now()
         iid = self._x("INSERT INTO model_items(category,text,confidence,tier,source,created_at,updated_at) VALUES('trait_hypothesis',?,?,'deep','analysis',?,?)",

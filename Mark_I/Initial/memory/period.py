@@ -419,13 +419,14 @@ def _record(mem, kind, period, model, status, detail=None, digest=None, digest_k
 
 
 def _done(w, kind, period):
-    return bool(w.q("SELECT 1 FROM period_runs WHERE kind=? AND period=? AND status='done'", (kind, period)))
+    """Finished: done, or incomplete (its fallback text stands; a timer must not repeat a full run every tick). force=True reruns."""
+    return bool(w.q("SELECT 1 FROM period_runs WHERE kind=? AND period=? AND status IN ('done','incomplete')", (kind, period)))
 
 
-def run_monthly(mem, month, llm, index, model="unset", pm_update=None):
+def run_monthly(mem, month, llm, index, model="unset", pm_update=None, force=False):
     """Returns the digest, or None if skipped (done) or failed (retries next time)."""
     w = Month(mem, month, index)
-    if _done(w, "monthly", month):
+    if not force and _done(w, "monthly", month):
         return None
     status, detail = "done", None
     try:
@@ -452,10 +453,10 @@ def run_monthly_pending(mem, llm, index, model="unset", today=None, pm_update=No
     return [m for m in months if m < this and run_monthly(mem, m, llm, index, model, pm_update)]
 
 
-def run_yearly(mem, anchor_day, llm, index, model="unset"):
+def run_yearly(mem, anchor_day, llm, index, model="unset", force=False):
     """12 month notes, then the whole-year loop, then the critic. Resumable at every step; None if skipped or not finished."""
     w = Year(mem, anchor_day, index)
-    if _done(w, "yearly", anchor_day):
+    if not force and _done(w, "yearly", anchor_day):
         return None
     have = {n["month"] for n in w.notes()}
     digests = {r["period"]: r["summary"] for r in w.q("SELECT period, summary FROM period_digests WHERE kind='monthly' AND period BETWEEN ? AND ?",
@@ -473,7 +474,8 @@ def run_yearly(mem, anchor_day, llm, index, model="unset"):
         status = "done"
         if not draft:
             status, draft = w.loop(llm)
-            w.q("INSERT OR REPLACE INTO period_digests VALUES('yearly_draft',?,?,?)", (anchor_day, draft, _now()))
+            if status == "done":  # an incomplete draft is not kept: a retry must run the analyst again, not promote the fallback text
+                w.q("INSERT OR REPLACE INTO period_digests VALUES('yearly_draft',?,?,?)", (anchor_day, draft, _now()))
         c = Critic(mem, anchor_day, index, draft)
         cstatus, final = c.loop(llm)
         if cstatus != "done":
@@ -496,11 +498,12 @@ def run_yearly_pending(mem, llm, index, model="unset", today=None):
         return None
     t = today or datetime.now(timezone.utc).date()
     m, d = map(int, mmdd.split("-"))
-    try:
-        this = date(t.year, m, d)
-    except ValueError:  # 02-29 in a non-leap year
-        this = date(t.year, m, 28)
-    anchor = this if t >= this else date(t.year - 1, this.month, this.day)
+    def on(y):
+        try:
+            return date(y, m, d)
+        except ValueError:  # 02-29 in a non-leap year
+            return date(y, m, 28)
+    anchor = on(t.year) if t >= on(t.year) else on(t.year - 1)
     return run_yearly(mem, anchor.isoformat(), llm, index, model)
 
 

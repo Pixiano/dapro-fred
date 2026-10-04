@@ -144,6 +144,11 @@ def _undo(mem, kind, d, res):
             s.db.execute("INSERT OR IGNORE INTO entity_aliases(kind,alias,entity_id) VALUES(?,?,?)", (res["kind"], d["alias"], d["entity"]))
             s.db.execute("UPDATE retired_aliases SET restored=1 WHERE kind=? AND alias=? AND at=?", (res["kind"], d["alias"], res["at"]))
         else:
+            newer = s.db.execute("SELECT 1 FROM entity_states WHERE entity_id=? AND field=? AND (valid_to IS NULL OR valid_from>=?) AND id NOT IN (%s)"
+                                 % ",".join("?" * len(res["closed"])), (d["entity"], d["field"], res["at"], *res["closed"])).fetchone()
+            if newer:
+                s.db.rollback()
+                raise ValueError("a newer value has been recorded for that fact since; it cannot be reopened")
             s.db.execute("UPDATE entity_states SET valid_to=NULL WHERE id IN (%s) AND valid_to=?" % ",".join("?" * len(res["closed"])), (*res["closed"], res["at"]))
         s.db.commit()
     if kind == "merge":
@@ -173,6 +178,10 @@ def _check(mem, kind, d):
     return False
 
 
+def _nkey(kind, d):
+    return (kind, *sorted((d["from"], d["into"]))) if kind == "merge" else (kind, json.dumps(d, sort_keys=True))
+
+
 def propose(mem, kind, payload, reason="", confidence=0.5, agent="manual", run="", allow_auto=True):
     """Queue a proposal. Returns {"id", "status", "tier"} (status 'applied' when the tier let code apply it, or 'proposed'),
     or {"id", "duplicate": True} for one already waiting, {"error"} for one Vatsal already rejected. ValueError for a malformed one."""
@@ -183,13 +192,16 @@ def propose(mem, kind, payload, reason="", confidence=0.5, agent="manual", run="
     same_kind = _check(mem, kind, payload)
     conf = min(1.0, max(0.0, float(confidence)))
     key = json.dumps(payload, sort_keys=True)
+    nk = _nkey(kind, payload)
     with s.lock:
-        old = s.db.execute("SELECT id, status FROM proposals WHERE kind=? AND payload=? ORDER BY id DESC", (kind, key)).fetchone()
-    if old and old["status"] in ("proposed", "applied", "confirmed"):
-        return {"id": old["id"], "duplicate": True, "status": old["status"]}
-    if old and old["status"] == "rejected":
-        return {"error": "Vatsal already rejected exactly this; it is not proposed again"}
-    auto = kind == "merge" and conf >= AUTO_CONF and same_kind and allow_auto
+        olds = [dict(r) for r in s.db.execute("SELECT id, status, payload FROM proposals WHERE kind=? ORDER BY id DESC", (kind,))
+                if _nkey(kind, json.loads(r["payload"])) == nk]   # a merge is the same pair whichever way round
+    for old in olds:
+        if old["status"] in ("proposed", "applied", "confirmed"):
+            return {"id": old["id"], "duplicate": True, "status": old["status"]}
+    if any(o["status"] == "rejected" for o in olds):
+        return {"error": "Vatsal already rejected this; it is not proposed again"}
+    auto = kind == "merge" and conf >= AUTO_CONF and same_kind and allow_auto and not any(o["status"] == "undone" for o in olds)  # an undone one is asked, not redone
     with s.lock:
         pid = s.db.execute("INSERT INTO proposals(kind,payload,reason,confidence,tier,agent,run,created_at) VALUES(?,?,?,?,?,?,?,?)",
                            (kind, key, (reason or "")[:500], conf, "auto" if auto else "ask", agent, str(run), _now())).lastrowid
@@ -462,7 +474,8 @@ if __name__ == "__main__":
         undo(m, r["id"])
         assert s.db.execute("SELECT 1 FROM entity_aliases WHERE alias='ri'").fetchone()
         try:
-            propose(m, "retire_alias", {"entity": a, "alias": "rina"}); confirm(m, propose(m, "retire_alias", {"entity": a, "alias": "rina"})["id"])
+            g.confirm_alias("Rina", a)  # now "rina" really is an alias, so the refusal below is the own-name guard
+            confirm(m, propose(m, "retire_alias", {"entity": a, "alias": "rina"})["id"])
             raise AssertionError("own name retired")
         except ValueError:
             pass
@@ -527,6 +540,24 @@ if __name__ == "__main__":
         assert run_maintenance_pending(m, llm, ix, today=date(2026, 10, 8)) is None                  # not due: 4 days
         steps = iter([{"tool": "finish", "args": {"summary": "again"}}])
         assert run_maintenance_pending(m, llm, ix, today=date(2026, 10, 12)) == "again"
+        # review fixes: an undone merge is asked about, not redone; a rejected one stays rejected whichever way round
+        p1, p2 = s.entity("person", "Una"), s.entity("person", "Uma")
+        r1 = propose(m, "merge", {"from": p1, "into": p2}, "", 0.95)
+        assert r1["status"] == "applied"
+        undo(m, r1["id"])
+        r2 = propose(m, "merge", {"from": p2, "into": p1}, "", 0.95)
+        assert r2["status"] == "proposed" and r2["tier"] == "ask"
+        reject(m, r2["id"])
+        assert "error" in propose(m, "merge", {"from": p1, "into": p2}, "", 0.99)
+        s.set_state(p1, "city", "Pune", ts="2026-01-01T00:00:00+00:00")
+        r3 = propose(m, "stale_fact", {"entity": p1, "field": "city"}, "old")
+        confirm(m, r3["id"])
+        s.set_state(p1, "city", "Goa", ts="2026-10-01T00:00:00+00:00")
+        try:
+            undo(m, r3["id"]); raise AssertionError("reopened a fact that has a newer value")
+        except ValueError:
+            pass
+        assert s.state(p1, "city")["value"] == "Goa"
         # backup: the review part carries proposals (rejected and waiting ones included) and retired nicknames, and restores them
         from backup import backup, restore_part
         bk = backup(m, Path(d) / "bk", ["review"], pdf=False)

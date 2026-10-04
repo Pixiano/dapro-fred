@@ -53,6 +53,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from archive import parse_lines
+
 logging.getLogger("fontTools").setLevel(logging.ERROR)  # font subsetting is chatty and harmless
 PARTS = ("archive", "events", "facts", "graph", "logs", "inferences", "model", "chapters", "digests", "review", "runs", "database")
 PDF_MAX_CHARS = 400_000
@@ -233,22 +235,34 @@ _PART_FN = {"events": _events, "facts": _facts, "graph": _graph, "logs": _logs, 
             "chapters": _chapters, "digests": _digests, "review": _review, "runs": _runs}
 
 
-def _archive(mem, dest, since, until, blobs):
-    """Copy the JSONL day files in range (native, byte-identical) and write a readable transcript. Returns (md, record count, blob count)."""
-    root, md, n = mem.archive.root, ["# Raw archive\n"], 0
-    files = sorted(p for p in root.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*.jsonl"))
-    days = {}
-    for p in files:
+def _archive_listing(mem, since, until, blobs):
+    """Under the store lock (quick): which day files are in range and how long each is right now, and the blob rows."""
+    root = mem.archive.root
+    files = []
+    for p in sorted(root.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*.jsonl")):
         day = f"{p.parts[-4]}-{p.parts[-3]}-{p.parts[-2]}"
-        if (since and day < since) or (until and day > until):
-            continue
+        if not ((since and day < since) or (until and day > until)):
+            files.append((p, day, p.stat().st_size))
+    q, a = _in("created_at", since, until)
+    return files, (_rows(mem.store.db, "SELECT * FROM archive_blobs WHERE 1=1" + q, a) if blobs else [])
+
+
+def _archive(mem, dest, listing):
+    """Copy the JSONL day files in the listing (native, byte-identical up to the recorded size) and write a readable transcript.
+    Runs WITHOUT the store lock: day files are append-only, so what was there at listing time is stable. Returns (md, record count, blob count)."""
+    root, md, n = mem.archive.root, ["# Raw archive\n"], 0
+    files, blob_rows = listing
+    days = {}
+    for p, day, size in files:
         out = dest / "archive" / p.relative_to(root)
         out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(p, out)
-        days.setdefault(day, []).append(p)
+        with open(p, "rb") as src:
+            data = src.read(size)
+        out.write_bytes(data)
+        days.setdefault(day, []).append(data)
     for day in sorted(days):
         md.append(f"\n## {day}\n")
-        recs = [json.loads(l) for p in days[day] for l in p.read_text(encoding="utf-8").splitlines() if l]
+        recs = [r for data in days[day] for r in parse_lines(data.decode("utf-8", errors="replace"))[0]]
         for r in sorted(recs, key=lambda r: r["ts"]):
             body = json.dumps(r["data"], ensure_ascii=False, default=str)
             if len(body) > MD_RECORD_CHARS:
@@ -256,15 +270,13 @@ def _archive(mem, dest, since, until, blobs):
             md.append(f"- `{r['ts'][11:19]}` **{r['stream']}**{' (historical)' if r.get('kind') == 'historical' else ''}: {body}")
             n += 1
     nb = 0
-    if blobs:
-        q, a = _in("created_at", since, until)
-        for b in _rows(mem.store.db, "SELECT * FROM archive_blobs WHERE 1=1" + q, a):
-            src = root / b["path"]
-            if src.exists():
-                out = dest / "archive" / b["path"]
-                out.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(src, out)
-                nb += 1
+    for b in blob_rows:
+        src = root / b["path"]
+        if src.exists():
+            out = dest / "archive" / b["path"]
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, out)
+            nb += 1
     return "\n".join(md) + "\n", n, nb
 
 
@@ -498,30 +510,46 @@ def backup(mem, out_dir=None, parts=None, since=None, until=None, pdf=True, blob
         _check_password(password)
     if final.exists() or final.with_name(final.name + ".fredbak").exists():
         raise FileExistsError(final)
-    work = final.with_name(final.name + ".partial")
+    out.mkdir(parents=True, exist_ok=True)
+    tmp_root = None
+    if password is not None:  # the readable staging folder and tar of an encrypted backup never touch out_dir (it may be a synced folder)
+        tmp_root = Path(tempfile.mkdtemp(prefix="fredbak-"))
+        work = tmp_root / (final.name + ".partial")
+    else:
+        work = final.with_name(final.name + ".partial")
     work.mkdir(parents=True)
     db, info, notes = mem.store.db, {}, []
     try:
-        with mem.store.lock:  # one consistent snapshot of the tables while writing
+        snap = {}
+        with mem.store.lock:  # phase 1, quick: one consistent snapshot of the tables, the database copy and the archive listing
             for part in parts:
+                if part == "archive":
+                    snap[part] = _archive_listing(mem, since, until, blobs)
+                elif part == "database":
+                    (work / part).mkdir()
+                    dst = sqlite3.connect(work / part / "memory.sqlite")
+                    db.backup(dst)  # sqlite online backup: consistent copy
+                    dst.close()
+                else:
+                    snap[part] = _PART_FN[part](db, since, until)
+        # phase 2, slow (files, pictures, PDFs): the memory is in use again meanwhile
+        for part in parts:
+            if True:
                 d = work / part
-                d.mkdir()
+                d.mkdir(exist_ok=True)
                 tables = None
                 fm = set(formats.get(part) or DEFAULT_FORMATS[part])
                 if not pdf:
                     fm.discard("pdf")
                 if part == "archive":
-                    md, n, nb = _archive(mem, work, since, until, blobs)
+                    md, n, nb = _archive(mem, work, snap[part])
                     native = {"records": n, "blobs": nb}
                     d.joinpath("README.txt").write_text("The day files under this folder are byte-identical copies of the raw archive (YYYY/MM/DD/<stream>.jsonl), blobs under blobs/.\n", encoding="utf-8")
                 elif part == "database":
                     md = None
-                    dst = sqlite3.connect(d / "memory.sqlite")
-                    db.backup(dst)  # sqlite online backup: consistent copy
-                    dst.close()
                     native = {"sqlite": True}
                 else:
-                    tables, md = _PART_FN[part](db, since, until)
+                    tables, md = snap[part]
                     d.joinpath(f"{part}.json").write_text(json.dumps(tables, ensure_ascii=False, indent=1, default=str), encoding="utf-8", newline="\n")
                     native = {k: len(v) for k, v in tables.items()}
                 if md is not None:
@@ -554,6 +582,9 @@ def backup(mem, out_dir=None, parts=None, since=None, until=None, pdf=True, blob
     except BaseException:
         shutil.rmtree(work, ignore_errors=True)  # only our own half-built folder
         raise
+    finally:
+        if tmp_root:
+            shutil.rmtree(tmp_root, ignore_errors=True)
     return {"dir": str(final), "file": None, "files": files, "counts": info, "notes": notes}
 
 
@@ -776,21 +807,23 @@ def _restore_archive(mem, folder):
     for p in sorted(src.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/*.jsonl")):
         rel = p.relative_to(src)
         live, new = root / rel, p.read_bytes()
-        if live.exists():
-            cur = live.read_bytes()
-            if cur.startswith(new):  # identical, or the live copy already has more
-                out["files_same"] += 1
-                continue
-            if not new.startswith(cur):  # two different histories: never pick one
-                out["conflicts"].append(rel.as_posix())
-                continue
-            out["files_extended"] += 1
-        else:
-            out["files_added"] += 1
-        live.parent.mkdir(parents=True, exist_ok=True)
-        live.write_bytes(new)
-        recs = [json.loads(l) for l in new.decode("utf-8").splitlines() if l]
-        with s.lock:
+        with s.lock:  # a live write cannot land between the read and the append; files only ever grow
+            if live.exists():
+                cur = live.read_bytes()
+                if cur.startswith(new):  # identical, or the live copy already has more
+                    out["files_same"] += 1
+                    continue
+                if not new.startswith(cur):  # two different histories: never pick one
+                    out["conflicts"].append(rel.as_posix())
+                    continue
+                with open(live, "ab") as f:
+                    f.write(new[len(cur):])  # only the missing tail
+                out["files_extended"] += 1
+            else:
+                live.parent.mkdir(parents=True, exist_ok=True)
+                live.write_bytes(new)
+                out["files_added"] += 1
+            recs = parse_lines(live.read_bytes().decode("utf-8"))[0]
             s.db.execute("INSERT OR REPLACE INTO archive_files VALUES(?,?,?,?,?,?)",
                          (rel.as_posix(), rel.stem, "-".join(rel.parts[:3]), len(recs), min(r["ts"] for r in recs), max(r["ts"] for r in recs)))
             s.db.commit()
