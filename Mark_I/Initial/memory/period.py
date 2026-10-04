@@ -120,12 +120,13 @@ Reply with JSON only: {"note": str}"""
 
 class Month(Week):
     min_explore = 2
+    hard_gap = True
     explore_tools = EXPLORE | {"state_at", "compare_states", "get_weekly_digests", "list_decisions", "find_recurring"}
 
     def _gap(self):
         if not self.q("SELECT 1 FROM turning_points WHERE period=?", (self.period,)):
             return ("no turning points recorded: call create_turning_point for each turning point you describe (with real supporting event ids) and "
-                    "upsert_chapter for each life track; if this month truly had none, call finish again")
+                    "upsert_chapter for each life track. Every turning point you write in the digest must be recorded first")
     def __init__(self, mem, month, index, start=None, end=None, period=None):
         s, e = month_bounds(month) if month else (start, end)
         super().__init__(mem, e, index)
@@ -262,9 +263,9 @@ class Month(Week):
         if not lo <= day <= hi:
             return {"error": f"day must fall within the period {self.start}..{self.end} (a week of slack)"}
         ev = [e for e in self.q("SELECT id, ts FROM events WHERE id IN (%s)" % ",".join("?" * len(list(event_ids or [0]))), [int(i) for i in (event_ids or [0])])
-              if lo <= e["ts"][:10] <= hi]
+              if _days(day, -3) <= e["ts"][:10] <= _days(day, 3)]
         if not ev:
-            return {"error": "a turning point needs real supporting events dated within the period"}
+            return {"error": f"a turning point needs supporting event ids dated within 3 days of {day} (from tool results)"}
         for t in self.q("SELECT id, day, title FROM turning_points WHERE period=?", (self.period,)):
             if SequenceMatcher(None, norm(title), norm(t["title"])).ratio() >= TP_DUP and abs((date.fromisoformat(t["day"]) - date.fromisoformat(day)).days) <= 7:
                 return {"error": f"duplicates turning point #{t['id']} {t['title']!r}"}
@@ -661,4 +662,12 @@ if __name__ == "__main__":  # self-check: python period.py
         w9 = Week(m, "2026-03-08", ix)
         w9.call({"tool": "get_daily_logs", "args": {"from": "2026-03-01", "to": "2026-03-08"}})
         assert "identical call" in w9.call({"tool": "get_daily_logs", "args": {"from": "2026-03-01", "to": "2026-03-08"}})["error"] and w9.explored == 1
+        # monthly: the turning-point gap refuses every time; turning-point evidence must be near its day
+        with tempfile.TemporaryDirectory() as d3, Memory(d3) as m3:
+            ix3 = SemanticIndex(m3.store, lambda t, q: [1.0, 0.0], "fake")
+            mo = Month(m3, "2026-07", ix3)
+            assert mo._gap() and mo.hard_gap
+            assert "turning points" in mo.t_finish("d")["error"] and "turning points" in mo.t_finish("d")["error"]   # refused every time, not once
+            far = m3.store.add_event("note", "far", ts="2026-07-02T10:00:00+00:00")
+            assert "within 3 days" in mo.t_create_turning_point("2026-07-20", "x", event_ids=[far])["error"]
     print("period ok")

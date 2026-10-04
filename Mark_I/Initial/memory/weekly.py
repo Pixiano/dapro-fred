@@ -63,7 +63,7 @@ find_similar_events {"event_id": int, "k": 5}
 list_inferences {"status": "proposed|supported|weakened|rejected|outdated|active"}
 get_inference {"id": int}
 create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis|recurrence", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str], "tier": "light|normal|deep"}   tier = how big a claim this is (light: trivial and observable, normal, deep: about who he is); you may raise it above the default for the category, never lower it
-update_inference {"id": int, "status": str, "confidence": 0-1, "add_support": [int], "add_counter": [int], "note": str}
+update_inference {"id": int or [int, ...] (the same status/note applied to each), "status": str, "confidence": 0-1, "add_support": [int], "add_counter": [int], "note": str}
 rule_review_item {"id": int, "ruling": "apparent|historical_change|real|unknown", "note": str}
 finish {"digest": str}   plain prose, sections only if there is something to say: The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about. The code adds the review counts and the "Please check" list itself: do not write them, and never write that no contradictions remain. No traits or personality guesses. Length follows the week.
 Before finish, check every open review item and every active inference. To see what is still missing without writing a digest, call finish with an empty digest first. Errors come back as {"error": ...}: fix the call and retry."""
@@ -85,6 +85,7 @@ class Week(MemTools):
     min_explore = MIN_EXPLORE  # search/compare calls required before finish (the monthly/yearly agents have their own tools and counts)
     explore_tools = EXPLORE
     gap_warned = False
+    hard_gap = False   # True: the gap refuses every finish (the call cap still forces one)
 
     def _gap(self):
         """Something structural the period run must have produced before it may finish (None = nothing); said once, then the model may insist."""
@@ -143,10 +144,11 @@ class Week(MemTools):
                      "JOIN entities b ON b.id=r.object_id WHERE substr(r.valid_from,1,10) BETWEEN ?1 AND ?2 OR substr(r.valid_to,1,10) BETWEEN ?1 AND ?2",
                      (self.start, self.end))
         out.append("GRAPH CHANGES:\n" + ("\n".join(f"{r['an']} {r['relation']} {r['bn']} (from {r['valid_from'][:10]}"
-                                                  f"{', ended ' + r['valid_to'][:10] if r['valid_to'] else ''})" for r in rel) or "(none)"))
+                                                  f"{', ended ' + r['valid_to'][:10] if r['valid_to'] and r['valid_to'][:10] <= self.end else ''})" for r in rel) or "(none)"))
         rv = self.q("SELECT id, kind, day, text FROM review_queue WHERE status='open' AND day <= ? ORDER BY id", (self.end,))
         out.append("OPEN REVIEW ITEMS:\n" + ("\n".join(f"#{r['id']} [{r['kind']}, {r['day']}] {r['text']}" for r in rv) or "(none)"))
-        inf = self.q(f"SELECT id, statement, category, status, confidence, support_weeks FROM inferences WHERE status IN ({','.join('?' * len(ACTIVE))})", ACTIVE)
+        inf = self.q(f"SELECT id, statement, category, status, confidence, support_weeks FROM inferences WHERE status IN ({','.join('?' * len(ACTIVE))}) "
+                     "AND COALESCE((SELECT MIN(week) FROM inference_log WHERE inference_id=inferences.id), '') <= ?", (*ACTIVE, self.end))
         out.append("ACTIVE INFERENCES:\n" + ("\n".join(f"#{r['id']} [{r['category']}, {r['status']}, conf {r['confidence']}, weeks {r['support_weeks']}] {r['statement']}"
                                                        for r in inf) or "(none)"))
         head = f"WEEK {self.start} to {self.end}: {len(evs)} events."
@@ -317,6 +319,8 @@ class Week(MemTools):
         return {"id": iid, "confidence": conf, "tier": tier}
 
     def t_update_inference(self, id, status=None, confidence=None, add_support=(), add_counter=(), note=""):
+        if isinstance(id, (list, tuple)):   # batch: the same note for several inferences (fewer, shorter turns)
+            return [dict(self.t_update_inference(i, status, confidence, add_support, add_counter, note), id=i) for i in id]
         r = self.q("SELECT * FROM inferences WHERE id=?", (id,))
         if not r:
             return {"error": f"no inference {id}"}
@@ -385,7 +389,7 @@ class Week(MemTools):
             if self.explored < self.min_explore and len(self.events()) >= MIN_EVENTS:
                 return {"error": f"explore first: only {self.explored} of {self.min_explore} search/compare calls so far. Look for support AND counter-evidence of this period's main routines, projects and relationships, then create_inference or say you found none"}
             if (gap := self._gap()) and not self.gap_warned:
-                self.gap_warned = True
+                self.gap_warned = not self.hard_gap
                 return {"error": gap}
         if not (digest or "").strip():
             return {"error": "digest is empty (nothing else is missing: write the digest and finish)"}

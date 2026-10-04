@@ -21,7 +21,9 @@ from semantic import SemanticIndex
 
 URL = "http://localhost:1234/v1"
 NIGHTLY = {"model": "qwen/qwen3-8b", "temperature": 0.6, "top_p": 0.95, "max_tokens": 12000}   # Qwen3 thinks by default; <think> is stripped
-GPT = {"model": "openai/gpt-oss-20b", "temperature": 0.6, "max_tokens": 9000}   # high effort thinks long
+GPT = {"model": "openai/gpt-oss-20b", "temperature": 0.6, "max_tokens": 9000}
+NIGHTLY["model"] = os.environ.get("NIGHTLY_MODEL", NIGHTLY["model"])   # model comparison: NIGHTLY_MODEL / ANALYST_MODEL override the defaults
+GPT["model"] = os.environ.get("ANALYST_MODEL", GPT["model"])   # high effort thinks long
 EFFORT = {"weekly": "medium", "monthly": "high", "yearly": "high"}    # production levels (Vatsal, 2026-10-04)
 EMB = "text-embedding-qwen3-embedding-4b"
 QPREFIX = "Instruct: Given a search query, retrieve relevant memory notes\nQuery: "
