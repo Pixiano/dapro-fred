@@ -64,7 +64,7 @@ list_inferences {"status": "proposed|supported|weakened|rejected|outdated|active
 get_inference {"id": int}
 create_inference {"statement": str, "category": "project|routine|decision|relationship|trait_hypothesis|recurrence", "confidence": 0-1, "supporting_event_ids": [int], "counter_event_ids": [int], "alternatives": [str], "tier": "light|normal|deep"}   tier = how big a claim this is (light: trivial and observable, normal, deep: about who he is); you may raise it above the default for the category, never lower it
 update_inference {"id": int or [int, ...] (the same status/note applied to each), "status": str, "confidence": 0-1, "add_support": [int], "add_counter": [int], "note": str}
-rule_review_item {"id": int, "ruling": "apparent|historical_change|real|unknown", "note": str}
+rule_review_item {"id": int, "ruling": "apparent|historical_change|real|unknown", "note": str, "event_ids": [int]}   (a contradiction item ruled apparent or historical_change needs event_ids: events from tool results that explain the difference)
 finish {"digest": str}   plain prose, sections only if there is something to say: The week in brief, Projects, Routines, Decisions and how they went, People, Changed my mind about. The code adds the review counts and the "Please check" list itself: do not write them, and never write that no contradictions remain. No traits or personality guesses. Length follows the week.
 Before finish, check every open review item and every active inference. To see what is still missing without writing a digest, call finish with an empty digest first. Errors come back as {"error": ...}: fix the call and retry."""
 
@@ -89,7 +89,10 @@ class Week(MemTools):
 
     def _gap(self):
         """Something structural the period run must have produced before it may finish (None = nothing); said once, then the model may insist."""
-        return None
+        if not self.made and len(self.events()) >= 8 and self.q("SELECT 1 FROM events WHERE substr(ts,1,10) < ? LIMIT 1", (self.start,)):
+            return ("no inference created: the TOPICS section shows what matches earlier weeks. For each routine or recurrence you see (the same kind of thing "
+                    "on several days or weeks), create_inference with supporting event ids from this and earlier weeks (search_memory finds them); "
+                    "if you truly find none, call finish again")
 
     def __init__(self, mem, end_day, index):
         self.mem, self.s, self.index, self.end = mem, mem.store, index, end_day
@@ -98,7 +101,7 @@ class Week(MemTools):
             self.s.db.executescript((_HERE / "schema_weekly.sql").read_text(encoding="utf-8"))
         self.start = (datetime.fromisoformat(end_day) - timedelta(days=6)).strftime("%Y-%m-%d")
         self.digest, self.calls, self.finish_warned, self.explored, self._seen = None, 0, False, 0, set()
-        self.shown, self.unknowns = set(), 0   # event ids the tools returned this run; 'unknown' rulings used
+        self.shown, self.unknowns, self.made = set(), 0, 0   # event ids the tools returned this run; 'unknown' rulings used
         self.system, self.max_calls, self.map_chars = SYSTEM, MAX_CALLS, MAP_CHARS  # subclasses swap these
 
     # ---- helpers ----
@@ -316,6 +319,7 @@ class Week(MemTools):
                 self.s.db.execute("INSERT INTO inference_alternatives VALUES(?,?)", (iid, str(a)))
             self.s.db.commit()
         self._log(iid, f"created ({category}, tier {tier}, conf {conf})")
+        self.made += 1
         return {"id": iid, "confidence": conf, "tier": tier}
 
     def t_update_inference(self, id, status=None, confidence=None, add_support=(), add_counter=(), note=""):
@@ -352,7 +356,7 @@ class Week(MemTools):
         self._log(id, f"{status or r['status']}, conf {conf}, +{len(sup)} support, +{len(con)} counter. {note}".strip())
         return {"id": id, "status": status or r["status"], "confidence": conf, "support_weeks": weeks}
 
-    def t_rule_review_item(self, id, ruling, note=""):
+    def t_rule_review_item(self, id, ruling, note="", event_ids=()):
         if ruling not in RULINGS:
             return {"error": f"ruling must be one of {sorted(RULINGS)}"}
         if self.q("SELECT 1 FROM review_rulings WHERE item_id=? AND week=? AND ruling=?", (id, self.end, ruling)):
@@ -366,6 +370,11 @@ class Week(MemTools):
             return {"error": "real applies only to contradiction items; a question is apparent, historical_change or unknown"}
         if self.q("SELECT 1 FROM review_rulings WHERE item_id=? AND ruling='real'", (id,)):
             return {"error": "this was ruled a real contradiction; only Vatsal closes it"}
+        if ruling in ("apparent", "historical_change") and row[0]["kind"] == "contradiction":   # closing a contradiction hides it for good: it must be explained by evidence
+            why = [e for e in (event_ids or []) if isinstance(e, int) and e in self.shown | {x["id"] for x in self.events()}]
+            if not why:
+                return {"error": "a contradiction is only apparent or a historical_change if events explain the difference: search for them (search_memory / get_events_about), then pass their ids as event_ids. If you cannot find any, rule real"}
+            note = f"{note} [events {why}]"
         with self.s.lock:
             self.unknowns += ruling == "unknown"
             self.s.db.execute("INSERT OR REPLACE INTO review_rulings VALUES(?,?,?,?)", (id, ruling, self.end, note))
@@ -611,5 +620,13 @@ if __name__ == "__main__":  # self-check: python weekly.py
         assert "ok" in str(w5.t_rule_review_item(ids[0], "unknown", "x")) or "ruling" in w5.t_rule_review_item(ids[0], "unknown", "x")
         w5.t_rule_review_item(ids[1], "unknown", "x")
         assert "used up" in w5.t_rule_review_item(ids[2], "unknown", "x")["error"]
+        cid = s.db.execute("INSERT INTO review_queue(kind,day,text,status) VALUES('contradiction','2026-05-04','d','open')").lastrowid; s.db.commit()
+        assert "event_ids" in w5.t_rule_review_item(cid, "apparent", "same")["error"]                      # no evidence, no closing a contradiction
+        assert w5.t_rule_review_item(cid, "apparent", "same", [far])["closed"]
+        s.add_event("note", "old", ts="2026-01-01T10:00:00+00:00")
+        for i in range(8):
+            s.add_event("note", f"busy {i}", ts=f"2026-06-0{i % 7 + 1}T10:00:00+00:00")
+        w6 = Week(m, "2026-06-07", ix)
+        assert "no inference created" in w6._gap() and (w6.t_create_inference("routine x", "routine", 0.6, [w6.events()[0]["id"]]) and w6._gap() is None)   # a quiet-evidence week must attempt a recurrence
         assert "not yet reviewed" in w5.t_finish("")["error"]                                             # gates first, even with an empty digest
     print("weekly ok")
