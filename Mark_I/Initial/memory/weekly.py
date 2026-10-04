@@ -385,8 +385,9 @@ class Week(MemTools):
 
     def _unfinished(self):
         items = self.q("SELECT id FROM review_queue WHERE status='open' AND day <= ? AND id NOT IN (SELECT item_id FROM review_rulings WHERE week=? OR ruling='real')", (self.end, self.end))
-        infs = self.q("SELECT id FROM inferences WHERE status IN (%s) AND (last_reviewed_week IS NULL OR last_reviewed_week != ?)" % ",".join("?" * len(ACTIVE)),
-                      (*ACTIVE, self.end))
+        infs = self.q("SELECT id FROM inferences WHERE status IN (%s) AND (last_reviewed_week IS NULL OR last_reviewed_week != ?) "
+                      "AND COALESCE((SELECT MIN(week) FROM inference_log WHERE inference_id=inferences.id), '') <= ?" % ",".join("?" * len(ACTIVE)),
+                      (*ACTIVE, self.end, self.end))
         return [r["id"] for r in items], [r["id"] for r in infs]
 
     def t_finish(self, digest, force=False):

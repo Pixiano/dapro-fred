@@ -91,9 +91,9 @@ def _build(role, sections, period, extra_tools, guide):
 
 MONTH_SYSTEM = _build(
     "You are FRED's monthly analyst. You see one month of Vatsal's life only through memory tools. Your job: answer what actually changed this month.",
-    "The month in brief, Turning points, Changed priorities, Project evolution, Relationship evolution, Behavioural changes, Emerging patterns, Weakened patterns, Unresolved questions",
+    "The month in brief, Changed priorities, Project evolution, Relationship evolution, Behavioural changes, Emerging patterns, Weakened patterns, Unresolved questions",
     "month", _TOOLS,
-    "COMPARE how things stood at the start of the month with how they stand at the end (the map shows the differences), then explain the difference through the events, decisions and outcomes in between. TURNING POINTS are moments where direction changed, each with real supporting events. CHAPTERS are named periods of life (for example 'FRED v2 build'). Life runs in parallel: when two or three big projects and something social happened in the same weeks, keep one chapter per track side by side instead of forcing the month into one. Extend or close the open chapter of a track when the month shows it ended, start a new one on that track when a new period began. RECORD, do not just describe: call create_turning_point for every turning point you write in the digest, and upsert_chapter or refine_chapter for each life track; ground the month with get_weekly_digests and get_daily_logs first.")
+    "COMPARE how things stood at the start of the month with how they stand at the end (the map shows the differences), then explain the difference through the events, decisions and outcomes in between. TURNING POINTS are moments where direction changed, each with real supporting events. Do not list them in the digest: record each with create_turning_point and the code adds the recorded list. CHAPTERS are named periods of life (for example 'FRED v2 build'). Life runs in parallel: when two or three big projects and something social happened in the same weeks, keep one chapter per track side by side instead of forcing the month into one. Extend or close the open chapter of a track when the month shows it ended, start a new one on that track when a new period began. RECORD, do not just describe: call create_turning_point for every turning point you write in the digest, and upsert_chapter or refine_chapter for each life track; ground the month with get_weekly_digests and get_daily_logs first.")
 YEAR_SYSTEM = _build(
     "You are FRED's yearly analyst. You see one year of Vatsal's life through twelve month notes and memory tools. Your job: answer how Vatsal changed this year.",
     "The year in brief, Phases of the year, What stayed stable, What changed, Decisions and consequences, People, Goals dropped or revived, Recurring cycles",
@@ -122,6 +122,16 @@ class Month(Week):
     min_explore = 2
     hard_gap = True
     explore_tools = EXPLORE | {"state_at", "compare_states", "get_weekly_digests", "list_decisions", "find_recurring"}
+
+    lists_turning_points = True   # the digest ends with the turning points actually recorded, so it cannot name ones that were not
+
+    def t_finish(self, digest, force=False):
+        r = super().t_finish(digest, force)
+        if r.get("ok") and self.lists_turning_points:
+            tp = self.q("SELECT day, title FROM turning_points WHERE period=? ORDER BY day", (self.period,))
+            if tp:
+                self.digest += "\n\nTurning points recorded:\n" + "\n".join(f"- {t['day']} {t['title']}" for t in tp)
+        return r
 
     def _gap(self):
         if not self.q("SELECT 1 FROM turning_points WHERE period=?", (self.period,)):
@@ -281,6 +291,7 @@ class Month(Week):
 class Year(Month):
     """The whole-year run. anchor_day = the day the run is for; the window is the 12 completed months before its month."""
     min_explore = 0
+    lists_turning_points = False
 
     def _gap(self):
         return None
@@ -670,4 +681,8 @@ if __name__ == "__main__":  # self-check: python period.py
             assert "turning points" in mo.t_finish("d")["error"] and "turning points" in mo.t_finish("d")["error"]   # refused every time, not once
             far = m3.store.add_event("note", "far", ts="2026-07-02T10:00:00+00:00")
             assert "within 3 days" in mo.t_create_turning_point("2026-07-20", "x", event_ids=[far])["error"]
+            near = m3.store.add_event("note", "near", ts="2026-07-19T10:00:00+00:00")
+            assert mo.t_create_turning_point("2026-07-20", "Big change", event_ids=[near])["id"]
+            mo.t_finish("the month", force=True)
+            assert mo.digest.endswith("- 2026-07-20 Big change") and "Turning points recorded" in mo.digest
     print("period ok")
