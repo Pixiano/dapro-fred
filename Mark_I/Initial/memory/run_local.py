@@ -1,10 +1,11 @@
 """Mark I memory: runs the synthetic year through the REAL local models (LM Studio's OpenAI-style server) and scores the result.
 Models are swapped by hand/`lms` between stages (they do not fit the GPU together): nightly = Qwen3-8B (thinking on), weekly+ = gpt-oss-20b.
-Usage: python run_local.py nightly|weekly|monthly|yearly <run folder> [synthetic folder] [last day to consolidate, e.g. 2026-01-18]
+Usage: python run_local.py oracle|nightly|weekly|monthly|yearly <run folder> [synthetic folder] [last day to consolidate, e.g. 2026-01-18]
 The run folder is a disposable Memory root, resumable (finished days/weeks are skipped), plus calls.jsonl (every model call: seconds, tokens, effort).
 Nothing here touches a real memory folder.
 """
 import json
+import os
 import re
 import sys
 import time
@@ -20,8 +21,8 @@ from semantic import SemanticIndex
 
 URL = "http://localhost:1234/v1"
 NIGHTLY = {"model": "qwen/qwen3-8b", "temperature": 0.6, "top_p": 0.95, "max_tokens": 12000}   # Qwen3 thinks by default; <think> is stripped
-GPT = {"model": "openai/gpt-oss-20b", "temperature": 0.6, "max_tokens": 6000}
-EFFORT = {"weekly": "low", "monthly": "medium", "yearly": "medium"}    # Vatsal: medium for gpt-oss, low for the weekly
+GPT = {"model": "openai/gpt-oss-20b", "temperature": 0.6, "max_tokens": 9000}   # high effort thinks long
+EFFORT = {"weekly": "medium", "monthly": "high", "yearly": "high"}    # production levels (Vatsal, 2026-10-04)
 EMB = "text-embedding-qwen3-embedding-4b"
 QPREFIX = "Instruct: Given a search query, retrieve relevant memory notes\nQuery: "
 
@@ -106,16 +107,25 @@ if __name__ == "__main__":
     m, ix, days, ex, run = open_run(run, folder)
     calls = run / "calls.jsonl"
     t0 = time.time()
-    if stage == "nightly":
+    if stage == "oracle":   # the key's own perfect nightly answers: lets weekly/monthly/yearly be tested without the nightly model's mistakes
+        done = [d for d in sorted(days) if d <= UNTIL and consolidate.consolidate_day(m, d, rs.oracle(ex), "oracle")]
+        report(m, ex, folder, run, stage, {"days_done_this_run": len(done)})
+    elif stage == "nightly":
         llm = make_llm(NIGHTLY, "nightly", calls, want_json=True)
         done = [d for d in sorted(days) if d <= UNTIL and consolidate.consolidate_day(m, d, llm, "qwen3-8b")]   # a small batch first, not the whole year
         report(m, ex, folder, run, stage, {"days_done_this_run": len(done), "minutes": round((time.time() - t0) / 60, 1)})
     elif stage == "weekly":
-        done = weekly.run_weekly_pending(m, make_llm(GPT, "weekly", calls, EFFORT["weekly"]), ix, "gpt-oss-20b")
+        llm = make_llm(GPT, "weekly", calls, EFFORT["weekly"])
+        done = [w for w in os.environ["WEEKS"].split(",") if weekly.run_weekly(m, w, llm, ix, "gpt-oss-20b")] if os.environ.get("WEEKS") else             weekly.run_weekly_pending(m, llm, ix, "gpt-oss-20b")   # WEEKS=2026-01-18,... runs only those Sundays
         report(m, ex, folder, run, stage, {"weeks_done_this_run": done, "minutes": round((time.time() - t0) / 60, 1)})
     elif stage in ("monthly", "yearly"):
-        fn = period.run_monthly_pending if stage == "monthly" else period.run_yearly_pending
-        done = fn(m, make_llm(GPT, stage, calls, EFFORT[stage]), ix, "gpt-oss-20b")
+        llm = make_llm(GPT, stage, calls, EFFORT[stage])
+        if stage == "monthly" and os.environ.get("MONTHS"):   # MONTHS=2026-01,2026-02
+            done = [x for x in os.environ["MONTHS"].split(",") if period.run_monthly(m, x, llm, ix, "gpt-oss-20b")]
+        elif stage == "yearly" and os.environ.get("YEAR_END"):   # YEAR_END=2026-05-04: the year ending that day
+            done = bool(period.run_yearly(m, os.environ["YEAR_END"], llm, ix, "gpt-oss-20b"))
+        else:
+            done = (period.run_monthly_pending if stage == "monthly" else period.run_yearly_pending)(m, llm, ix, "gpt-oss-20b")
         report(m, ex, folder, run, stage, {"done_this_run": done, "minutes": round((time.time() - t0) / 60, 1)})
     else:
         raise SystemExit("stage: nightly|weekly|monthly|yearly")
