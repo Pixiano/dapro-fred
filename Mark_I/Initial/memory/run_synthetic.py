@@ -43,6 +43,58 @@ def oracle(ex):
     return llm
 
 
+def score(m, truth):
+    """Checks the code's result against the answer key where the code alone decides. Returns {check: (passed, total, first failures)}.
+    Checks that need a real model (patterns, contradictions ruled, decisions, traits) are for the model run, not here."""
+    from graph import Graph
+    g, s, res = Graph(m.store), m.store, {}
+    ev = [r["content"].lower() for r in s.db.execute("SELECT content FROM events")]
+    low = lambda q: " ".join(q.lower().split())
+    has = lambda q: any(low(q) in " ".join(c.split()) for c in ev)
+    eid = lambda kind, name: next((e["id"] for e in s.entities(kind) if e["name"].lower() == name.lower()), None)
+
+    def put(name, fails, total):
+        res[name] = (total - len(fails), total, fails[:3])
+    f = []
+    for grp in truth["entity_groups"]:
+        base = eid(grp["kind"], grp["canonical"])
+        if base is None:
+            f.append(f"{grp['canonical']}: no entity")
+            continue
+        for al in grp.get("aliases", []) + grp.get("spelling_variants", []):
+            if g.canonical(g.resolve(grp["kind"], al)) != base:
+                f.append(f"{al!r} does not resolve to {grp['canonical']}")
+    put("aliases_resolve_to_one_entity", f, len(truth["entity_groups"]))
+    f = []
+    for p in truth["must_stay_separate"]:
+        a, b = g.resolve("person", p["a"]), g.resolve("person", p["b"])   # resolve like any later mention would (creates the entity if the key never extracted it)
+        if g.canonical(a) == g.canonical(b):
+            f.append(f"{p['a']} / {p['b']} merged")
+    put("different_people_stay_separate", f, len(truth["must_stay_separate"]))
+    f = []
+    for tl in truth["fact_timelines"]:
+        kind, name = tl["entity"].split("/", 1)
+        e, last = eid(kind, name), tl["values"][-1]["value"]
+        if e is None:
+            f.append(f"{name}: no entity")
+        elif "(relationship)" in tl["field"]:
+            rel = tl["field"].split()[0]
+            row = s.db.execute("SELECT o.name FROM relationships r JOIN entities o ON o.id=r.object_id WHERE r.subject_id=? AND r.relation=? AND r.valid_to IS NULL", (e, rel)).fetchone()
+            if not row or low(last) not in low(row[0]):
+                f.append(f"{name}.{rel}: now {row[0] if row else None!r}, key says {last!r}")
+        else:
+            row = s.state(e, tl["field"])
+            if not row or low(last) not in low(row["value"]):  # the extraction may add detail to the value ("Redmi Note (8 GB), gift")
+                f.append(f"{name}.{tl['field']}: now {row['value'] if row else None!r}, key says {last!r}")
+    put("fact_timelines_end_on_latest_value", f, len(truth["fact_timelines"]))
+    for key, name in (("gate_skip", "chatter_stays_out_of_events"), ("injections", "injected_text_not_stored_as_fact"), ("sarcasm", "sarcasm_not_stored_literally"),
+                      ("hypothetical_or_quoted", "hypotheticals_not_stored_as_facts"), ("over_psychologise", "trait_talk_not_stored_as_facts")):
+        put(name, [x["quote"] for x in truth[key] if has(x["quote"])], len(truth[key]))
+    f = [d["quotes"] for d in truth["near_duplicates"] if sum(has(q) for q in d["quotes"]) > 1]
+    put("near_duplicates_kept_once", f, len(truth["near_duplicates"]))
+    return res
+
+
 def run(folder):
     logging.getLogger("memory").setLevel(logging.ERROR)
     days, ex = load(folder)
@@ -61,6 +113,9 @@ def run(folder):
                "events_in_key": sum(len(o.get("events", [])) for o in ex.values()), "states_in_key": sum(len(o.get("states", [])) for o in ex.values()),
                "aliases_in_key": sum(len(o.get("aliases", [])) for o in ex.values())}
         out["events_kept_by_gate"] = f"{out['events']}/{out['events_in_key']}"
+        tf = Path(folder) / "truth.json"
+        if tf.exists():
+            out["score"] = {k: f"{p}/{n}" + (f"  FAIL: {fails}" if fails else "") for k, (p, n, fails) in score(m, json.loads(tf.read_text(encoding="utf-8"))).items()}
         return out, m
 
 

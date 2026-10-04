@@ -55,11 +55,12 @@ def _lev(a, b):
 def _variant(a, b):
     """True only for a plain spelling variant of one name (never another person's): both names at least 5 letters (6 for a plain typo), neither a
     prefix/suffix extension of the other (Manish/Manisha, Nikhil/Nikhila, Sara/Sarah are different people), and one typo away, or two
-    when the phonetic forms agree (Soohani/Suhani). Anything merely similar is asked about, not merged."""
+    when the phonetic forms agree (Soohani/Suhani). A plain one-letter difference is NOT enough (Pranay/Pranav, Rahul/Rahil are different people): it is asked about.
+    Anything merely similar is asked about, not merged."""
     if min(len(a), len(b)) < 5 or a.startswith(b) or b.startswith(a) or a.endswith(b) or b.endswith(a):
         return False
-    d = _lev(a, b)
-    return (d <= 1 and min(len(a), len(b)) >= 6) or (d <= 2 and _ph(a) == _ph(b))
+    squash = lambda s: re.sub(r"(.)+", r"", s.replace("h", ""))  # Nitya/Nithya, Sharma/Sarma: h and doubled letters are transliteration noise
+    return squash(a) == squash(b) or (_lev(a, b) <= 2 and _ph(a) == _ph(b))
 
 
 class Graph:
@@ -389,6 +390,10 @@ if __name__ == "__main__":  # self-check: python graph.py
     for known, new in (("Manish", "Manisha"), ("Nikhil", "Nikhila"), ("Aditya", "Aditi"), ("Mohan", "Mohana"), ("Sara", "Sarah")):
         a1 = g.resolve("person", known)
         assert g.resolve("person", new) != a1, (known, new)
+    pa = g.resolve("person", "Pranay")
+    assert g.resolve("person", "Pranav") != pa and g.resolve("person", "Rahil") != g.resolve("person", "Rahul")   # one letter apart is a different person
+    ni = g.resolve("person", "Nitya")
+    assert g.resolve("person", "Nithya") == ni                                                                    # h/doubled letters are only spelling
     zk, zr = g.resolve("person", "Zara Khan"), g.resolve("person", "Zoya Rao")
     g.confirm_alias("Mom", zk)
     assert g.add_alias("person", "Mom", zr) is False and g.resolve("person", "Mom") == zk          # refused, queued as a question

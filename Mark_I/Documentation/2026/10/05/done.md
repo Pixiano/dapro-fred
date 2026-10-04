@@ -34,3 +34,6 @@
 
 ## Review hardening
 - A larger model (Opus) reviewed all the memory code adversarially (27 findings, 23 reproduced with probe scripts). Fixed: 1 critical, 6 high, 12 medium and several low ones, each with a regression assertion in the module self-checks; the list and what was left alone is in the overview ("Review hardening"). Re-running the review's own probe scripts now shows the intended refusals.
+
+## Synthetic year and oracle run
+- An Opus agent wrote 120 days of invented chat with a 16-trap answer key (`Mark_I/Initial/memory/testdata/synthetic_year/`). `python run_synthetic.py` replays it through the pipeline with an oracle model and scores the code-decided traps: all pass. It exposed that one-letter-apart names (Pranay/Pranav) were still auto-merged; fixed in `graph._variant`. The local-model runs (daily, weekly, monthly, yearly, self-analysis on this data) are not done yet and wait for Vatsal's go.
