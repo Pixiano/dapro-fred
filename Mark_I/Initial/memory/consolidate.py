@@ -24,6 +24,14 @@ from graph import Graph
 _SCHEMA = Path(__file__).with_name("schema_consolidation.sql")
 MAX_CHARS = 60_000
 log = logging.getLogger("memory")
+USER = "Vatsal"  # whose memory this is; first-person facts attach to person/USER (tests of other people's data set it)
+KINDS = {"person", "place", "project", "pet", "org", "task", "goal", "preference"}  # anything else is topic noise ("concept", "education", "time check")
+RELATIVE = ("tomorrow", "today", "tonight", "yesterday", "now", "next week", "this week", "later")  # a state is a lasting fact, never a relative time
+MAX_QUESTIONS = 1
+RELATIONS = {"parent_of", "sibling_of", "cousin_of", "friend_of", "teammate_of", "mentor_of", "tutors", "helps_with", "works_on", "works_at", "lives_in", "studies_at", "owns", "pet_of"}
+RELATION_ALIASES = {"has_sister": "sibling_of", "has_brother": "sibling_of", "sister_of": "sibling_of", "brother_of": "sibling_of", "sibling": "sibling_of",
+                    "mother_of": "parent_of", "father_of": "parent_of", "mom_of": "parent_of", "has_parent": "parent_of", "best_friend_of": "friend_of",
+                    "friends_with": "friend_of", "friend": "friend_of", "teacher_of": "mentor_of", "teaches": "tutors", "works_with": "teammate_of"}
 
 PROMPT = """You are FRED's nightly memory consolidation agent. Review {day} and return ONLY JSON:
 {{"events": [{{"type": str, "content": str, "importance": 0-1, "about": [{{"kind": str, "name": str}}]}}],
@@ -32,7 +40,7 @@ PROMPT = """You are FRED's nightly memory consolidation agent. Review {day} and 
  "aliases": [{{"kind": str, "name": str, "alias": str}}],
  "contradictions": [str], "open_questions": [str],
  "summary": str}}
-Only record what the material supports; do not invent. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
+Only record what the material supports; do not invent. The user is {user}: what they say about themselves ("I", "my") is about person "{user}", always under that exact name, never "user". Events and states are about the user's life, plans, people, projects, decisions and stated facts. Do NOT record what FRED explained, general knowledge or homework answers as events or states. Entity kinds are only person, place, project, pet, org, task, goal, preference: no topic, concept, subject or time-check entities. A state value is a lasting fact, never a relative time ("tomorrow", "today"); a one-off plan is an event with its date. Flag a contradiction only when a new value for the same entity and field differs from CURRENT STATE. At most ONE open_question per day, only for a possible same-person pair, a clash with a stored fact or a clear mishearing, never trivia or next steps. Write each contradiction as "ENTITY FIELD: current state says X, but now Y" quoting CURRENT STATE; anything else is not a contradiction. One standalone fact per event; merge the steps of one decision into one event; usually 1-2 events a day, at most 4; no weather or filler. Record each person's relation to {user} the first time they appear, with relations only from: parent_of, sibling_of, cousin_of, friend_of, teammate_of, mentor_of, tutors, helps_with, works_on, works_at, lives_in, studies_at, owns, pet_of. Name a person by their formal form (Mom for mumma/ma, Mr. Okhande for "Okhande sir"), and put the other spoken forms in aliases when the user said them. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
 conflicts with a current state shown below. Summary: plain prose covering significant events, work, decisions,
 people, learning, health/routine, notable changes, open threads. Length follows the day: <=200 words if
 uneventful, 200-500 normal, 500-800 active, <=1000 exceptional. A boring day gets a short summary.
@@ -105,6 +113,29 @@ def _state(mem, material=""):
 def _names(mem, material=""):
     return "(names only: this day is imported history, so today's state is not shown and nothing is a contradiction)\n" + _pick(
         mem, material, lambda e: f"{e['kind']}/{e['name']}")
+
+
+def _clean(out):
+    """After the structure check, before any write: drops what is only noise. Events are kept (the gate handles those); tags, states and relationships on
+    non-entity kinds, slash-joined or empty names and relative-time values go; 'user' becomes USER; open questions are capped."""
+    def ent(d):
+        name = d["name"].strip()
+        if name.lower() in ("user", "me", "i", "the user"):
+            name = USER
+        return {**d, "kind": d["kind"].strip().lower(), "name": name}
+    ok = lambda d: d["kind"] in KINDS and "/" not in d["name"]
+    out["events"] = [{**e, "about": [a for a in map(ent, e.get("about", [])) if ok(a)]} for e in out.get("events", [])]
+    out["states"] = [s for s in map(lambda x: {**ent(x)}, out.get("states", []))
+                     if ok(s) and str(s["value"]).strip().lower() not in RELATIVE and s["field"].strip().lower() not in ("current day", "today")]
+    out["aliases"] = [a for a in map(ent, out.get("aliases", [])) if ok(a)]
+    out["relationships"] = [{**r, "subject": ent(r["subject"]), "object": ent(r["object"])} for r in out.get("relationships", [])]
+    for r in out["relationships"]:
+        rel = r["relation"].strip().lower().replace(" ", "_")
+        r["relation"] = RELATION_ALIASES.get(rel, rel)
+    out["relationships"] = [r for r in out["relationships"] if ok(r["subject"]) and ok(r["object"]) and r["relation"] in RELATIONS]
+    out["contradictions"] = [c for c in out.get("contradictions", []) if "current state says" in c]   # a contradiction must quote the stored fact it clashes with
+    out["open_questions"] = out.get("open_questions", [])[:MAX_QUESTIONS]
+    return out
 
 
 def _valid(out):
@@ -195,9 +226,9 @@ def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
         outs = []
         for i, part in enumerate(parts):
             head = f"(PART {i + 1} of {len(parts)} of this day)\n" if len(parts) > 1 else ""
-            out = json.loads(traced(s, agent, key, llm)(PROMPT.format(day=day, state=state, material=head + part)))
+            out = json.loads(traced(s, agent, key, llm)(PROMPT.format(day=day, state=state, material=head + part, user=USER)))
             _valid(out)  # a malformed part fails the whole day before any write
-            outs.append(out)
+            outs.append(_clean(out))
         sid = s.add_source("backfill" if historical else "consolidation", day)
         summary = "\n\n".join(_apply(s, g, o, day, ts, sid, agent, key, historical) for o in outs)
         old = s.daily_log(day) if historical else None
@@ -258,7 +289,7 @@ if __name__ == "__main__":  # self-check: python consolidate.py
                        "aliases": [{"kind": "person", "name": "Priya", "alias": "Pri"}],
                        "relationships": [{"subject": {"kind": "person", "name": "Priya"}, "relation": "works on", "object": {"kind": "project", "name": "FRED"}},
                                          {"subject": {"kind": "person", "name": "Preeya"}, "relation": "knows", "object": {"kind": "person", "name": "Preeya"}}],
-                       "contradictions": ["phase was 2"], "open_questions": ["which model?"], "summary": "Quiet build day."})
+                       "contradictions": ["FRED phase: current state says 3, but now 2"], "open_questions": ["which model?"], "summary": "Quiet build day."})
     with tempfile.TemporaryDirectory() as d, Memory(d) as m:
         m.archive.write("conversation", {"text": "let's use sqlite"}, ts="2026-01-01T10:00:00+00:00")
         m.archive.write("import", {"text": "old chat"}, ts="2026-01-02T10:00:00+00:00", kind="historical")
@@ -325,4 +356,10 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         assert backfill_pending(m, hl) == ["2026-01-01"]
         assert m.store.daily_log("2026-01-01") == "Quiet build day.\n\n(Imported history) Early days."
         assert m.archive.read("import", "2025-05-01")[0]["kind"] == "historical"                  # the raw record itself is never touched
+    c = _clean({"events": [{"type": "n", "content": "x", "about": [{"kind": "Person", "name": "user"}, {"kind": "concept", "name": "friction"}, {"kind": "person", "name": "Chhotu/PF"}]}],
+                "states": [{"kind": "person", "name": "user", "field": "exam", "value": "tomorrow"}, {"kind": "person", "name": "user", "field": "phone", "value": "Redmi"}],
+                "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "I"}, "relation": "knows", "object": {"kind": "education", "name": "physics"}}],
+                "contradictions": ["x", "Maths date: current state says 9th, but now 12th"], "open_questions": ["a", "b", "c", "d"], "summary": "s"})
+    assert c["events"][0]["about"] == [{"kind": "person", "name": USER}] and [x["field"] for x in c["states"]] == ["phone"] and c["states"][0]["name"] == USER
+    assert c["relationships"] == [] and len(c["open_questions"]) == MAX_QUESTIONS and len(c["contradictions"]) == 1
     print("consolidate ok")
