@@ -56,11 +56,11 @@ MATERIAL ({day}):
 """
 
 
-CHECK = """You check what {user} said on {day} against facts already stored in memory. For EACH numbered stored fact answer with one verdict:
-confirmed = the material says the same; not_mentioned = the material says nothing about it;
+CHECK = """You check what {user} said on {day} against facts already stored in memory. Treat each stored fact as true and ask: could everything in the material still be true as well? Quote the exact words of the material that bear on the fact and compare numbers, dates, ages, places and "never/always" by calculation (a stored age of 12 against "I started class 12 two years ago", "lives in Jaipur" against "walked to school here in Pune every day"). The material may imply something without naming the fact. For EACH numbered stored fact write in "why" what the material says about it, then give one verdict:
+confirmed = the material says the same; not_mentioned = the material really says nothing about its subject;
 changed = {user} genuinely changed his mind or the situation moved on after the fact was stored (a new opinion, a new school, a new value), give the new value in "new";
-conflict = the material claims something that CANNOT be true together with the stored fact and is no change over time (for example a stored age or date against a past-tense claim about an earlier time, "never done X" against a story of doing X, "goes to school A" against "same school as me" at school B), say what clashes in "why".
-A change of mind or taste is "changed", never "conflict". Use only the material. Return ONLY JSON: {{"checks": [{{"fact": n, "verdict": "confirmed|changed|conflict|not_mentioned", "new": str or null, "why": str}}]}}
+conflict = the material and the stored fact cannot both be true and it is no change over time (a past-tense claim about a time before the fact was stored is never a change).
+A change of mind or taste is "changed", never "conflict". Use only the material. Return ONLY JSON: {{"checks": [{{"fact": n, "why": str, "verdict": "confirmed|changed|conflict|not_mentioned", "new": str or null}}]}}
 
 STORED FACTS:
 {facts}

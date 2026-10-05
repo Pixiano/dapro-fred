@@ -37,8 +37,14 @@ MAX_CALLS, MAX_BAD, FINISH_GRACE = 60, 3, 3   # tool calls, consecutive unusable
 RESULT_CHARS, MAP_CHARS, KEEP_MSGS = 3000, 12000, 24
 MIN_EVENTS, TRAIT_MAX_CONF, DUP_SIM, PAST_SIM = 3, 0.5, 0.8, 0.6
 MAX_UNKNOWN = 2
+REVIEW_CALLS = 25   # calls spent while review items are open do not count against MAX_CALLS (up to this many): review no longer eats the exploration budget
+CAND_SIM, CAND_WEEKS, CAND_MAX = 0.75, 3, 8   # recurring candidates: events at least this similar (0.75 separated the key's routines from one-off topics), in this many different weeks, at most this many shown
 CONFLICT = re.compile(r"contradict|cannot both|can.t both|conflict|inconsisten|incompatible", re.I)
 EXPLORE, MIN_EXPLORE = {"search_memory", "get_events_about", "compare_periods", "find_similar_events", "get_entity", "get_daily_logs"}, 3
+
+PHASES = """
+PHASES. Phase 1: rule every open review item first; those calls do not count against your call limit (up to 25). Phase 2: go through RECURRING CANDIDATES, built by code from similar events in at least three different weeks: for each, read its events and decide whether the same thing really happens again and again (then create_inference, category routine for a habit, recurrence for something that comes back after a gap, citing its event ids) or whether it is one episode, one topic or a coincidence (then skip it and say why in the digest only if it matters). Do not accept a candidate just because it is listed.
+"""   # appended to the system prompt only when cands is on (not proven, see done.md 2026-10-05)
 
 SYSTEM = """You are FRED's weekly analyst. You see one week of Vatsal's life only through memory tools. Your job is to find what is visible only when the days are looked at together: how projects are moving, routines and habits, decisions and how they turned out, relationships.
 
@@ -93,6 +99,7 @@ class Week(MemTools):
     explore_tools = EXPLORE
     gap_warned = False
     hard_gap = True   # True: the gap refuses every finish (the call cap still forces one)
+    cands = False   # True: recurring-candidates block in the map, a free review phase and the PHASES prompt. Default off: a real run did not finish in time
 
     def _gap(self):
         """Something structural the period run must have produced before it may finish (None = nothing); said once, then the model may insist."""
@@ -108,8 +115,8 @@ class Week(MemTools):
             self.s.db.executescript((_HERE / "schema_weekly.sql").read_text(encoding="utf-8"))
         self.start = (datetime.fromisoformat(end_day) - timedelta(days=6)).strftime("%Y-%m-%d")
         self.digest, self.calls, self.finish_warned, self.explored, self._seen = None, 0, False, 0, set()
-        self.shown, self.unknowns, self.made = set(), 0, 0   # event ids the tools returned this run; 'unknown' rulings used
-        self.system, self.max_calls, self.map_chars = SYSTEM, MAX_CALLS, MAP_CHARS  # subclasses swap these
+        self.shown, self.unknowns, self.made, self.review_used = set(), 0, 0, 0   # event ids the tools returned this run; 'unknown' rulings used
+        self.system, self.max_calls, self.map_chars = SYSTEM + (PHASES if self.cands else ""), MAX_CALLS, MAP_CHARS  # subclasses swap these
 
     # ---- helpers ----
     def q(self, sql, args=()):
@@ -159,6 +166,8 @@ class Week(MemTools):
         out.append("OPEN REVIEW ITEMS:\n" + ("\n".join(f"#{r['id']} [{r['kind']}, {r['day']}] {r['text']}" for r in rv) or "(none)"))
         inf = self.q(f"SELECT id, statement, category, status, confidence, support_weeks FROM inferences WHERE status IN ({','.join('?' * len(ACTIVE))}) "
                      "AND COALESCE((SELECT MIN(week) FROM inference_log WHERE inference_id=inferences.id), '') <= ?", (*ACTIVE, self.end))
+        if self.cands:
+            out.append("RECURRING CANDIDATES (found by code: events similar to each other in at least 3 different weeks; confirm or skip each, its ids may be cited):\n" + self._candidates())
         out.append("ACTIVE INFERENCES:\n" + ("\n".join(f"#{r['id']} [{r['category']}, {r['status']}, conf {r['confidence']}, weeks {r['support_weeks']}] {r['statement']}"
                                                        for r in inf) or "(none)"))
         head = f"WEEK {self.start} to {self.end}: {len(evs)} events."
@@ -174,6 +183,27 @@ class Week(MemTools):
             out[i] = parts[i] if len(parts[i]) <= share else parts[i][:share] + "\n(... cut)"
             left -= len(out[i])
         return "\n\n".join([head] + out)
+
+    def _candidates(self):
+        """Greedy clustering of the events up to the period end by stored embedding (an event joins the closest cluster whose centroid is CAND_SIM close, else starts
+        one); clusters spanning CAND_WEEKS different weeks are routine/recurrence candidates. Cheap and deterministic, no model."""
+        rows = self.q("SELECT e.id, e.ts, e.content, m.vec FROM events e JOIN embeddings m ON m.event_id=e.id WHERE m.model=? AND substr(e.ts,1,10) <= ? ORDER BY e.ts, e.id",
+                      (self.index.model, self.end))
+        cl = []
+        for r in rows:
+            v = np.frombuffer(r["vec"], np.float32)
+            v = v / (np.linalg.norm(v) or 1.0)
+            sims = [float(v @ c[0]) / (np.linalg.norm(c[0]) or 1.0) for c in cl]
+            if sims and max(sims) >= CAND_SIM:
+                c = cl[sims.index(max(sims))]
+                c[0], c[1] = c[0] + v, c[1] + [r]
+            else:
+                cl.append([v, [r]])
+        wk = lambda r: datetime.fromisoformat(r["ts"][:10]).isocalendar()[:2]
+        good = sorted((c[1] for c in cl if len({wk(r) for r in c[1]}) >= CAND_WEEKS), key=lambda m: -len({wk(r) for r in m}))[:CAND_MAX]
+        self.shown |= {r["id"] for m in good for r in m}
+        return "\n".join(f"- {len(m)} events in {len({wk(r) for r in m})} weeks, dates {', '.join(r['ts'][5:10] for r in m[:12])}: " + "; ".join(f"#{r['id']} {r['content'][:90]}" for r in m[:4])
+                         + f" (all ids: {[r['id'] for r in m]})" for m in good) or "(none)"
 
     def _clusters(self, evs):
         model = self.index.model
@@ -448,6 +478,8 @@ class Week(MemTools):
 
     def _call(self, action):
         self.calls += 1
+        if self.cands and self.review_used < REVIEW_CALLS and self._unfinished()[0]:   # phase 1: an open review item is being worked on, the call is free
+            self.calls, self.review_used = self.calls - 1, self.review_used + 1
         try:
             tool = action["tool"]
             fn = getattr(self, "t_" + tool, None) if isinstance(tool, str) and re.fullmatch(r"[a-z_]+", tool) else None
@@ -680,4 +712,20 @@ if __name__ == "__main__":  # self-check: python weekly.py
         assert not s9.db.execute("SELECT 1 FROM review_rulings WHERE item_id=?", (cid,)).fetchone()
         w9.t_rule_review_item(cid, "apparent", "other circumstances", [w9.events()[0]["id"]]); confirm_review(s9, cid, True)
         assert s9.db.execute("SELECT status FROM review_queue WHERE id=?", (cid,)).fetchone()[0] == "closed"
+    with tempfile.TemporaryDirectory() as d7, Memory(d7) as m7:   # recurring candidates (3+ different weeks, same kind of event) and the free review phase
+        ix7 = SemanticIndex(m7.store, lambda t, q: [float("gym" in t) + 0.01, float("tax" in t) + 0.01], "fake7"); ix7.attach()
+        gym = [m7.store.add_event("note", "went to the gym", importance=0.6, ts=f"2026-03-{day:02d}T07:00:00+00:00") for day in (2, 10, 18, 26)]
+        tax = [m7.store.add_event("note", "paid tax", importance=0.6, ts=f"2026-03-{day:02d}T09:00:00+00:00") for day in (2, 3)]   # one week only: no candidate
+        for item in ("a", "b"):
+            m7.store._ask("2026-03-05", item)
+        w7 = Week(m7, "2026-03-29", ix7)
+        w7.cands = True
+        cand = w7._candidates()
+        assert all(f"#{i}" in cand for i in gym) and not any(f"#{i}" in cand for i in tax) and w7.shown >= set(gym)
+        assert "RECURRING CANDIDATES" in w7.week_map()
+        w7.call({"tool": "get_daily_logs", "args": {"from": "2026-03-01", "to": "2026-03-02"}})
+        assert w7.calls == 0 and w7.review_used == 1                                                     # open review items: the call is free
+        w7.t_rule_review_item(1, "unknown"); w7.t_rule_review_item(2, "unknown")
+        w7.call({"tool": "get_daily_logs", "args": {"from": "2026-03-01", "to": "2026-03-03"}})
+        assert w7.calls == 1 and w7.review_used == 1                                                     # none open: counted
     print("weekly ok")
