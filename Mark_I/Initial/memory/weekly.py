@@ -479,6 +479,8 @@ class Week(MemTools):
             res = self._call(action)
         if isinstance(action, dict) and action.get("tool") in self.explore_tools and not (isinstance(res, dict) and "error" in res):
             self.explored += 1
+        if isinstance(action, dict) and action.get("tool") != "finish" and not (isinstance(res, dict) and "error" in res):
+            self.refused = 0   # only finish calls in a row with no progress between them count as a stuck loop
         if isinstance(res, list):
             self.shown |= {x["id"] for x in res if isinstance(x, dict) and isinstance(x.get("id"), int) and "content" in x}
         self._dlog("override" if isinstance(res, dict) and "error" in res else "action", action=action, result=res)
@@ -730,6 +732,8 @@ if __name__ == "__main__":  # self-check: python weekly.py
         w8 = Week(m8, "2026-03-08", ix8)
         assert all(w8.t_rule_review_item(i, "unknown").get("ruling") == "unknown" for i in (1, 2, 3)) and w8.unknowns == 0   # no cap on questions
         m8.store.db.execute("INSERT INTO review_queue(day,kind,text) VALUES('2026-03-02','question','four')"); m8.store.db.commit()
+        w8.t_finish("The week."); w8.t_finish("The week."); assert w8.refused == 2
+        w8.call({"tool": "search_memory", "args": {"query": "event", "k": 3}}); assert w8.refused == 0   # progress between refusals resets the count
         for i in range(MAX_REFUSED):
             assert w8.t_finish("The week.")["error"]
         assert w8.t_finish("The week.") == {"ok": True} and "The week." in w8.digest   # open item left, finish accepted
