@@ -346,6 +346,9 @@ class Week(MemTools):
         for r in self.q("SELECT id, statement FROM inferences WHERE status IN (%s)" % ",".join("?" * len(ACTIVE)), ACTIVE):
             if SequenceMatcher(None, norm(statement), norm(r["statement"])).ratio() >= DUP_SIM:
                 return {"error": f"this duplicates active inference #{r['id']}: use update_inference on it"}
+        for r in self.q("SELECT i.id FROM inferences i WHERE i.category=? AND i.status IN (%s)" % ",".join("?" * len(ACTIVE)), (category, *ACTIVE)):   # worded differently, same evidence = same inference
+            if len({x["event_id"] for x in self.q("SELECT event_id FROM inference_evidence WHERE inference_id=? AND role='support'", (r["id"],))} & set(sup)) * 2 >= len(sup):
+                return {"error": f"most of this evidence already supports active inference #{r['id']}: use update_inference on it"}
         with self.s.lock:
             cur = self.s.db.execute("INSERT INTO inferences(statement,category,confidence,tier,created_at,valid_from,last_reviewed_week) VALUES(?,?,?,?,?,?,?)",
                                     (statement, category, conf, tier, _now(), self.start, self.end))
@@ -683,6 +686,7 @@ if __name__ == "__main__":  # self-check: python weekly.py
         assert "error" in r                                                                               # not in this week's map, never shown by a tool
         w5.shown.add(far)
         iid = w5.t_create_inference(statement="gym often", category="routine", confidence=0.6, supporting_event_ids=[far])["id"]
+        assert "most of this evidence" in w5.t_create_inference(statement="trains at the fitness centre regularly", category="routine", confidence=0.6, supporting_event_ids=[far])["error"]   # reworded, same evidence
         assert "add_counter" in w5.t_update_inference(iid, status="rejected", note="quiet week")["error"]
         ids = [r["id"] for r in s.db.execute("SELECT id FROM review_queue WHERE day='2026-05-03'").fetchall()]
         assert "ok" in str(w5.t_rule_review_item(ids[0], "unknown", "x")) or "ruling" in w5.t_rule_review_item(ids[0], "unknown", "x")
@@ -701,7 +705,7 @@ if __name__ == "__main__":  # self-check: python weekly.py
         assert "not yet reviewed" in w5.t_finish("")["error"]                                             # gates first, even with an empty digest
         s.db.execute("UPDATE review_queue SET status='closed'"); s.db.commit()
         w7 = Week(m, "2026-06-07", ix)
-        iid7 = w7.t_create_inference("Arin swims every Saturday morning at the club pool", "routine", 0.6, [w7.events()[0]["id"]])["id"]
+        iid7 = w7.t_create_inference("Arin swims every Saturday morning at the club pool", "project", 0.6, [w7.events()[0]["id"]])["id"]
         w7.t_update_inference(iid7, note="seen")
         s.db.execute("UPDATE inferences SET status='rejected' WHERE id != ?", (iid7,)); s.db.commit()   # the earlier tests' inferences are out of the way
         w7.explored = w7.min_explore
