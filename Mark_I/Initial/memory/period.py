@@ -119,6 +119,7 @@ Reply with JSON only: {"note": str}"""
 
 
 class Month(Week):
+    structural = True
     min_explore = 2
     hard_gap = True
     explore_tools = EXPLORE | {"state_at", "compare_states", "get_weekly_digests", "list_decisions", "find_recurring"}

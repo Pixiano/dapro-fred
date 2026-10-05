@@ -100,6 +100,7 @@ class Week(MemTools):
     explore_tools = EXPLORE
     gap_warned = False
     hard_gap = True   # True: the gap refuses every finish (the call cap still forces one)
+    structural = False   # True: this agent's gap is a required record (monthly chapters and turning points), not waived by a stuck loop
     cands = False   # True: recurring-candidates block in the map, a free review phase and the PHASES prompt. Default off: a real run did not finish in time
 
     def _gap(self):
@@ -435,15 +436,15 @@ class Week(MemTools):
         stuck = not force and self.refused >= MAX_REFUSED
         if stuck:
             self._dlog("override", why="finish accepted after repeated refusals", open_items=items, inferences=infs)
-        if not force and not stuck:  # refused, not just warned: a medium-effort model otherwise finishes at the first chance. The call cap forces a finish, so it cannot be trapped.
-            if items or infs:
+        if not force:  # refused, not just warned: a medium-effort model otherwise finishes at the first chance. The call cap forces a finish, so it cannot be trapped.
+            if (items or infs) and not stuck:
                 self.refused += 1
                 return {"error": "not yet reviewed", "review_items": items, "inferences": infs,
                         "hint": "rule_review_item each open item (unknown is allowed) and update_inference each active inference (a note is enough), then finish"}
-            if self.explored < self.min_explore and len(self.events()) >= MIN_EVENTS:
+            if self.explored < self.min_explore and len(self.events()) >= MIN_EVENTS and not stuck:
                 self.refused += 1
                 return {"error": f"explore first: only {self.explored} of {self.min_explore} search/compare calls so far. Look for support AND counter-evidence of this period's main routines, projects and relationships, then create_inference or say you found none"}
-            if (gap := self._gap()) and not self.gap_warned:
+            if (gap := self._gap()) and not self.gap_warned and (self.structural or not stuck):   # a structural gap (chapters, turning points) is never waived
                 self.gap_warned = not self.hard_gap
                 self.refused += 1
                 return {"error": gap}
