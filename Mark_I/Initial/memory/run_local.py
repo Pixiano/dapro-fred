@@ -52,6 +52,12 @@ ACTION = {"type": "json_schema", "json_schema": {"name": "action", "strict": Tru
 NOTE = {"type": "json_schema", "json_schema": {"name": "note", "strict": True, "schema": {"type": "object", "properties": {"note": {"type": "string"}}, "required": ["note"]}}}
 
 
+_ARR = {"type": "array", "items": {}}
+NIGHT = {"type": "json_schema", "json_schema": {"name": "night", "strict": True, "schema": {"type": "object", "properties": {
+    **{k: _ARR for k in ("events", "states", "aliases", "relationships", "corrections", "contradictions", "open_questions")}, "summary": {"type": "string"}},
+    "required": ["events", "states", "aliases", "relationships", "corrections", "contradictions", "open_questions", "summary"]}}}   # the nightly answer for gpt-oss (role swap test)
+
+
 def make_llm(cfg, stage, log_to, effort=None, want_json=False):
     """llm(prompt or messages) -> text. Thinking text is dropped; want_json cuts the answer down to its outermost {...}."""
     def llm(x):
@@ -60,7 +66,7 @@ def make_llm(cfg, stage, log_to, effort=None, want_json=False):
         if effort:
             body["reasoning_effort"] = effort
             first = msgs[0]["content"] if msgs and isinstance(msgs[0], dict) else ""
-            body["response_format"] = NOTE if first.startswith("You write ONE short YEAR NOTE") else ACTION   # tool loops speak one JSON action per turn; year notes one {"note"}
+            body["response_format"] = NIGHT if stage == "nightly" else NOTE if first.startswith("You write ONE short YEAR NOTE") else ACTION   # tool loops speak one JSON action per turn; year notes one {"note"}
         t = time.time()
         r = _post("/chat/completions", body)
         text = r["choices"][0]["message"].get("content") or ""
@@ -122,7 +128,7 @@ if __name__ == "__main__":
         done = [d for d in sorted(days) if d <= UNTIL and consolidate.consolidate_day(m, d, rs.oracle(ex), "oracle")]
         report(m, ex, folder, run, stage, {"days_done_this_run": len(done)})
     elif stage == "nightly":
-        llm = make_llm(NIGHTLY, "nightly", calls, want_json=True)
+        llm = make_llm(NIGHTLY, "nightly", calls, os.environ.get("NIGHTLY_EFFORT"), want_json=True)   # NIGHTLY_EFFORT=medium with NIGHTLY_MODEL=openai/gpt-oss-20b
         done = [d for d in sorted(days) if d <= UNTIL and consolidate.consolidate_day(m, d, llm, "qwen3-8b")]   # a small batch first, not the whole year
         report(m, ex, folder, run, stage, {"days_done_this_run": len(done), "minutes": round((time.time() - t0) / 60, 1)})
     elif stage == "weekly":

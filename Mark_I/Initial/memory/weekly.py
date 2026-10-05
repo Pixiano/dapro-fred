@@ -406,6 +406,10 @@ class Week(MemTools):
                 return {"error": gap}
         if not (digest or "").strip():
             return {"error": "digest is empty (nothing else is missing: write the digest and finish)"}
+        known = {r["id"] for r in self.q("SELECT id FROM inferences")}
+        ghost = sorted({int(n) for n in re.findall(r"inferences? #(\d+)", digest, re.I)} - known)
+        if ghost and not force:   # a digest may not cite an inference that was never stored
+            return {"error": f"your digest cites inference #{ghost[0]} which does not exist; create it with create_inference first or remove the reference"}
         rl = self.q("SELECT r.item_id, r.ruling, q.text FROM review_rulings r JOIN review_queue q ON q.id=r.item_id WHERE r.week=? ORDER BY r.item_id", (self.end,))
         foot = f"\n\n[Review: {len(rl)} item(s) ruled" + "".join(f", {n} {k}" for k in sorted(RULINGS) if (n := sum(r["ruling"] == k for r in rl))) + "]"
         real = self.q("SELECT DISTINCT q.id, q.text FROM review_rulings r JOIN review_queue q ON q.id=r.item_id WHERE r.ruling='real' AND q.status='open' "
@@ -634,4 +638,12 @@ if __name__ == "__main__":  # self-check: python weekly.py
         w6 = Week(m, "2026-06-07", ix)
         assert "no inference created" in w6._gap() and (w6.t_create_inference("routine x", "routine", 0.6, [w6.events()[0]["id"]]) and w6._gap() is None)   # a quiet-evidence week must attempt a recurrence
         assert "not yet reviewed" in w5.t_finish("")["error"]                                             # gates first, even with an empty digest
+        s.db.execute("UPDATE review_queue SET status='closed'"); s.db.commit()
+        w7 = Week(m, "2026-06-07", ix)
+        iid7 = w7.t_create_inference("Arin swims every Saturday morning at the club pool", "routine", 0.6, [w7.events()[0]["id"]])["id"]
+        w7.t_update_inference(iid7, note="seen")
+        s.db.execute("UPDATE inferences SET status='rejected' WHERE id != ?", (iid7,)); s.db.commit()   # the earlier tests' inferences are out of the way
+        w7.explored = w7.min_explore
+        assert "inference #99" in w7.t_finish("A new inference #99 was found.").get("error", "")           # a digest may not cite an inference that does not exist
+        assert w7.t_finish(f"Inference #{iid7} holds.").get("ok")
     print("weekly ok")
