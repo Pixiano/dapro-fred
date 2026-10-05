@@ -10,6 +10,7 @@ Mark I (aka v2) is the clean rebuild of FRED. The predecessor (v1.x, `Core/`) is
 ## Layout
 - `Mark_I/Initial/` is where everything is built. Finished work is extracted to `Mark_I/`.
 - `Mark_I/Initial/memory/` is the first component (memory overhaul, Phase 1).
+- `Mark_I/Initial/pulse/` is the second division: the daily news feed (placeholder, not designed yet).
 
 ## Index
 | Day | Files | What |
