@@ -335,6 +335,9 @@ def consolidate_day(mem, day, llm, model="unset", historical=False, embed=None, 
             for k in ("events", "states", "aliases", "relationships", "corrections"):   # stray strings in a list (gpt-oss ran its keys into an array) carry no data
                 if isinstance(out.get(k), list):
                     out[k] = [x for x in out[k] if isinstance(x, dict)]
+            for e in out.get("events", []) if isinstance(out.get("events"), list) else []:   # 'about': ["Bruno"] (bare names, no kind) cannot be resolved: the event stays, the link goes
+                if isinstance(e, dict) and isinstance(e.get("about"), list):
+                    e["about"] = [x for x in e["about"] if isinstance(x, dict)]
             if isinstance(out.get("states"), list):   # an entry with an empty field or value is noise, not a reason to fail the day
                 out["states"] = [x for x in out["states"] if not (isinstance(x, dict) and "field" in x and "value" in x and not (str(x["field"]).strip() and str(x["value"]).strip()))]
             _valid(out)  # a malformed part fails the whole day before any write
@@ -493,6 +496,10 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         bad = json.dumps({"events": [], "states": [], "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "A"}, "relation": "sibling_of", "object": {"kind": "person", "name": "B"}}, "contradictions", [], "open_questions"],
                           "contradictions": [], "open_questions": [], "summary": "s"})
         assert consolidate_day(m4, "2026-02-03", lambda p: bad)
+        m4.store.db.execute("DELETE FROM consolidation_runs"); m4.store.db.commit()
+        bad = json.dumps({"events": [{"type": "note", "content": "Bruno is 9", "importance": 0.5, "about": ["Bruno", "Mira"]}], "states": [], "aliases": [], "relationships": [],
+                          "contradictions": [], "open_questions": [], "summary": "s"})
+        assert consolidate_day(m4, "2026-02-03", lambda p: bad) and m4.store.db.execute("SELECT COUNT(*) FROM events WHERE content='Bruno is 9'").fetchone()[0] == 1   # bare-name about list: day kept
         m4.store.db.execute("DELETE FROM consolidation_runs"); m4.store.db.commit()
         bad = json.dumps({"events": [], "states": [{"kind": "place", "name": "Shanti Nagar", "field": "", "value": ""}], "aliases": [], "relationships": [],
                           "contradictions": [], "open_questions": [], "summary": "s"})
