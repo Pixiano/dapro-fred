@@ -76,3 +76,12 @@ Self-checks all pass: consolidate, weekly, period, graph, decisionlog, selfanaly
 | Monthly/yearly team | code only (TEAM_FALLBACK, DRAFT_MODEL, CRITIC_MODEL). The monthly fallback is Qwen alone (there is no monthly critic pass), already measured in March: 5 duplicate turning points, 3 chapters, 9.6 min; gpt-oss alone 2 turning points, ~48 min. No new March run |
 
 Why the second pass tops out at 1 of 3 (not proven by a fix yet): the check compares the day's text with stored STATES only. The dog's age and the cousin's school were stored, if at all, as events, so the checker has nothing to compare. Proposed next step: give the check pass the related past events too (search the day's lines in the event index) and rerun mini_contra.py. Nightly stopping rule (3 of 3, control clean) not met; weekly rulings 4 of 5 met with Qwen3-8B, patterns 1 of 6 not met.
+
+## Second pass on clearer scenarios (direct contradictions, two controls)
+The earlier dog and school scenarios needed arithmetic or an inferred school difference, so they were not fair; the checker already receives the stored states and related past events (checked on the stored memories), so the "give it related events" fix was not needed. Rewritten mini scenarios (dog 4 -> 9 years, plane, school Greenfield -> Lakeview, controls: change of taste, house move):
+| | planted flagged | controls clean |
+|---|---|---|
+| gpt-oss (extract + check), run 1 | 1 of 3 (plane); the dog night failed on a bare-name `about` list (now tolerated) | taste clean, move not clean (spurious school-time conflict) |
+| gpt-oss, run 2 | 2 of 3 (plane, school); dog not flagged | taste not clean (model stored `dislikes = mushrooms`, a state-level conflict), move clean |
+| Qwen3-8B (extract + check) | 1 of 3 (dog); the plane was only matched by an unrelated question, so not counted | both clean |
+The same model flagged the school case in one run and not in the other, so one run per cell is noise. Reading: no model/pass combination reliably reaches 3 of 3 with clean controls; nightly detection is limited by the model, and the layers behind it (weekly rulings 4 of 5, the user confirming contradictions) are what catches the rest. The second pass stays off by default.
