@@ -44,7 +44,7 @@ SYSTEM = """You are FRED's weekly analyst. You see one week of Vatsal's life onl
 
 METHOD (required). For every conclusion: state it as a hypothesis; search for supporting evidence; search for counter-evidence; decide keep, weaken or reject; only then write it. Prefer update_inference on an existing inference over creating a duplicate. Use compare_periods to compare this week with earlier ones. Observed facts are not inferences.
 EVIDENCE. Every inference must cite supporting event ids that tool results or this period's map showed you (guessed ids are refused); no evidence, no inference. State an inference without this period's dates (no "during the week of"). Not seeing a pattern in one quiet period is NOT counter-evidence: never lower confidence or reject without add_counter event ids. List alternative explanations. Confidence says how well the evidence supports it, not how interesting it is. One week is thin data: say so.
-RECURRENCE. Something that appeared earlier and reappears later, with the connection made explicit. Category recurrence needs supporting events from at least two different calendar months. A recurrence is the same kind of thing happening AGAIN after a gap, never the start and the end of one episode.
+RECURRENCE. Something that appeared earlier and reappears later, with the connection made explicit. Category recurrence needs supporting events from at least two different calendar months, at least a week apart (the code refuses otherwise). A recurrence is the same kind of thing happening AGAIN after a gap, never the start and the end of one episode.
 TRAITS, VALUES, MOTIVATIONS. Allowed only with category "trait_hypothesis": status proposed, confidence at most 0.5, at least two supporting events. Never state them in the digest.
 CHECKLIST (required before finish): for the routines, projects, decisions and relationships of this period, search for support AND counter-evidence, then create_inference, or state that you found none. Whether two names are the same person is a review question, never an inference. Finish is refused until every open review item is ruled and you have explored with at least 3 search/compare calls.
 REVIEW ITEMS. Rule on each open review item with rule_review_item: apparent (different circumstances), historical_change (he genuinely changed AFTER the first statement: a past-tense claim about a time before the first statement, such as 'we got Toffee when I was in class 3' or 'a trip in class 8', is never a change but a real contradiction), real (two current beliefs cannot both be true; do not resolve it yourself) or unknown. An item that quotes a stored fact and a new statement that cannot both be true is real, unless an event you cite explains the difference. Use unknown at most twice per run; search for the events behind an item before ruling on it.
@@ -72,6 +72,12 @@ Before finish, check every open review item and every active inference. To see w
 
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _recurs(days):
+    """True when two supporting events, next to each other in time, lie in different calendar months at least 7 days apart: the same thing came AGAIN after a gap."""
+    d = sorted(datetime.fromisoformat(x) for x in days)
+    return any(a.strftime("%Y-%m") != b.strftime("%Y-%m") and (b - a).days >= 7 for a, b in zip(d, d[1:]))
 
 
 def _json(text):
@@ -298,8 +304,8 @@ class Week(MemTools):
         if not sup:
             return {"error": "no valid supporting_event_ids: an inference needs real evidence, search for events first"}
         conf = min(1.0, max(0.0, float(confidence)))
-        if category == "recurrence" and len({e["ts"][:7] for e in self.q("SELECT ts FROM events WHERE id IN (%s)" % ",".join("?" * len(sup)), sup)}) < 2:
-            return {"error": "a recurrence needs supporting events from at least two different calendar months"}
+        if category == "recurrence" and not _recurs([e["ts"][:10] for e in self.q("SELECT ts FROM events WHERE id IN (%s)" % ",".join("?" * len(sup)), sup)]):
+            return {"error": "a recurrence needs supporting events from at least two different calendar months with a gap of at least a week between them (one episode is not a recurrence)"}
         if category == "trait_hypothesis":
             if len(sup) < 2:
                 return {"error": "a trait_hypothesis needs at least two supporting events"}
@@ -648,6 +654,7 @@ if __name__ == "__main__":  # self-check: python weekly.py
         for i in range(8):
             s.add_event("note", f"busy {i}", ts=f"2026-06-0{i % 7 + 1}T10:00:00+00:00")
         w6 = Week(m, "2026-06-07", ix)
+        assert _recurs(["2026-01-10", "2026-03-02"]) and _recurs(["2026-01-31", "2026-02-20", "2026-02-21"]) and not _recurs(["2026-01-30", "2026-02-03"]) and not _recurs(["2026-02-03", "2026-02-20"])   # an episode over a month end is not a recurrence
         assert "no inference created" in w6._gap() and (w6.t_create_inference("routine x", "routine", 0.6, [w6.events()[0]["id"]]) and w6._gap() is None)   # a quiet-evidence week must attempt a recurrence
         assert "not yet reviewed" in w5.t_finish("")["error"]                                             # gates first, even with an empty digest
         s.db.execute("UPDATE review_queue SET status='closed'"); s.db.commit()
