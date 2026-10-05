@@ -381,10 +381,10 @@ class Week(MemTools):
         with self.s.lock:
             self.unknowns += ruling == "unknown"
             self.s.db.execute("INSERT OR REPLACE INTO review_rulings VALUES(?,?,?,?)", (id, ruling, self.end, note))
-            if ruling in ("apparent", "historical_change"):
-                self.s.db.execute("UPDATE review_queue SET status='closed' WHERE id=?", (id,))
+            if ruling in ("apparent", "historical_change"):   # a contradiction is never closed by the agent: it waits for the user's confirmation
+                self.s.db.execute("UPDATE review_queue SET status=? WHERE id=?", ("explained" if row[0]["kind"] == "contradiction" else "closed", id))
             self.s.db.commit()
-        return {"id": id, "ruling": ruling, "closed": ruling in ("apparent", "historical_change")}
+        return {"id": id, "ruling": ruling, "closed": ruling in ("apparent", "historical_change") and row[0]["kind"] != "contradiction"}
 
     def _unfinished(self):
         items = self.q("SELECT id FROM review_queue WHERE status='open' AND day <= ? AND id NOT IN (SELECT item_id FROM review_rulings WHERE week=? OR ruling='real')", (self.end, self.end))
@@ -416,6 +416,9 @@ class Week(MemTools):
                       "AND q.day <= ? ORDER BY q.id", (self.end,))
         if real:
             foot += "\nPlease check (ruled real, still open):\n" + "\n".join(f"- #{r['id']} {r['text']}" for r in real)
+        expl = self.q("SELECT q.id, q.text, r.ruling, r.note FROM review_queue q JOIN review_rulings r ON r.item_id=q.id WHERE q.status='explained' AND q.day <= ? ORDER BY q.id", (self.end,))
+        if expl:
+            foot += "\nExplained by the agent, waiting for your confirmation:\n" + "\n".join(f"- #{r['id']} {r['text']} -> {r['ruling']}: {r['note']}" for r in expl)
         self.digest = digest.split("\n\n[Review:")[0].strip() + foot   # an older footer inside the text (a critic copies the draft) is replaced, not doubled   # counts and the real-contradiction list come from the code, not from the model
         return {"ok": True}
 
@@ -493,6 +496,15 @@ class Week(MemTools):
     def _fallback(self):
         logs = self.q("SELECT day, summary FROM daily_logs WHERE day BETWEEN ? AND ? ORDER BY day", (self.start, self.end))
         return "(Weekly analysis incomplete; daily logs follow.)\n" + "\n".join(f"{r['day']}: {r['summary']}" for r in logs)
+
+
+def confirm_review(store, item_id, confirmed):
+    """The user's answer on a contradiction the agent explained: True closes it for good, False reopens it (the agent's ruling is dropped, so it is ruled again)."""
+    with store.lock:
+        store.db.execute("UPDATE review_queue SET status=? WHERE id=? AND status='explained'", ("closed" if confirmed else "open", item_id))
+        if not confirmed:
+            store.db.execute("DELETE FROM review_rulings WHERE item_id=?", (item_id,))
+        store.db.commit()
 
 
 def run_weekly(mem, end_day, llm, index, model="unset", force=False):
@@ -631,7 +643,7 @@ if __name__ == "__main__":  # self-check: python weekly.py
         cid = s.db.execute("INSERT INTO review_queue(kind,day,text,status) VALUES('contradiction','2026-05-04','d','open')").lastrowid; s.db.commit()
         assert "rule real" in w5.t_rule_review_item(cid, "historical_change", "this contradicts the stored fact", [far])["error"]   # the label may not contradict the note
         assert "event_ids" in w5.t_rule_review_item(cid, "apparent", "same")["error"]                      # no evidence, no closing a contradiction
-        assert w5.t_rule_review_item(cid, "apparent", "same", [far])["closed"]
+        assert not w5.t_rule_review_item(cid, "apparent", "same", [far])["closed"] and s.db.execute("SELECT status FROM review_queue WHERE id=?", (cid,)).fetchone()[0] == "explained"   # explained, not closed
         s.add_event("note", "old", ts="2026-01-01T10:00:00+00:00")
         for i in range(8):
             s.add_event("note", f"busy {i}", ts=f"2026-06-0{i % 7 + 1}T10:00:00+00:00")
@@ -646,4 +658,19 @@ if __name__ == "__main__":  # self-check: python weekly.py
         w7.explored = w7.min_explore
         assert "inference #99" in w7.t_finish("A new inference #99 was found.").get("error", "")           # a digest may not cite an inference that does not exist
         assert w7.t_finish(f"Inference #{iid7} holds.").get("ok")
+    with tempfile.TemporaryDirectory() as d9, Memory(d9) as m9:   # the agent explains a contradiction; only the user closes it
+        s9 = m9.store
+        s9.add_event("note", "x is 1", ts="2026-05-04T10:00:00+00:00")
+        w9 = Week(m9, "2026-05-10", ix)
+        cid = s9.db.execute("INSERT INTO review_queue(kind,day,text,status) VALUES('contradiction','2026-05-03','x was 1 but now 2','open')").lastrowid
+        s9.db.commit()
+        w9.shown.add(w9.events()[0]["id"])
+        r9 = w9.t_rule_review_item(cid, "historical_change", "he changed it", [w9.events()[0]["id"]])
+        assert r9["ruling"] == "historical_change" and not r9["closed"]
+        assert s9.db.execute("SELECT status FROM review_queue WHERE id=?", (cid,)).fetchone()[0] == "explained"
+        confirm_review(s9, cid, False)
+        assert s9.db.execute("SELECT status FROM review_queue WHERE id=?", (cid,)).fetchone()[0] == "open"
+        assert not s9.db.execute("SELECT 1 FROM review_rulings WHERE item_id=?", (cid,)).fetchone()
+        w9.t_rule_review_item(cid, "apparent", "other circumstances", [w9.events()[0]["id"]]); confirm_review(s9, cid, True)
+        assert s9.db.execute("SELECT status FROM review_queue WHERE id=?", (cid,)).fetchone()[0] == "closed"
     print("weekly ok")
