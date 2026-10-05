@@ -7,6 +7,7 @@ Nothing here touches a real memory folder.
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
@@ -24,6 +25,7 @@ NIGHTLY = {"model": "qwen/qwen3-8b", "temperature": 0.6, "top_p": 0.95, "max_tok
 GPT = {"model": "openai/gpt-oss-20b", "temperature": 0.6, "max_tokens": 9000}
 NIGHTLY["model"] = os.environ.get("NIGHTLY_MODEL", NIGHTLY["model"])   # model comparison: NIGHTLY_MODEL / ANALYST_MODEL override the defaults
 GPT["model"] = os.environ.get("ANALYST_MODEL", GPT["model"])   # high effort thinks long
+CRITIC = os.environ.get("CRITIC_MODEL")   # monthly/yearly: a different model for the critic pass (period.Critic); default = ANALYST_MODEL
 EFFORT = {"weekly": "medium", "monthly": "high", "yearly": "high"}    # production levels (Vatsal, 2026-10-04)
 EMB = "text-embedding-qwen3-embedding-4b"
 QPREFIX = "Instruct: Given a search query, retrieve relevant memory notes\nQuery: "
@@ -58,6 +60,9 @@ NIGHT = {"type": "json_schema", "json_schema": {"name": "night", "strict": True,
     "required": ["events", "states", "aliases", "relationships", "corrections", "contradictions", "open_questions", "summary"]}}}   # the nightly answer for gpt-oss (role swap test)
 
 
+CHECKS = {"type": "json_schema", "json_schema": {"name": "checks", "strict": True, "schema": {"type": "object", "properties": {"checks": _ARR}, "required": ["checks"]}}}   # the second nightly pass
+
+
 def make_llm(cfg, stage, log_to, effort=None, want_json=False):
     """llm(prompt or messages) -> text. Thinking text is dropped; want_json cuts the answer down to its outermost {...}."""
     def llm(x):
@@ -66,7 +71,7 @@ def make_llm(cfg, stage, log_to, effort=None, want_json=False):
         if effort:
             body["reasoning_effort"] = effort
             first = msgs[0]["content"] if msgs and isinstance(msgs[0], dict) else ""
-            body["response_format"] = NIGHT if stage == "nightly" else NOTE if first.startswith("You write ONE short YEAR NOTE") else ACTION   # tool loops speak one JSON action per turn; year notes one {"note"}
+            body["response_format"] = NIGHT if stage == "nightly" else CHECKS if stage == "check" else NOTE if first.startswith("You write ONE short YEAR NOTE") else ACTION   # tool loops speak one JSON action per turn; year notes one {"note"}
         t = time.time()
         r = _post("/chat/completions", body)
         text = r["choices"][0]["message"].get("content") or ""
@@ -80,6 +85,22 @@ def make_llm(cfg, stage, log_to, effort=None, want_json=False):
                                 "completion_tokens": u.get("completion_tokens"), "finish": r["choices"][0].get("finish_reason")}) + "\n")
         print(f"[{stage}] call {time.time() - t:.0f}s {u.get('completion_tokens')} tok", flush=True)
         return text
+    return llm
+
+
+def critic_llm(calls):
+    """CRITIC_MODEL set: the yearly critic pass runs on that model (team: Qwen3-8B drafts, gpt-oss criticises). The model is swapped with lms right
+    before the critic's first call (they do not fit the GPU together). None = the analyst model criticises its own draft."""
+    if not CRITIC:
+        return None
+    inner, state = make_llm(dict(GPT, model=CRITIC), "yearly", calls, EFFORT["yearly"]), {"swapped": False}
+    def llm(x):
+        if not state["swapped"]:
+            lms = str(Path.home() / ".lmstudio" / "bin" / "lms")
+            for cmd in (["unload", "--all"], ["load", CRITIC, "--context-length", "20000", "--gpu", "max", "-y"], ["load", EMB, "-y"]):
+                subprocess.run([lms, *cmd], check=True, capture_output=True)
+            state["swapped"] = True
+        return inner(x)
     return llm
 
 
@@ -129,7 +150,8 @@ if __name__ == "__main__":
         report(m, ex, folder, run, stage, {"days_done_this_run": len(done)})
     elif stage == "nightly":
         llm = make_llm(NIGHTLY, "nightly", calls, os.environ.get("NIGHTLY_EFFORT"), want_json=True)   # NIGHTLY_EFFORT=medium with NIGHTLY_MODEL=openai/gpt-oss-20b
-        done = [d for d in sorted(days) if d <= UNTIL and consolidate.consolidate_day(m, d, llm, "qwen3-8b")]   # a small batch first, not the whole year
+        check = make_llm(dict(NIGHTLY, model=os.environ.get("NIGHTLY_CHECK_MODEL", NIGHTLY["model"])), "check", calls, os.environ.get("NIGHTLY_EFFORT"), want_json=True) if os.environ.get("NIGHTLY_CHECK") else None   # NIGHTLY_CHECK=1: second fact-check pass, NIGHTLY_CHECK_MODEL=other model for it (swap by hand with lms between runs)
+        done = [d for d in sorted(days) if d <= UNTIL and consolidate.consolidate_day(m, d, llm, "qwen3-8b", embed=embed, check_llm=check)]   # a small batch first, not the whole year
         report(m, ex, folder, run, stage, {"days_done_this_run": len(done), "minutes": round((time.time() - t0) / 60, 1)})
     elif stage == "weekly":
         llm = make_llm(GPT, "weekly", calls, EFFORT["weekly"])
@@ -140,7 +162,7 @@ if __name__ == "__main__":
         if stage == "monthly" and os.environ.get("MONTHS"):   # MONTHS=2026-01,2026-02
             done = [x for x in os.environ["MONTHS"].split(",") if period.run_monthly(m, x, llm, ix, "gpt-oss-20b")]
         elif stage == "yearly" and os.environ.get("YEAR_END"):   # YEAR_END=2026-05-04: the year ending that day
-            done = bool(period.run_yearly(m, os.environ["YEAR_END"], llm, ix, "gpt-oss-20b"))
+            done = bool(period.run_yearly(m, os.environ["YEAR_END"], llm, ix, "gpt-oss-20b", critic_llm=critic_llm(calls)))
         else:
             done = (period.run_monthly_pending if stage == "monthly" else period.run_yearly_pending)(m, llm, ix, "gpt-oss-20b")
         report(m, ex, folder, run, stage, {"done_this_run": done, "minutes": round((time.time() - t0) / 60, 1)})

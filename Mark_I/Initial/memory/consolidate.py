@@ -43,7 +43,7 @@ PROMPT = """You are FRED's nightly memory consolidation agent. Review {day} and 
  "corrections": [{{"kind": str, "wrong": str, "right": str}}],
  "contradictions": [str], "open_questions": [str],
  "summary": str}}
-Only record what the material supports; do not invent. The user is {user}: what they say about themselves ("I", "my") is about person "{user}", always under that exact name, never "user". Events and states are about the user's life, plans, people, projects, decisions and stated facts. Do NOT record what FRED explained, general knowledge or homework answers as events or states. Entity kinds are only person, place, project, pet, org, task, goal (likes, dislikes and habits are states on the person, never entities): no topic, concept, subject or time-check entities. A state value is a lasting fact, never a relative time ("tomorrow", "today"); a one-off plan is an event with its date. Flag a contradiction only when a new value for the same entity and field differs from CURRENT STATE. At most ONE open_question per day, only for a possible same-person pair, a clash with a stored fact or a clear mishearing, never trivia or next steps. Write each contradiction as "ENTITY FIELD: current state says X, but now Y" quoting CURRENT STATE; anything else is not a contradiction. One standalone fact per event; merge the steps of one decision into one event; usually 1-2 events a day, at most 4; no weather or filler. A relationship reads "subject RELATION object" = the subject IS the RELATION of the object ("Mom parent_of {user}", "Mr. Okhande mentor_of {user}", "{user} tutors Chintu"); keep the direction right. Record each person's relation to {user} the first time they appear, with relations only from: parent_of, sibling_of, cousin_of, friend_of, teammate_of, mentor_of, tutors, helps_with, works_on, works_at, lives_in, studies_at, owns, pet_of. Name a person by their formal form (Mom for mumma/ma, Mr. Okhande for "Okhande sir"), and put the other spoken forms in aliases when the user said them. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. corrections: ONLY when {user} explicitly fixes a name used before ("my sister is Nitya, not Navya"): wrong = the old name, right = the correct one, both exactly as written in the material. A different person who merely has a similar name is not a correction. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
+Only record what the material supports; do not invent. The user is {user}: what they say about themselves ("I", "my") is about person "{user}", always under that exact name, never "user". Events and states are about the user's life, plans, people, projects, decisions and stated facts. Do NOT record what FRED explained, general knowledge or homework answers as events or states. Entity kinds are only person, place, project, pet, org, task, goal (likes, dislikes and habits are states on the person, never entities): no topic, concept, subject or time-check entities. A state value is a lasting fact, never a relative time ("tomorrow", "today"); a one-off plan is an event with its date. Flag a contradiction only when a new value for the same entity and field differs from CURRENT STATE. At most ONE open_question per day, only for a possible same-person pair, a clash with a stored fact or a clear mishearing, never trivia or next steps. Write each contradiction as "ENTITY FIELD: current state says X, but now Y" quoting CURRENT STATE; anything else is not a contradiction. One standalone fact per event; merge the steps of one decision into one event; usually 1-2 events a day, at most 4; no weather or filler. A relationship reads "subject RELATION object" = the subject IS the RELATION of the object ("Mom parent_of {user}", "Mr. Okhande mentor_of {user}", "{user} tutors Chintu"); keep the direction right. Record each person's relation to {user} the first time they appear, with relations only from: parent_of, sibling_of, cousin_of, friend_of, teammate_of, mentor_of, tutors, helps_with, works_on, works_at, lives_in, studies_at, owns, pet_of. Name a person by their formal form (Mom for mumma/ma, Mr. Okhande for "Okhande sir"), and put the other spoken forms in aliases when the user said them. Tag each event with the entities it is about. Put an alias (nickname, short form) in aliases ONLY if the user explicitly said so; if you merely suspect one, add a question to open_questions instead. corrections: ONLY when {user} explicitly fixes a name used before ("my sister is Nitya, not Navya"): wrong = the old name, right = the correct one, both exactly as written in the material. A different person who merely has a similar name is not a correction. For a state, reuse the exact field name already shown for that entity in CURRENT STATE when the new value is about the same fact (field "coffee", not a new "drink_preference"), so a later different value replaces the old one and a clash is seen. Reuse a name from CURRENT STATE when someone clearly means the same entity (speech-to-text spells names differently). Flag a contradiction only when new material clearly
 conflicts with a current state shown below. Summary: plain prose covering significant events, work, decisions,
 people, learning, health/routine, notable changes, open threads. Length follows the day: <=200 words if
 uneventful, 200-500 normal, 500-800 active, <=1000 exceptional. A boring day gets a short summary.
@@ -54,6 +54,63 @@ CURRENT STATE:
 MATERIAL ({day}):
 {material}
 """
+
+
+CHECK = """You check what {user} said on {day} against facts already stored in memory. For EACH numbered stored fact answer with one verdict:
+confirmed = the material says the same; not_mentioned = the material says nothing about it;
+changed = {user} genuinely changed his mind or the situation moved on after the fact was stored (a new opinion, a new school, a new value), give the new value in "new";
+conflict = the material claims something that CANNOT be true together with the stored fact and is no change over time (for example a stored age or date against a past-tense claim about an earlier time, "never done X" against a story of doing X, "goes to school A" against "same school as me" at school B), say what clashes in "why".
+A change of mind or taste is "changed", never "conflict". Use only the material. Return ONLY JSON: {{"checks": [{{"fact": n, "verdict": "confirmed|changed|conflict|not_mentioned", "new": str or null, "why": str}}]}}
+
+STORED FACTS:
+{facts}
+
+MATERIAL ({day}):
+{material}
+"""
+CHECK_FACTS = 40  # facts shown to the check call
+
+
+def _facts(mem, day, material):
+    """Stored facts about the entities the material names (and the user): current states and the most important earlier events, for the fact check."""
+    s, g, low, out = mem.store, Graph(mem.store), material.lower(), []
+    for e in s.entities():
+        if e["name"] == USER or e["name"].lower() in low:
+            tag = f"{e['kind']}/{e['name']}"
+            out += [{"e": e["id"], "field": f, "value": v, "text": f"{tag}: {f} = {v}", "tag": tag} for f, v in s.snapshot(e["id"]).items()]
+            out += [{"e": e["id"], "field": None, "value": ev["content"], "text": f"{tag}: on {ev['ts'][:10]}: {ev['content']}", "tag": tag}
+                    for ev in g.events_about(e["id"], 5) if ev["ts"][:10] < day]
+    return out[:CHECK_FACTS]
+
+
+def _check(mem, day, material, llm):
+    """Second nightly call: each stored fact about today's entities against today's material. Returns the verdicts that need action (changed, conflict).
+    A broken answer gives no verdicts: the day is never failed by the check."""
+    facts = _facts(mem, day, material)
+    if not facts:
+        return []
+    try:
+        reply = json.loads(llm(CHECK.format(day=day, user=USER, material=material, facts="\n".join(f"{i + 1}. {f['text']}" for i, f in enumerate(facts)))))
+        return [{**facts[int(c["fact"]) - 1], "verdict": c["verdict"], "new": str(c.get("new") or "").strip(), "why": str(c.get("why") or "").strip()}
+                for c in reply["checks"] if c.get("verdict") in ("changed", "conflict") and 0 < int(c["fact"]) <= len(facts)]
+    except (ValueError, KeyError, TypeError, AttributeError) as ex:
+        log.warning("fact check of %s skipped: %r", day, ex)
+        return []
+
+
+def _apply_checks(s, checks, day, ts, sid):
+    """conflict -> a contradiction in the review queue (the existing mechanism); changed -> a normal state update, history kept."""
+    for c in checks:
+        if c["verdict"] == "conflict" and c["why"]:
+            text = f"{c['tag']} {c['field'] or 'fact'}: current state says {c['value']}, but now {c['why']}"
+            with s.lock:
+                s.db.execute("INSERT INTO review_queue(day,kind,text,source_id) SELECT ?,?,?,? WHERE NOT EXISTS "
+                             "(SELECT 1 FROM review_queue WHERE day=? AND kind=? AND text=? AND status='open')", (day, "contradiction", text, sid, day, "contradiction", text))
+                s.db.commit()
+        elif c["verdict"] == "changed" and c["field"] and c["new"]:
+            cur = s.state(c["e"], c["field"])
+            if cur is not None and cur["value"] == c["value"]:   # the first pass did not already write the new value
+                s.set_state(c["e"], c["field"], c["new"], source_id=sid, ts=ts)
 
 
 def _material(mem, day, historical=False):
@@ -175,7 +232,26 @@ def _valid(out):
             raise ValueError(f"bad correction {c!r}")
 
 
-def _apply(s, g, out, day, ts, sid, agent, run, historical, material=""):
+FIELD_SIM = 0.85  # cosine of two field names of one entity above which they are one fact (phone 0.89 mobile_phone). Lower is unsafe: favorite_day 0.76 favorite_food, coffee 0.75 chai; drifted names like coffee 0.72 drink_preference are left to the prompt
+
+
+def _field(s, eid, field, embed):
+    """A new field name close to an existing field of the SAME entity is the same fact under a drifted name: reuse the old name, so later
+    values collide and contradictions show. embed(text, is_query) is injected; None (the default) maps nothing."""
+    old = list(s.snapshot(eid))
+    if embed is None or not old or field in old:
+        return field
+    try:
+        v = embed(field, False)
+        sims = [(sum(x * y for x, y in zip(v, w)) / ((sum(x * x for x in v) * sum(y * y for y in w)) ** 0.5 or 1), o) for o, w in ((o, embed(o, False)) for o in old)]
+    except Exception as ex:  # no embedder, no mapping: the field stays as the model wrote it
+        log.warning("field mapping skipped: %r", ex)
+        return field
+    best = max(sims)
+    return best[1] if best[0] >= FIELD_SIM else field
+
+
+def _apply(s, g, out, day, ts, sid, agent, run, historical, material="", embed=None):
     """Writes one model answer. Returns its summary."""
     low = " ".join(material.lower().split())
     for c in out.get("corrections", []):  # first, so the rest of the answer already sees the corrected names
@@ -197,7 +273,11 @@ def _apply(s, g, out, day, ts, sid, agent, run, historical, material=""):
             except (ValueError, KeyError, TypeError) as ex:
                 log.warning("skipped tag %r: %r", a, ex)
     for st in out.get("states", []):
-        s.set_state(g.resolve(st["kind"], st["name"], day, sid), st["field"], st["value"], source_id=sid, ts=ts)
+        e = g.resolve(st["kind"], st["name"], day, sid)
+        f = _field(s, e, st["field"], embed)
+        if f != st["field"]:
+            note(s, agent, run, "override", why="field name mapped to the entity's existing field", was=st["field"], now=f)
+        s.set_state(e, f, st["value"], source_id=sid, ts=ts)
     for a in out.get("aliases", []):
         try:
             g.add_alias(a["kind"], a["alias"], g.resolve(a["kind"], a["name"], day, sid))
@@ -220,7 +300,7 @@ def _apply(s, g, out, day, ts, sid, agent, run, historical, material=""):
     return out["summary"]
 
 
-def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
+def consolidate_day(mem, day, llm, model="unset", historical=False, embed=None, check_llm=None) -> bool:
     """Returns False if skipped (already done or nothing to consolidate). historical=True is backfill: it reads only the imported
     records of that day (kind "historical"), see backfill_pending. A day longer than MAX_CHARS goes to the model in parts; every part is
     answered and checked BEFORE anything is written, so a failed part leaves nothing half-applied."""
@@ -238,7 +318,7 @@ def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
             return False
         g = Graph(s)
         parts, state = _chunks(material), _names(mem, material) if historical else _state(mem, material)
-        outs = []
+        outs, checks = [], []
         for i, part in enumerate(parts):
             head = f"(PART {i + 1} of {len(parts)} of this day)\n" if len(parts) > 1 else ""
             out = json.loads(traced(s, agent, key, llm)(PROMPT.format(day=day, state=state, material=head + part, user=USER)))
@@ -249,8 +329,12 @@ def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
                 out["states"] = [x for x in out["states"] if not (isinstance(x, dict) and "field" in x and "value" in x and not (str(x["field"]).strip() and str(x["value"]).strip()))]
             _valid(out)  # a malformed part fails the whole day before any write
             outs.append(_clean(out))
+            if check_llm and not historical:   # the second pass decides contradictions; the first answer's own flags are dropped
+                outs[-1]["contradictions"] = []
+                checks += _check(mem, day, part, check_llm)
         sid = s.add_source("backfill" if historical else "consolidation", day)
-        summary = "\n\n".join(_apply(s, g, o, day, ts, sid, agent, key, historical, material) for o in outs)
+        summary = "\n\n".join(_apply(s, g, o, day, ts, sid, agent, key, historical, material, embed) for o in outs)
+        _apply_checks(s, checks, day, ts, sid)
         old = s.daily_log(day) if historical else None
         s.set_daily_log(day, f"{old}\n\n(Imported history) {summary}" if old else summary)
         status, detail = "done", None
@@ -403,6 +487,31 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         bad = json.dumps({"events": [], "states": [{"kind": "place", "name": "Shanti Nagar", "field": "", "value": ""}], "aliases": [], "relationships": [],
                           "contradictions": [], "open_questions": [], "summary": "s"})
         assert consolidate_day(m4, "2026-02-03", lambda p: bad) and not m4.store.db.execute("SELECT 1 FROM consolidation_runs WHERE status!='done'").fetchone()
+    with tempfile.TemporaryDirectory() as d5, Memory(d5) as m5:   # a drifted field name maps onto the entity's own field, never another entity's
+        fake = lambda t, q: [float("coffee" in t or "drink" in t), float("age" in t), float("class" in t)]   # coffee ~ drink_preference; age and class apart
+        st = lambda who, f, v: json.dumps({"events": [], "states": [{"kind": "person", "name": who, "field": f, "value": v}], "summary": "s"})
+        for i, (who, f, v) in enumerate([("Mira", "coffee", "hates it"), ("Mira", "drink", "likes it now"), ("Mira", "age", "15"), ("Mira", "class", "9"), ("Ravi", "drink", "tea")]):
+            m5.archive.write("conversation", {"text": f"day {i}"}, ts=f"2026-03-0{i + 1}T10:00:00+00:00")
+            assert consolidate_day(m5, f"2026-03-0{i + 1}", lambda p, a=st(who, f, v): a, embed=fake)
+        assert m5.store.snapshot(m5.store.entity("person", "Mira")) == {"coffee": "likes it now", "age": "15", "class": "9"}
+        assert m5.store.snapshot(m5.store.entity("person", "Ravi")) == {"drink": "tea"}
+        assert [r["value"] for r in m5.store.state_history(m5.store.entity("person", "Mira"), "coffee")] == ["hates it", "likes it now"]
+    with tempfile.TemporaryDirectory() as d6, Memory(d6) as m6:   # second pass: conflict is queued, a change of mind updates the state, junk answers change nothing
+        for i, t in enumerate(["Mira hates mushrooms", "Mira: mum made mushroom soup, I like mushrooms now", "Mira never flew", "Mira flew to Pune"]):
+            m6.archive.write("conversation", {"text": t}, ts=f"2026-04-0{i + 1}T10:00:00+00:00")
+        first = json.dumps({"events": [{"type": "note", "content": "Mira hates mushrooms", "importance": 0.8, "about": [{"kind": "person", "name": "Mira"}]}],
+                            "states": [{"kind": "person", "name": "Mira", "field": "mushrooms", "value": "hates them"}],
+                            "contradictions": ["Mira mushrooms: current state says hates them, but now likes them"], "summary": "s"})
+        assert consolidate_day(m6, "2026-04-01", lambda p: first.replace("current state says", "state says"))   # (cleaned away: no queue item yet)
+        mira = m6.store.entity("person", "Mira")
+        verdict = lambda v, new=None, why="": json.dumps({"checks": [{"fact": 1, "verdict": v, "new": new, "why": why}, {"fact": 99, "verdict": "conflict", "why": "x"}]})
+        quiet = json.dumps({"events": [], "summary": "s"})
+        assert consolidate_day(m6, "2026-04-02", lambda p: quiet, check_llm=lambda p: verdict("changed", "likes them now"))
+        assert m6.store.snapshot(mira) == {"mushrooms": "likes them now"} and not m6.store.db.execute("SELECT 1 FROM review_queue").fetchone()   # change of mind: state history, no contradiction
+        assert consolidate_day(m6, "2026-04-03", lambda p: first.replace("hates them", "likes them now"), check_llm=lambda p: verdict("conflict", None, "he says he never flew"))
+        q = [r[0] for r in m6.store.db.execute("SELECT text FROM review_queue")]
+        assert len(q) == 1 and "current state says likes them now, but now he says he never flew" in q[0]   # the first answer's own contradiction was dropped, the check's queued
+        assert consolidate_day(m6, "2026-04-04", lambda p: quiet, check_llm=lambda p: "not json") and m6.store.db.execute("SELECT COUNT(*) FROM review_queue").fetchone()[0] == 1   # a broken check answer does not fail the day
     c = _clean({"events": [{"type": "n", "content": "x", "about": [{"kind": "Person", "name": "user"}, {"kind": "concept", "name": "friction"}, {"kind": "person", "name": "Chhotu/PF"}]}],
                 "states": [{"kind": "person", "name": "user", "field": "exam", "value": "tomorrow"}, {"kind": "person", "name": "user", "field": "phone", "value": "Redmi"}],
                 "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "I"}, "relation": "knows", "object": {"kind": "education", "name": "physics"}}],

@@ -119,6 +119,7 @@ Reply with JSON only: {"note": str}"""
 
 
 class Month(Week):
+    cands = False
     min_explore = 2
     hard_gap = True
     explore_tools = EXPLORE | {"state_at", "compare_states", "get_weekly_digests", "list_decisions", "find_recurring"}
@@ -488,8 +489,9 @@ def run_monthly_pending(mem, llm, index, model="unset", today=None, pm_update=No
     return [m for m in months if m < this and run_monthly(mem, m, llm, index, model, pm_update)]
 
 
-def run_yearly(mem, anchor_day, llm, index, model="unset", force=False):
-    """12 month notes, then the whole-year loop, then the critic. Resumable at every step; None if skipped or not finished."""
+def run_yearly(mem, anchor_day, llm, index, model="unset", force=False, critic_llm=None):
+    """12 month notes, then the whole-year loop, then the critic (critic_llm, default the same llm: a second model can criticise the first's draft).
+    Resumable at every step; None if skipped or not finished."""
     w = Year(mem, anchor_day, index)
     if not force and _done(w, "yearly", anchor_day):
         return None
@@ -512,7 +514,7 @@ def run_yearly(mem, anchor_day, llm, index, model="unset", force=False):
             if status == "done":  # an incomplete draft is not kept: a retry must run the analyst again, not promote the fallback text
                 w.q("INSERT OR REPLACE INTO period_digests VALUES('yearly_draft',?,?,?)", (anchor_day, draft, _now()))
         c = Critic(mem, anchor_day, index, draft)
-        cstatus, final = c.loop(llm)
+        cstatus, final = c.loop(critic_llm or llm)
         if cstatus != "done":
             final, status = draft, "incomplete"
         elif status != "done":
