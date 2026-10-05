@@ -142,6 +142,7 @@ if __name__ == "__main__":
         for k, v in list(vars(mod).items()):
             if k.isupper() and isinstance(v, str) and "Vatsal" in v:
                 setattr(mod, k, v.replace("Vatsal", "Arin"))
+    weekly.Week.cands = bool(os.environ.get("WEEK_CANDS"))   # WEEK_CANDS=1: recurring candidates + free review phase in the weekly run
     m, ix, days, ex, run = open_run(run, folder)
     calls = run / "calls.jsonl"
     t0 = time.time()

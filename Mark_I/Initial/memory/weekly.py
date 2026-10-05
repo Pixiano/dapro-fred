@@ -36,7 +36,8 @@ RULINGS = {"apparent", "historical_change", "real", "unknown"}
 MAX_CALLS, MAX_BAD, FINISH_GRACE = 60, 3, 3   # tool calls, consecutive unusable replies, turns allowed after the cap
 RESULT_CHARS, MAP_CHARS, KEEP_MSGS = 3000, 12000, 24
 MIN_EVENTS, TRAIT_MAX_CONF, DUP_SIM, PAST_SIM = 3, 0.5, 0.8, 0.6
-MAX_UNKNOWN = 2
+MAX_UNKNOWN = 2   # for contradiction items only; a question may always be left unknown
+MAX_REFUSED = 3   # refused finish calls (review/explore gates) after which the next finish succeeds with the rest left open: a stuck loop must not burn the call cap
 REVIEW_CALLS = 25   # calls spent while review items are open do not count against MAX_CALLS (up to this many): review no longer eats the exploration budget
 CAND_SIM, CAND_WEEKS, CAND_MAX = 0.75, 3, 8   # recurring candidates: events at least this similar (0.75 separated the key's routines from one-off topics), in this many different weeks, at most this many shown
 CONFLICT = re.compile(r"contradict|cannot both|can.t both|conflict|inconsisten|incompatible", re.I)
@@ -115,7 +116,7 @@ class Week(MemTools):
             self.s.db.executescript((_HERE / "schema_weekly.sql").read_text(encoding="utf-8"))
         self.start = (datetime.fromisoformat(end_day) - timedelta(days=6)).strftime("%Y-%m-%d")
         self.digest, self.calls, self.finish_warned, self.explored, self._seen = None, 0, False, 0, set()
-        self.shown, self.unknowns, self.made, self.review_used = set(), 0, 0, 0   # event ids the tools returned this run; 'unknown' rulings used
+        self.shown, self.unknowns, self.made, self.review_used, self.refused = set(), 0, 0, 0, 0   # event ids the tools returned this run; 'unknown' rulings used
         self.system, self.max_calls, self.map_chars = SYSTEM + (PHASES if self.cands else ""), MAX_CALLS, MAP_CHARS  # subclasses swap these
 
     # ---- helpers ----
@@ -401,7 +402,7 @@ class Week(MemTools):
         row = self.q("SELECT kind FROM review_queue WHERE id=? AND status='open' AND day <= ?", (id, self.end))
         if not row:
             return {"error": f"no open review item {id}"}
-        if ruling == "unknown" and self.unknowns >= MAX_UNKNOWN:
+        if ruling == "unknown" and row[0]["kind"] == "contradiction" and self.unknowns >= MAX_UNKNOWN:
             return {"error": f"unknown is used up for this run ({MAX_UNKNOWN}): decide apparent, historical_change or real (real = two current beliefs cannot both be true)"}
         if ruling == "real" and row[0]["kind"] != "contradiction":
             return {"error": "real applies only to contradiction items; a question is apparent, historical_change or unknown"}
@@ -415,7 +416,7 @@ class Week(MemTools):
                 return {"error": "a contradiction is only apparent or a historical_change if events explain the difference: search for them (search_memory / get_events_about), then pass their ids as event_ids. If you cannot find any, rule real"}
             note = f"{note} [events {why}]"
         with self.s.lock:
-            self.unknowns += ruling == "unknown"
+            self.unknowns += ruling == "unknown" and row[0]["kind"] == "contradiction"
             self.s.db.execute("INSERT OR REPLACE INTO review_rulings VALUES(?,?,?,?)", (id, ruling, self.end, note))
             if ruling in ("apparent", "historical_change"):   # a contradiction is never closed by the agent: it waits for the user's confirmation
                 self.s.db.execute("UPDATE review_queue SET status=? WHERE id=?", ("explained" if row[0]["kind"] == "contradiction" else "closed", id))
@@ -431,14 +432,20 @@ class Week(MemTools):
 
     def t_finish(self, digest, force=False):
         items, infs = self._unfinished()
-        if not force:  # refused, not just warned: a medium-effort model otherwise finishes at the first chance. The call cap forces a finish, so it cannot be trapped.
+        stuck = not force and self.refused >= MAX_REFUSED
+        if stuck:
+            self._dlog("override", why="finish accepted after repeated refusals", open_items=items, inferences=infs)
+        if not force and not stuck:  # refused, not just warned: a medium-effort model otherwise finishes at the first chance. The call cap forces a finish, so it cannot be trapped.
             if items or infs:
+                self.refused += 1
                 return {"error": "not yet reviewed", "review_items": items, "inferences": infs,
                         "hint": "rule_review_item each open item (unknown is allowed) and update_inference each active inference (a note is enough), then finish"}
             if self.explored < self.min_explore and len(self.events()) >= MIN_EVENTS:
+                self.refused += 1
                 return {"error": f"explore first: only {self.explored} of {self.min_explore} search/compare calls so far. Look for support AND counter-evidence of this period's main routines, projects and relationships, then create_inference or say you found none"}
             if (gap := self._gap()) and not self.gap_warned:
                 self.gap_warned = not self.hard_gap
+                self.refused += 1
                 return {"error": gap}
         if not (digest or "").strip():
             return {"error": "digest is empty (nothing else is missing: write the digest and finish)"}
@@ -712,6 +719,19 @@ if __name__ == "__main__":  # self-check: python weekly.py
         assert not s9.db.execute("SELECT 1 FROM review_rulings WHERE item_id=?", (cid,)).fetchone()
         w9.t_rule_review_item(cid, "apparent", "other circumstances", [w9.events()[0]["id"]]); confirm_review(s9, cid, True)
         assert s9.db.execute("SELECT status FROM review_queue WHERE id=?", (cid,)).fetchone()[0] == "closed"
+    with tempfile.TemporaryDirectory() as d8, Memory(d8) as m8:   # a question may stay unknown; a stuck finish loop ends after MAX_REFUSED refusals
+        for i in range(4):
+            m8.store.add_event("note", f"event {i}", ts=f"2026-03-0{i + 1}T10:00:00+00:00")
+        ix8 = SemanticIndex(m8.store, lambda t, q: [1.0], "fake8")
+        for t in ("question one", "question two", "question three"):
+            m8.store._ask("2026-03-02", t)
+        m8.store.db.execute("UPDATE review_queue SET kind='question'"); m8.store.db.commit()
+        w8 = Week(m8, "2026-03-08", ix8)
+        assert all(w8.t_rule_review_item(i, "unknown").get("ruling") == "unknown" for i in (1, 2, 3)) and w8.unknowns == 0   # no cap on questions
+        m8.store.db.execute("INSERT INTO review_queue(day,kind,text) VALUES('2026-03-02','question','four')"); m8.store.db.commit()
+        for i in range(MAX_REFUSED):
+            assert w8.t_finish("The week.")["error"]
+        assert w8.t_finish("The week.") == {"ok": True} and "The week." in w8.digest   # open item left, finish accepted
     with tempfile.TemporaryDirectory() as d7, Memory(d7) as m7:   # recurring candidates (3+ different weeks, same kind of event) and the free review phase
         ix7 = SemanticIndex(m7.store, lambda t, q: [float("gym" in t) + 0.01, float("tax" in t) + 0.01], "fake7"); ix7.attach()
         gym = [m7.store.add_event("note", "went to the gym", importance=0.6, ts=f"2026-03-{day:02d}T07:00:00+00:00") for day in (2, 10, 18, 26)]
