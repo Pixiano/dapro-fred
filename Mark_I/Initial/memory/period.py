@@ -134,6 +134,9 @@ class Month(Week):
         return r
 
     def _gap(self):
+        if not self.q("SELECT 1 FROM chapter_log WHERE period=?", (self.period,)):
+            return ("no chapter recorded: call upsert_chapter (start a chapter, or give an ended one its end_day) or refine_chapter for each life track "
+                    "this month touched; chapters are named stretches of life such as 'PathFinder build'")
         if not self.q("SELECT 1 FROM turning_points WHERE period=?", (self.period,)):
             return ("no turning points recorded: call create_turning_point for each turning point you describe (with real supporting event ids) and "
                     "upsert_chapter for each life track. Every turning point you write in the digest must be recorded first")
@@ -678,7 +681,9 @@ if __name__ == "__main__":  # self-check: python period.py
             ix3 = SemanticIndex(m3.store, lambda t, q: [1.0, 0.0], "fake")
             mo = Month(m3, "2026-07", ix3)
             assert mo._gap() and mo.hard_gap
-            assert "turning points" in mo.t_finish("d")["error"] and "turning points" in mo.t_finish("d")["error"]   # refused every time, not once
+            assert "chapter" in mo.t_finish("d")["error"] and "chapter" in mo.t_finish("d")["error"]   # refused every time, not once
+            assert mo.t_upsert_chapter("PathFinder build", "2026-07-01")["id"]
+            assert "turning points" in mo.t_finish("d")["error"] and "turning points" in mo.t_finish("d")["error"]
             far = m3.store.add_event("note", "far", ts="2026-07-02T10:00:00+00:00")
             assert "within 3 days" in mo.t_create_turning_point("2026-07-20", "x", event_ids=[far])["error"]
             near = m3.store.add_event("note", "near", ts="2026-07-19T10:00:00+00:00")

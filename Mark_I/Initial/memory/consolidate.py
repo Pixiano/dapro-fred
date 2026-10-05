@@ -13,6 +13,7 @@ A day longer than MAX_CHARS goes to the model in parts (summaries joined, nothin
     consolidates those days (oldest first) without today's state and without contradictions.
 """
 import json
+import re
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,7 @@ USER = "Vatsal"  # whose memory this is; first-person facts attach to person/USE
 KINDS = {"person", "place", "project", "pet", "org", "task", "goal"}  # anything else is topic noise ("concept", "education", "time check")
 RELATIVE = ("tomorrow", "today", "tonight", "yesterday", "now", "next week", "this week", "later")  # a state is a lasting fact, never a relative time
 MAX_QUESTIONS = 1
+ADVICE = re.compile(r"(should|how (to|can|do|might)|will|would|could|can|shall) ", re.I)   # advice, plans and predictions are not doubts about what is stored
 RELATIONS = {"parent_of", "sibling_of", "cousin_of", "friend_of", "teammate_of", "mentor_of", "tutors", "helps_with", "works_on", "works_at", "lives_in", "studies_at", "owns", "pet_of"}
 RELATION_ALIASES = {"has_sister": "sibling_of", "has_brother": "sibling_of", "sister_of": "sibling_of", "brother_of": "sibling_of", "sibling": "sibling_of",
                     "mother_of": "parent_of", "father_of": "parent_of", "mom_of": "parent_of", "has_parent": "parent_of", "best_friend_of": "friend_of",
@@ -135,7 +137,7 @@ def _clean(out):
         r["relation"] = RELATION_ALIASES.get(rel, rel)
     out["relationships"] = [r for r in out["relationships"] if ok(r["subject"]) and ok(r["object"]) and r["relation"] in RELATIONS]
     out["contradictions"] = [c for c in out.get("contradictions", []) if "current state says" in c]   # a contradiction must quote the stored fact it clashes with
-    out["open_questions"] = out.get("open_questions", [])[:MAX_QUESTIONS]
+    out["open_questions"] = [q for q in out.get("open_questions", []) if not ADVICE.match(q.strip())][:MAX_QUESTIONS]
     out["corrections"] = [c for c in out.get("corrections", []) if c["kind"].strip().lower() in KINDS]
     return out
 
@@ -382,6 +384,9 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         assert {"Nitya", "Navya", "Navya [heard as Nitya]"} <= set(ids) and "Zed" not in ids
         about = lambda n: [e["content"] for e in g2.events_about(ids[n])]
         assert about("Nitya") == ["Navya took a charger"] and about("Navya") == ["tuition Navya is nice"]
+    q = _clean({"events": [], "states": [], "aliases": [], "relationships": [], "contradictions": [], "summary": "s",
+                "open_questions": ["Should I remind Arin to label the charger?", "Will the tutoring go ahead?", "Is person 'Chintu' the same as 'Chhotu'?"]})
+    assert q["open_questions"] == ["Is person 'Chintu' the same as 'Chhotu'?"]                              # advice and predictions are not memory doubts
     c = _clean({"events": [{"type": "n", "content": "x", "about": [{"kind": "Person", "name": "user"}, {"kind": "concept", "name": "friction"}, {"kind": "person", "name": "Chhotu/PF"}]}],
                 "states": [{"kind": "person", "name": "user", "field": "exam", "value": "tomorrow"}, {"kind": "person", "name": "user", "field": "phone", "value": "Redmi"}],
                 "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "I"}, "relation": "knows", "object": {"kind": "education", "name": "physics"}}],
