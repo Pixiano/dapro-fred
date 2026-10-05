@@ -242,6 +242,9 @@ def consolidate_day(mem, day, llm, model="unset", historical=False) -> bool:
         for i, part in enumerate(parts):
             head = f"(PART {i + 1} of {len(parts)} of this day)\n" if len(parts) > 1 else ""
             out = json.loads(traced(s, agent, key, llm)(PROMPT.format(day=day, state=state, material=head + part, user=USER)))
+            for k in ("events", "states", "aliases", "relationships", "corrections"):   # stray strings in a list (gpt-oss ran its keys into an array) carry no data
+                if isinstance(out.get(k), list):
+                    out[k] = [x for x in out[k] if isinstance(x, dict)]
             if isinstance(out.get("states"), list):   # an entry with an empty field or value is noise, not a reason to fail the day
                 out["states"] = [x for x in out["states"] if not (isinstance(x, dict) and "field" in x and "value" in x and not (str(x["field"]).strip() and str(x["value"]).strip()))]
             _valid(out)  # a malformed part fails the whole day before any write
@@ -391,6 +394,12 @@ if __name__ == "__main__":  # self-check: python consolidate.py
     assert q["open_questions"] == ["Is person 'Chintu' the same as 'Chhotu'?"]                              # advice and predictions are not memory doubts
     with tempfile.TemporaryDirectory() as d4, Memory(d4) as m4:   # one empty state entry must not fail the day (gpt-oss did this)
         m4.archive.write("conversation", {"text": "I live in Shanti Nagar"}, ts="2026-02-03T10:00:00+00:00")
+        bad = json.dumps({"events": [], "states": [{"kind": "place", "name": "Shanti Nagar", "field": "", "value": ""}], "aliases": [], "relationships": [],
+                          "contradictions": [], "open_questions": [], "summary": "s"})
+        bad = json.dumps({"events": [], "states": [], "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "A"}, "relation": "sibling_of", "object": {"kind": "person", "name": "B"}}, "contradictions", [], "open_questions"],
+                          "contradictions": [], "open_questions": [], "summary": "s"})
+        assert consolidate_day(m4, "2026-02-03", lambda p: bad)
+        m4.store.db.execute("DELETE FROM consolidation_runs"); m4.store.db.commit()
         bad = json.dumps({"events": [], "states": [{"kind": "place", "name": "Shanti Nagar", "field": "", "value": ""}], "aliases": [], "relationships": [],
                           "contradictions": [], "open_questions": [], "summary": "s"})
         assert consolidate_day(m4, "2026-02-03", lambda p: bad) and not m4.store.db.execute("SELECT 1 FROM consolidation_runs WHERE status!='done'").fetchone()
