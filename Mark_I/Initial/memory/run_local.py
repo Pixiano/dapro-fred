@@ -88,20 +88,36 @@ def make_llm(cfg, stage, log_to, effort=None, want_json=False):
     return llm
 
 
-def critic_llm(calls):
-    """CRITIC_MODEL set: the yearly critic pass runs on that model (team: Qwen3-8B drafts, gpt-oss criticises). The model is swapped with lms right
-    before the critic's first call (they do not fit the GPU together). None = the analyst model criticises its own draft."""
-    if not CRITIC:
+def lms_load(model, ctx=20000):
+    """Swaps the model in LM Studio (the two analysts do not fit the GPU together); the embedder is reloaded."""
+    lms = str(Path.home() / ".lmstudio" / "bin" / "lms")
+    for cmd in (["unload", "--all"], ["load", model, "--context-length", str(ctx), "--gpu", "max", "-y"], ["load", EMB, "-y"]):
+        subprocess.run([lms, *cmd], check=True, capture_output=True)
+
+
+def critic_llm(calls, model=None):
+    """A different model for the yearly critic pass (team: Qwen3-8B drafts, gpt-oss criticises): CRITIC_MODEL or `model`; the swap happens right before the
+    critic's first call. None = the analyst model criticises its own draft."""
+    model = model or CRITIC
+    if not model:
         return None
-    inner, state = make_llm(dict(GPT, model=CRITIC), "yearly", calls, EFFORT["yearly"]), {"swapped": False}
+    inner, state = make_llm(dict(GPT, model=model), "yearly", calls, EFFORT["yearly"]), {"swapped": False}
     def llm(x):
         if not state["swapped"]:
-            lms = str(Path.home() / ".lmstudio" / "bin" / "lms")
-            for cmd in (["unload", "--all"], ["load", CRITIC, "--context-length", "20000", "--gpu", "max", "-y"], ["load", EMB, "-y"]):
-                subprocess.run([lms, *cmd], check=True, capture_output=True)
+            lms_load(model)
             state["swapped"] = True
         return inner(x)
     return llm
+
+
+DRAFT = os.environ.get("DRAFT_MODEL", "qwen/qwen3-8b")   # last-resort team: this model drafts, GPT["model"] (gpt-oss) criticises (yearly)
+
+
+def period_failed(m, kind, period):
+    """The analyst run ended without what a period run must produce: not done, or (monthly) no turning point recorded."""
+    r = m.store.db.execute("SELECT status FROM period_runs WHERE kind=? AND period=?", (kind, period)).fetchone()
+    tp = m.store.db.execute("SELECT COUNT(*) FROM turning_points WHERE period=?", (period,)).fetchone()[0]
+    return not r or r[0] != "done" or (kind == "monthly" and not tp)
 
 
 def open_run(run, folder):
@@ -161,9 +177,23 @@ if __name__ == "__main__":
     elif stage in ("monthly", "yearly"):
         llm = make_llm(GPT, stage, calls, EFFORT[stage])
         if stage == "monthly" and os.environ.get("MONTHS"):   # MONTHS=2026-01,2026-02
-            done = [x for x in os.environ["MONTHS"].split(",") if period.run_monthly(m, x, llm, ix, "gpt-oss-20b")]
+            done = []
+            for x in os.environ["MONTHS"].split(","):
+                if period.run_monthly(m, x, llm, ix, "gpt-oss-20b"):
+                    done.append(x)
+                if period_failed(m, "monthly", x) and os.environ.get("TEAM_FALLBACK", "1") != "0":   # last resort: Qwen3-8B takes the month (there is no monthly critic pass)
+                    print(f"[fallback] {x}: gpt-oss run failed or recorded no turning point; rerunning with {DRAFT}", flush=True)
+                    lms_load(DRAFT, 32000)
+                    if period.run_monthly(m, x, make_llm(dict(GPT, model=DRAFT), stage, calls, None), ix, "team-" + DRAFT.split("/")[-1], force=True):
+                        done.append(x + " (team)")
+                    lms_load(GPT["model"])
         elif stage == "yearly" and os.environ.get("YEAR_END"):   # YEAR_END=2026-05-04: the year ending that day
             done = bool(period.run_yearly(m, os.environ["YEAR_END"], llm, ix, "gpt-oss-20b", critic_llm=critic_llm(calls)))
+            if period_failed(m, "yearly", os.environ["YEAR_END"]) and os.environ.get("TEAM_FALLBACK", "1") != "0":   # last resort: Qwen3-8B drafts, gpt-oss criticises
+                print(f"[fallback] yearly: rerunning as team, {DRAFT} drafts", flush=True)
+                lms_load(DRAFT, 32000)
+                done = bool(period.run_yearly(m, os.environ["YEAR_END"], make_llm(dict(GPT, model=DRAFT), stage, calls, None), ix, "team", force=True, critic_llm=critic_llm(calls, GPT["model"])))
+                lms_load(GPT["model"])
         else:
             done = (period.run_monthly_pending if stage == "monthly" else period.run_yearly_pending)(m, llm, ix, "gpt-oss-20b")
         report(m, ex, folder, run, stage, {"done_this_run": done, "minutes": round((time.time() - t0) / 60, 1)})

@@ -77,7 +77,9 @@ def _facts(mem, day, material):
     for e in s.entities():
         if e["name"] == USER or e["name"].lower() in low:
             tag = f"{e['kind']}/{e['name']}"
-            out += [{"e": e["id"], "field": f, "value": v, "text": f"{tag}: {f} = {v}", "tag": tag} for f, v in s.snapshot(e["id"]).items()]
+            with s.lock:   # the state as it stood before this day, so the check also works on a day that is already stored
+                before = {r["field"]: r["value"] for r in s.db.execute("SELECT field, value FROM entity_states WHERE entity_id=? AND valid_from < ? ORDER BY valid_from", (e["id"], day))}
+            out += [{"e": e["id"], "field": f, "value": v, "text": f"{tag}: {f} = {v}", "tag": tag} for f, v in before.items()]
             out += [{"e": e["id"], "field": None, "value": ev["content"], "text": f"{tag}: on {ev['ts'][:10]}: {ev['content']}", "tag": tag}
                     for ev in g.events_about(e["id"], 5) if ev["ts"][:10] < day]
     return out[:CHECK_FACTS]
@@ -111,6 +113,14 @@ def _apply_checks(s, checks, day, ts, sid):
             cur = s.state(c["e"], c["field"])
             if cur is not None and cur["value"] == c["value"]:   # the first pass did not already write the new value
                 s.set_state(c["e"], c["field"], c["new"], source_id=sid, ts=ts)
+
+
+def check_day(mem, day, llm):
+    """The second pass alone on a day that is already consolidated (so a different model can do it after a model swap). Returns the verdicts applied."""
+    raw = "\n".join(l for l in _material(mem, day).split("\n") if "event/" not in l)   # the archive records only, not the extracted events
+    checks = _check(mem, day, raw, llm)
+    _apply_checks(mem.store, checks, day, f"{day}T23:59:59+00:00", mem.store.add_source("consolidation", day))
+    return checks
 
 
 def _material(mem, day, historical=False):
@@ -512,6 +522,14 @@ if __name__ == "__main__":  # self-check: python consolidate.py
         q = [r[0] for r in m6.store.db.execute("SELECT text FROM review_queue")]
         assert len(q) == 1 and "current state says likes them now, but now he says he never flew" in q[0]   # the first answer's own contradiction was dropped, the check's queued
         assert consolidate_day(m6, "2026-04-04", lambda p: quiet, check_llm=lambda p: "not json") and m6.store.db.execute("SELECT COUNT(*) FROM review_queue").fetchone()[0] == 1   # a broken check answer does not fail the day
+    with tempfile.TemporaryDirectory() as d9, Memory(d9) as m9:   # the check on an already stored day (model swap between extraction and check)
+        m9.archive.write("conversation", {"text": "Mira hates mushrooms"}, ts="2026-05-01T10:00:00+00:00")
+        m9.archive.write("conversation", {"text": "Mira likes mushrooms now"}, ts="2026-05-02T10:00:00+00:00")
+        ex = lambda v: json.dumps({"events": [], "states": [{"kind": "person", "name": "Mira", "field": "mushrooms", "value": v}], "summary": "s"})
+        assert consolidate_day(m9, "2026-05-01", lambda p: ex("hates them")) and consolidate_day(m9, "2026-05-02", lambda p: ex("likes them"))
+        seen9 = []
+        got = check_day(m9, "2026-05-02", lambda p: (seen9.append(p), json.dumps({"checks": [{"fact": 1, "verdict": "changed", "new": "likes them", "why": "w"}]}))[1])
+        assert "mushrooms = hates them" in seen9[0] and "likes mushrooms now" in seen9[0] and "event/" not in seen9[0].split("MATERIAL")[1] and [c["verdict"] for c in got] == ["changed"]
     c = _clean({"events": [{"type": "n", "content": "x", "about": [{"kind": "Person", "name": "user"}, {"kind": "concept", "name": "friction"}, {"kind": "person", "name": "Chhotu/PF"}]}],
                 "states": [{"kind": "person", "name": "user", "field": "exam", "value": "tomorrow"}, {"kind": "person", "name": "user", "field": "phone", "value": "Redmi"}],
                 "aliases": [], "relationships": [{"subject": {"kind": "person", "name": "I"}, "relation": "knows", "object": {"kind": "education", "name": "physics"}}],
