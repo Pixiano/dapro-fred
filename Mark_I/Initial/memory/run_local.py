@@ -103,7 +103,7 @@ def report(m, ex, folder, run, stage, extra):
     out["events_in_key"] = sum(len(o.get("events", [])) for o in ex.values())
     tf = Path(folder) / "truth.json"
     if tf.exists():
-        out["score"] = {k: f"{p}/{n}" + (f"  FAIL: {fails}" if fails else "") for k, (p, n, fails) in rs.score(m, json.loads(tf.read_text(encoding="utf-8"))).items()}
+        out["score"] = {k: f"{p}/{n}" + (f"  FAIL: {fails}" if fails else "") for k, (p, n, fails) in rs.score(m, json.loads(tf.read_text(encoding="utf-8")), UNTIL).items()}
     Path(run, f"{stage}_report.json").write_text(json.dumps(out, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     print(json.dumps(out, indent=1, ensure_ascii=False, default=str))
 

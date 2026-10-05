@@ -43,11 +43,17 @@ def oracle(ex):
     return llm
 
 
-def score(m, truth):
+def score(m, truth, until="9999"):
     """Checks the code's result against the answer key where the code alone decides. Returns {check: (passed, total, first failures)}.
-    Checks that need a real model (patterns, contradictions ruled, decisions, traits) are for the model run, not here."""
+    Checks that need a real model (patterns, contradictions ruled, decisions, traits) are for the model run, not here.
+    until = last day that was run: aliases, corrections and fact values first seen after it are not counted."""
     from graph import Graph
     g, s, res = Graph(m.store), m.store, {}
+    files = [(p.stem, "-".join(p.parts[-4:-1])) for p in m.archive.root.glob("*/*/*/*.jsonl")]
+    seen = " ".join(" ".join(json.dumps(r, ensure_ascii=False).lower().split()) for st, d in files if d <= until for r in m.archive.read(st, d))
+    said = lambda w: w.lower() in seen   # the word appears in a day that was run
+    close = lambda key, val: low(key) in low(val) or sum(w in low(val) for w in re.findall(r"[a-z]{3,}", low(key))) * 2 >= len(re.findall(r"[a-z]{3,}", low(key))) > 0   # same wording, or half of the key's words ("Tue/Thu" vs "Tuesdays and Thursdays" counts)
+    reach = lambda v: v["valid_from"].lstrip("<=") <= until or not v["valid_from"][:1].isdigit()   # a value dated after the last day is not reachable
     ev = [r["content"].lower() for r in s.db.execute("SELECT content FROM events")]
     low = lambda q: " ".join(q.lower().split())
     has = lambda q: any(low(q) in " ".join(c.split()) for c in ev)
@@ -56,32 +62,41 @@ def score(m, truth):
     def put(name, fails, total):
         res[name] = (total - len(fails), total, fails[:3])
     f = []
-    for grp in truth["entity_groups"]:
+    groups = [grp for grp in truth["entity_groups"] if said(grp["canonical"])]
+    for grp in groups:
         base = eid(grp["kind"], grp["canonical"])
         if base is None:
             f.append(f"{grp['canonical']}: no entity")
             continue
-        for al in grp.get("aliases", []) + grp.get("spelling_variants", []):
+        for al in filter(said, grp.get("aliases", []) + grp.get("spelling_variants", [])):
             if g.canonical(g.resolve(grp["kind"], al)) != base:
                 f.append(f"{al!r} does not resolve to {grp['canonical']}")
-    put("aliases_resolve_to_one_entity", f, len(truth["entity_groups"]))
-    f = []
-    for grp in truth["entity_groups"]:   # a misheard name that was corrected: its early events now belong to the right person
+    put("aliases_resolve_to_one_entity", f, len(groups))
+    f, n = [], 0
+    for grp in groups:   # a misheard name that was corrected: its early events now belong to the right person
         for bad in grp.get("misheard_as", []):
+            if not any(c["day"] <= until and bad.lower() in c["quote"].lower() for c in truth["corrections"]):
+                continue
+            n += 1
             base = eid(grp["kind"], grp["canonical"])
             if base is None or not any(f"heard as {bad.lower()}" in e["content"].lower() for e in g.events_about(base, 500)):
                 f.append(f"{bad!r} was not merged into {grp['canonical']}")
-    put("misheard_name_merged_after_correction", f, sum(len(g_.get("misheard_as", [])) for g_ in truth["entity_groups"]))
+    put("misheard_name_merged_after_correction", f, n)
     f = []
-    for p in truth["must_stay_separate"]:
+    sep = [p for p in truth["must_stay_separate"] if said(p["a"].split(" (")[0]) and said(p["b"].split(" (")[0])]
+    for p in sep:
         a, b = g.resolve("person", p["a"]), g.resolve("person", p["b"])   # resolve like any later mention would (creates the entity if the key never extracted it)
         if g.canonical(a) == g.canonical(b):
             f.append(f"{p['a']} / {p['b']} merged")
-    put("different_people_stay_separate", f, len(truth["must_stay_separate"]))
-    f = []
+    put("different_people_stay_separate", f, len(sep))
+    f, n = [], 0
     for tl in truth["fact_timelines"]:
         kind, name = tl["entity"].split("/", 1)
-        e, last = eid(kind, name), tl["values"][-1]["value"]
+        vals = [v for v in tl["values"] if reach(v)]
+        if not vals or (isinstance(tl.get("told"), dict) and any(t["day"] > until for t in tl["told"].values())):
+            continue   # nothing of this fact was said yet in the days that were run
+        n += 1
+        e, last = eid(kind, name), vals[-1]["value"]   # latest value within the run
         if e is None:
             f.append(f"{name}: no entity")
         elif "(relationship)" in tl["field"]:
@@ -90,10 +105,10 @@ def score(m, truth):
             if not row or low(last) not in low(row[0]):
                 f.append(f"{name}.{rel}: now {row[0] if row else None!r}, key says {last!r}")
         else:
-            row = s.state(e, tl["field"])
-            if not row or low(last) not in low(row["value"]):  # the extraction may add detail to the value ("Redmi Note (8 GB), gift")
+            row = s.state(e, tl["field"]) or next((r for r in s.db.execute("SELECT * FROM entity_states WHERE entity_id=? AND valid_to IS NULL", (e,)) if close(last, r["value"])), None)   # the field may be stored under another name; the value decides
+            if not row or not close(last, row["value"]):  # the extraction may add detail to the value ("Redmi Note (8 GB), gift")
                 f.append(f"{name}.{tl['field']}: now {row['value'] if row else None!r}, key says {last!r}")
-    put("fact_timelines_end_on_latest_value", f, len(truth["fact_timelines"]))
+    put("fact_timelines_end_on_latest_value", f, n)
     for key, name in (("gate_skip", "chatter_stays_out_of_events"), ("injections", "injected_text_not_stored_as_fact"), ("sarcasm", "sarcasm_not_stored_literally"),
                       ("hypothetical_or_quoted", "hypotheticals_not_stored_as_facts"), ("over_psychologise", "trait_talk_not_stored_as_facts")):
         put(name, [x["quote"] for x in truth[key] if has(x["quote"])], len(truth[key]))
@@ -102,7 +117,7 @@ def score(m, truth):
     return res
 
 
-def run(folder):
+def run(folder, until="9999"):
     logging.getLogger("memory").setLevel(logging.ERROR)
     days, ex = load(folder)
     with tempfile.TemporaryDirectory() as d, Memory(d) as m:
@@ -122,7 +137,7 @@ def run(folder):
         out["events_kept_by_gate"] = f"{out['events']}/{out['events_in_key']}"
         tf = Path(folder) / "truth.json"
         if tf.exists():
-            out["score"] = {k: f"{p}/{n}" + (f"  FAIL: {fails}" if fails else "") for k, (p, n, fails) in score(m, json.loads(tf.read_text(encoding="utf-8"))).items()}
+            out["score"] = {k: f"{p}/{n}" + (f"  FAIL: {fails}" if fails else "") for k, (p, n, fails) in score(m, json.loads(tf.read_text(encoding="utf-8")), until).items()}
         return out, m
 
 
