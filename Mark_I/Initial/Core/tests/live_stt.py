@@ -61,6 +61,7 @@ def main():
         audio.append(to16k(x, sr))
     print(f"synthesised {len(audio)} sentences with Kokoro (CPU)")
     base, ram0 = vram_mb(), rss_mb()
+    config.get().stt_save_audio = False                 # synthetic test speech must not land in the real voice_data
     print(f"device {config.get().whisper_device}, compute {config.get().whisper_compute}")
     bus = ev.EventBus()
     stt = Stt(bus)

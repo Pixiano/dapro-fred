@@ -70,3 +70,8 @@ Run Core files with `.venv\Scripts\python`; the playground itself is stdlib only
 - Subfolder modules start with a 3-line path bootstrap so `python models/client.py` works from anywhere; imports are flat from the Core root (`import config`, `from models import toolparse`).
 - Anything above the model takes a `Chat`-shaped object, so `FakeChat` drops in; anything that reports takes the `EventBus`.
 - No personal data, vault text or real logs in code, tests or docs.
+
+## Model weights (git-ignored, `Core/weights/`)
+- `weights/smart_turn/smart-turn-v3.2-cpu.onnx`: `huggingface_hub.hf_hub_download("pipecat-ai/smart-turn-v3", "smart-turn-v3.2-cpu.onnx", local_dir="weights/smart_turn")`
+- `weights/ecapa/*`: the speechbrain/spkrec-ecapa-voxceleb checkpoint files (copy from `Old/Core/models/spkrec-ecapa-voxceleb/` or let speechbrain download them)
+Voice data collection: `stt_save_audio` (default on) saves every final utterance and its transcript under `<FRED_DATA>/voice_data/` (outside the repo).

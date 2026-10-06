@@ -17,3 +17,6 @@ memory-backup-*.partial/
 *.jsonl
 Mark_I/**/archive/
 Mark_I/**/blobs/
+
+# Downloaded model weights (regenerate with the recipe in Core/README)
+Mark_I/Initial/Core/weights/

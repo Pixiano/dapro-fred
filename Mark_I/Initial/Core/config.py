@@ -62,6 +62,11 @@ class Settings:
     presence_absent_s: float = 49.0                   # no face for this long (since the last one seen) before "absent"; noticed at the first poll after it
     faces_static_cap: int = 13                        # face references: deliberate shots (never auto-changed)
     faces_dynamic_cap: int = 7                        # face references: FIFO of recent confident matches (static : dynamic = 13 : 7)
+    turn_prob_threshold: float = 0.5                  # Smart Turn: at or above = the turn is complete
+    voice_threshold: float = 0.30                     # cosine similarity at or above = Vatsal. Measured on 1-s real clips: same-speaker median 0.42, synthetic other voices max 0.23; 0.5 would reject 78% of his clips (tests/voice_eval.py); retune with real other speakers
+    voice_min_s: float = 1.0                          # shorter clips are too short to judge (score None); 1 s clips scored median 0.50, 2 s 0.62, 0.6 s 0.40 (tests/voice_eval.py)
+    voice_refs_cap: int = 20                          # enrolled voice references kept (most diverse)
+    stt_save_audio: bool = True                       # save each final utterance + transcript to <FRED_DATA>/voice_data (real-voice data collection)
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)
