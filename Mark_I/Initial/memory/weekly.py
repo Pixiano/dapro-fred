@@ -13,6 +13,7 @@ ponytail: the week map keeps only the last KEEP_MSGS messages of the loop, no su
 context window overflows in practice.
 """
 import json
+import sqlite3
 import logging
 import re
 from datetime import datetime, timedelta, timezone

@@ -204,6 +204,19 @@ class PersonalModel:
         self._log(iid, f"added by user: {text.strip()}")
         return iid
 
+    def has_pattern(self, key):
+        return bool(self.q("SELECT 1 FROM model_item_log WHERE change LIKE ?", (f"decision pattern [{key}]%",)))
+
+    def add_decision_pattern(self, key, text):
+        """A habit distilled from Vatsal's own precedents (precedents.distill: 3+ identical choices, code-gated). One item per key; a removed item stays gone."""
+        text = text.strip()
+        if self.has_pattern(key) or self.q("SELECT 1 FROM model_items WHERE status='removed' AND text=?", (text,)):
+            return None
+        now = _now()
+        iid = self._x("INSERT INTO model_items(category,text,confidence,tier,source,created_at,updated_at) VALUES('decision',?,0.7,'normal','precedents',?,?)", (text, now, now))
+        self._log(iid, f"decision pattern [{key}]: {text}")
+        return iid
+
     def add_analysis(self, text, confidence):
         """A deep-analysis inference that passed its own code gate (selfanalysis.py). Returns the item id, or None if already there.
         ponytail: no automatic demotion for these (they have no weekly inference behind them); the user's remove/correct is the way out."""
@@ -260,8 +273,9 @@ if __name__ == "__main__":  # self-check: python personal_model.py
         a = w.t_create_inference("Works on FRED at night", "project", 0.7, ev[:3])["id"]            # light: passes after 1 week
         b = w.t_create_inference("Prefers quiet places", "routine", 0.7, ev[3:5])["id"]               # normal: needs 4 weeks
         t = w.t_create_inference("Values focus over social time", "trait_hypothesis", 0.9, ev[:3])      # deep: needs 8 weeks
-        assert t["confidence"] == 0.5 and w.t_create_inference("x", "project", 0.5, ev[:2], tier="light")["tier"] == "light"
-        assert w.t_create_inference("Trait lowered", "trait_hypothesis", 0.4, ev[:3], tier="light")["tier"] == "deep"   # tier can be raised, never lowered
+        _x = w.t_create_inference("x", "project", 0.5, ev[3:5], tier="light")
+        assert t["confidence"] == 0.5 and _x["tier"] == "light"
+        assert w.t_create_inference("Trait lowered", "trait_hypothesis", 0.4, ev[3:6], tier="light")["tier"] == "deep"   # tier can be raised, never lowered
         tr = t["id"]
         sent = []
         def llm(prompt):
@@ -291,7 +305,7 @@ if __name__ == "__main__":  # self-check: python personal_model.py
         pm.add("preference", "favourite colour is cyan")
         assert pm.relevant("pick a cyan theme")[0]["text"] == "favourite colour is cyan" and pm.relevant("   ") == []
         # weakening an inference demotes its item (no model call); a user correction is locked
-        w.t_update_inference(a, status="weakened")
+        w.t_update_inference(a, status="weakened", add_counter=[ev[5]])   # weakening needs counter-evidence
         assert pm.update(llm, "2026-05-10")["demoted"] == 1
         assert pm.q("SELECT status FROM model_items WHERE inference_id=?", (a,))[0]["status"] == "demoted"
         it = pm.q("SELECT id, inference_id FROM model_items WHERE inference_id=?", (tr,))[0]

@@ -9,7 +9,9 @@ with the precedent named. FRED only settles its OWN review items (same-person, c
 Code holds every permission; the model only abstracts the situation and judges "what is different here?":
   - the reason is NEVER model-written: it is Vatsal's own words, or "none" (a model-offered reason counts only if it is a verbatim part of what he said)
   - needs >= MIN_MATCH similar (>= SIM) live precedents of one domain, all with the same choice and none opposed; then the model's difference test
-  - autonomy per domain: 0 ask, 1 suggest, 2 decide and tell, 3 decide silently (capped per domain by stakes); a new level takes CONFIRM agreeing shadows/confirmations
+  - autonomy per domain: 0 ask, 1 suggest, 2 decide and tell (capped per domain by stakes; a silent level 3 is not used); a new level takes CONFIRM agreeing shadows/confirmations
+  - old precedents fade (half-life a year): 3 close ones must weigh 2.0 together, so three year-old ones are not enough
+  - distill(mem, llm, pm): a choice made 3+ times in a domain becomes one 'decision' item of the personal model (wording by the model, no names; code gates it)
 """
 import json
 import math
@@ -19,7 +21,7 @@ from datetime import datetime, timezone
 from decisionlog import note, traced
 from graph import Graph
 
-SIM, MIN_MATCH, CONFIRM, MAX_AGE_DAYS = 0.9, 3, 3, 730
+SIM, MIN_MATCH, CONFIRM, HALF_LIFE_DAYS, MIN_WEIGHT = 0.9, 3, 3, 365, 2.0   # an old precedent counts less: weight 0.5 ** (age / half-life), the matches must weigh MIN_WEIGHT together
 MAX_LEVEL = {"pair": 2, "yesno": 2, "contradiction": 1}   # stakes: a contradiction is only ever suggested; unknown domains stay at 0
 STAKES = {"pair": "low", "yesno": "medium", "contradiction": "high"}
 REVERSIBLE = {"pair": 1, "yesno": 1, "contradiction": 0}
@@ -86,10 +88,8 @@ def _matches(mem, domain, vec, today=None):
         rows = [dict(r) for r in s.db.execute("SELECT * FROM precedents WHERE domain=? AND overridden=0", (domain,))]
     out = []
     for r in rows:
-        if (now - datetime.fromisoformat(r["at"])).days > MAX_AGE_DAYS:
-            continue   # stale precedents no longer count
-        sim = _cos(vec, json.loads(r["vec"]))
-        out.append((sim, r))
+        r["weight"] = 0.5 ** (max(0, (now - datetime.fromisoformat(r["at"])).total_seconds()) / 86400 / HALF_LIFE_DAYS)
+        out.append((_cos(vec, json.loads(r["vec"])), r))
     return sorted(out, key=lambda t: -t[0])
 
 
@@ -99,8 +99,8 @@ def _eligible(mem, item, embed, situation=None, today=None):
     ms = _matches(mem, item["kind"], embed(sit, False), today)
     close = [r for s_, r in ms if s_ >= SIM]
     choices = {r["choice"] for r in close}
-    if len(close) < MIN_MATCH or len(choices) != 1:
-        return None   # too few, or they disagree: ask
+    if len(close) < MIN_MATCH or len(choices) != 1 or sum(r["weight"] for r in close) < MIN_WEIGHT:
+        return None   # too few, too old, or they disagree: ask
     return {"choice": choices.pop(), "ids": [r["id"] for r in close], "cases": [r["qtext"] or r["situation"] for r in close[:3]], "situation": sit}
 
 
@@ -194,6 +194,42 @@ def decide(mem, item, llm, embed, today=None):
     return None if differs else {"choice": el["choice"], "mode": mode, "precedents": el["ids"]}
 
 
+DISTILL = """Vatsal has settled {n} similar doubts the same way. The doubts (names removed):
+{cases}
+His choice each time: {label}. Reasons he gave: {reasons}.
+Write ONE short sentence describing this as a habit of Vatsal's ("When ..., he usually ..."). No names, no dates, no guesses beyond what the cases show. Reply with one JSON object: {{"pattern": "<sentence>"}}"""
+
+
+def distill(mem, llm, pm):
+    """Weekly: a choice made at least MIN_MATCH times (live precedents, same domain and choice, none of the opposite choice among them) becomes one
+    personal-model item (PersonalModel.add_decision_pattern). Returns the ids added."""
+    s, added = mem.store, []
+    ensure(s)
+    with s.lock:
+        rows = [dict(r) for r in s.db.execute("SELECT * FROM precedents WHERE overridden=0 AND choice!='later' ORDER BY id")]
+    for d in sorted({r["domain"] for r in rows}):
+        by = {}
+        for r in (r for r in rows if r["domain"] == d):
+            by.setdefault(r["choice"], []).append(r)
+        if len(by) != 1:
+            continue   # mixed answers in a domain are not a habit
+        choice, rs = next(iter(by.items()))
+        if len(rs) < MIN_MATCH or pm.has_pattern(f"{d}/{choice}"):
+            continue
+        try:
+            reasons = "; ".join(r["reason"] for r in rs if r["reason"] != "none") or "none given"
+            out = json.loads(traced(s, "precedents", d, llm)(DISTILL.format(n=len(rs), cases=chr(10).join("- " + (r["qtext"] or r["situation"]) for r in rs[-5:]),
+                                                                          label=choice, reasons=reasons)))
+            text = scrub(mem, str(out.get("pattern", "")))
+        except Exception:
+            continue
+        if len(text.split()) >= 4 and "[name]" not in text and "[date]" not in text:
+            iid = pm.add_decision_pattern(f"{d}/{choice}", text)
+            if iid:
+                added.append(iid)
+    return added
+
+
 def reason_tags(mem, item, choice, embed, today=None):
     """Ask for a reason only when it is the first case of its kind, or the answer conflicts with a similar precedent. One tap, never free text."""
     ms = _matches(mem, item["kind"], embed(scrub(mem, item["text"], item.get("names", ())), False), today)
@@ -270,8 +306,29 @@ if __name__ == "__main__":  # self-check: python precedents.py
         m3 = Memory(tempfile.mkdtemp())
         for i, c in enumerate(["yes", "yes", "yes", "no"]):
             record(m3, mk(f"E{i}", f"F{i}"), c, c, sit, embed)
-        assert _eligible(m3, mk("G", "H"), embed) is None
-        old = (datetime.now(timezone.utc) + timedelta(days=MAX_AGE_DAYS + 5))
-        assert _matches(m3, "pair", embed(scrub(m3, mk("G", "H")["text"]), False), today=old) == []
-        m3.close()
+        assert _eligible(m3, mk("Gita", "Hari"), embed) is None
+        for i in range(3):
+            record(m3, mk(f"I{i}", f"J{i}"), "yes", "yes", sit, embed)
+        assert _eligible(m3, mk("Gita", "Hari"), embed) is None   # 4 yes + 1 no earlier: still opposed
+        m4 = Memory(tempfile.mkdtemp())
+        for i in range(3):
+            record(m4, mk(f"K{i}", f"L{i}"), "no", "no", sit, embed)
+        assert _eligible(m4, mk("Gita", "Hari"), embed)["choice"] == "no"
+        old = datetime.now(timezone.utc) + timedelta(days=365)
+        assert _eligible(m4, mk("Gita", "Hari"), embed, today=old) is None                        # a year later three precedents weigh 1.5: ask again
+        assert _eligible(m4, mk("Gita", "Hari"), embed, today=datetime.now(timezone.utc) + timedelta(days=180)) is not None
+        # distillation: only an all-agreeing domain with 3+ cases, once, wording checked for names
+        from personal_model import PersonalModel
+        pm = PersonalModel(m4, embed)
+        pat = lambda p: json.dumps({"pattern": "When two people have near-identical names but different details, he usually treats them as different people."})
+        assert len(distill(m4, pat, pm)) == 1 and distill(m4, pat, pm) == []
+        assert distill(m3, pat, PersonalModel(m3, embed)) == []                               # mixed answers: no habit
+        bad = lambda p: json.dumps({"pattern": "He always says Nitu is different."})
+        m5 = Memory(tempfile.mkdtemp())
+        m5.store.entity("person", "Nitu")
+        for i in range(3):
+            record(m5, mk(f"M{i}", f"N{i}"), "no", "no", sit, embed)
+        assert distill(m5, bad, PersonalModel(m5, embed)) == []                               # a name in the wording: refused
+        for mm in (m3, m4, m5):
+            mm.close()
     print("precedents ok")
