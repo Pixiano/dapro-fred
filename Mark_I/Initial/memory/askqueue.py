@@ -141,17 +141,19 @@ def ask(mem, topic="", turns=0, today=None, rng=random.random, decider=None):
     return {"id": iid, **out}
 
 
-def _choice(reply, options):
-    r = (reply or "").strip().lower().rstrip(".!")
+def _pick(r, options):
     keys = [o["key"] for o in options]
     if r in keys:
         return r
     if len(r) == 1 and "a" <= r < chr(ord("a") + len(keys)):
         return keys[ord(r) - ord("a")]
-    for k, words in WORDS.items():
-        if k in keys and r in words:
-            return k
-    return None
+    return next((k for k, words in WORDS.items() if k in keys and r in words), None)
+
+
+def _choice(reply, options):
+    """The option in a spoken/typed reply. "no, they live in different cities" is the option 'no' plus a reason (the whole reply is kept as what Vatsal said)."""
+    r = (reply or "").strip().lower().rstrip(".!")
+    return _pick(r, options) or _pick(re.split(r"[,;:.!?—-]| because | since | but ", r, maxsplit=1)[0].strip(), options)
 
 
 def answer(mem, item_id, reply, today=None, recorder=None):
@@ -278,6 +280,7 @@ if __name__ == "__main__":  # self-check: python askqueue.py
     import tempfile
     from manager import Memory
     logging.getLogger("memory").setLevel(logging.ERROR)
+    OPTS_T = [{"key": "yes"}, {"key": "no"}, {"key": "later"}]
     with tempfile.TemporaryDirectory() as d, Memory(d) as m:
         s, g = m.store, None
         nitu, nitya = s.entity("person", "Nitu"), s.entity("person", "Nitya")
@@ -294,6 +297,8 @@ if __name__ == "__main__":  # self-check: python askqueue.py
         assert ask(m, "x", turns=12, today=datetime(2026, 3, 6).date(), rng=always)["kind"] == "contradiction"   # the same item is not asked twice a day
         assert ask(m, "", turns=12, today=datetime(2026, 3, 6).date(), rng=always) is None                       # nothing else waiting today
         assert answer(m, q["id"], "banana")["error"] == "unclear"
+        assert _choice("No, they live in different cities", OPTS_T) == "no" and _choice("same - she moved schools", OPTS_T) == "yes" and _choice("later please", OPTS_T) == "later"
+        assert _choice("nobody knows", OPTS_T) is None
         assert answer(m, q["id"], "later", today=datetime(2026, 3, 6).date())["choice"] == "later"
         assert ask(m, "Nitu", turns=12, today=datetime(2026, 3, 7).date(), rng=always)["kind"] == "contradiction"   # snoozed: not before 3 days
         assert answer(m, q["id"], "b")["choice"] == "no"                                                          # a letter works; two different ones
