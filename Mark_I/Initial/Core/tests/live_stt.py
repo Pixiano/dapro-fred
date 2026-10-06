@@ -2,9 +2,11 @@
 
   python tests/live_stt.py
 Self-contained: the test sentences are invented and spoken by Kokoro (CPU, allowed), so no personal recordings are involved. Checks, per sentence:
-  word error rate against the known text, decode time, and that the model ran on CUDA through gpu.run. Also: a silent buffer never reaches the GPU,
+  word error rate against the known text, decode time, and that the model ran through gpu.run on settings.whisper_device.
+  CPU test (explicit request only): FRED_WHISPER_DEVICE=cpu FRED_WHISPER_COMPUTE=int8 python tests/live_stt.py Also: a silent buffer never reaches the GPU,
   a Capture of the replayed audio transcribes the same, and Stt.unload() frees VRAM. The Kokoro files are read in place from Old/Core/models/kokoro.
 """
+import os
 import re
 import subprocess
 import sys
@@ -31,6 +33,11 @@ def vram_mb() -> int:
     return int(subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"], capture_output=True, text=True).stdout.split()[0])
 
 
+def rss_mb() -> int:
+    import psutil
+    return int(psutil.Process().memory_info().rss / 2**20)
+
+
 def words(t: str) -> list:
     return re.findall(r"[a-z0-9']+", t.lower().replace("thirty percent", "30 percent").replace("five", "5").replace("three", "3"))
 
@@ -53,12 +60,13 @@ def main():
         x, sr = k.create(s, voice="am_michael", speed=1.0, lang="en-us")
         audio.append(to16k(x, sr))
     print(f"synthesised {len(audio)} sentences with Kokoro (CPU)")
-    base = vram_mb()
+    base, ram0 = vram_mb(), rss_mb()
+    print(f"device {config.get().whisper_device}, compute {config.get().whisper_compute}")
     bus = ev.EventBus()
     stt = Stt(bus)
     t0 = time.time()
     first = stt.transcribe(audio[0])
-    print(f"first call (incl. model load) {time.time() - t0:.1f}s, VRAM +{vram_mb() - base} MB, owner stats {gpu.stats()['by_owner']}")
+    print(f"first call (incl. model load) {time.time() - t0:.1f}s, VRAM +{vram_mb() - base} MB, RAM +{rss_mb() - ram0} MB, owner stats {gpu.stats()['by_owner']}")
     worst = 0.0
     for s, a in zip(SENTENCES, audio):
         t = stt.transcribe(a)

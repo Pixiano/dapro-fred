@@ -45,6 +45,7 @@ class Settings:
     whisper_model: str = "large-v3-turbo"
     whisper_language: str = "en"
     whisper_beam: int = 5
+    whisper_device: str = "cuda"                      # GPU-only rule: change only for an explicit CPU test (FRED_WHISPER_DEVICE=cpu FRED_WHISPER_COMPUTE=int8)
     whisper_compute: str = "float16"
     whisper_prompt: str = "Fred. Call Mom. Hang up. What's on my agenda? Open the file. Set a timer. Search the web."
     stt_min_peak: float = 0.02                        # a buffer whose peak stays under this is silence: no Whisper pass

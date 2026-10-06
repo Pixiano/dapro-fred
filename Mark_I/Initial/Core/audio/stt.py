@@ -8,7 +8,7 @@ Sockets
          audio = int16 or float32 mono at the Core rate; model = anything with transcribe(float32, **kw) -> (segments, info), default faster-whisper
        Capture(mic).begin(preroll_s=0.5) / snapshot() / end() -> int16 audio     collects from the Mic (plus pre-roll from its ring), capped at max_utterance_s
   out: Transcript(text, language, audio_s, ms, silent); bus event stt.transcript {text, final, audio_s, ms}  (a text event only, never the audio)
-Rules: the model runs ONLY through gpu.run (one in-process GPU user at a time) and ONLY on CUDA: no CPU fallback (standing GPU-only rule); a load/CUDA failure raises
+Rules: the model runs ONLY through gpu.run (one in-process GPU user at a time) and on settings.whisper_device, default CUDA, never a silent CPU fallback (standing GPU-only rule; CPU only by explicit setting, e.g. for a test); a load/CUDA failure raises
        SttError and emits stt.error. A buffer whose peak stays under stt_min_peak is silence: empty Transcript, no GPU pass (the old "listening for seconds on nothing").
        unload() frees the VRAM (L5 windows). Vocabulary bias: settings.whisper_prompt, or `prompt=` per call.
 Self-check: python audio/stt.py (fake model, no GPU).  Real model on recordings: tests/live_stt.py
@@ -56,10 +56,10 @@ class Stt:
             c = config.get()
             try:
                 from faster_whisper import WhisperModel
-                self._model = WhisperModel(c.whisper_model, device="cuda", compute_type=c.whisper_compute)
+                self._model = WhisperModel(c.whisper_model, device=c.whisper_device, compute_type=c.whisper_compute)
             except Exception as ex:
                 self.bus.emit("stt", "error", error=repr(ex))
-                raise SttError(f"cannot load {c.whisper_model} on CUDA: {ex}")
+                raise SttError(f"cannot load {c.whisper_model} on {c.whisper_device}: {ex}")
         return self._model
 
     def unload(self):
