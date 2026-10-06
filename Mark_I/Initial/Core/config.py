@@ -16,7 +16,7 @@ CORE_DIR = Path(__file__).resolve().parent
 
 @dataclass
 class Settings:
-    playground_url: str = "http://localhost:8090"   # /v1 is appended by the client
+    playground_url: str = "http://127.0.0.1:8090"   # /v1 is appended by the client. NOT "localhost": on Windows it adds a flat 2 s per request (IPv6 attempt first; the playground listens on IPv4 only)
     brain: str = "unsloth/qwen3.5-4b"                 # chat model id; Qwen only for now (Vatsal, 2026-10-06), override with FRED_BRAIN
     embedder: str = "text-embedding-qwen3-embedding-4b"
     http_timeout_s: float = 600.0                     # one model call, incl. a cold load
@@ -50,6 +50,18 @@ class Settings:
     whisper_prompt: str = "Fred. Call Mom. Hang up. What's on my agenda? Open the file. Set a timer. Search the web."
     stt_min_peak: float = 0.02                        # a buffer whose peak stays under this is silence: no Whisper pass
     max_utterance_s: float = 60.0
+    # --- screen (P1b) ---
+    screen_interval_s: float = 1.0                    # capture period; bench_screen.py compares 0.5 / 0.7 / 1.0 / 1.2
+    screen_monitor: int = 1                           # mss monitor index (1 = primary)
+    screen_threshold: float = 0.990                   # a tile is changed when its similarity (1 - mean abs diff / 255) falls below this
+    screen_grid_rows: int = 36
+    screen_grid_cols: int = 64
+    screen_stride: int = 2                            # sample every Nth pixel in each axis before tiling (CPU cost vs thin changes)
+    screen_min_tiles: int = 1                         # tiles that must change to emit screen.change
+    crop_pad_px: int = 24                             # native-resolution padding around the changed region
+    ocr_enabled: bool = False                         # Windows OCR stays OFF until Vatsal approves CPU use
+    describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model (Qwen only for now)
+    describe_max_tokens: int = 300
 
 
 def _coerce(raw: str, like):

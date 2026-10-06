@@ -1,6 +1,6 @@
 # Core rebuild handoff (2026-10-06)
 
-Start here after a context clear. **P0 is built and passed its gate** (see `README.md`, `Documentation/2026/10/06/core_p0_done.md`). **P1a audio is built** (`Documentation/2026/10/06/core_p1a_done.md`). Next action: **P1b screen, then P1c camera** from `PLAN.md` (layer order: P0, L0, L1, L3, L2, UI, L4, L5, soak). Re-run `.venv\Scripts\python tests/run_all.py` first.
+Start here after a context clear. **P0 is built and passed its gate** (see `README.md`, `Documentation/2026/10/06/core_p0_done.md`). **P1a audio is built** (`Documentation/2026/10/06/core_p1a_done.md`). **P1b screen is built** (`core_p1b_done.md`). Next action: **P1c camera/presence** from `PLAN.md`. Always use 127.0.0.1, never localhost (2 s penalty) (layer order: P0, L0, L1, L3, L2, UI, L4, L5, soak). Re-run `.venv\Scripts\python tests/run_all.py` first.
 
 ## Standing rules (also in memory notes)
 - Work only in `Mark_I/Initial/Core/`; `Old/` (v1.x FRED, `Old/Core`) is reference only, never edited; FRED stays down, no restart.

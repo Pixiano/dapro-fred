@@ -6,7 +6,7 @@ The rebuilt FRED runtime, built layer by layer (plan: [PLAN.md](PLAN.md), handof
 | Phase | State |
 |---|---|
 | P0 Foundations | built, see below |
-| P1a L0 audio | built (mic, wake word, VAD, STT, hotkey), gate results in `Documentation/2026/10/06/core_p1a_done.md`; 1b screen and 1c camera next |
+| P1a L0 audio | built (mic, wake word, VAD, STT, hotkey), gate results in `Documentation/2026/10/06/core_p1a_done.md`; 1b screen built (`senses/`: change detector, vision describer, OCR socket off), see `core_p1b_done.md`; 1c camera next |
 | P1b/c senses, P2 L1 clock, P3 L3 thinker, P4 L2 voice, P5 UI, P6 L4, P7 L5, P8 soak | not started |
 
 ## P0 modules
@@ -34,6 +34,14 @@ Each file has its sockets (inputs, outputs, failure behaviour) in its docstring 
 | `hotkey.py` | Left Ctrl + Left Alt hold-to-talk hook -> `audio.hotkey` |
 | `wav.py` | wav -> mono int16 16 kHz |
 Gates by hand: `python tests/replay_audio.py` (wake/VAD on labelled recordings), `python tests/live_stt.py` (Whisper on the GPU), `python audio/mic.py --live`, `python audio/hotkey.py --live`.
+
+## P1b modules (`senses/`)
+| File | Job |
+|---|---|
+| `screen.py` | mss capture on a fixed period, tile-max change detector, native-resolution crop |
+| `describe.py` | vision-slot describer + the OCR grounding rule |
+| `ocr.py` | OCR socket, off until approved |
+Gates by hand: `python tests/bench_screen.py` (period comparison), `python tests/live_describe.py` (12 screenshots).
 
 ## Environment
 Two Python 3.11 venvs, both gitignored: `Core/.venv` (everything Core needs, includes the memory dependencies since Core runs memory in-process) and `memory/.venv` (the memory pipeline alone). Brain: Qwen only for now (`brain` default `unsloth/qwen3.5-4b`).
