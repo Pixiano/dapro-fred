@@ -1,0 +1,15 @@
+{
+  "llama_server": "C:/Users/Dhiraj Vatsal/llama.cpp/b11433/llama-server.exe",
+  "models_dir": "C:/Users/Dhiraj Vatsal/.lmstudio/models",
+  "port": 8090,
+  "models": [
+    {"id": "openai/gpt-oss-20b", "path": "lmstudio-community/gpt-oss-20b-GGUF/gpt-oss-20b.gguf", "ctx": 20000, "kind": "chat", "note": "weekly/monthly/yearly analyst, nightly (reasoning_effort low|medium|high)"},
+    {"id": "qwen/qwen3-8b", "path": "lmstudio-community/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf", "ctx": 32000, "kind": "chat", "note": "nightly alternative, weekly draft, monthly/yearly team draft"},
+    {"id": "qwen/qwen3-14b", "path": "lmstudio-community/Qwen3-14B-GGUF/Qwen3-14B-Q4_K_M.gguf", "ctx": 32000, "kind": "chat"},
+    {"id": "google/gemma-4-12b-it-qat", "path": "lmstudio-community/gemma-4-12B-it-QAT-GGUF/gemma-4-12B-it-QAT-Q4_0.gguf", "ctx": 16000, "kind": "chat",
+     "mmproj": "lmstudio-community/gemma-4-12B-it-QAT-GGUF/mmproj-gemma-4-12B-it-QAT-BF16.gguf"},
+    {"id": "unsloth/qwen3.5-4b", "path": "unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q6_K.gguf", "ctx": 16000, "kind": "chat", "mmproj": "unsloth/Qwen3.5-4B-GGUF/mmproj-BF16.gguf"},
+    {"id": "bonsai-27b", "path": "lmstudio-community/Bonsai-27B-GGUF/Bonsai-27B-Q1_0.gguf", "ctx": 8192, "kind": "chat", "mmproj": "lmstudio-community/Bonsai-27B-GGUF/mmproj-Bonsai-27B-BF16.gguf"},
+    {"id": "text-embedding-qwen3-embedding-4b", "path": "Qwen/Qwen3-Embedding-4B-GGUF/Qwen3-Embedding-4B-Q4_K_M.gguf", "ctx": 8192, "kind": "embed", "args": ["--embedding", "--pooling", "last"]}
+  ]
+}

@@ -1,4 +1,4 @@
-"""Mark I memory: runs the synthetic year through the REAL local models (LM Studio's OpenAI-style server) and scores the result.
+"""Mark I memory: runs the synthetic year through the REAL local models (the FRED playground, Mark_I/Initial/playground/server.py: llama.cpp behind an OpenAI-style endpoint; start it first) and scores the result.
 Models are swapped by hand/`lms` between stages (they do not fit the GPU together): nightly = Qwen3-8B (thinking on), weekly+ = gpt-oss-20b.
 Usage: python run_local.py oracle|nightly|weekly|monthly|yearly <run folder> [synthetic folder] [last day to consolidate, e.g. 2026-01-18]
 The run folder is a disposable Memory root, resumable (finished days/weeks are skipped), plus calls.jsonl (every model call: seconds, tokens, effort).
@@ -7,7 +7,6 @@ Nothing here touches a real memory folder.
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import urllib.request
@@ -20,7 +19,7 @@ import weekly
 from manager import Memory
 from semantic import SemanticIndex
 
-URL = "http://localhost:1234/v1"
+URL = os.environ.get("LLM_URL", "http://localhost:8090/v1")   # the playground; LLM_URL=http://localhost:1234/v1 would use LM Studio again
 NIGHTLY = {"model": "qwen/qwen3-8b", "temperature": 0.6, "top_p": 0.95, "max_tokens": 12000}   # Qwen3 thinks by default; <think> is stripped
 GPT = {"model": "openai/gpt-oss-20b", "temperature": 0.6, "max_tokens": 9000}
 NIGHTLY["model"] = os.environ.get("NIGHTLY_MODEL", NIGHTLY["model"])   # model comparison: NIGHTLY_MODEL / ANALYST_MODEL override the defaults
@@ -89,10 +88,10 @@ def make_llm(cfg, stage, log_to, effort=None, want_json=False):
 
 
 def lms_load(model, ctx=20000):
-    """Swaps the model in LM Studio (the two analysts do not fit the GPU together); the embedder is reloaded."""
-    lms = str(Path.home() / ".lmstudio" / "bin" / "lms")
-    for cmd in (["unload", "--all"], ["load", model, "--context-length", str(ctx), "--gpu", "max", "-y"], ["load", EMB, "-y"]):
-        subprocess.run([lms, *cmd], check=True, capture_output=True)
+    """Swaps the chat model in the playground (the analysts do not fit the GPU together); the embedder is loaded on demand by the first embed call.
+    Name kept so the callers below stay unchanged."""
+    for body in ({"model": model, "ctx": ctx}, {"model": EMB}):
+        urllib.request.urlopen(urllib.request.Request(URL.rsplit("/v1", 1)[0] + "/api/load", json.dumps(body).encode(), {"Content-Type": "application/json"}), timeout=900).read()
 
 
 def critic_llm(calls, model=None):

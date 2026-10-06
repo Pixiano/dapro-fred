@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FRED Playground</title>
+<style>
+:root{--bg:#fff;--fg:#1c1c1e;--mut:#6b7280;--card:#f4f4f6;--line:#d8d8de;--acc:#2563eb}
+@media(prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececf0;--mut:#9ca3af;--card:#1f1f23;--line:#33333a;--acc:#6ea0ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;display:grid;grid-template-columns:320px 1fr;height:100vh}
+@media(max-width:800px){body{grid-template-columns:1fr;height:auto}}
+aside{padding:16px;border-right:1px solid var(--line);overflow:auto}main{display:flex;flex-direction:column;min-height:0;padding:16px;gap:10px}
+h1{font-size:16px;margin:0 0 12px}h2{font-size:12px;text-transform:uppercase;color:var(--mut);margin:16px 0 6px}
+select,input,textarea,button{width:100%;font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:6px}
+button{cursor:pointer;background:var(--acc);color:#fff;border:0}button.sec{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+.row{display:flex;gap:6px}.row>*{flex:1}label{display:flex;align-items:center;gap:6px;color:var(--mut);margin-bottom:6px}label input{width:auto;margin:0}
+.mut{color:var(--mut);font-size:12px}.tabs{display:flex;gap:6px}.tabs button{width:auto;padding:4px 12px}
+#log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:200px}
+.m{padding:8px 10px;border-radius:8px;background:var(--card);white-space:pre-wrap;word-break:break-word}.m.u{background:var(--acc);color:#fff;align-self:flex-end;max-width:85%}
+details{color:var(--mut);margin-bottom:4px}.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+</style></head><body>
+<aside>
+<h1>FRED Playground</h1>
+<div class="mut" id="gpu"></div><div class="bar"><i id="vram" style="width:0"></i></div>
+<h2>Model</h2>
+<select id="model"></select>
+<div class="row"><input id="ctx" placeholder="context (default)" inputmode="numeric"><label><input type="checkbox" id="vision">vision</label></div>
+<div class="row"><button onclick="load()">Load</button><button class="sec" onclick="unload('all')">Unload all</button></div>
+<div class="mut" id="slots"></div>
+<h2>Sampling</h2>
+<div class="row"><input id="temp" value="0.6" title="temperature"><input id="maxtok" value="4000" title="max tokens"></div>
+<select id="effort"><option value="">reasoning effort: default</option><option>low</option><option>medium</option><option>high</option></select>
+<textarea id="schema" rows="3" placeholder='response schema (JSON Schema, optional), e.g. {"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}'></textarea>
+<h2>Register a model</h2>
+<input id="rid" placeholder="id"><input id="rpath" placeholder="path under models folder (.gguf)">
+<div class="row"><select id="rkind"><option>chat</option><option>embed</option></select><input id="rctx" placeholder="ctx" value="8192"></div>
+<button class="sec" onclick="reg()">Save to models.json</button>
+</aside>
+<main>
+<div class="tabs"><button class="sec" onclick="tab('chat')">Chat</button><button class="sec" onclick="tab('emb')">Embeddings</button></div>
+<div id="chat" style="display:flex;flex-direction:column;flex:1;min-height:0;gap:8px">
+<textarea id="sys" rows="2" placeholder="system prompt (optional)"></textarea>
+<div id="log"></div><div class="mut" id="stats"></div>
+<div class="row"><textarea id="in" rows="3" placeholder="Message (Ctrl+Enter sends)"></textarea><button style="max-width:100px" onclick="send()">Send</button><button class="sec" style="max-width:80px" onclick="clearChat()">Clear</button></div>
+</div>
+<div id="emb" style="display:none"><textarea id="e1" rows="3" placeholder="text A"></textarea><textarea id="e2" rows="3" placeholder="text B (optional: cosine similarity)"></textarea>
+<button style="max-width:160px" onclick="embed()">Embed</button><pre id="eout" class="m"></pre></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);let hist=[],ST={};
+const j=async(u,b)=>{const r=await fetch(u,b?{method:'POST',body:JSON.stringify(b)}:{});const d=await r.json();if(!r.ok)throw new Error(d.error?.message||d.error||r.status);return d};
+function tab(t){$('chat').style.display=t=='chat'?'flex':'none';$('emb').style.display=t=='emb'?'block':'none'}
+async function refresh(){try{ST=await j('/api/status')}catch(e){return}
+ const cur=$('model').value;$('model').innerHTML=ST.models.map(m=>`<option value="${m.id}">${m.loaded?'● ':''}${m.id} [${m.kind}${m.mmproj?', vision':''}]</option>`).join('');if(cur)$('model').value=cur;
+ $('slots').textContent=Object.entries(ST.slots).map(([k,s])=>k+': '+(s?`${s.model} (ctx ${s.ctx}${s.vision?', vision':''})`:'empty')).join('\n');
+ if(ST.gpu){$('gpu').textContent=`${ST.gpu.name}: ${ST.gpu.used_mb} / ${ST.gpu.total_mb} MB`;$('vram').style.width=100*ST.gpu.used_mb/ST.gpu.total_mb+'%'}}
+async function load(){$('slots').textContent='loading...';try{await j('/api/load',{model:$('model').value,ctx:+$('ctx').value||undefined,vision:$('vision').checked})}catch(e){alert(e.message)}refresh()}
+async function unload(s){await j('/api/unload',{slot:s});refresh()}
+async function reg(){await j('/api/register',{id:$('rid').value,path:$('rpath').value,kind:$('rkind').value,ctx:+$('rctx').value,...($('rkind').value=='embed'?{args:['--embedding']}:{})});refresh()}
+function bubble(c,t){const d=document.createElement('div');d.className='m '+c;d.textContent=t;$('log').append(d);$('log').scrollTop=1e9;return d}
+function clearChat(){hist=[];$('log').innerHTML='';$('stats').textContent=''}
+async function send(){const t=$('in').value.trim();if(!t)return;$('in').value='';bubble('u',t);hist.push({role:'user',content:t});
+ const msgs=($('sys').value?[{role:'system',content:$('sys').value}]:[]).concat(hist);
+ const body={model:$('model').value,messages:msgs,stream:true,stream_options:{include_usage:true},temperature:+$('temp').value,max_tokens:+$('maxtok').value};
+ if($('effort').value)body.reasoning_effort=$('effort').value;
+ if($('schema').value.trim()){try{body.response_format={type:'json_schema',json_schema:{name:'out',strict:true,schema:JSON.parse($('schema').value)}}}catch(e){return bubble('','bad schema JSON: '+e.message)}}
+ const wrap=document.createElement('div');const think=document.createElement('details');think.innerHTML='<summary>thinking</summary><span></span>';think.style.display='none';
+ const out=document.createElement('div');out.className='m';wrap.append(think,out);$('log').append(wrap);
+ const t0=performance.now();let ans='',usage=null,first=0;
+ try{const r=await fetch('/v1/chat/completions',{method:'POST',body:JSON.stringify(body)});if(!r.ok){const d=await r.json();throw new Error(d.error?.message||r.status)}
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+  for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
+   for(const l of ls){if(!l.startsWith('data: ')||l.includes('[DONE]'))continue;const o=JSON.parse(l.slice(6));if(o.usage)usage=o.usage;const d=o.choices?.[0]?.delta;if(!d)continue;
+    if(!first)first=performance.now();
+    if(d.reasoning_content){think.style.display='';think.lastChild.textContent+=d.reasoning_content}if(d.content){ans+=d.content;out.textContent=ans}$('log').scrollTop=1e9}}
+  const s=(performance.now()-t0)/1000;$('stats').textContent=`${s.toFixed(1)}s total, first token ${((first-t0)/1000).toFixed(1)}s`+(usage?`, ${usage.prompt_tokens} in / ${usage.completion_tokens} out, ${(usage.completion_tokens/Math.max(s-(first-t0)/1000,.01)).toFixed(1)} tok/s`:'');
+  hist.push({role:'assistant',content:ans})}catch(e){out.textContent='error: '+e.message}refresh()}
+$('in').addEventListener('keydown',e=>{if(e.key=='Enter'&&e.ctrlKey)send()});
+const cos=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0)/(Math.hypot(...a)*Math.hypot(...b));
+async function embed(){const inp=[$('e1').value,$('e2').value].filter(Boolean);const m=ST.models.find(m=>m.kind=='embed');
+ try{const d=await j('/v1/embeddings',{model:m.id,input:inp});const v=d.data.map(x=>x.embedding);$('eout').textContent=`${v.length} vector(s), dim ${v[0].length}`+(v[1]?`\ncosine A,B = ${cos(v[0],v[1]).toFixed(4)}`:'')+`\nA[0..5] = ${v[0].slice(0,6).map(x=>x.toFixed(4)).join(', ')}`}catch(e){$('eout').textContent='error: '+e.message}refresh()}
+refresh();setInterval(refresh,5000);
+</script></body></html>
