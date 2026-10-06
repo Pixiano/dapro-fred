@@ -1,6 +1,6 @@
 # Core rebuild handoff (2026-10-06)
 
-Start here after a context clear. **P0 is built and passed its gate** (see `README.md`, `Documentation/2026/10/06/core_p0_done.md`). Next action: decide the Core interpreter (below), then **P1 L0 senses** from `PLAN.md` (layer order: P0, L0, L1, L3, L2, UI, L4, L5, soak). Re-run `python tests/run_all.py` first.
+Start here after a context clear. **P0 is built and passed its gate** (see `README.md`, `Documentation/2026/10/06/core_p0_done.md`). Next action: **P1 L0 senses** from `PLAN.md` (layer order: P0, L0, L1, L3, L2, UI, L4, L5, soak). Re-run `.venv\Scripts\python tests/run_all.py` first.
 
 ## Standing rules (also in memory notes)
 - Work only in `Mark_I/Initial/Core/`; `Old/` (v1.x FRED, `Old/Core`) is reference only, never edited; FRED stays down, no restart.
@@ -20,5 +20,5 @@ Start here after a context clear. **P0 is built and passed its gate** (see `READ
 
 ## Open before later phases
 - Playground on :8090 was restarted on the P0 server code (2026-10-06).
-- Core runtime interpreter: DONE. `Core/.venv` (Python 3.11, everything incl. CUDA torch) and `memory/.venv`; run Core with `Core.venvScriptspython`.
+- Core runtime interpreter: DONE. `Core/.venv` (Python 3.11, everything incl. CUDA torch) and `memory/.venv`; run Core with `Core\.venv\Scripts\python`.
 - Still undecided by Vatsal: scope of Mark I vs Mark II, network tools, first tool set (brain: Qwen only for now, default Qwen3.5-4B), personal-data location.
