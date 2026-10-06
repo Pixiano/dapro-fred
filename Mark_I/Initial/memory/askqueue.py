@@ -78,7 +78,8 @@ def _items(mem):
         if p["kind"] == "merge" and g_ok(mem, d["from"], d["into"]):
             out.append(_pair_item(mem, d["from"], d["into"], "proposal", p["id"]))
         else:
-            out.append({"src": "proposal", "ref": p["id"], "kind": "yesno", "ents": (), "names": (), "text": "Quick one, sir: " + maintenance.describe(mem, p),
+            out.append({"src": "proposal", "ref": p["id"], "kind": "yesno", "domain": "yesno:" + p["kind"] + (":" + str(d.get("field", "")) if p["kind"] == "stale_fact" else ""),   # precedents only carry over within the same kind (and, for a stale fact, the same field: school is not allergy)
+                        "ents": (), "names": (), "text": "Quick one, sir: " + maintenance.describe(mem, p),
                         "options": _opts(("yes", "Yes"), ("no", "No"), ("later", "Ask me later"))})
     for r in rq:
         m = PAIR.search(r["text"]) if r["kind"] == "question" else None
@@ -201,7 +202,7 @@ def _close(mem, it, ch, said, day, item_id, recorder=None, auto=None):
             s.db.commit()
     label = next(o["label"] for o in it["options"] if o["key"] == ch)
     if auto:
-        auto = {**auto, "domain": it["kind"], "question": it["text"], "label": label}
+        auto = {**auto, "domain": it.get("domain") or it["kind"], "question": it["text"], "label": label}
     with s.lock:
         s.db.execute("INSERT INTO ask_state(src,ref,answer,answered_at,auto,meta) VALUES(?,?,?,?,?,?) ON CONFLICT(src,ref) DO UPDATE SET answer=?, answered_at=?, auto=?, meta=?",
                      (src, ref, ch, day, json.dumps(auto) if auto else None, json.dumps(meta), ch, day, json.dumps(auto) if auto else None, json.dumps(meta)))

@@ -99,12 +99,17 @@ def _matches(mem, domain, vec, today=None):
 def _eligible(mem, item, embed, situation=None, today=None):
     """The precedent rule, code only: {"choice","ids","cases"} or None."""
     sit = situation or scrub(mem, item["text"], item.get("names", ()))
-    ms = _matches(mem, item["kind"], embed(sit, False), today)
+    ms = _matches(mem, _dom(item), embed(sit, False), today)
     close = [r for s_, r in ms if s_ >= SIM]
     choices = {r["choice"] for r in close}
     if len(close) < MIN_MATCH or len(choices) != 1 or sum(r["weight"] for r in close) < MIN_WEIGHT:
         return None   # too few, too old, or they disagree: ask
     return {"choice": choices.pop(), "ids": [r["id"] for r in close], "cases": [r["qtext"] or r["situation"] for r in close[:3]], "situation": sit}
+
+
+def _dom(item):
+    """The precedent domain: an item may name a finer one than its kind ("yesno:stale_fact:allergy"): precedents never carry over between domains."""
+    return item.get("domain") or item["kind"]
 
 
 def level(mem, domain):
@@ -119,7 +124,7 @@ def outcome(mem, domain, ok, ids=()):
     and marks the precedents it rested on as overridden, so they stop counting."""
     s = mem.store
     ensure(s)
-    cap = MAX_LEVEL.get(domain, 0)
+    cap = MAX_LEVEL.get(domain.split(":")[0], 0)
     with s.lock:
         s.db.execute("INSERT OR IGNORE INTO autonomy(domain) VALUES(?)", (domain,))
         lv, st = s.db.execute("SELECT level, streak FROM autonomy WHERE domain=?", (domain,)).fetchone()
@@ -143,7 +148,7 @@ def record(mem, item, choice, said, llm, embed, today=None):
     ensure(s)
     if choice == "later":
         return None
-    d = item["kind"]
+    d = _dom(item)
     elig = _eligible(mem, item, embed, today=today)   # shadow: what FRED would have said, before this answer is added
     if elig:
         outcome(mem, d, elig["choice"] == choice, elig["ids"])
@@ -165,7 +170,7 @@ def record(mem, item, choice, said, llm, embed, today=None):
     vec = [float(x) for x in embed(q, False)]
     with s.lock:
         pid = s.db.execute("INSERT INTO precedents(at,domain,situation,options,choice,reason,stakes,reversible,vec,qtext,item) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                           (_now(today), d, sit, json.dumps([o["key"] for o in item["options"]]), choice, reason, STAKES.get(d, "high"), REVERSIBLE.get(d, 0),
+                           (_now(today), d, sit, json.dumps([o["key"] for o in item["options"]]), choice, reason, STAKES.get(d.split(":")[0], "high"), REVERSIBLE.get(d.split(":")[0], 0),
                             json.dumps(vec), q, item.get("id"))).lastrowid
         s.db.commit()
     return pid
@@ -180,7 +185,8 @@ def decide(mem, item, llm, embed, today=None):
     """May FRED settle this itself? Level 0: never. Then the precedent rule, then the model's difference test. Every outcome is logged in precedent_use."""
     s = mem.store
     ensure(s)
-    d, lv = item["kind"], level(mem, item["kind"])
+    d = _dom(item)
+    lv = level(mem, d)
     el = _eligible(mem, item, embed, today=today) if lv >= 1 else None
     if not el:
         return None
@@ -235,7 +241,7 @@ def distill(mem, llm, pm):
 
 def reason_tags(mem, item, choice, embed, today=None):
     """Ask for a reason only when it is the first case of its kind, or the answer conflicts with a similar precedent. One tap, never free text."""
-    ms = _matches(mem, item["kind"], embed(scrub(mem, item["text"], item.get("names", ())), False), today)
+    ms = _matches(mem, _dom(item), embed(scrub(mem, item["text"], item.get("names", ())), False), today)
     close = [r for s_, r in ms if s_ >= SIM]
     return TAGS if not close or any(r["choice"] != choice for r in close) else None
 
@@ -340,4 +346,11 @@ if __name__ == "__main__":  # self-check: python precedents.py
         assert distill(m5, bad, PersonalModel(m5, embed)) == []                               # a name in the wording: refused
         for mm in (m3, m4, m5):
             mm.close()
+    with tempfile.TemporaryDirectory() as d, Memory(d) as mz:   # a finer domain: "school" precedents do not settle "allergy"
+        it = lambda f, i: {"id": f"p:{i}", "kind": "yesno", "domain": f"yesno:stale_fact:{f}", "names": (), "options": OPTS[:2] + OPTS[2:],
+                           "text": f"Quick one, sir: Is Meera{i}'s {f} out of date? (close the current value)"}
+        for i in range(MIN_MATCH + CONFIRM):
+            record(mz, it("school", i), "yes", "yes", sit, embed)
+        assert level(mz, "yesno:stale_fact:school") == 1 and level(mz, "yesno:stale_fact:allergy") == 0
+        assert decide(mz, it("allergy", 9), no_diff, embed) is None and decide(mz, it("school", 9), no_diff, embed)["choice"] == "yes"
     print("precedents ok")
