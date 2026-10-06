@@ -8,10 +8,12 @@ with the precedent named. FRED only settles its OWN review items (same-person, c
   outcome(mem, domain, ok, ids)                 Vatsal confirmed (ok) or overrode a suggestion; confirmations raise the level, an override drops it
 Code holds every permission; the model only abstracts the situation and judges "what is different here?":
   - the reason is NEVER model-written: it is Vatsal's own words, or "none" (a model-offered reason counts only if it is a verbatim part of what he said)
+  - SIM 0.75 was measured with the real Qwen3 embedder (2026-10-06): questions of one kind score 0.78-0.91 with each other, a different kind about 0.5, so 0.9 never matched.
+    The embedding only separates kinds of question; what is different about THIS case is the model's difference test (it sees the full text), which is why that test must stay.
   - needs >= MIN_MATCH similar (>= SIM) live precedents of one domain, all with the same choice and none opposed; then the model's difference test
   - autonomy per domain: 0 ask, 1 suggest, 2 decide and tell (capped per domain by stakes; a silent level 3 is not used); a new level takes CONFIRM agreeing shadows/confirmations
   - old precedents fade (half-life a year): 3 close ones must weigh 2.0 together, so three year-old ones are not enough
-  - distill(mem, llm, pm): a choice made 3+ times in a domain becomes one 'decision' item of the personal model (wording by the model, no names; code gates it)
+  - distill(mem, llm, pm): a choice made 3+ times in a domain, with reasons given for at least 2, becomes one 'decision' item of the personal model (wording by the model, no names; code gates it)
 """
 import json
 import math
@@ -21,7 +23,7 @@ from datetime import datetime, timezone
 from decisionlog import note, traced
 from graph import Graph
 
-SIM, MIN_MATCH, CONFIRM, HALF_LIFE_DAYS, MIN_WEIGHT = 0.9, 3, 3, 365, 2.0   # an old precedent counts less: weight 0.5 ** (age / half-life), the matches must weigh MIN_WEIGHT together
+SIM, MIN_MATCH, CONFIRM, HALF_LIFE_DAYS, MIN_WEIGHT = 0.75, 3, 3, 365, 2.0   # an old precedent counts less: weight 0.5 ** (age / half-life), the matches must weigh MIN_WEIGHT together
 MAX_LEVEL = {"pair": 2, "yesno": 2, "contradiction": 1}   # stakes: a contradiction is only ever suggested; unknown domains stay at 0
 STAKES = {"pair": "low", "yesno": "medium", "contradiction": "high"}
 REVERSIBLE = {"pair": 1, "yesno": 1, "contradiction": 0}
@@ -214,8 +216,8 @@ def distill(mem, llm, pm):
         if len(by) != 1:
             continue   # mixed answers in a domain are not a habit
         choice, rs = next(iter(by.items()))
-        if len(rs) < MIN_MATCH or pm.has_pattern(f"{d}/{choice}"):
-            continue
+        if len(rs) < MIN_MATCH or pm.has_pattern(f"{d}/{choice}") or sum(r["reason"] != "none" for r in rs) < MIN_MATCH - 1:
+            continue   # without reasons a pattern only repeats the precedents, which decide() already uses
         try:
             reasons = "; ".join(r["reason"] for r in rs if r["reason"] != "none") or "none given"
             out = json.loads(traced(s, "precedents", d, llm)(DISTILL.format(n=len(rs), cases=chr(10).join("- " + (r["qtext"] or r["situation"]) for r in rs[-5:]),
@@ -233,7 +235,7 @@ def distill(mem, llm, pm):
 def reason_tags(mem, item, choice, embed, today=None):
     """Ask for a reason only when it is the first case of its kind, or the answer conflicts with a similar precedent. One tap, never free text."""
     ms = _matches(mem, item["kind"], embed(scrub(mem, item["text"], item.get("names", ())), False), today)
-    close = [r for s_, r in ms if s_ >= 0.8]
+    close = [r for s_, r in ms if s_ >= SIM]
     return TAGS if not close or any(r["choice"] != choice for r in close) else None
 
 
@@ -312,7 +314,7 @@ if __name__ == "__main__":  # self-check: python precedents.py
         assert _eligible(m3, mk("Gita", "Hari"), embed) is None   # 4 yes + 1 no earlier: still opposed
         m4 = Memory(tempfile.mkdtemp())
         for i in range(3):
-            record(m4, mk(f"K{i}", f"L{i}"), "no", "no", sit, embed)
+            record(m4, mk(f"K{i}", f"L{i}"), "no", "no, they live in different cities" if i < 2 else "no", sit, embed)
         assert _eligible(m4, mk("Gita", "Hari"), embed)["choice"] == "no"
         old = datetime.now(timezone.utc) + timedelta(days=365)
         assert _eligible(m4, mk("Gita", "Hari"), embed, today=old) is None                        # a year later three precedents weigh 1.5: ask again
@@ -323,11 +325,16 @@ if __name__ == "__main__":  # self-check: python precedents.py
         pat = lambda p: json.dumps({"pattern": "When two people have near-identical names but different details, he usually treats them as different people."})
         assert len(distill(m4, pat, pm)) == 1 and distill(m4, pat, pm) == []
         assert distill(m3, pat, PersonalModel(m3, embed)) == []                               # mixed answers: no habit
+        m6 = Memory(tempfile.mkdtemp())
+        for i in range(3):
+            record(m6, mk(f"Q{i}", f"R{i}"), "no", "no", sit, embed)
+        assert distill(m6, pat, PersonalModel(m6, embed)) == []                               # no reasons given: nothing worth distilling
+        m6.close()
         bad = lambda p: json.dumps({"pattern": "He always says Nitu is different."})
         m5 = Memory(tempfile.mkdtemp())
         m5.store.entity("person", "Nitu")
         for i in range(3):
-            record(m5, mk(f"M{i}", f"N{i}"), "no", "no", sit, embed)
+            record(m5, mk(f"M{i}", f"N{i}"), "no", "no, they live in different cities", sit, embed)
         assert distill(m5, bad, PersonalModel(m5, embed)) == []                               # a name in the wording: refused
         for mm in (m3, m4, m5):
             mm.close()
