@@ -60,6 +60,8 @@ class Settings:
     presence_poll_s: float = 7.0                      # camera snapshot period
     presence_present_polls: int = 1                   # face polls in a row before "present"
     presence_absent_s: float = 49.0                   # no face for this long (since the last one seen) before "absent"; noticed at the first poll after it
+    faces_static_cap: int = 13                        # face references: deliberate shots (never auto-changed)
+    faces_dynamic_cap: int = 7                        # face references: FIFO of recent confident matches (static : dynamic = 13 : 7)
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)

@@ -20,3 +20,8 @@ Cost: ~0.09 s of one core per 10 s = ~0.9 %, one frame in memory.
 ## Not done / next
 - Presence 8-hour soak (the P1 gate line) belongs to P8; run it once the engine is wired.
 - Look-through-camera tool (snapshot + vision describe) is P3 (tools over the P1 events).
+
+## Face references imported (13 static : 7 dynamic), pose test
+- `senses/face_store.py`: two tiers, static 13 (deliberate, never auto-changed, `add_static` refuses past the cap) and dynamic 7 (FIFO of recent confident matches). Stored at `<FRED_DATA>/face_refs.json`, outside the repo, never logged or put in an event. No matching code yet (identity comes after presence is tuned to Vatsal's expectations).
+- Old FRED's file (20 base, 0 hard, 30 dynamic, 512-d ArcFace) was imported with `python senses/face_store.py --import-old <old file>`: static = the 13 most DIVERSE of the 20 base shots (farthest-point sampling, so 13 different looks rather than near-duplicates), dynamic = the 7 most recent of the 30. The complete old file is kept next to it as `face_refs_old_import.json`, nothing dropped. The old dynamic tier was meant to cap at 15 but held 30.
+- Pose test (`--watch`, 40 s, Vatsal looking down): faces counted stayed at 2 for the whole 40 s (main face score 0.73-0.87, box ~470x610 px; a second, small detection at the right edge, ~150x175 px, score 0.86). So looking down did not lose the face at that distance. The second detection means presence is currently "someone", not "Vatsal": another person in view keeps it present after Vatsal leaves, which is what the identification step is for.
