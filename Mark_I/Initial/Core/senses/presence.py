@@ -10,7 +10,7 @@ Sockets
   small detector 2026-10-06 (onnxruntime here has no CUDA provider). No recognition, no embeddings: this module never identifies anyone and stores nothing; frames
   are dropped after counting. Identity matching is a separate, later socket.
   Because it holds no GPU, it does not go through gpu.run, which removes the old "CUDA operation not permitted when stream is capturing" collisions by construction.
-Self-check: python senses/presence.py (fake camera + detector); `--live` takes one real snapshot and prints the face count only.
+Self-check: python senses/presence.py (fake camera + detector); `--live` takes one real snapshot and prints the face count only; `--watch` prints the count every ~1 s for 40 s (try turning away, looking down).
 """
 import sys
 import threading
@@ -139,8 +139,22 @@ def _selfcheck():
     print("presence ok")
 
 
+def watch(seconds=40):
+    """Hand test: faces per second (numbers only), for turning away / looking down in front of the camera."""
+    cam, det = Camera(), _insightface_detector()
+    t_end = time.monotonic() + seconds
+    while time.monotonic() < t_end:
+        t = time.monotonic()
+        try:
+            print(f"{seconds - (t_end - t):5.1f}s faces={det(cam.snap())}", flush=True)
+        except CameraFault as ex:
+            print("fault", ex, flush=True)
+
+
 if __name__ == "__main__":
-    if "--live" in sys.argv:
+    if "--watch" in sys.argv:
+        watch()
+    elif "--live" in sys.argv:
         t = time.time()
         r = Presence().poll()
         print("live poll:", r, f"{time.time() - t:.1f}s incl. model load")

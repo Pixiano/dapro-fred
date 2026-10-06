@@ -52,14 +52,14 @@ class Settings:
     max_utterance_s: float = 60.0
     # --- screen (P1b) ---
     screen_interval_s: float = 0.2                    # capture period; bench_screen.py compares 0.1 / 0.2 / 0.5 / 0.7 / 1.0 / 1.2 (0.2: 2.7% of a core, every flash >= 0.2 s seen)
-    camera_index: int = 0                             # cv2 index; --probe in senses/camera.py shows per-index numbers (index 1 here was a flat virtual camera)
+    camera_index: int = 1                             # cv2 index; the real 2K webcam (PHOCUS 40A) is 1, indices 0 and 2 are frozen virtual cameras; --probe in senses/camera.py checks
     camera_warmup: int = 6                            # frames read and thrown away before the real one
     camera_black_p99: float = 16.0                    # 99th-percentile brightness below this = dead frame
     camera_flat_std: float = 2.0                      # pixel std below this = dead (flat placeholder / covered lens)
     camera_retry_s: float = 0.5                       # wait before the one retry
-    presence_poll_s: float = 10.0                     # camera snapshot period
+    presence_poll_s: float = 7.0                      # camera snapshot period
     presence_present_polls: int = 1                   # face polls in a row before "present"
-    presence_absent_s: float = 45.0                   # no face for this long (since the last one seen) before "absent"; noticed at the first poll after it
+    presence_absent_s: float = 49.0                   # no face for this long (since the last one seen) before "absent"; noticed at the first poll after it
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)

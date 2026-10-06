@@ -11,6 +11,12 @@ Poll every `presence_poll_s` (10 s): snapshot -> count faces -> state. **Present
 Detector: insightface SCRFD (buffalo_l detection model only) on **CPU** (your answer on 2026-10-06: onnxruntime in the Core venv has no CUDA provider; small model, added to the CPU-allowed list with the others). ~88 ms per poll, 2.5 s one-off load. Sanity: finds 6 faces in the sample photo bundled with insightface; live camera polls returned 0 faces (nobody in view at test time). CPU, so it never touches `gpu.run`: the old "CUDA operation not permitted when stream is capturing" presence errors (4,302 of them) are gone by construction.
 Cost: ~0.09 s of one core per 10 s = ~0.9 %, one frame in memory.
 
+## Update (same day): 7 s / 49 s, camera index, frozen frames
+- Poll every **7 s**, absent after **49 s** (= 7 polls exactly), Vatsal's call.
+- `camera.py` also treats a **frozen** camera as dead: two bit-identical frames in a row (a real sensor always has noise). `--probe` after the lens was uncovered: index 0 (1280x720) and index 2 (640x480) are frozen virtual cameras; **index 1 (2560x1440, PHOCUS 40A) is the real webcam** and was the flat "dead" one earlier because the lens was covered. Old FRED's "index 0" is out of date: `camera_index` is now 1. (The listed devices are PHOCUS 40A and EOS Webcam Utility; the old iBall is not present.)
+- Live with the real camera: snapshot ~1.0 s (open + warm-up), face detect ~88 ms, **2 faces counted** every poll (someone or a picture besides the user was in view).
+- `python senses/presence.py --watch` prints faces per second for 40 s (numbers only) to test turning away / looking down.
+
 ## Not done / next
 - Presence 8-hour soak (the P1 gate line) belongs to P8; run it once the engine is wired.
 - Look-through-camera tool (snapshot + vision describe) is P3 (tools over the P1 events).
