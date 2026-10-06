@@ -1,7 +1,7 @@
 """Run every module's self-check (`python <file>.py`) and report; exit 1 if any fails. No GPU, no playground needed.
 
   python tests/run_all.py
-A module is any Core .py file (outside tests/) that defines `_selfcheck`. Output goes to a temp FRED_DATA, never the real logs.
+A module is any Core .py file (outside tests/ and hidden dirs such as .venv) that defines `_selfcheck`. Output goes to a temp FRED_DATA, never the real logs.
 """
 import os
 import subprocess
@@ -13,7 +13,7 @@ CORE = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
-    mods = sorted(p for p in CORE.rglob("*.py") if "tests" not in p.parts and "def _selfcheck" in p.read_text(encoding="utf-8"))
+    mods = sorted(p for p in CORE.rglob("*.py") if "tests" not in p.parts and not any(x.startswith(".") for x in p.relative_to(CORE).parts) and "def _selfcheck" in p.read_text(encoding="utf-8"))
     failed = 0
     with tempfile.TemporaryDirectory() as t:
         env = {**os.environ, "FRED_DATA": t}

@@ -17,7 +17,7 @@ CORE_DIR = Path(__file__).resolve().parent
 @dataclass
 class Settings:
     playground_url: str = "http://localhost:8090"   # /v1 is appended by the client
-    brain: str = ""                      # chat model id; undecided (baseline Qwen3.5-4B suggested), set via FRED_BRAIN
+    brain: str = "unsloth/qwen3.5-4b"                 # chat model id; Qwen only for now (Vatsal, 2026-10-06), override with FRED_BRAIN
     embedder: str = "text-embedding-qwen3-embedding-4b"
     http_timeout_s: float = 600.0                     # one model call, incl. a cold load
     http_retries: int = 1                             # extra tries on a connection error only
@@ -77,7 +77,7 @@ def reload() -> Settings:
 
 def _selfcheck():
     s = get()
-    assert s.max_tool_rounds == 4 and s.playground_url.startswith("http")
+    assert s.max_tool_rounds == 4 and s.playground_url.startswith("http") and "qwen" in s.brain
     os.environ["FRED_MAX_TOOL_ROUNDS"] = "7"
     os.environ["FRED_EVENT_RING_S"] = "30"
     assert reload().max_tool_rounds == 7 and get().event_ring_s == 30.0

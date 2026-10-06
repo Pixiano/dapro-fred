@@ -23,8 +23,21 @@ Each file has its sockets (inputs, outputs, failure behaviour) in its docstring 
 | `tools/registry.py` | `ToolSpec`, `Result`, `ToolError`; `call()` never raises, bounded by a timeout, optional child-process isolation |
 | `tools/coerce.py` | schema validation and type coercion before any tool runs |
 
+## Environment
+Two Python 3.11 venvs, both gitignored: `Core/.venv` (everything Core needs, includes the memory dependencies since Core runs memory in-process) and `memory/.venv` (the memory pipeline alone). Brain: Qwen only for now (`brain` default `unsloth/qwen3.5-4b`).
+```
+# Core (from Mark_I/Initial/Core)
+py -3.11 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-torch.txt     # CUDA 12.8 torch, own index
+.venv\Scripts\python -m pip install -r requirements.txt
+# memory (from Mark_I/Initial/memory)
+py -3.11 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+Run Core files with `.venv\Scripts\python`; the playground itself is stdlib only and runs on any Python.
+
 ## Run
-- All no-GPU self-checks: `python tests/run_all.py`
+- All no-GPU self-checks: `.venv\Scripts\python tests/run_all.py`
 - One module: `python <file>.py` (from this folder)
 - Live gate against a real playground (GPU, one run at a time): `python tests/live_playground.py [chat-model-id]`; address from `FRED_PLAYGROUND_URL`.
 

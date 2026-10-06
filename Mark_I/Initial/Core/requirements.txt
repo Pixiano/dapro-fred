@@ -1,8 +1,39 @@
-# Core runtime dependencies, tagged by the phase that needs them. No venv; see PLAN.md "Dependencies and installs".
-# P0 foundations: standard library only (urllib, threading, multiprocessing, json). Nothing to install.
-#
-# Added from P1 on (not installed yet; the interpreter decision comes first, see HANDOFF.md "Open before later phases"):
-# P1 audio:   faster-whisper, onnxruntime, openwakeword, webrtcvad-wheels, sounddevice
-# P1 screen:  mss, opencv-python
-# P2 clock:   speechbrain (voice ID), onnxruntime (Smart Turn)
-# P4 voice:   kokoro-onnx
+# Core runtime: Python 3.11, venv at Core/.venv (gitignored). Versions are the ones proven in the old FRED venv (Old/Core/venv), trimmed to what Core needs.
+# Install: see Core/README.md ("Environment"). torch comes from the CUDA 12.8 index, listed separately in requirements-torch.txt.
+# P0 uses only the standard library; the rest is installed now so later phases do not stop on setup.
+
+# memory pipeline (Core imports memory/ in-process, P3b)
+numpy==2.4.6
+faiss-cpu==1.13.2
+fpdf2
+pillow
+networkx
+cryptography
+
+# P1 audio, P2 clock, P4 voice
+faster-whisper==1.2.1          # + ctranslate2; CUDA libs from the nvidia-* packages below
+ctranslate2==4.8.1
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cuda-runtime-cu12==12.9.79
+nvidia-cuda-nvrtc-cu12==12.9.86
+onnxruntime==1.27.0            # Smart Turn, wake word, Kokoro (CPU)
+openwakeword==0.6.0
+webrtcvad-wheels==2.0.14
+speechbrain==1.1.0             # voice ID (CPU); needs torch
+kokoro-onnx==0.5.0
+sounddevice==0.5.5
+soundfile==0.14.0
+scipy==1.17.1
+
+# P1 screen + camera, P5 UI
+mss==10.2.0
+opencv-python==5.0.0.93
+insightface==1.0.1             # presence
+pywin32==312
+pycaw==20251023
+comtypes
+psutil==7.2.2
+
+# tools / glue
+requests
+pytest

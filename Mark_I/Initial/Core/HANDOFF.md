@@ -19,6 +19,6 @@ Start here after a context clear. **P0 is built and passed its gate** (see `READ
 `config`, `log`, `events`, `gpu`, `models/client`, `models/fake`, `models/toolparse`, `tools/registry`, `tools/coerce`; extend the playground to more slots (chat, embed, talk, vision/describer) with the unload/reload window. Gate: no-GPU self-checks pass; client round-trips chat, schema JSON and embeddings on the real playground; registry rejects/coerces bad args.
 
 ## Open before later phases
-- The playground on :8090 still runs the pre-P0 server code (slots/window need a restart of it; Vatsal's call, I did not touch that process).
-- Core runtime interpreter: system Python 3.10.11 lacks faster-whisper, onnxruntime, kokoro-onnx, openwakeword, speechbrain, insightface, webrtcvad; `Old/Core/venv` has them. Decide before P1 (check CUDA in the system Python first).
-- Still undecided by Vatsal: scope of Mark I vs Mark II, network tools, first tool set, brain (baseline Qwen3.5-4B suggested), personal-data location.
+- Playground on :8090 was restarted on the P0 server code (2026-10-06).
+- Core runtime interpreter: DONE. `Core/.venv` (Python 3.11, everything incl. CUDA torch) and `memory/.venv`; run Core with `Core.venvScriptspython`.
+- Still undecided by Vatsal: scope of Mark I vs Mark II, network tools, first tool set (brain: Qwen only for now, default Qwen3.5-4B), personal-data location.

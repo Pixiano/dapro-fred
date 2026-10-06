@@ -33,3 +33,9 @@ Load 4.7 s; text 2.1 s; schema-forced JSON 2.5 s; tool call parsed 2.6 s (`{'tim
 
 ## Not done / next
 P1 (L0 senses) needs the interpreter decision first (see HANDOFF.md). Nothing here is wired to the memory pipeline yet (P3b).
+
+## Environment and brain (same day, Vatsal's call)
+- Playground on :8090 restarted by me on the P0 server code (slots chat/embed/talk/vision, `/api/window` live).
+- Two Python 3.11 venvs, gitignored: `Core/.venv` (everything: torch 2.11+cu128, faster-whisper/ctranslate2 4.8.1, onnxruntime, openwakeword, webrtcvad, speechbrain, kokoro-onnx, insightface, opencv, mss, pywin32/pycaw, plus the memory dependencies) and `memory/.venv` (memory only: numpy, faiss-cpu, fpdf2, pillow, networkx, cryptography). Versions pinned from the old FRED venv; recipe in `Core/README.md`, files `requirements.txt` + `requirements-torch.txt`.
+- Verified in `Core/.venv`: every import loads, `torch.cuda.is_available()` True, ctranslate2 sees the GPU, `pip check` clean, all 9 self-checks pass. Memory venv: store/archive/recall/manager self-checks pass. This closes the "Core interpreter" open item.
+- Brain: Qwen only for now. `config.brain` default `unsloth/qwen3.5-4b`.
