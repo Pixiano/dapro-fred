@@ -42,7 +42,8 @@ Gates by hand: `python tests/replay_audio.py` (wake/VAD on labelled recordings),
 | `describe.py` | vision-slot describer + the OCR grounding rule |
 | `ocr.py` | Windows OCR (CPU) on a crop |
 | `camera.py` | one snapshot, black-frame check, retry once, fault event |
-| `presence.py` | face count every 10 s on CPU, debounced present/absent |
+| `presence.py` | face count every 7 s on CPU, absent after 49 s |
+| `face_store.py` | face references, 13 static : 7 dynamic, in `FRED_DATA` (no matching yet) |
 | `glance.py` | frames at speech start / every 3 s / end, described in parallel with the speech |
 Gates by hand: `python tests/bench_screen.py` (period comparison), `python tests/live_describe.py` (12 screenshots).
 

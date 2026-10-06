@@ -5,15 +5,14 @@ Two tiers, 13 : 7 (Vatsal 2026-10-06):
   dynamic  `faces_dynamic_cap` (7), a FIFO window of recent confident matches (glasses, hair, light drift); the oldest is dropped when full.
 Sockets
   in : FaceStore(path=None)  (default <FRED_DATA>/face_refs.json, outside the repo: embeddings are biometric data, never logged, never in an event, never committed)
-       add_static(vec) / add_dynamic(vec, ts=None) / import_old(old_json_path, archive=True) / counts() / vectors() -> (static, dynamic) lists of unit-length float32 arrays
-  out: the JSON file {"v":1,"static":[{"e":[512 floats],"ts":..}],"dynamic":[..]}; import_old keeps the full old file next to it as face_refs_old_import.json so nothing is lost.
+       add_static(vec) / add_dynamic(vec, ts=None) / import_old(old_json_path) / counts() / vectors() -> (static, dynamic) lists of unit-length float32 arrays
+  out: the JSON file {"v":1,"static":[{"e":[512 floats],"ts":..}],"dynamic":[..]}; import_old keeps only the 20 imported references (the unused old ones are dropped, Vatsal's call).
   add_static refuses past the cap (raises ValueError) rather than evicting a deliberate shot. Vectors are L2-normalised on the way in (cosine similarity = dot product later).
 Import rule for the old FRED file (tiers base / hard / dynamic, 512-d ArcFace): static = the 13 most DIVERSE of base+hard (farthest-point sampling, so 13 different looks
 rather than 13 near-duplicates); dynamic = the 7 most recent dynamic entries by timestamp.
 Self-check: python senses/face_store.py (random vectors, temp dir)
 """
 import json
-import shutil
 import sys
 import tempfile
 from datetime import datetime
@@ -80,7 +79,7 @@ class FaceStore:
         del d[:max(0, len(d) - config.get().faces_dynamic_cap)]
         self._save()
 
-    def import_old(self, old_path, archive=True) -> dict:
+    def import_old(self, old_path) -> dict:
         old = json.loads(Path(old_path).read_text(encoding="utf-8"))["embeddings"]
         c = config.get()
         stat = [e for e in old if e.get("kind") in ("base", "hard")]
@@ -91,8 +90,6 @@ class FaceStore:
                    "static": [{"e": _unit(e["embedding"]).tolist(), "ts": e.get("ts", "")} for e in keep],
                    "dynamic": [{"e": _unit(e["embedding"]).tolist(), "ts": e.get("ts", "")} for e in dyn]}
         self._save()
-        if archive:
-            shutil.copyfile(old_path, self.path.with_name("face_refs_old_import.json"))
         return {**self.counts(), "old_static": len(stat), "old_dynamic": len([e for e in old if e.get("kind") == "dynamic"])}
 
 
@@ -123,7 +120,7 @@ def _selfcheck():
         s2 = FaceStore(d / "new" / "refs.json")
         r = s2.import_old(d / "old.json")
         assert r == {"static": 13, "dynamic": 7, "old_static": 20, "old_dynamic": 30}, r
-        assert (d / "new" / "face_refs_old_import.json").exists()
+        assert not (d / "new" / "face_refs_old_import.json").exists()
         assert [x["ts"] for x in s2._d["dynamic"]] == [f"2026-09-{i:02d}" for i in range(24, 31)]     # the 7 most recent
         # diversity: all 6 spread vectors are kept, and not all 14 near-duplicates are
         kept = np.stack(s2.vectors()[0])
