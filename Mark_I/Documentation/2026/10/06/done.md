@@ -15,6 +15,12 @@ What Vatsal decides is kept (situation without names/dates, options, choice, rea
 - Bugs found by the runs and fixed: an answer with a reason was rejected as unclear; a bare "yeah same person" was accepted as a reason; the distilled pattern without reasons only repeated the data (now needs reasons); a stored reason kept the leading option word.
 - Not tested: contradiction and merge-proposal domains with precedents, real history, delivery.
 
+## Other domains (gpt-oss low)
+- Merge proposals (domain `pair`): reached level 2, settled by FRED, planted nickname case asked.
+- Contradictions: never left level 0 (13 answers): the wording varies too much to match, so FRED always asks. Safe, and precedents do not help there.
+- Stale-fact proposals: first run settled a planted "allergy is out of date" case from earlier "school" answers (the difference test missed it). Fixed by giving each stale-fact field its own domain (`yesno:stale_fact:<field>`); rerun: the allergy case is asked, "school" reached level 2.
+- Over-caution: the difference test sometimes flags a harmless case ("topic changed"), costing an extra question, never a wrong settlement.
+
 ## llama.cpp playground (`Mark_I/Initial/playground/`)
 One OpenAI-compatible endpoint (http://localhost:8090/v1) and a web page in front of llama.cpp's `llama-server` (CUDA build b11433, outside the repo): chat with streaming and thinking pane, embeddings, load/unload, VRAM bar, register a model. Models load on demand and swap in one chat slot (plus one embedding slot), fully on the GPU. Standing rule: local models are run ONLY through it, one run at a time. Models load with `-lm dio` (direct IO): without it each llama-server held the whole model file in host RAM (13 GB for gpt-oss) and a run of three models exhausted 31 GB twice. Smoke test of Bonsai-27B, Gemma 4 12B and Qwen3.5-4B (text only): all load in 5-7 s and answer a schema-forced call correctly (63, 53 and 97 tok/s).
 
