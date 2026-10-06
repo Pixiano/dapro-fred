@@ -15,6 +15,7 @@ Sockets
 The vision slot must be loaded with the image projector (Playground().load(model, slot="vision", vision=True)); the launcher owns that, describe() only calls it.
 Self-check: python senses/describe.py (scripted model).  Real model on the 12-screenshot set: tests/live_describe.py
 """
+import difflib
 import re
 import sys
 import time
@@ -41,8 +42,20 @@ _NUMBER = re.compile(r"(?<![\w.])(?:\d+(?:[,.:]\d+)+|\d{3,})(?!\w)")
 _UNVERIFIED = "(unverified text)"
 
 
-def _norm(s: str) -> str:
-    return re.sub(r"[\s,]+", " ", s.lower()).strip()
+def _alnum(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
+def found(span: str, ocr_text: str, cover: float = 0.85) -> bool:
+    """Is `span` in the OCR text? OCR reads quotes, spaces, underscores and punctuation differently from the source, so compare letters and digits only;
+    spans of 8+ characters also pass when at least `cover` of them is matched in order by blocks of 3+ characters (an OCR slip, not an invention)."""
+    a, h = _alnum(span), _alnum(ocr_text)
+    if not a or a in h:
+        return True
+    if len(a) < 8:
+        return False
+    blocks = difflib.SequenceMatcher(None, a, h, autojunk=False).get_matching_blocks()
+    return sum(b.size for b in blocks if b.size >= 3) / len(a) >= cover
 
 
 @dataclass
@@ -63,16 +76,16 @@ def spans(text: str) -> list:
 
 def ground(text: str, ocr_text: str) -> tuple:
     """Replace every quoted span not present in the OCR text; numbers outside quotes that OCR lacks are only listed. -> (clean_text, dropped)"""
-    hay, dropped, clean = _norm(ocr_text), [], text
+    dropped, clean = [], text
 
     def fix(m):
         span = (m.group(1) or m.group(2)).strip()
-        if _norm(span) in hay:
+        if found(span, ocr_text):
             return m.group(0)
         dropped.append(span)
         return _UNVERIFIED
     clean = _QUOTE.sub(fix, clean)
-    dropped += [n for n in (m.group(0) for m in _NUMBER.finditer(clean)) if _norm(n) not in hay and n not in dropped]
+    dropped += [n for n in (m.group(0) for m in _NUMBER.finditer(clean)) if not found(n, ocr_text) and n not in dropped]
     return clean, dropped
 
 
@@ -115,6 +128,10 @@ def _selfcheck():
     assert "KeyError" in clean and "Disk is full" not in clean and _UNVERIFIED in clean       # an invented quote is replaced
     assert "Disk is full" in dropped and "98765" in dropped and "14:32" not in dropped         # an invented number is listed, a real one passes
     assert ground("The build log says 'exit code 1'.", ocr)[1] == []                           # single-quoted, case-insensitive match
+    assert ground("It failed with \"KeyError: 'user_id'\".", "Traceback\nKeyError :\n' user id'\nline 41")[1] == []   # OCR spacing / underscore differences are not inventions
+    assert ground("Error says \"Connection refused by remote host\".", "Connection refused by remote host")[1] == []
+    assert ground("Error says \"Connection reset by peer\".", "Connection refused by remote host")[1] == ["Connection reset by peer"]   # a different message is
+
     assert ground("Nothing notable on screen.", ocr) == ("Nothing notable on screen.", [])
     assert spans("It says \"hello world\" and costs 4,280 or 99 euros") == ["hello world", "4,280"]   # 2-digit numbers are not asserted facts
     b, got = ev.EventBus(), []

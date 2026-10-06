@@ -7,16 +7,24 @@ Detector: the frame is sampled every `screen_stride` pixels, grey-scaled (green 
 frame is 1 - mean|diff| / 255; the frame score is the LOWEST tile similarity ("tile-max difference"). Changed when score < screen_threshold (0.990).
 The first frame, and any frame whose size differs from the last (resolution or monitor switch), only set the baseline.
 
+Fast path (lossless): the tile grid is quantised to bins of q = floor((1 - screen_threshold) * 255) levels (2 at 0.990) and hashed with sha256. Equal hashes mean every tile
+moved by less than q levels, which is below the change threshold, so the similarity pass is skipped (`skips` counts them). Any real change flips at least one bin, so nothing is lost.
+The same hash marks `screen.settled` events `duplicate=True` when the screen has returned to exactly the state of the previous settled event (a toast came and went, a menu
+opened and closed): downstream OCR / description can skip those.
+
 Sockets
   in : ScreenSense(bus, source=None).start() / stop()          a thread ticks every screen_interval_s on a fixed schedule (no drift; an overrun is counted, not queued)
        tick() -> Change | None                                  one capture+compare, synchronously (tests, replay, benchmarks)
        source = anything with grab() -> HxWx3|4 uint8 ndarray   default MssSource (primary monitor); ListSource replays frames
-  out: bus event  screen.change {score, tiles, bbox: [x0,y0,x1,y1] in native px, w, h}
+  out: bus event  screen.change {score, tiles, bbox: [x0,y0,x1,y1] in native px, w, h}      every tick that differs from the previous one (can be 5-10 per second on a busy screen)
+                  screen.settled {bbox, changes, ms, duplicate}   `screen_settle_s` after the LAST change of a burst: the union of the burst's regions. THIS is what OCR and the describer
+                                                       should follow, so a video or a scrolling page costs one pass at the end, not ten a second
        latest() -> last frame (ndarray) | None;  crop(bbox=None, pad=None) -> RGB ndarray at native resolution;  png(arr) -> bytes (for the vision slot)
        stats() -> {ticks, changes, overruns, grab_ms, detect_ms}  (running means; the resource numbers behind the interval choice, see tests/bench_screen.py)
 Failure: a grab error emits screen.error (rate-limited to one per 30 s) and the loop keeps going.
 Self-check: python senses/screen.py (synthetic frames, no display needed)
 """
+import hashlib
 import sys
 import threading
 import time
@@ -70,6 +78,8 @@ class TileDetector:
     def __init__(self):
         self._prev: np.ndarray | None = None
         self._shape = None
+        self.last_fp: bytes | None = None
+        self.skips = 0
 
     def _tiles(self, frame: np.ndarray) -> np.ndarray:
         c = config.get()
@@ -79,13 +89,24 @@ class TileDetector:
         return g[:h, :w].reshape(r, h // r, k, w // k).mean(axis=(1, 3), dtype=np.float32)
 
     def reset(self):
-        self._prev = self._shape = None
+        self._prev = self._shape = self.last_fp = None
+
+    @staticmethod
+    def _fp(tiles: np.ndarray) -> bytes:
+        q = max(1, int((1.0 - config.get().screen_threshold) * 255))
+        return hashlib.sha256((tiles // q).astype(np.int16).tobytes()).digest()
 
     def update(self, frame: np.ndarray) -> Change | None:
         c = config.get()
         t = self._tiles(frame)
+        fp = self._fp(t)
         if self._prev is None or self._shape != frame.shape:
-            self._prev, self._shape = t, frame.shape
+            self._prev, self._shape, self.last_fp = t, frame.shape, fp
+            return None
+        same, self.last_fp = fp == self.last_fp, fp
+        if same:                                           # lossless fast path, see module docstring
+            self._prev = t
+            self.skips += 1
             return None
         sim = 1.0 - np.abs(t - self._prev) / 255.0
         self._prev = t
@@ -112,6 +133,9 @@ class ScreenSense:
         self._n = {"ticks": 0, "changes": 0, "overruns": 0}
         self._grab_s = self._detect_s = 0.0
         self._last_err = -1e9
+        self._clock = time.monotonic          # injectable for tests
+        self._settled_fp = None
+        self._pend = None                     # [x0,y0,x1,y1, n_changes, t_first, t_last] of the burst in progress
 
     # --- one step ------------------------------------------------------
     def tick(self) -> Change | None:
@@ -127,9 +151,18 @@ class ScreenSense:
             self._n["ticks"] += 1
             self._grab_s += t1 - t0
             self._detect_s += t2 - t1
+        now = self._clock()
         if ch:
             self._n["changes"] += 1
             self.bus.emit("screen", "change", score=round(ch.score, 4), tiles=ch.tiles, bbox=list(ch.bbox), w=ch.w, h=ch.h)
+            b = ch.bbox
+            p = self._pend
+            self._pend = [b[0], b[1], b[2], b[3], 1, now, now] if p is None else [min(p[0], b[0]), min(p[1], b[1]), max(p[2], b[2]), max(p[3], b[3]), p[4] + 1, p[5], now]
+        elif self._pend and now - self._pend[6] >= config.get().screen_settle_s:
+            p, self._pend = self._pend, None
+            dup = self.det.last_fp == self._settled_fp
+            self._settled_fp = self.det.last_fp
+            self.bus.emit("screen", "settled", bbox=p[:4], changes=p[4], ms=int((p[6] - p[5]) * 1000), duplicate=dup)
         return ch
 
     # --- loop ----------------------------------------------------------
@@ -189,7 +222,7 @@ class ScreenSense:
 
     def stats(self) -> dict:
         n = max(1, self._n["ticks"])
-        return {**self._n, "grab_ms": round(self._grab_s / n * 1000, 2), "detect_ms": round(self._detect_s / n * 1000, 2)}
+        return {**self._n, "skips": self.det.skips, "grab_ms": round(self._grab_s / n * 1000, 2), "detect_ms": round(self._detect_s / n * 1000, 2)}
 
 
 def _frame(w=1280, h=720, fill=40):
@@ -231,6 +264,39 @@ def _selfcheck():
     assert s3.tick() is None
     st = s.stats()
     assert st["ticks"] == 7 and st["changes"] == 2 and st["grab_ms"] >= 0
+    # settle: a burst of changes yields ONE screen.settled, settle_s after the last change, with the union region
+    sb, settled = ev.EventBus(), []
+    sb.subscribe(lambda e: settled.append(dict(e.data)), kinds={"settled"})
+    clock = [0.0]
+    c1, c2 = a.copy(), a.copy()
+    c1[100:140, 100:300, :3] = 220
+    c2[500:540, 800:1000, :3] = 220
+    s6 = ScreenSense(sb, ListSource([a, c1, a, c2, c2, c2, c2, c2]))
+    s6._clock = lambda: clock[0]
+    config.get().screen_settle_s = 0.5
+    for i in range(8):
+        clock[0] = i * 0.2
+        s6.tick()
+    assert len(settled) == 1, settled                       # three changes (appear, vanish, other region) -> one settled event, after 0.5 s of quiet
+    assert settled[0]["changes"] == 3 and settled[0]["bbox"][0] <= 100 and settled[0]["bbox"][2] >= 1000 and settled[0]["bbox"][1] <= 100 and settled[0]["bbox"][3] >= 540
+    assert s6.det.skips >= 4 and settled[0]["duplicate"] is False                                   # identical frames take the hash fast path; the first settle is never a duplicate
+    # a toast comes and goes: the second settled event is the SAME screen as the first -> duplicate
+    settled.clear()
+    t_ = a.copy()
+    t_[600:680, 900:1260, :3] = 230
+    clock[0] = 0.0
+    s7 = ScreenSense(sb, ListSource([a, t_, a, a, a, a, t_, a, a, a, a, a, a]))
+    s7._clock = lambda: clock[0]
+    for i in range(13):
+        clock[0] = i * 0.2
+        s7.tick()
+    assert [x["duplicate"] for x in settled] == [False, True], settled
+    # a slow brightness ramp below the threshold never fires, with or without the fast path
+    ramp = [a.copy() for _ in range(6)]
+    for i, f in enumerate(ramp):
+        f[:, :, :3] = 40 + i // 3                                                                    # +1 level over 6 frames
+    s8 = ScreenSense(sb, ListSource(ramp))
+    assert all(s8.tick() is None for _ in ramp)
     class Boom:
         def grab(self): raise OSError("display lost")
     errs = []

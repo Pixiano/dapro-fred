@@ -4,10 +4,11 @@ with the old baseline for the Qwen3.5-4B image path (100% on these 12).
 
   python tests/live_describe.py [model-id]          needs the P0 playground (slots) at FRED_PLAYGROUND_URL (default http://localhost:8090); one run at a time
 Loads the model into the VISION slot with its image projector, runs the cases, reports pass/fail and time per case, then unloads the slot.
-The grounding rule is exercised too: with OCR off every description is `verified=False` and its quoted spans are listed (printed as a count only).
+OCR (Windows, CPU) runs on every image and its text grounds the description: spans the OCR text lacks are dropped (printed as counts). Also prints whether the OCR text alone contains the expected answer (the describer-vs-OCR reading check).
 """
 import json
 import os
+import cv2
 import re
 import sys
 import time
@@ -18,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 import events as ev
 from models.client import Chat, Playground
+from senses import ocr
 from senses.describe import Describer
 
 OLD = Path(__file__).resolve().parents[4] / "Old" / "benchmarking"
@@ -50,12 +52,19 @@ def main():
     ok = 0
     try:
         for c in cases:
-            r = d.describe(OLD / "fixtures" / c["images"][0], question=c["prompt"])
+            img = cv2.imread(str(OLD / "fixtures" / c["images"][0]))[:, :, ::-1]
+            t0 = time.time()
+            text = ocr.read(img)
+            ocr_ms = int((time.time() - t0) * 1000)
+            has_key = "reply_must_match_any" in c or "reply_must_match_all" in c
+            has = ("ocr has the answer: " + ("yes" if passes({k: v for k, v in c.items() if k != "reply_must_not_match"}, text) else "no")) if has_key else "ocr: n/a"
+            r = d.describe(img, question=c["prompt"], ocr_text=text)
             good = passes(c, r.text)
             ok += good
-            print(f"{'PASS' if good else 'FAIL'} {c['id']} {c['tag']:20} {r.ms:5d} ms  unverified spans {len(r.unverified)}" + ("" if good else f"\n     reply: {r.text[:200]!r}"))
-        g = d.describe(OLD / "fixtures" / "cuda_oom.png")
-        print(f"generic description ({g.ms} ms, {len(g.text)} chars, verified={g.verified}, {len(g.unverified)} unverified spans)")
+            print(f"{'PASS' if good else 'FAIL'} {c['id']} {c['tag']:20} describe {r.ms:5d} ms  ocr {ocr_ms:3d} ms ({len(text):4d} chars, {has})  grounded: {len(r.dropped)} span(s) dropped" + ("" if good else f"\n     reply: {r.text[:200]!r}"))
+        img = cv2.imread(str(OLD / "fixtures" / "cuda_oom.png"))[:, :, ::-1]
+        g = d.describe(img, ocr_text=ocr.read(img))
+        print(f"generic description ({g.ms} ms, {len(g.text)} chars, verified={g.verified}, {len(g.dropped)} span(s) dropped as not in the OCR text)")
     finally:
         pg.unload("vision")
     print(f"{ok}/{len(cases)} passed (old baseline for this model's image path: 12/12)")

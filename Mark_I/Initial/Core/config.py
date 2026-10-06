@@ -51,7 +51,8 @@ class Settings:
     stt_min_peak: float = 0.02                        # a buffer whose peak stays under this is silence: no Whisper pass
     max_utterance_s: float = 60.0
     # --- screen (P1b) ---
-    screen_interval_s: float = 1.0                    # capture period; bench_screen.py compares 0.5 / 0.7 / 1.0 / 1.2
+    screen_interval_s: float = 0.2                    # capture period; bench_screen.py compares 0.1 / 0.2 / 0.5 / 0.7 / 1.0 / 1.2 (0.2: 2.7% of a core, every flash >= 0.2 s seen)
+    screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)
     screen_monitor: int = 1                           # mss monitor index (1 = primary)
     screen_threshold: float = 0.990                   # a tile is changed when its similarity (1 - mean abs diff / 255) falls below this
     screen_grid_rows: int = 36
@@ -59,7 +60,7 @@ class Settings:
     screen_stride: int = 2                            # sample every Nth pixel in each axis before tiling (CPU cost vs thin changes)
     screen_min_tiles: int = 1                         # tiles that must change to emit screen.change
     crop_pad_px: int = 24                             # native-resolution padding around the changed region
-    ocr_enabled: bool = False                         # Windows OCR stays OFF until Vatsal approves CPU use
+    ocr_enabled: bool = True                          # Windows OCR on the changed crop: approved by Vatsal 2026-10-06
     describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model (Qwen only for now)
     describe_max_tokens: int = 300
 
