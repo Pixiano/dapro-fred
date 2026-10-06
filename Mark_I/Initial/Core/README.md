@@ -40,7 +40,8 @@ Gates by hand: `python tests/replay_audio.py` (wake/VAD on labelled recordings),
 |---|---|
 | `screen.py` | mss capture on a fixed period, tile-max change detector, native-resolution crop |
 | `describe.py` | vision-slot describer + the OCR grounding rule |
-| `ocr.py` | OCR socket, off until approved |
+| `ocr.py` | Windows OCR (CPU) on a crop |
+| `glance.py` | frames at speech start / every 3 s / end, described in parallel with the speech |
 Gates by hand: `python tests/bench_screen.py` (period comparison), `python tests/live_describe.py` (12 screenshots).
 
 ## Environment

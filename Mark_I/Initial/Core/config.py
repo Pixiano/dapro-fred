@@ -52,6 +52,8 @@ class Settings:
     max_utterance_s: float = 60.0
     # --- screen (P1b) ---
     screen_interval_s: float = 0.2                    # capture period; bench_screen.py compares 0.1 / 0.2 / 0.5 / 0.7 / 1.0 / 1.2 (0.2: 2.7% of a core, every flash >= 0.2 s seen)
+    glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
+    glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)
     screen_monitor: int = 1                           # mss monitor index (1 = primary)
     screen_threshold: float = 0.990                   # a tile is changed when its similarity (1 - mean abs diff / 255) falls below this
