@@ -59,7 +59,7 @@ class Settings:
     camera_retry_s: float = 0.5                       # wait before the one retry
     presence_poll_s: float = 10.0                     # camera snapshot period
     presence_present_polls: int = 1                   # face polls in a row before "present"
-    presence_absent_polls: int = 6                    # no-face polls in a row before "absent" (60 s at 10 s)
+    presence_absent_s: float = 45.0                   # no face for this long (since the last one seen) before "absent"; noticed at the first poll after it
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)

@@ -3,9 +3,9 @@
 Sockets
   in : Presence(bus, camera, detector=None).poll() -> {"faces": int} | None  (None = camera fault, state unchanged);  start() / stop() run poll() on a fixed schedule
   out: bus event presence.state {present, faces, since_s} only when the state CHANGES, after debounce: present as soon as a face is seen (`presence_present_polls`, 1),
-       absent after `presence_absent_polls` (6 = 60 s) consecutive no-face polls, so looking away or a missed detection does not flip it.
+       absent once no face has been seen for `presence_absent_s` (45 s; noticed at the first poll after that, so up to one poll period later), so looking away or a missed detection does not flip it.
        presence.poll {faces} on every successful poll (log noise stays low: the EventLog keeps it as a number only).  is_present() -> bool | None (None before the first poll).
-  A camera fault (senses/camera.py raises CameraFault, which also emits camera.fault) is neither present nor absent: the state is held, nothing is counted.
+  A camera fault (senses/camera.py raises CameraFault, which also emits camera.fault) changes nothing by itself: the state is held, and the 45 s clock keeps running, so the first fault-free poll with no face after 45 s of no faces says absent.
   Detector: `detector(rgb) -> int` faces. Default is the insightface SCRFD detection model only (buffalo_l's det_10g, ~17 MB) on CPU: Vatsal approved CPU for this
   small detector 2026-10-06 (onnxruntime here has no CUDA provider). No recognition, no embeddings: this module never identifies anyone and stores nothing; frames
   are dropped after counting. Identity matching is a separate, later socket.
@@ -38,7 +38,9 @@ class Presence:
         self.camera = camera or Camera(self.bus)
         self._detector, self._lazy = detector, detector is None
         self._present: bool | None = None
-        self._seen = self._missed = 0
+        self._seen = 0
+        self._clock = time.monotonic          # injectable for tests
+        self._last_face = self._clock()
         self._since = time.monotonic()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -57,16 +59,16 @@ class Presence:
         del rgb
         self.bus.emit("presence", "poll", faces=n)
         c = config.get()
-        self._seen, self._missed = (self._seen + 1, 0) if n else (0, self._missed + 1)
+        now = self._clock()
+        self._seen = self._seen + 1 if n else 0
+        if n:
+            self._last_face = now
         new = self._present
         if n and self._seen >= c.presence_present_polls:
             new = True
-        elif not n and self._missed >= c.presence_absent_polls:
-            new = False
-        elif self._present is None and not n and self._missed >= 1 and c.presence_absent_polls <= 1:
+        elif not n and now - self._last_face >= c.presence_absent_s:
             new = False
         if new != self._present:
-            now = time.monotonic()
             self.bus.emit("presence", "state", present=new, faces=n, since_s=int(now - self._since) if self._present is not None else 0)
             self._present, self._since = new, now
         return {"faces": n}
@@ -94,12 +96,13 @@ class Presence:
 
 def _selfcheck():
     import numpy as np
-    config.get().presence_absent_polls, config.get().presence_present_polls = 3, 1
+    config.get().presence_absent_s, config.get().presence_present_polls = 45.0, 1
+    clock = [0.0]
     bus = ev.EventBus()
     states = []
     bus.subscribe(lambda e: states.append(e.data["present"]), kinds={"state"}, sources={"presence"})
     frame = np.full((8, 8, 3), 100, dtype=np.uint8)
-    faces = iter([0, 0, 1, 0, 0, 1, 0, 0, 0, 2, 0])
+    faces = iter([0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 2, 0])
     fault = {"on": False}
 
     class Cam:
@@ -109,21 +112,27 @@ def _selfcheck():
             return frame
 
     p = Presence(bus, Cam(), lambda rgb: next(faces))
+    p._clock = lambda: clock[0]
+    p._last_face = 0.0
+    _poll = p.poll
+    p.poll = lambda: (clock.__setitem__(0, clock[0] + 10.0), _poll())[1]     # polls every 10 s
     assert p.is_present() is None
     p.poll(); p.poll()
-    assert states == [] and p.is_present() is None             # two empty polls at startup: not enough to claim absence
+    assert states == [] and p.is_present() is None             # 20 s of empty polls at startup: not enough to claim absence
     p.poll()
     assert states == [True]                                    # first face -> present immediately
     p.poll(); p.poll()
-    assert states == [True] and p.is_present() is True         # two misses: still present (debounce 3)
+    assert states == [True] and p.is_present() is True         # two misses (20 s): still present
     p.poll()
-    assert p.is_present() is True                              # a face resets the miss count
+    assert p.is_present() is True                              # a face resets the 45 s clock
     p.poll(); p.poll()
     fault["on"] = True
-    assert p.poll() is None and p.is_present() is True         # camera fault: state held, nothing counted
+    assert p.poll() is None and p.is_present() is True         # camera fault: state held (clock still runs: 30 s without a face)
     fault["on"] = False
     p.poll()
-    assert states == [True, False] and p.is_present() is False  # third consecutive miss -> absent
+    assert states == [True] and p.is_present() is True         # 40 s since the last face: under 45 s
+    p.poll()
+    assert states == [True, False] and p.is_present() is False  # 50 s -> absent, noticed at the first poll past 45 s
     p.poll()
     assert states == [True, False, True]                       # returns on the first face (two faces count as present too)
     config.reload()
