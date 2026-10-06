@@ -1,7 +1,8 @@
 """Text front end for the engine: type a request, see the reply and exactly what ran. The P3 way to talk to FRED before the voice output exists.
 
-  python engine/cli.py --live [--brain MODEL] [--no-embed] [--keep]       lines from stdin (interactive or piped); empty line or Ctrl+D quits
+  python engine/cli.py --live [--brain MODEL] [--no-embed] [--keep] [--memory]       lines from stdin (interactive or piped); empty line or Ctrl+D quits
 Loads the chat (and embedding) model into the playground if its slot is empty, and unloads what IT loaded on exit unless --keep.
+--memory attaches the memory: turns are archived under <data_dir>/memory, recall joins the prompt, the memory tools exist (needs the embed slot).
 Each reply is followed by a trace line: how it was routed (chat / tools / say / confirm / fault), the tools offered and called with their outcome, the rounds and the time.
 Sockets: engine.loop.Engine over tools.builtin.build_registry(), models.client.Chat/Embedder. `run_lines(engine, lines, out)` is the testable core.
 Self-check: python engine/cli.py (no --live: scripted model)
@@ -53,11 +54,22 @@ def main(argv):
     if "--no-embed" not in argv:
         _ensure(pg, config.get().embedder, "embed", loaded)
         emb = Embedder()
-    e = Engine(Chat(brain), build_registry(), emb, prompt.build_system())
+    bus, feed, mem, recall = None, None, None, None
+    if "--memory" in argv:
+        import events as ev
+        from memory_bridge.feed import Feed
+        from memory_bridge.link import open_memory
+        from memory_bridge.turn_recall import MemoryRecall
+        bus, mem, chat = ev.EventBus(), open_memory(), Chat(brain)
+        recall, feed = MemoryRecall(mem, emb, chat, config.get().embedder), Feed(mem, bus)
+        feed.start()
+    e = Engine(Chat(brain), build_registry(recall=recall), emb, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: print(f"FRED (interim): {t}"))
     try:
         print("type a request (empty line quits)")
         run_lines(e, (l for l in sys.stdin))
     finally:
+        feed and feed.stop()
+        mem and mem.close()
         if loaded and "--keep" not in argv:
             for s in loaded:
                 pg.unload(s)

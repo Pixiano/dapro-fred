@@ -73,6 +73,7 @@ class ToolSpec:
     isolate: bool = False
     say: bool = False                 # the returned data is already a complete spoken sentence: the engine speaks it as is (no second model round) unless the request is compound
     cues: tuple = ()                  # regex fragments (case-insensitive, word-bounded by the router) that make this tool's GROUP a candidate for an utterance
+    preview: Callable | None = None   # preview(args) -> str: what exactly a destructive call would hit, shown in the confirmation question ("kills chrome.exe x7")
     examples: tuple = ()              # how a person actually asks for it; embedded once for the semantic ranking
 
 

@@ -5,7 +5,7 @@ Sockets
          chat = anything with complete(messages, tools=, think=) -> ChatResult (models/client.Chat or models/fake.FakeChat); registry = tools/registry.Registry
          Engine.history is the rolling conversation (settings.history_turns pairs); Engine.confirm is the confirmation gate (engine/gates.Confirmer)
   out: Reply.text (what FRED says), Reply.calls [{name, args, ok, error_kind, ms}], Reply.offered (the menu), Reply.reason (why that menu), Reply.via
-         ("chat" | "tools" | "say" | "confirm" | "fault"); bus events engine.turn / engine.tool (when a bus is given). No raw exception ever leaves run().
+         ("chat" | "tools" | "say" | "confirm" | "memory" | "fault"); bus events engine.turn / engine.tool (when a bus is given). No raw exception ever leaves run().
 Rules (PLAN.md "The tool loop"):
   - arguments are coerced by the registry before the call; a tool call whose arguments were not valid JSON becomes bad_args, not a crash
   - an identical call (tool + canonical args) that already failed this turn is not run again: the earlier error comes back, marked as a repeat
@@ -15,10 +15,13 @@ Rules (PLAN.md "The tool loop"):
   - chain offer: a call to a real tool outside the current menu widens the menu to that tool's whole group (never the full menu by default)
   - destructive tool -> nothing in that message runs; the user is asked, and the next yes/no turn decides (gates.Confirmer)
   - read/send separation: after an untrusted-content tool ran this turn, a `sends` tool is refused
+  - refusal nudge: the reply says "I can't ..." although the menu had tools for the request and none ran -> the model is asked again once, told which tools it has
   - reply guards (gates.py): leaked tool syntax -> regenerate once without tools; a completion claim no tool supports -> widen the menu once, then an honest line;
     a failed tool whose failure the reply does not mention -> the failure's speakable replaces the reply
   - `say` tools (data is already a spoken sentence) skip the second model round unless the request is compound or derived ("how many days until...")
-Not here (later phases): sentence streaming to TTS (P4), memory recall into the prompt (3b), agent allowlists (L4).
+Memory (3b): `recall` = memory_bridge/turn_recall.MemoryRecall (anything with context(text, say) -> Recalled(block, ask, direct)); its block joins the system prompt for that turn only,
+  an ask/direct reply is spoken without the model; `on_say(text)` / bus engine.say carries the interim "digging deeper" line.
+Not here (later phases): sentence streaming to TTS (P4), agent allowlists (L4).
 Self-check: python engine/loop.py (scripted FakeChat, no GPU); the full scenario suite is tests/test_engine.py
 """
 import json
@@ -63,6 +66,7 @@ class _Turn:
         self.calls: list[dict] = []
         self.read_untrusted = False
         self.widened = False
+        self.nudged = False                   # the refusal nudge fires at most once per turn
         self.rounds = 0
 
 
@@ -78,8 +82,9 @@ def _text(res: Result) -> str:
 
 
 class Engine:
-    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None):
+    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None):
         self.chat, self.registry, self.system, self.bus = chat, registry, system, bus
+        self.recall, self.on_say = recall, on_say
         self.router = classify.Router(registry, embedder) if embedder is not None else None
         self.confirm = confirm or gates.Confirmer()
         self.history: list[dict] = []
@@ -98,7 +103,7 @@ class Engine:
             self._remember(text, r.text)
             log.session("turn", source=source, asked=text, reply=r.text, via=r.via, reason=r.reason, offered=r.offered, calls=r.calls, rounds=r.rounds, ms=r.ms)
             if self.bus:
-                self.bus.emit("engine", "turn", text=text, reply=r.text, via=r.via, calls=[c["name"] for c in r.calls], ms=r.ms, source=source)
+                self.bus.emit("engine", "turn", text=text, reply=r.text, via=r.via, calls=[c["name"] for c in r.calls], ms=r.ms, origin=source)
             return r
 
     # ---- internals -----------------------------------------------------------------------------------------------------------
@@ -107,19 +112,31 @@ class Engine:
         del self.history[: -2 * config.get().history_turns]
 
     def _complete(self, msgs, tools):
-        return self.chat.complete(msgs, tools=tools or None, think=config.get().engine_think)
+        return self.chat.complete(list(msgs), tools=tools or None, think=config.get().engine_think)      # a copy: the loop edits msgs afterwards
 
-    def _messages(self, text: str) -> list:
-        return ([{"role": "system", "content": self.system}] if self.system else []) + self.history + [{"role": "user", "content": text}]
+    def _say(self, text: str):
+        """An interim spoken line while a slow step runs ("digging deeper..."): a hook, never an error."""
+        try:
+            self.on_say and self.on_say(text)
+            self.bus and self.bus.emit("engine", "say", text=text)
+        except Exception as ex:
+            log.session("say_error", error=repr(ex))
+
+    def _messages(self, text: str, memory: str = "") -> list:
+        system = (self.system + ("\n\n---\n\n" + memory if memory else "")).strip()
+        return ([{"role": "system", "content": system}] if system else []) + self.history + [{"role": "user", "content": text}]
 
     def _run(self, text: str) -> Reply:
         c = config.get()
         r = self.confirm.resolve(text)
         if r:
             return self._confirmed(r, text)
+        rc = self.recall.context(text, self._say) if self.recall else None
+        if rc and (rc.direct or (rc.ask and not rc.block)):                          # the memory needs an answer first, or has already answered
+            return Reply(rc.direct or rc.ask, via="memory", reason="memory")
         d = classify.classify(text, self.registry, self.router)
         t = _Turn(text)
-        msgs = self._messages(text)
+        msgs = self._messages(text, rc.block if rc else "")
         offered = list(d.names) if d.needs_tools else []
         res = self._complete(msgs, self.registry.schemas(offered) if offered else None)
         if not d.needs_tools and gates.unsupported_claim(res.text, [], text):          # the chat path runs no tools, so a completion claim is false every time
@@ -129,6 +146,13 @@ class Engine:
         while True:
             calls = res.tool_calls[: c.max_calls_per_round]
             if not calls:
+                if offered and not t.results and not t.nudged and gates.looks_like_refusal(res.text):      # "I can't..." with tools on the menu: remind the model what it has, once
+                    t.nudged = True
+                    msgs.append({"role": "assistant", "content": res.text})
+                    msgs.append({"role": "user", "content": "You do have tools for this: " + ", ".join(offered) + ". If one of them can do what I asked, call it now. Otherwise answer normally."})
+                    res = self._complete(msgs, self.registry.schemas(offered))
+                    msgs[-2:] = []                                                       # the nudge is not part of the conversation
+                    continue
                 done = self._finish(res, t, msgs, offered)
                 if done is None:                                                       # a guard widened the menu: ask again
                     offered = self.registry.names()
@@ -179,9 +203,13 @@ class Engine:
         text = toolparse.strip_debris(res.text or "")
         return text if text and not toolparse.looks_leaked(res.text) else " ".join(t.results)
 
-    @staticmethod
-    def _confirm_prompt(name: str, args: dict) -> str:
-        shown = ", ".join(f"{k} {v}" for k, v in args.items())
+    def _confirm_prompt(self, name: str, args: dict) -> str:
+        spec = self.registry.spec(name)
+        try:
+            shown = spec.preview(args) if spec and spec.preview else ""
+        except Exception:
+            shown = ""
+        shown = shown or ", ".join(f"{k} {v}" for k, v in args.items())
         return f"Just to confirm: {name.replace('_', ' ')}{(' ' + shown) if shown else ''}. Yes or no?"
 
     def _confirmed(self, r, text: str) -> Reply:
@@ -224,7 +252,7 @@ class Engine:
         t.results.append(_text(res))
         t.calls.append({"name": name, "args": args, "ok": res.ok, "error_kind": res.error_kind, "ms": res.ms})
         if self.bus:
-            self.bus.emit("engine", "tool", name=name, ok=res.ok, error_kind=res.error_kind, ms=res.ms)
+            self.bus.emit("engine", "tool", name=name, args=args, ok=res.ok, error_kind=res.error_kind, ms=res.ms, result=_text(res)[:300])
 
     def _execute(self, calls, t: _Turn) -> list:
         """Pre-checks in order (they depend on earlier failures), the real calls in parallel, bookkeeping in order."""

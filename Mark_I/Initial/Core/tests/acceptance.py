@@ -25,7 +25,7 @@ from tools.registry import Registry, ToolError, ToolSpec
 
 CASES = Path(__file__).resolve().parent / "cases"
 SUPPORTS = {"text", "tools"}
-PURE = {"get_current_time", "calculate"}
+PURE = {"get_current_time", "calculate", "days_until"}
 
 
 def load(name):

@@ -37,3 +37,4 @@ psutil==7.2.2
 # tools / glue
 requests
 pytest
+screen_brightness_control

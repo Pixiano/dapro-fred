@@ -1,7 +1,7 @@
 """Tools: timers and reminders, persisted. Firing them is the L4 scheduler's job (P6); this module owns the store and the time parsing.
 
 Sockets
-  in : register(registry) adds set_timer, set_reminder, list_reminders, cancel_reminder
+  in : register(registry) adds set_timer, schedule_reminder, set_alarm, schedule_recurring, list_reminders, cancel_reminder
        Store(path=None).add(kind, text, due) / .due(now) -> [items due and not fired] / .fire(id) / .items() / .cancel(match)    (<data_dir>/reminders.json, outside the repo)
        parse_when(text, now=None) -> datetime | None;   parse_duration(text) -> seconds | None
   out: spoken-style confirmations that state the exact resolved time (so a misheard time is audible at once); a time that cannot be parsed is bad_args, never a guess
@@ -64,7 +64,7 @@ def parse_when(text: str, now: datetime | None = None):
         from dateutil import parser as dp
         base = datetime.combine(day, datetime.min.time()) if day else now.replace(second=0, microsecond=0)
         if not rest:
-            return None
+            return base.replace(hour=9, minute=0) if day else None                    # a bare day ("friday") means 9 am that day
         dt = dp.parse(rest, default=base.replace(hour=9, minute=0) if day and not re.search(r"\d", rest) else base)
     except (ValueError, OverflowError):
         return None
@@ -80,6 +80,27 @@ def _say_when(due: datetime, now: datetime) -> str:
     if due.date() == (now + timedelta(days=1)).date():
         return f"tomorrow at {clock}"
     return f"{due.strftime('%A %d %B')} at {clock}"
+
+
+REPEATS = ("daily", "weekdays", "weekly", "monthly")
+
+
+def next_due(due: datetime, repeat: str) -> datetime:
+    """The next occurrence after `due` for a repeat rule (same clock time). "weekdays" skips Saturday and Sunday; "monthly" keeps the day, clamped to the month length."""
+    if repeat == "daily":
+        return due + timedelta(days=1)
+    if repeat == "weekly":
+        return due + timedelta(days=7)
+    if repeat == "weekdays":
+        n = due + timedelta(days=1)
+        while n.weekday() >= 5:
+            n += timedelta(days=1)
+        return n
+    if repeat == "monthly":
+        import calendar
+        y, m = due.year + (due.month == 12), due.month % 12 + 1
+        return due.replace(year=y, month=m, day=min(due.day, calendar.monthrange(y, m)[1]))
+    raise ValueError(repeat)
 
 
 class Store:
@@ -98,8 +119,8 @@ class Store:
         tmp.write_text(json.dumps(items, indent=1), encoding="utf-8")
         tmp.replace(self.path)
 
-    def add(self, kind: str, text: str, due: datetime) -> dict:
-        it = {"id": uuid.uuid4().hex[:8], "kind": kind, "text": text, "due": due.isoformat(timespec="seconds"), "fired": False}
+    def add(self, kind: str, text: str, due: datetime, repeat: str = "") -> dict:
+        it = {"id": uuid.uuid4().hex[:8], "kind": kind, "text": text, "due": due.isoformat(timespec="seconds"), "fired": False, "repeat": repeat}
         self._save(self.items() + [it])
         return it
 
@@ -108,7 +129,14 @@ class Store:
         return [i for i in self.items() if not i["fired"] and datetime.fromisoformat(i["due"]) <= now]
 
     def fire(self, id: str):
-        self._save([{**i, "fired": True} if i["id"] == id else i for i in self.items()])
+        """Mark fired; a repeating item moves to its next occurrence instead (still pending)."""
+        def one(i):
+            if i["id"] != id:
+                return i
+            if i.get("repeat"):
+                return {**i, "due": next_due(datetime.fromisoformat(i["due"]), i["repeat"]).isoformat(timespec="seconds")}
+            return {**i, "fired": True}
+        self._save([one(i) for i in self.items()])
 
     def pending(self) -> list:
         return sorted((i for i in self.items() if not i["fired"]), key=lambda i: i["due"])
@@ -145,9 +173,27 @@ def set_reminder(text: str, when: str) -> str:
     return f"Reminder set for {_say_when(due, now)}: {text}."
 
 
+def set_alarm(when: str, label: str = "") -> str:
+    now = datetime.now()
+    due = parse_when(when, now)
+    if due is None:
+        raise ToolError("bad_args", "I didn't catch what time.", f"cannot read a time from {when!r}; give e.g. '6 am tomorrow'")
+    Store().add("alarm", label or "alarm", due)
+    return f"Alarm set for {_say_when(due, now)}{(': ' + label) if label else ''}."
+
+
+def schedule_recurring(text: str, when: str, repeat: str) -> str:
+    now = datetime.now()
+    due = parse_when(when, now)
+    if due is None:
+        raise ToolError("bad_args", "I didn't catch when.", f"cannot read a time from {when!r}; give the first occurrence, e.g. 'monday 9am'")
+    Store().add("reminder", text, due, repeat)
+    return f"I'll remind you {repeat}, starting {_say_when(due, now)}: {text}."
+
+
 def list_reminders() -> str:
     now, p = datetime.now(), Store().pending()
-    return "\n".join(f"{i['kind']}: {i['text']} ({_say_when(datetime.fromisoformat(i['due']), now)})" for i in p) or "You have no reminders or timers."
+    return "\n".join(f"{i['kind']}: {i['text']} ({_say_when(datetime.fromisoformat(i['due']), now)}{', ' + i['repeat'] if i.get('repeat') else ''})" for i in p) or "You have no reminders or timers."
 
 
 def cancel_reminder(match: str) -> str:
@@ -155,12 +201,16 @@ def cancel_reminder(match: str) -> str:
 
 
 def register(reg):
-    cues = (r"remind(?:er)?s?", r"timers?", r"alarm", r"don't let me forget", r"wake me", r"in \d+ (?:seconds?|minutes?|hours?)", r"yaad dila\w*", r"yaad rakh\w*")
+    cues = (r"every (?:day|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|morning|evening)", r"daily", r"weekly", r"remind(?:er)?s?", r"timers?", r"alarm", r"don't let me forget", r"wake me", r"in \d+ (?:seconds?|minutes?|hours?)", r"yaad dila\w*", r"yaad rakh\w*")
     reg.register(ToolSpec("set_timer", set_timer, {"type": "object", "required": ["duration"], "properties": {"duration": {"type": "string", "description": "e.g. '10 minutes'"}, "label": {"type": "string"}}},
                           "Start a countdown timer.", group="reminders", say=True, cues=cues, examples=("set a timer for five minutes", "timer ten minutes for the pasta")))
     reg.register(ToolSpec("schedule_reminder", set_reminder, {"type": "object", "required": ["text", "when"], "properties": {
         "text": {"type": "string", "description": "what to remind about"}, "when": {"type": "string", "description": "e.g. 'in 20 minutes', 'tomorrow at 9am', 'friday 6pm', '2026-10-09 14:30'"}}},
-        "Set a reminder for a given time. One call per reminder.", group="reminders", say=True, cues=cues, examples=("remind me to call the dentist tomorrow at nine", "remind me in twenty minutes")))
+        "Remind the user of something at a time. Use for every 'remind me ...' request, one call per reminder.", group="reminders", say=True, cues=cues, examples=("remind me to call the dentist tomorrow at nine", "remind me in twenty minutes", "remind me at 7:45 pm to take my meds", "mujhe 5 baje yaad dilana ki gym jaana hai")))
+    reg.register(ToolSpec("set_alarm", set_alarm, {"type": "object", "required": ["when"], "properties": {"when": {"type": "string", "description": "e.g. '6 am tomorrow', '7:30'"}, "label": {"type": "string"}}},
+                          "Set an ALARM (wake-up / clock alarm) for a time. Only when the user says alarm or wake me; for 'remind me ...' use schedule_reminder.", group="reminders", say=True, cues=cues, examples=("set an alarm for six am", "wake me up at seven")))
+    reg.register(ToolSpec("schedule_recurring", schedule_recurring, {"type": "object", "required": ["text", "when", "repeat"], "properties": {"text": {"type": "string"}, "when": {"type": "string", "description": "the FIRST occurrence, e.g. 'monday 9am'"}, "repeat": {"type": "string", "enum": list(REPEATS)}}},
+                          "A reminder that repeats: every day, every weekday, every week, every month.", group="reminders", say=True, cues=cues, examples=("remind me every monday at nine to submit the timesheet", "every morning remind me to take my pills")))
     reg.register(ToolSpec("list_reminders", list_reminders, description="List pending reminders and timers.", group="reminders", cues=cues, examples=("what reminders do I have", "any timers running")))
     reg.register(ToolSpec("cancel_reminder", cancel_reminder, {"type": "object", "required": ["match"], "properties": {"match": {"type": "string", "description": "words from the reminder, or its id"}}},
                           "Cancel a pending reminder or timer by words from it.", group="reminders", say=True, cues=cues, examples=("cancel the dentist reminder", "stop the timer")))
@@ -177,6 +227,7 @@ def _selfcheck():
     assert parse_when("8 pm", N) == datetime(2026, 10, 6, 20, 0)
     assert parse_when("friday 6pm", N) == datetime(2026, 10, 9, 18, 0) and parse_when("on tuesday at 10am", N) == datetime(2026, 10, 13, 10, 0)
     assert parse_when("2026-10-09 14:30", N) == datetime(2026, 10, 9, 14, 30)
+    assert parse_when("friday", N) == datetime(2026, 10, 9, 9, 0) and parse_when("tomorrow", N) == datetime(2026, 10, 7, 9, 0)
     assert parse_when("whenever", N) is None and parse_when("", N) is None
     with tempfile.TemporaryDirectory() as t:
         real = config.data_dir()
@@ -187,6 +238,12 @@ def _selfcheck():
         assert [i["id"] for i in s.due(N)] == [a["id"]] and not s.due(N - timedelta(hours=1))
         s.fire(a["id"])
         assert not s.due(N) and len(s.pending()) == 1
+        w = s.add("reminder", "timesheet", datetime(2026, 10, 12, 9, 0), "weekly")
+        s.fire(w["id"])                                                               # a repeating item moves on, it is not done
+        assert [i["due"] for i in s.pending() if i["id"] == w["id"]] == ["2026-10-19T09:00:00"]
+        s.cancel("timesheet")
+        assert next_due(datetime(2026, 10, 9, 9, 0), "weekdays") == datetime(2026, 10, 12, 9, 0) and next_due(datetime(2026, 12, 31, 8, 0), "monthly") == datetime(2027, 1, 31, 8, 0)
+        assert next_due(datetime(2026, 1, 31, 8, 0), "monthly") == datetime(2026, 2, 28, 8, 0) and next_due(datetime(2026, 10, 6, 8, 0), "daily").day == 7
         try:
             s.add("reminder", "call mum", N)
             s.cancel("call")

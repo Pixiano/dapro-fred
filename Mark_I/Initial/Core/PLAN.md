@@ -36,7 +36,7 @@ audio/             mic.py (single stream owner), wakeword.py (frozen model), vad
 clock/             turn_controller.py (160 ms tick: LISTEN/END_OF_TURN/BARGE_IN/BACKCHANNEL/IGNORE), smart_turn.py, voice_id.py
 senses/            screen.py (1 fps tile-max change detector + crop), ocr.py (Windows.Media.Ocr, off until approved), describe.py (vision slot), presence.py, camera.py
 proactive/         judge.py (L4), gates.py, scheduler.py (reminders, timers, file watches), checks.py
-memory_bridge/     feed.py (events -> Archive.write), recall.py (judged_search + PersonalModel.relevant), jobs.py (nightly/weekly/... runners + GPU window), ask.py (askqueue socket)
+memory_bridge/     feed.py (events -> Archive.write), link.py + turn_recall.py (judged_search + PersonalModel.relevant), jobs.py (nightly/weekly/... runners + GPU window), ask.py (askqueue socket)
 ui/                pill.py (Win32 layered window), hud_server.py, popup.py (ask queue text box)
 launcher.py        starts playground, waits healthy, starts main; supervises; unloads live stack for L5 windows
 tests/             per-module self-checks stay in the module; cross-module tests + acceptance suite here

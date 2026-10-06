@@ -7,7 +7,8 @@ The rebuilt FRED runtime, built layer by layer (plan: [PLAN.md](PLAN.md), handof
 |---|---|
 | P0 Foundations | built, see below |
 | P1a L0 audio | built (mic, wake word, VAD, STT, hotkey), gate results in `Documentation/2026/10/06/core_p1a_done.md`; 1b screen built (`senses/`: change detector, vision describer, OCR socket off), see `core_p1b_done.md`; 1c camera + presence built (`core_p1c_done.md`), P2 clock built (`core_p2_done.md`), P3 thinker next |
-| P1b/c senses, P2 L1 clock, P3 L3 thinker, P4 L2 voice, P5 UI, P6 L4, P7 L5, P8 soak | not started |
+| P3 L3 thinker | built (`engine/`, `tools/`, `memory_bridge/`), see `Documentation/2026/10/06/core_p3_done.md`; network/phone/mail tools deferred |
+| P4 L2 voice, P5 UI, P6 L4, P7 L5, P8 soak | not started |
 
 ## P0 modules
 Each file has its sockets (inputs, outputs, failure behaviour) in its docstring and a runnable self-check.

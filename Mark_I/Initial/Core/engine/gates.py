@@ -8,6 +8,7 @@ Sockets
 Guards (all deterministic):
   - false completion: the reply says an action is done ("deleted", "set", "engaged"...) but no tool ran, or the file it names appears in no tool result
   - leaked tool syntax: models/toolparse.looks_leaked
+  - refusal with tools offered: the reply says "I can't ..." although the menu had tools for the request and none was called -> asked again once, naming the tools
   - failure not reflected: a tool failed this turn and the reply neither admits it nor asks anything
 Self-check: python engine/gates.py
 """
@@ -54,6 +55,14 @@ def reflects_failure(text: str) -> bool:
     return bool(_FAILURE_WORDS.search(t)) or t.endswith("?")
 
 
+_REFUSAL = re.compile(r"\b(?:i (?:can't|cannot|can not|am unable|am not able|'m unable|'m not able|don't have|do not have|have no)|unable to|not able to|no (?:tool|way to|access to))\b", re.IGNORECASE)
+
+
+def looks_like_refusal(text: str) -> bool:
+    """The reply says it cannot do something. Only meaningful when tools WERE offered for the request and none was called: then it is a refusal of something the menu can do."""
+    return bool(_REFUSAL.search(text or ""))
+
+
 def untrusted_then_send(spec, read_untrusted: bool) -> bool:
     """Read/send separation: after reading untrusted content in this turn, a tool that sends something out is refused (prompt-injection guard)."""
     return bool(spec is not None and spec.sends and read_untrusted)
@@ -96,6 +105,7 @@ def _selfcheck():
     assert not unsupported_claim("It is set to 40.", ["volume 40"])                                  # a non-write claim with evidence passes
     assert reflects_failure("I couldn't open it.") and reflects_failure("Do you want me to retry?") and not reflects_failure("Done, sir. Volume is at 30.")
     assert untrusted_then_send(ToolSpec("m", lambda: 0, sends=True), True) and not untrusted_then_send(ToolSpec("m", lambda: 0, sends=True), False)
+    assert looks_like_refusal("I can't capture screenshots.") and looks_like_refusal("Sorry, I don't have access to that.") and not looks_like_refusal("Done, screenshot saved.")
     c = Confirmer(ttl_s=60)
     c.ask("delete_file", {"path": "a"}, "Delete a?")
     assert c.resolve("yes please") == ("run", "delete_file", {"path": "a"}) and c.resolve("yes") is None          # consumed

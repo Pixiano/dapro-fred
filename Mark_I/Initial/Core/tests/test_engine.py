@@ -170,6 +170,30 @@ def t_say_shortcut_and_compound():
     assert r.text == "Three days." and len(g.chat.calls) == 2
 
 
+def t_bus_events():
+    import events as ev
+    g = Rig([tool_call("vol"), "x"])
+    bus, seen = ev.EventBus(), []
+    bus.subscribe(seen.append, sources={"engine"})
+    g.e.bus = bus
+    g.e.run("what is the volume and also hello", source="voice")                               # compound: two model rounds, one tool event, one turn event
+    kinds = [(e.kind, e.data.get("name") or e.data.get("origin")) for e in seen]
+    assert ("tool", "vol") in kinds and ("turn", "voice") in kinds and seen[0].data["args"] == {} and "result" in seen[0].data
+
+
+def t_refusal_with_tools_offered_is_nudged_once():
+    g = Rig(["I can't change the volume.", tool_call("vol"), "Volume is 30."])
+    r = g.e.run("turn the volume down")                                                         # the menu has vol; the first reply refused it
+    assert g.n["vol"] == 1 and r.via == "say", (g.n, r)
+    nudge = g.chat.calls[1]["messages"][-1]["content"]
+    assert "vol" in nudge and nudge.startswith("You do have tools for this")
+    assert all("You do have tools" not in m["content"] for m in g.e.history)                    # the nudge never enters the conversation
+    g = Rig(["I can't do that.", "I really can't do that."])                                    # still refuses: accepted, no loop
+    assert g.e.run("turn the volume down").text == "I really can't do that." and len(g.chat.calls) == 2
+    g = Rig(["I can't tell you about the moon landing."])                                       # no tools offered (chat turn): never nudged
+    assert g.e.run("tell me about the moon landing").text.startswith("I can't") and len(g.chat.calls) == 1
+
+
 def t_history_rolls():
     g = Rig(["a"] * 30)
     config.get().history_turns = 3

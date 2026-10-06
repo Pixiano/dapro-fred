@@ -1,11 +1,11 @@
 """Tools: read, list, create, overwrite, delete and find files, with bounds and guards.
 
 Sockets
-  in : register(registry) adds read_text_file, list_directory, write_file, overwrite_file (destructive), delete_file (destructive), find_files (isolated child process)
+  in : register(registry) adds read_text_file, list_directory, write_file, overwrite_file (destructive), delete_file (destructive), find_file_smart (isolated child process)
   out: strings for the model (file text is capped, untrusted: `reads_untrusted`); failures are ToolError(not_found | denied | bad_args)
 Guards: relative paths resolve against the home folder; FRED's private data folder (config.data_dir(): vault, memory, voice data) is never readable or writable by a tool;
 system folders are not writable; write_file refuses to replace an existing file (that is overwrite_file, which asks first); delete_file does not erase, it moves the file to
-<data_dir>/trash/ (reversible). find_files is a bounded name search (depth, result count and wall-clock limits) in a child process killed on timeout, so a huge drive cannot hang a turn.
+<data_dir>/trash/ (reversible). find_file_smart is a bounded name search (depth, result count and wall-clock limits) in a child process killed on timeout, so a huge drive cannot hang a turn.
 Self-check: python tools/files.py
 """
 import os
@@ -127,9 +127,9 @@ def register(reg):
                           "Replace the content of an existing file (asks the user first).", group="files", destructive=True, cues=(r"overwrite", r"replace the (?:file|content)"), examples=("overwrite that file",)))
     reg.register(ToolSpec("delete_file", delete_file, {"type": "object", "required": ["path"], "properties": P},
                           "Delete a file (moved to FRED's trash; asks the user first).", group="files", destructive=True, cues=(r"delete", r"remove (?:the |this )?file", r"get rid of"), examples=("delete that file", "remove the old draft")))
-    reg.register(ToolSpec("find_files", _find_isolated, {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, **{"root": {"type": "string", "format": "path", "default": "~"}}, "depth": {"type": "integer", "minimum": 1, "maximum": 8, "default": 6}}},
+    reg.register(ToolSpec("find_file_smart", _find_isolated, {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, **{"root": {"type": "string", "format": "path", "default": "~"}}, "depth": {"type": "integer", "minimum": 1, "maximum": 8, "default": 6}}},
                           "Find files and folders whose name contains the text, searching under a folder (home by default).", group="files", isolate=True, timeout_s=12, reads_untrusted=False,
-                          cues=(r"find (?:the |my |a )?(?:file|folder|document)", r"where(?:'s| is) (?:the |my )", r"look for (?:the |a )?file", r"search for (?:the |a )?file"), examples=("find my budget spreadsheet", "where is the report")))
+                          cues=(r"find (?:the |my |a |that |this )?[\w' -]+", r"search for", r"look for", r"locate", r"where(?:'s| is) (?:the |my )", r"look for (?:the |a )?file", r"search for (?:the |a )?file"), examples=("find my budget spreadsheet", "where is the report")))
 
 
 def _selfcheck():
@@ -155,9 +155,9 @@ def _selfcheck():
         assert t.startswith("y" * 100) and "more characters" in t
         (w / "sub" / "deep").mkdir(parents=True)
         (w / "sub" / "deep" / "Budget_2026.xlsx").write_text("x")
-        assert "Budget_2026.xlsx" in r.call("find_files", {"name": "budget", "root": str(w)}).data
-        assert r.call("find_files", {"name": "zzz", "root": str(w)}).data == "(no match)"
-        assert r.call("find_files", {"name": "budget", "root": str(w), "depth": 1}).data == "(no match)"             # depth bound
+        assert "Budget_2026.xlsx" in r.call("find_file_smart", {"name": "budget", "root": str(w)}).data
+        assert r.call("find_file_smart", {"name": "zzz", "root": str(w)}).data == "(no match)"
+        assert r.call("find_file_smart", {"name": "budget", "root": str(w), "depth": 1}).data == "(no match)"             # depth bound
         assert "a.txt" in r.call("list_directory", {"path": str(w)}).data and "sub/" in r.call("list_directory", {"path": str(w)}).data
         d = r.call("delete_file", {"path": str(w / "a.txt")})
         assert d.ok and not (w / "a.txt").exists() and any(Path(priv, "trash").iterdir())                          # moved, recoverable
