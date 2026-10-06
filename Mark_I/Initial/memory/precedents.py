@@ -79,7 +79,7 @@ def _reason(said, offered):
     words = lambda s: [w for w in re.findall(r"[\w']+", s) if w not in VOCAB]   # a reason has real content beyond "yeah same person"
     if off != "none" and off in sw and len(words(off)) >= 2:
         return off
-    return " ".join(said.split()) if len(words(sw)) >= 2 else "none"
+    return re.sub(r"^\w+[,;:.—-]\s*", "", " ".join(said.split())) if len(words(sw)) >= 2 else "none"   # "no, they live far" -> "they live far"
 
 
 def _matches(mem, domain, vec, today=None):
@@ -271,6 +271,7 @@ if __name__ == "__main__":  # self-check: python precedents.py
         assert s.db.execute("SELECT reason FROM precedents WHERE id=?", (record(m, mk("Ravi", "Ravina"), "yes", said, ext, embed),)).fetchone()[0] == "she's my cousin"
         assert _reason("same, she's my cousin", "they share a family") == "same, she's my cousin"
         assert _reason("yeah same person", "yeah same person") == "none"      # seen live: the model echoed a bare confirmation as its "reason"
+        assert _reason("No, they live in different cities", None) == "they live in different cities"
         assert _reason("yes", None) == "none" and _reason("later please sir", None) == "none"
         # 3. names and dates never reach a stored situation, even if the model echoes them
         echo = lambda p: json.dumps({"situation": "Nitu and Nitya on 2026-03-05, March 5", "reason": "none"})
