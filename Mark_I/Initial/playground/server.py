@@ -83,7 +83,7 @@ def ensure(m, ctx=None, vision=False):
         stop(slot)
         root = Path(CFG["models_dir"])
         cmd = [CFG["llama_server"], "-m", str(root / m["path"]), "-c", str(ctx), "-ngl", "99", "--port", str(slot.port), "--host", "127.0.0.1",
-               "--jinja", "-fa", "on", "-np", "1", "--no-webui", *m.get("args", [])]
+               "--jinja", "-fa", "on", "-np", "1", "--no-webui", "-lm", "dio", *m.get("args", [])]   # direct IO: the weights go to the GPU without also filling host RAM (page cache + mapped pages exhausted 31 GB RAM)
         if vision and m.get("mmproj"):
             cmd += ["--mmproj", str(root / m["mmproj"])]
         log = open(HERE / f"llama-{slot.name}.log", "w", encoding="utf-8")
