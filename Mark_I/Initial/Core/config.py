@@ -69,7 +69,7 @@ class Settings:
     stt_save_audio: bool = True                       # save each final utterance + transcript to <FRED_DATA>/voice_data (real-voice data collection)
     clock_tick_s: float = 0.16                        # interaction clock tick
     eot_silence_ms: int = 200                         # VAD silence before Smart Turn is consulted
-    eot_hard_cap_s: float = 1.2                       # silence that ends a turn regardless of Smart Turn
+    eot_hard_cap_s: float = 0.9                       # silence that ends a turn regardless of Smart Turn (Vatsal 2026-10-06: 0.9 instead of the planned 1.2)
     barge_ms: int = 300                               # speech while FRED talks that counts as a real interruption
     barge_level: float = 1500.0                       # mic RMS (int16 units) needed to barge in when not on headphones
     followup_s: float = 8.0                           # open-mic window after FRED speaks

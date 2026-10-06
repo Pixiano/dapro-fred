@@ -7,7 +7,7 @@ Spoken material is invented (Kokoro, 4 voices). Cases and labels:
   backchannel  a 0.15-0.25 s interjection while FRED is speaking     expected: BACKCHANNEL, nothing cancelled
   barge-in   a 1 s interruption while FRED is speaking          expected: BARGE_IN
   unaddressed speech with no wake word / hotkey                 expected: IGNORE not_addressed
-Compared end-of-turn rules: A = VAD silence only (200 ms), B = + Smart Turn 0.5 (the planned rule), C = hard cap only (1.2 s).
+Compared end-of-turn rules: A = VAD silence only (200 ms), B = + Smart Turn 0.5 (the planned rule), C = hard cap only (settings.eot_hard_cap_s, 0.9 s).
 Reports counts, rates and waits; no personal audio is involved.
 """
 import sys
