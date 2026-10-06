@@ -6,7 +6,7 @@ The rebuilt FRED runtime, built layer by layer (plan: [PLAN.md](PLAN.md), handof
 | Phase | State |
 |---|---|
 | P0 Foundations | built, see below |
-| P1a L0 audio | built (mic, wake word, VAD, STT, hotkey), gate results in `Documentation/2026/10/06/core_p1a_done.md`; 1b screen built (`senses/`: change detector, vision describer, OCR socket off), see `core_p1b_done.md`; 1c camera + presence built (`core_p1c_done.md`), P2 clock next |
+| P1a L0 audio | built (mic, wake word, VAD, STT, hotkey), gate results in `Documentation/2026/10/06/core_p1a_done.md`; 1b screen built (`senses/`: change detector, vision describer, OCR socket off), see `core_p1b_done.md`; 1c camera + presence built (`core_p1c_done.md`), P2 clock built (`core_p2_done.md`), P3 thinker next |
 | P1b/c senses, P2 L1 clock, P3 L3 thinker, P4 L2 voice, P5 UI, P6 L4, P7 L5, P8 soak | not started |
 
 ## P0 modules
@@ -46,6 +46,14 @@ Gates by hand: `python tests/replay_audio.py` (wake/VAD on labelled recordings),
 | `face_store.py` | face references, 13 static : 7 dynamic, in `FRED_DATA` (no matching yet) |
 | `glance.py` | frames at speech start / every 3 s / end, described in parallel with the speech |
 Gates by hand: `python tests/bench_screen.py` (period comparison), `python tests/live_describe.py` (12 screenshots).
+
+## P2 modules (`clock/`)
+| File | Job |
+|---|---|
+| `turn_controller.py` | the 160 ms clock: LISTEN / END_OF_TURN / BARGE_IN / BACKCHANNEL / IGNORE |
+| `smart_turn.py` | Smart Turn v3.2 (CPU): "is the turn finished?" from audio |
+| `voice_id.py` | ECAPA speaker gate (nobody enrolled yet) |
+Gates by hand: `python tests/offline_clock.py`, `python tests/live_clock.py`, `python tests/voice_eval.py`.
 
 ## Environment
 Two Python 3.11 venvs, both gitignored: `Core/.venv` (everything Core needs, includes the memory dependencies since Core runs memory in-process) and `memory/.venv` (the memory pipeline alone). Brain: Qwen only for now (`brain` default `unsloth/qwen3.5-4b`).

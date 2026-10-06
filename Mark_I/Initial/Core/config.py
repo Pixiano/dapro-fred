@@ -67,6 +67,13 @@ class Settings:
     voice_min_s: float = 1.0                          # shorter clips are too short to judge (score None); 1 s clips scored median 0.50, 2 s 0.62, 0.6 s 0.40 (tests/voice_eval.py)
     voice_refs_cap: int = 20                          # enrolled voice references kept (most diverse)
     stt_save_audio: bool = True                       # save each final utterance + transcript to <FRED_DATA>/voice_data (real-voice data collection)
+    clock_tick_s: float = 0.16                        # interaction clock tick
+    eot_silence_ms: int = 200                         # VAD silence before Smart Turn is consulted
+    eot_hard_cap_s: float = 1.2                       # silence that ends a turn regardless of Smart Turn
+    barge_ms: int = 300                               # speech while FRED talks that counts as a real interruption
+    barge_level: float = 1500.0                       # mic RMS (int16 units) needed to barge in when not on headphones
+    followup_s: float = 8.0                           # open-mic window after FRED speaks
+    wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)
