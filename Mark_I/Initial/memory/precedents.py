@@ -269,7 +269,7 @@ if __name__ == "__main__":  # self-check: python precedents.py
         said = "same, she's my cousin from Delhi"
         ext = lambda p: json.dumps({"situation": "x", "reason": "she's my cousin"})
         assert s.db.execute("SELECT reason FROM precedents WHERE id=?", (record(m, mk("Ravi", "Ravina"), "yes", said, ext, embed),)).fetchone()[0] == "she's my cousin"
-        assert _reason("same, she's my cousin", "they share a family") == "same, she's my cousin"
+        assert _reason("same, she's my cousin", "they share a family") == "she's my cousin"
         assert _reason("yeah same person", "yeah same person") == "none"      # seen live: the model echoed a bare confirmation as its "reason"
         assert _reason("No, they live in different cities", None) == "they live in different cities"
         assert _reason("yes", None) == "none" and _reason("later please sir", None) == "none"
