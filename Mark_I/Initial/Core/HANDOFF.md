@@ -1,6 +1,6 @@
 # Core rebuild handoff (2026-10-06)
 
-Start here after a context clear. Next action: **begin P0 (foundations)** from `PLAN.md` in this folder (layer order: P0, L0, L1, L3, L2, UI, L4, L5, soak). Nothing is built yet; this folder holds only `PLAN.md`, `PLAN.pdf`, this file.
+Start here after a context clear. **P0 is built and passed its gate** (see `README.md`, `Documentation/2026/10/06/core_p0_done.md`). Next action: decide the Core interpreter (below), then **P1 L0 senses** from `PLAN.md` (layer order: P0, L0, L1, L3, L2, UI, L4, L5, soak). Re-run `python tests/run_all.py` first.
 
 ## Standing rules (also in memory notes)
 - Work only in `Mark_I/Initial/Core/`; `Old/` (v1.x FRED, `Old/Core`) is reference only, never edited; FRED stays down, no restart.
@@ -15,9 +15,10 @@ Start here after a context clear. Next action: **begin P0 (foundations)** from `
 - `Documentation/2026/10/06/core_rebuild_plan.md`: why and what (open decisions 1-5 there are not blocking P0).
 - Old references: `Old/Core/orchestrator/*` (loop at orchestrator.py:2812), `Old/MARK2_MASTER_PLAN.md`, `Old/ASSEMBLED_FRED_L0..L5.md`.
 
-## P0 scope
+## P0 scope (done 2026-10-06)
 `config`, `log`, `events`, `gpu`, `models/client`, `models/fake`, `models/toolparse`, `tools/registry`, `tools/coerce`; extend the playground to more slots (chat, embed, talk, vision/describer) with the unload/reload window. Gate: no-GPU self-checks pass; client round-trips chat, schema JSON and embeddings on the real playground; registry rejects/coerces bad args.
 
 ## Open before later phases
+- The playground on :8090 still runs the pre-P0 server code (slots/window need a restart of it; Vatsal's call, I did not touch that process).
 - Core runtime interpreter: system Python 3.10.11 lacks faster-whisper, onnxruntime, kokoro-onnx, openwakeword, speechbrain, insightface, webrtcvad; `Old/Core/venv` has them. Decide before P1 (check CUDA in the system Python first).
 - Still undecided by Vatsal: scope of Mark I vs Mark II, network tools, first tool set, brain (baseline Qwen3.5-4B suggested), personal-data location.

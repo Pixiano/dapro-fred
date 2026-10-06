@@ -1,0 +1,8 @@
+# Core runtime dependencies, tagged by the phase that needs them. No venv; see PLAN.md "Dependencies and installs".
+# P0 foundations: standard library only (urllib, threading, multiprocessing, json). Nothing to install.
+#
+# Added from P1 on (not installed yet; the interpreter decision comes first, see HANDOFF.md "Open before later phases"):
+# P1 audio:   faster-whisper, onnxruntime, openwakeword, webrtcvad-wheels, sounddevice
+# P1 screen:  mss, opencv-python
+# P2 clock:   speechbrain (voice ID), onnxruntime (Smart Turn)
+# P4 voice:   kokoro-onnx

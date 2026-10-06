@@ -2,17 +2,22 @@
 
   python server.py            start it, then open http://localhost:8090 (chat, embeddings, load/unload, VRAM, register a model)
   python server.py stop       unload everything (kills the llama-server children)
-A request names a model ("model": id from models.json); the server loads it on demand and swaps the chat model when another one is asked for, so the
-analysts' usual "one model on the GPU at a time" still holds. One chat slot + one embedding slot, both fully on the GPU (-ngl 99): nothing runs on the CPU.
+A request names a model ("model": id from models.json); the server loads it on demand into a slot and swaps that slot's model when another one is asked for.
+Four slots, each its own llama-server fully on the GPU (-ngl 99, nothing on the CPU): chat (the brain / analysts), embed, talk (talker/judge, a small chat model)
+and vision (describer). A request or load may name `"slot"`; without it the model goes where it is already loaded, else to chat (chat models) or embed (embedders).
+The analysts' usual "one chat model at a time" still holds, since they only use the chat slot.
 Any .gguf under models_dir that is not listed in models.json also shows up (id "local/<file stem>"), so a freshly downloaded model needs no config.
 API: /v1/models, /v1/chat/completions, /v1/completions, /v1/embeddings (streaming passes straight through) and
-     GET /api/status, POST /api/load {model, ctx?, vision?}, POST /api/unload {slot: chat|embed|all}, POST /api/register {id, path, kind, ctx, ...}
+     GET /api/status, POST /api/load {model, slot?, ctx?, vision?}, POST /api/unload {slot: chat|embed|talk|vision|all}, POST /api/register {id, path, kind, ctx, ...}
+     POST /api/window {action: open|close}: open remembers what every slot holds and unloads all (a job model then gets the whole GPU); close unloads the job
+     models and reloads the remembered stack (L5 consolidation window; 409 if opened twice or closed without opening).
 `reasoning_effort` in a chat request is passed to the template as chat_template_kwargs (gpt-oss), response_format json_schema is enforced by llama.cpp's grammar.
 ponytail: no auth (127.0.0.1 only), one request at a time per slot is not enforced beyond a swap waiting for in-flight requests, no queue.
 """
 import atexit
 import http.client
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -24,8 +29,10 @@ from pathlib import Path
 HERE = Path(__file__).parent
 CFG_FILE = HERE / "models.json"
 CFG = json.loads(CFG_FILE.read_text(encoding="utf-8"))
-PORT = CFG.get("port", 8090)
-INTERNAL = {"chat": 8191, "embed": 8192}
+PORT = int(os.environ.get("PLAYGROUND_PORT") or CFG.get("port", 8090))   # env override: a second instance for tests
+INTERNAL = {"chat": 8191, "embed": 8192, "talk": 8193, "vision": 8194}   # slot -> internal llama-server port
+DEFAULT_SLOT = {"chat": "chat", "embed": "embed"}   # model kind -> slot when a request does not say
+STASH = None   # slot states remembered by an open window
 LOAD_TIMEOUT = 600
 
 
@@ -40,6 +47,7 @@ class Slot:
 
 SLOTS = {k: Slot(k) for k in INTERNAL}
 _swap = threading.Lock()
+_window_lock = threading.Lock()
 
 
 def registry():
@@ -73,9 +81,20 @@ def stop(slot):
         slot.proc, slot.model = None, None
 
 
-def ensure(m, ctx=None, vision=False):
+def pick_slot(m, name=None):
+    """Slot for model m: the one asked for, else where it is already loaded, else the default for its kind. Embedders only live in embed, chat models never there."""
+    if name is None:
+        name = next((k for k, s in SLOTS.items() if s.alive() and s.model == m["id"]), DEFAULT_SLOT[m["kind"]])
+    if name not in SLOTS:
+        raise ValueError(f"unknown slot {name!r}; slots: {', '.join(SLOTS)}")
+    if (m["kind"] == "embed") != (name == "embed"):
+        raise ValueError(f"{m['id']} is a {m['kind']} model, it cannot go in the {name} slot")
+    return SLOTS[name]
+
+
+def ensure(m, ctx=None, vision=False, slot_name=None):
     """The slot for model m, loaded with the wanted context. Swaps the model in that slot if another is there."""
-    slot = SLOTS[m["kind"]]
+    slot = pick_slot(m, slot_name)
     ctx = int(ctx or m.get("ctx", 8192))
     with _swap:
         if slot.alive() and slot.model == m["id"] and slot.ctx == ctx and slot.vision == bool(vision):
@@ -103,6 +122,28 @@ def ensure(m, ctx=None, vision=False):
         raise RuntimeError(f"{m['id']} did not load within {LOAD_TIMEOUT}s")
 
 
+def window(action):
+    """Open: remember each live slot and unload all. Close: unload all, reload what was remembered."""
+    global STASH
+    with _window_lock:
+        if action == "open":
+            if STASH is not None:
+                raise RuntimeError("window already open")
+            STASH = {k: (s.model, s.ctx, s.vision) for k, s in SLOTS.items() if s.alive()}
+            for s in SLOTS.values():
+                stop(s)
+        elif action == "close":
+            if STASH is None:
+                raise RuntimeError("no window open")
+            for s in SLOTS.values():
+                stop(s)
+            saved, STASH = STASH, None
+            for k, (model, ctx, vision) in saved.items():
+                ensure(find(model), ctx, vision, k)
+        else:
+            raise ValueError("action must be open or close")
+
+
 def gpu():
     try:
         o = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.used,memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5).stdout
@@ -114,7 +155,7 @@ def gpu():
 
 def status():
     return {"slots": {k: ({"model": s.model, "ctx": s.ctx, "vision": s.vision, "pid": s.proc.pid} if s.alive() else None) for k, s in SLOTS.items()},
-            "models": [dict(m, loaded=any(s.alive() and s.model == m["id"] for s in SLOTS.values())) for m in registry().values()], "gpu": gpu()}
+            "models": [dict(m, loaded=any(s.alive() and s.model == m["id"] for s in SLOTS.values())) for m in registry().values()], "window_open": STASH is not None, "gpu": gpu()}
 
 
 class H(BaseHTTPRequestHandler):
@@ -163,11 +204,17 @@ class H(BaseHTTPRequestHandler):
                 m = find(b.get("model"))
                 if not m:
                     return self.send_json({"error": f"unknown model {b.get('model')!r}"}, 404)
-                ensure(m, b.get("ctx"), b.get("vision"))
+                ensure(m, b.get("ctx"), b.get("vision"), b.get("slot"))
                 return self.send_json(status())
             if self.path == "/api/unload":
                 for k in (INTERNAL if b.get("slot") in (None, "all") else [b["slot"]]):
                     stop(SLOTS[k])
+                return self.send_json(status())
+            if self.path == "/api/window":
+                try:
+                    window(b.get("action"))
+                except RuntimeError as ex:
+                    return self.send_json({"error": str(ex)}, 409)
                 return self.send_json(status())
             if self.path == "/api/register":
                 CFG["models"] = [m for m in CFG["models"] if m["id"] != b["id"]] + [{k: v for k, v in b.items() if v not in (None, "")}]
@@ -176,20 +223,23 @@ class H(BaseHTTPRequestHandler):
             if self.path in ("/v1/chat/completions", "/v1/completions", "/v1/embeddings"):
                 return self.proxy(b)
             self.send_json({"error": "not found"}, 404)
+        except ValueError as ex:
+            self.send_json({"error": {"message": str(ex)}}, 400)
         except Exception as ex:
             self.send_json({"error": {"message": str(ex)}}, 500)
 
     def proxy(self, b):
         emb = self.path.endswith("embeddings")
         m = find(b.get("model")) if b.get("model") else None
-        if not m:   # no/unknown model: whatever is loaded in that slot
-            cur = SLOTS["embed" if emb else "chat"]
-            m = find(cur.model) if cur.alive() else None
+        if not m:   # no/unknown model: whatever is loaded in the asked slot (default chat/embed)
+            cur = SLOTS.get(b.get("slot") or ("embed" if emb else "chat"))
+            m = find(cur.model) if cur and cur.alive() else None
         if not m:
             return self.send_json({"error": {"message": f"unknown or no model loaded ({b.get('model')!r}); see /v1/models"}}, 404)
         if (m["kind"] == "embed") != emb:
             return self.send_json({"error": {"message": f"{m['id']} is a {m['kind']} model, wrong endpoint"}}, 400)
-        slot = ensure(m)
+        want = pick_slot(m, b.pop("slot", None))
+        slot = want if want.alive() and want.model == m["id"] else ensure(m, slot_name=want.name)   # a model already loaded there is used as loaded (keeps its ctx and mmproj)
         with slot.cond:
             slot.active += 1
         try:
