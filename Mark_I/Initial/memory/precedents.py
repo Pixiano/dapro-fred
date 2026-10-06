@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from decisionlog import note, traced
 from graph import Graph
 
+PRECEDENT_MODEL, PRECEDENT_EFFORT, PRECEDENT_FALLBACK = "openai/gpt-oss-20b", "low", "qwen/qwen3-8b"   # measured 2026-10-06: low = same results as medium in half the time; the integration reads these
 SIM, MIN_MATCH, CONFIRM, HALF_LIFE_DAYS, MIN_WEIGHT = 0.75, 3, 3, 365, 2.0   # an old precedent counts less: weight 0.5 ** (age / half-life), the matches must weigh MIN_WEIGHT together
 MAX_LEVEL = {"pair": 2, "yesno": 2, "contradiction": 1}   # stakes: a contradiction is only ever suggested; unknown domains stay at 0
 STAKES = {"pair": "low", "yesno": "medium", "contradiction": "high"}
