@@ -6,7 +6,8 @@ The rebuilt FRED runtime, built layer by layer (plan: [PLAN.md](PLAN.md), handof
 | Phase | State |
 |---|---|
 | P0 Foundations | built, see below |
-| P1 L0 senses, P2 L1 clock, P3 L3 thinker, P4 L2 voice, P5 UI, P6 L4, P7 L5, P8 soak | not started |
+| P1a L0 audio | built (mic, wake word, VAD, STT, hotkey), gate results in `Documentation/2026/10/06/core_p1a_done.md`; 1b screen and 1c camera next |
+| P1b/c senses, P2 L1 clock, P3 L3 thinker, P4 L2 voice, P5 UI, P6 L4, P7 L5, P8 soak | not started |
 
 ## P0 modules
 Each file has its sockets (inputs, outputs, failure behaviour) in its docstring and a runnable self-check.
@@ -23,6 +24,17 @@ Each file has its sockets (inputs, outputs, failure behaviour) in its docstring 
 | `tools/registry.py` | `ToolSpec`, `Result`, `ToolError`; `call()` never raises, bounded by a timeout, optional child-process isolation |
 | `tools/coerce.py` | schema validation and type coercion before any tool runs |
 
+## P1a modules (`audio/`)
+| File | Job |
+|---|---|
+| `mic.py` | the single microphone owner, 80 ms chunks to subscribers, ring buffer, replay via `feed_array` |
+| `wakeword.py` | AGC + frozen `hey_fred.onnx` (read in place from `Old/`), threshold, cooldown -> `audio.wake` |
+| `vad.py` | webrtcvad -> `audio.vad` start/end (Silero socket) |
+| `stt.py` | faster-whisper on CUDA via `gpu.run`; `Capture` buffer with pre-roll |
+| `hotkey.py` | Left Ctrl + Left Alt hold-to-talk hook -> `audio.hotkey` |
+| `wav.py` | wav -> mono int16 16 kHz |
+Gates by hand: `python tests/replay_audio.py` (wake/VAD on labelled recordings), `python tests/live_stt.py` (Whisper on the GPU), `python audio/mic.py --live`, `python audio/hotkey.py --live`.
+
 ## Environment
 Two Python 3.11 venvs, both gitignored: `Core/.venv` (everything Core needs, includes the memory dependencies since Core runs memory in-process) and `memory/.venv` (the memory pipeline alone). Brain: Qwen only for now (`brain` default `unsloth/qwen3.5-4b`).
 ```
@@ -34,6 +46,7 @@ py -3.11 -m venv .venv
 py -3.11 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 ```
+openWakeWord also needs its feature models inside the venv: `.venv\Scripts\python -c "import openwakeword.utils as u; u.download_models()"` (network), or copy `embedding_model.onnx`, `melspectrogram.onnx`, `silero_vad.onnx` from `Old/Core/venv/Lib/site-packages/openwakeword/resources/models/` into the same folder of this venv.
 Run Core files with `.venv\Scripts\python`; the playground itself is stdlib only and runs on any Python.
 
 ## Run

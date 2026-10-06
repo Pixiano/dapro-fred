@@ -27,6 +27,28 @@ class Settings:
     gpu_default_timeout_s: float = 120.0
     event_ring_s: float = 600.0                       # EventLog in-memory window (~10 min)
     log_max_bytes: int = 20_000_000                   # one jsonl before it rotates
+    # --- audio (P1a) ---
+    sample_rate: int = 16000
+    mic_device: str = ""                              # input device name substring; "" = system default
+    mic_ring_s: float = 6.0                           # raw audio kept for pre-roll / pre-trigger
+    wakeword_model: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "wakeword" / "hey_fred.onnx")   # FROZEN model, read in place, never copied or swapped
+    wakeword_threshold: float = 0.35
+    wake_cooldown_s: float = 2.0                      # refuse a second fire this soon after one
+    wake_near_miss: float = 0.10                      # scores at/above this but under threshold are logged as audio.wake_near
+    agc_target_peak: float = 0.7
+    agc_max_gain: float = 100.0
+    agc_min_peak: float = 0.01                        # quieter than this: hold the gain, do not amplify noise
+    agc_smoothing: float = 0.3
+    vad_mode: int = 2                                 # webrtcvad aggressiveness 0-3
+    vad_onset_ms: int = 100                           # voiced time needed to call speech started
+    vad_hangover_ms: int = 200                        # silence needed to call speech ended (L1 adds Smart Turn on top)
+    whisper_model: str = "large-v3-turbo"
+    whisper_language: str = "en"
+    whisper_beam: int = 5
+    whisper_compute: str = "float16"
+    whisper_prompt: str = "Fred. Call Mom. Hang up. What's on my agenda? Open the file. Set a timer. Search the web."
+    stt_min_peak: float = 0.02                        # a buffer whose peak stays under this is silence: no Whisper pass
+    max_utterance_s: float = 60.0
 
 
 def _coerce(raw: str, like):
