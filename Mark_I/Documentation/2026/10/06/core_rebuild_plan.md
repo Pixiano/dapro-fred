@@ -48,17 +48,8 @@ Target folder: `Mark_I/Initial/Core/`. Old FRED (`Old/Core`, v1.x) stays untouch
 - **Drop:** cloud LLM cascade and cloud vision, the old FAISS memory manager (replaced by the Mark I memory), `Attic/` and `Legacy/` code, `_tmp_*` scratch.
 - **Defer (decide per item):** HaiSmart smart-AC vendor code (about 400 KB, cloud API), Gmail (Google API, network), WhatsApp/phone message reading (adb is local), web search and weather (network), face enrollment and headphone classifier training, wake-word training scripts.
 
-## 6. Build order (each phase shippable and tested before the next; same method as the memory build)
-0. **Foundations:** typed config, logging (real/tool/test), playground client with the two call shapes, tool registry with schema, coercion and a scripted fake model. Tests with no GPU.
-1. **Text brain:** engine (classify, route, tool loop, gates) with a first set of ported tools; CLI to talk to it; port the old benchmark cases as the acceptance suite; reach at least the old scores (tools 77.8%, conversation 76%) with the new failure rules on.
-2. **Memory bridge:** archive feed, `judged_search`, `PersonalModel.relevant`, nightly/weekly jobs on the playground (integration plan steps 1-5).
-3. **Voice out:** Kokoro, fillers, phrase cache, "digging deeper".
-4. **Voice in:** mic, wake word, VAD, STT, hotkey, turn handling; barge-in later.
-5. **UI:** pill window, HUD; the popup/HUD for the ask queue (integration step 6).
-6. **Senses:** presence, screen, camera behind a GPU scheduler.
-7. **Integrations and tools:** the rest of the tool set, per the decisions in section 5.
-8. **Proactive and scheduler;** precedents wiring (integration step 7); digest and alerts (step 8).
-9. **Soak and cut-over:** long run, then extract from `Initial/` to `Mark_I/`.
+## 6. Build order
+Superseded by the layer-order build path in `Mark_I/Initial/Core/PLAN.md` (P0 foundations, then L0, L1, L3, L2, UI, L4, L5, soak).
 
 ## 7. Open decisions (need Vatsal)
 1. **Scope:** is Mark I the faithful local rebuild of v1.x (voice loop, tools, memory, UI) with the fixes above, leaving the assembled architecture from the old Mark II plan (turn controller with barge-in, screen events, proactive judge, talker/judge model, 12 more models) for Mark II? Recommended: yes. It keeps Mark I buildable and testable; the assembled layers plug into the sockets later.
