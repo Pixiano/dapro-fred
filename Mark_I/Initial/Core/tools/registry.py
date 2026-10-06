@@ -12,6 +12,7 @@ Sockets
 Timeouts: every call runs in a worker thread bounded by timeout_s. A thread cannot be killed, so a tool that can hang or run long (file search, subprocess)
 must set isolate=True: it then runs in a child process that IS killed on timeout (fn must be a picklable module-level function, result picklable).
 Flags destructive / reads_untrusted / sends are metadata for the engine gates (confirmation, read-vs-send separation); the registry does not act on them.
+Routing metadata lives with the tool: `group` (the category the cue match offers as a set), `cues` (regex fragments), `examples` (embedded phrasings), `say` (data is the spoken answer).
 Self-check: python tools/registry.py
 """
 import multiprocessing as mp
@@ -70,6 +71,9 @@ class ToolSpec:
     reads_untrusted: bool = False
     sends: bool = False
     isolate: bool = False
+    say: bool = False                 # the returned data is already a complete spoken sentence: the engine speaks it as is (no second model round) unless the request is compound
+    cues: tuple = ()                  # regex fragments (case-insensitive, word-bounded by the router) that make this tool's GROUP a candidate for an utterance
+    examples: tuple = ()              # how a person actually asks for it; embedded once for the semantic ranking
 
 
 def _child(q, fn, args):

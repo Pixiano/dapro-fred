@@ -74,6 +74,12 @@ class Settings:
     barge_level: float = 1500.0                       # mic RMS (int16 units) needed to barge in when not on headphones
     followup_s: float = 8.0                           # open-mic window after FRED speaks
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
+    max_tool_rounds: int = 4                          # model <-> tool round trips per turn
+    max_calls_per_round: int = 4                      # tool calls executed from one model message
+    history_turns: int = 8                            # user/assistant pairs kept as conversation context
+    engine_think: bool = False                        # reasoning on tool/chat turns (off: the thinking cap; arithmetic goes to the calculator tool)
+    semantic_floor: float = 0.65                      # embedding similarity at which a tool counts as clearly requested
+    vault_dir: str = ""                               # persona/profile/rules markdown read at start (outside the repo); empty = built-in fallback persona
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
     screen_settle_s: float = 0.5                      # quiet time after a burst of changes before screen.settled fires (the trigger for OCR / the describer)
