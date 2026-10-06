@@ -4,7 +4,7 @@ other maintenance proposals), asked as a short either/or question when a convers
   ask(mem, topic, turns)   -> at most ONE item {"id", "kind", "text", "options": [{"key", "label"}]} or None. Call it once at the end of a conversation.
                                Longer conversations trigger more often (turns / FULL_TURNS), at most MAX_PER_DAY a day, each item at most MAX_ASKS times,
                                a snoozed item waits; the item closest to what was just talked about (names in `topic`) goes first.
-  answer(mem, id, reply)    -> reply is an option key, its letter (a, b, c...), or a plain word (yes, no, same, different, first, newer, both, later).
+  answer(mem, id, reply, recorder=None) -> reply is an option key, its letter (a, b, c...), or a plain word (yes, no, same, different, first, newer, both, later).
                                Returns {"ok", "choice"} or {"error": "unclear", "options"} so the popup/HUD can ask again.
 The question names who or what each side is (what was last said about it and its current facts), so the answer is a pick, not a riddle.
 Delivery (FRED speaking it, the pill popup with a text box, the HUD) and the "conversation is ending" signal belong to the integration.
@@ -147,7 +147,7 @@ def _choice(reply, options):
     return None
 
 
-def answer(mem, item_id, reply, today=None):
+def answer(mem, item_id, reply, today=None, recorder=None):
     s, day = mem.store, _day(today)
     src, ref = item_id.split(":")
     it = next((i for i in _items(mem) if i["src"] == src and i["ref"] == int(ref)), None)
@@ -187,6 +187,11 @@ def answer(mem, item_id, reply, today=None):
         s.db.commit()
     mem.archive.write("askqueue", {"question": it["text"], "answer": label, "said": reply})
     note(s, "askqueue", item_id, "action", item=item_id, choice=ch)
+    if recorder:   # precedents.recorder(mem, llm, embed): keeps what was decided; a failure there never loses the answer
+        try:
+            recorder({**it, "id": item_id}, ch, reply)
+        except Exception as ex:
+            note(s, "askqueue", item_id, "model_failure", error=repr(ex))
     return {"ok": True, "choice": ch}
 
 
