@@ -24,7 +24,7 @@ A rule runs through all of it: **nothing is overwritten or deleted.** When somet
 
 ### 3. Smart search (the librarian) - `semantic.py`
 - **Plain words:** finds memories by meaning, not exact words. Asking "when did I start the voice project?" can find a note that says "began working on FRED's speech".
-- **Technical:** each event gets a vector from an embedder (injected, not chosen yet), stored per model so swapping models never mixes incompatible vectors. Recall is brute-force cosine similarity in numpy, fine up to about 100k events. `sync()` backfills anything missed, so the index cannot drift from the events.
+- **Technical:** each event gets a vector from an embedder (injected; since 2026-10-07 the chosen one is Qwen3-Embedding-0.6B Q8_0, 1024-d, as in the assembled-FRED VRAM plan), stored per model so swapping models never mixes incompatible vectors. Recall is brute-force cosine similarity in numpy, fine up to about 100k events. `sync()` backfills anything missed, so the index cannot drift from the events.
 
 ### 4. Daily consolidation (the night editor) - `consolidate.py`
 - **Plain words:** each night, an AI reads the whole day and produces: a short diary entry (short on boring days, longer on busy ones), key events, updates to project facts, new relationships, and two "check later" lists: things that seem to contradict what was known, and questions it could not answer. If the AI gives a bad answer, that day is retried the next night. Running it twice never duplicates anything.

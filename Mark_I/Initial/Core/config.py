@@ -18,7 +18,7 @@ CORE_DIR = Path(__file__).resolve().parent
 class Settings:
     playground_url: str = "http://127.0.0.1:8090"   # /v1 is appended by the client. NOT "localhost": on Windows it adds a flat 2 s per request (IPv6 attempt first; the playground listens on IPv4 only)
     brain: str = "unsloth/qwen3.5-4b"                 # chat model id; Qwen only for now (Vatsal, 2026-10-06), override with FRED_BRAIN
-    embedder: str = "text-embedding-qwen3-embedding-4b"
+    embedder: str = "local/qwen3-embedding-0.6b-q8_0"
     http_timeout_s: float = 600.0                     # one model call, incl. a cold load
     http_retries: int = 1                             # extra tries on a connection error only
     max_tool_rounds: int = 4                          # P3 loop

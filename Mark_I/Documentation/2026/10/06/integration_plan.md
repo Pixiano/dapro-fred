@@ -9,7 +9,7 @@ Every item below is a socket the memory side already exposes. What FRED's side l
 | # | Step | Socket on the memory side | Needs from FRED |
 |---|---|---|---|
 | 1 | Feed the archive | `Archive.write(stream, data, session, ts)` | each producer (conversation, tool use, ASR, errors) calls it |
-| 2 | Models | one adapter over the playground (`http://localhost:8090/v1`): `llm(prompt)` and `llm(messages)`; embedder `text-embedding-qwen3-embedding-4b` (2560-d) | the playground started by FRED's launcher; GPU load window for the nightly/weekly jobs |
+| 2 | Models | one adapter over the playground (`http://localhost:8090/v1`): `llm(prompt)` and `llm(messages)`; embedder `local/qwen3-embedding-0.6b-q8_0` (1024-d; changed from the 4B on 2026-10-07) | the playground started by FRED's launcher; GPU load window for the nightly/weekly jobs |
 | 3 | Timers | `run_pending` (nightly), weekly/monthly/yearly runners, `run_maintenance_pending`, `run_backup_pending`, `run_alerts_pending`, `run_selfanalysis_pending` | one scheduler that respects "FRED stays idle while a job holds the GPU" |
 | 4 | Recall in the turn | `judged_search(graph=...)`, `PersonalModel.relevant(text)` | the talker says "digging deeper" through `say`; groups/`follow_up` from two-project answers spoken |
 | 5 | Spoken commands | `PersonalModel.show/correct/remove`, `restore`, backup, `Graph.correct` ("X is Y") | intent routing |

@@ -75,6 +75,7 @@ class ToolSpec:
     cues: tuple = ()                  # regex fragments (case-insensitive, word-bounded by the router) that make this tool's GROUP a candidate for an utterance
     preview: Callable | None = None   # preview(args) -> str: what exactly a destructive call would hit, shown in the confirmation question ("kills chrome.exe x7")
     examples: tuple = ()              # how a person actually asks for it; embedded once for the semantic ranking
+    not_for: tuple = ()               # what this tool must NOT be used for; shown to the model after the description, never embedded (naming a neighbour there would pull the ranking toward it)
 
 
 def _child(q, fn, args):
@@ -110,7 +111,7 @@ class Registry:
 
     def schemas(self, names=None, groups=None) -> list[dict]:
         pick = [n for n in (names if names is not None else self._tools) if n in self._tools and (groups is None or self._tools[n].group in groups)]
-        return [{"type": "function", "function": {"name": n, "description": self._tools[n].description, "parameters": self._tools[n].schema}} for n in pick]
+        return [{"type": "function", "function": {"name": n, "description": self._tools[n].description + (" Not for: " + "; ".join(self._tools[n].not_for) + "." if self._tools[n].not_for else ""), "parameters": self._tools[n].schema}} for n in pick]
 
     def call(self, name: str, args=None, base_dir=None) -> Result:
         t0 = time.monotonic()
