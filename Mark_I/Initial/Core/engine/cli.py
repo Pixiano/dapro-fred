@@ -63,7 +63,7 @@ def main(argv):
         bus, mem, chat = ev.EventBus(), open_memory(), Chat(brain)
         recall, feed = MemoryRecall(mem, emb, chat, config.get().embedder), Feed(mem, bus)
         feed.start()
-    e = Engine(Chat(brain), build(recall), emb, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: print(f"FRED (interim): {t}"))
+    e = Engine(Chat(brain), build(recall, bus=bus, embed=emb.embed), emb, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: print(f"FRED (interim): {t}"))
     try:
         print("type a request (empty line quits)")
         run_lines(e, (l for l in sys.stdin))

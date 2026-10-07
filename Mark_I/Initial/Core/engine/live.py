@@ -67,7 +67,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         recall, feed = MemoryRecall(mem, embedder, chat, c.embedder), Feed(mem, bus)
         feed.start()
         closers += [mem.close, feed.stop]
-    engine = Engine(chat, registry or build_skills(recall), embedder, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: out(f"FRED (interim): {t}"))
+    engine = Engine(chat, registry or build_skills(recall, mic=mic, bus=bus, embed=embedder.embed), embedder, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: out(f"FRED (interim): {t}"))
     if wake:
         WakeDetector(bus).attach(mic)
     vad = Vad(bus)

@@ -88,6 +88,7 @@ class Engine:
         self.recall, self.on_say = recall, on_say
         self.router = classify.Router(registry, embedder) if embedder is not None else None
         self.confirm = confirm or gates.Confirmer()
+        registry.confirmer = self.confirm          # skills may ask a yes/no of their own (audio_device: "Do you mean X?"); the next turn's yes runs the call they stored
         self.history: list[dict] = []
         self._lock = threading.Lock()         # one turn at a time: a second utterance waits for the first reply
 

@@ -88,10 +88,11 @@ def load(root=None, registry=None, include_extra: bool = True, ctx=None):
     return reg, problems
 
 
-def build(recall=None) -> Registry:
-    """The registry the runtime uses: every skill under skills/, memory skills only when `recall` (MemoryRecall) is given. Skipped skills are logged, not raised."""
+def build(recall=None, **shared) -> Registry:
+    """The registry the runtime uses: every skill under skills/, memory skills only when `recall` (MemoryRecall) is given. `shared` = more objects for bind() (mic, bus, embed...).
+    Skipped skills are logged, not raised."""
     import log
-    reg, problems = load(ctx={"recall": recall} if recall is not None else {})
+    reg, problems = load(ctx={**shared, **({"recall": recall} if recall is not None else {})})
     for p in problems:
         log.session("skill_skipped", problem=p)
     return reg
