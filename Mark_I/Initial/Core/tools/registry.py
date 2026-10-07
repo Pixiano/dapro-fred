@@ -75,6 +75,7 @@ class ToolSpec:
     cues: tuple = ()                  # regex fragments (case-insensitive, word-bounded by the router) that make this tool's GROUP a candidate for an utterance
     preview: Callable | None = None   # preview(args) -> str: what exactly a destructive call would hit, shown in the confirmation question ("kills chrome.exe x7")
     examples: tuple = ()              # how a person actually asks for it; embedded once for the semantic ranking
+    refuse_if: tuple = ()             # regexes (case-insensitive) on what the USER said: a match refuses the call before it runs (the 4B brain sometimes picks the nearest tool for a request it was told is not its job)
     not_for: tuple = ()               # what this tool must NOT be used for; shown to the model after the description, never embedded (naming a neighbour there would pull the ranking toward it)
 
 

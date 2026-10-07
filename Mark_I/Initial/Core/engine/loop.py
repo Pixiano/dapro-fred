@@ -25,6 +25,7 @@ Not here (later phases): sentence streaming to TTS (P4), agent allowlists (L4).
 Self-check: python engine/loop.py (scripted FakeChat, no GPU); the full scenario suite is tests/test_engine.py
 """
 import json
+import re
 import sys
 import threading
 import time
@@ -237,6 +238,9 @@ class Engine:
             return Result.fail(e.error_kind, e.speakable, f"repeat of a call that already failed this turn ({e.message}); change the arguments or stop")
         if t.fails.get(name, 0) >= 2:
             return Result.fail("failed", f"I couldn't get {name.replace('_', ' ')} to work.", f"fault: {name} failed twice this turn and is stopped; tell the user it failed")
+        spec = self.registry.spec(name)
+        if spec and any(re.search(p, t.asked, re.I) for p in spec.refuse_if):
+            return Result.fail("denied", f"I can't do that with {name.replace('_', ' ')}.", f"refused: the request mentions something {name} must not handle (see its not_for); tell the user plainly you cannot do that")
         if gates.untrusted_then_send(self.registry.spec(name), t.read_untrusted):
             return Result.fail("denied", "I won't send anything after reading untrusted content.", "denied: sending after reading untrusted content in the same turn")
         return None

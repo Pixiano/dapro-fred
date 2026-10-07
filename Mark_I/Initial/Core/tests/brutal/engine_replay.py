@@ -35,6 +35,7 @@ from tools.registry import Registry, ToolError  # noqa: E402
 
 SEED_MEMORY = ["likes tea in the morning", "studies physics", "has a younger sister called Nitya", "wakes up at six on weekdays", "is building a robot as a project", "prefers dark mode"]
 PURE = {"get_current_time", "calculate", "days_until"}
+HARMFUL = {"volume"}                                                                 # skills that change the real machine: recorded, never run, in a replay
 
 
 def recording_legacy(calls):
@@ -81,7 +82,8 @@ def run(a):
         wrapped = Registry()
         for n in reg.names():
             s = reg.spec(n)
-            wrapped.register(dataclasses.replace(s, fn=(lambda f, nm: (lambda **kw: (execs.append(nm), f(**kw))[1]))(s.fn, n)))
+            fn = (lambda **kw: "Done.") if n in HARMFUL else s.fn                      # real usage says "mute" and "volume up": those must not touch the real speakers
+            wrapped.register(dataclasses.replace(s, fn=(lambda f, nm: (lambda **kw: (execs.append(nm), f(**kw))[1]))(fn, n)))
         reg, real = wrapped, None
     else:
         reg, real = recording_legacy(execs)

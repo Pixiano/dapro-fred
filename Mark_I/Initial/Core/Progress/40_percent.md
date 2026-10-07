@@ -13,15 +13,17 @@ Old FRED was one big program where listening, looking, thinking and tools all kn
 - **P3, the thinker:** the brain (Qwen3.5-4B) with a tool loop and its safety rules: argument fixing, no repeated failed calls, 4 rounds and 4 calls per message, a yes/no question before anything destructive, no sending after reading untrusted content, and guards against claiming things were done that were not.
 - **Memory bridge:** turns, tool calls, speech, perception and errors are archived on their own streams, and each turn gets your personal model. The deeper search runs only when you refer to the past.
 - **Embedder:** Qwen3-Embedding-0.6B (1024-d), thresholds re-measured for it.
-- **Skills (new this stretch):** tools are now drop-in folders. Built-in set so far: recall, remember, forget, correct, what_can_you_do. A broken built-in stops start-up; a broken add-on is skipped and listed. The old 44 tools still exist but only feed old tests.
+- **Skills (new this stretch):** tools are now drop-in folders, 11 built-in: memory (recall, remember, forget, correct), system (time, days_until, volume, system_stats with a `part` of all, cpu, gpu, ram or disk), self (what_can_you_do, read_own_docs), math (calculate). A broken built-in stops start-up; a broken add-on is skipped and listed. A manifest can also list `refuse_if` patterns on the user's words, so a skill refuses a request that is not its job (volume refuses microphone and device-switching wording). The old 44 tools exist only for old tests. GPU temperature is reported; the CPU temperature is not available on this PC.
 - **Voice ID switch (new):** `voice_id_enabled`, off by default, until the gate is trained on your captured live recordings.
 
 ## The brutal test (full numbers in `Mark_I/Documentation/2026/10/07/brutal_test_report.md`)
 - **Replayed your real usage:** 600 turns with the real brain: 0 crashes and no destructive action ran without a yes. Median reply 0.8 s, memory use flat.
 - **Fuzzing, memory under load, self-checks:** all clean; 56 of 56 self-checks pass and 31 of 31 skill examples route to their own skill.
 - **Bugs it found and I fixed:** "do you have X" answered as an error and made FRED report a fault (9 faults to 0); a bare recall once got described as "your screen"; a skill that exits at import could escape the loader.
+- **Full 11-skill replay:** 600 real utterances, 0 crashes, no unconfirmed destructive action, 4 faults, median 1.45 s on a shared GPU. It exposed that the brain would change the real volume for microphone and device commands; a `refuse_if` guard now stops that.
+- **Embedder:** EmbeddingGemma-2 was tried and does not load on our llama.cpp build, so Qwen3-Embedding-0.6B stays (70 of 70 skill examples rank first). Revisit when llama.cpp supports it, since its multimodal side fits your plans.
 - **Honest gaps:**
-  - The built skills cover almost none of what you actually ask for (device, screen, reminders, mute, time). FRED answers those honestly instead of faking them, but it cannot do them yet.
+  - Time, volume, stats and math now work, but your top requests (device switching, screen, reminders, lockdown) still have no skill; FRED says so instead of faking them.
   - Wake word: 78.6% of real "Hey FRED" caught, 37% false fires on real non-wake speech (frozen, not touched).
   - Voice ID on real live-mic clips would reject about 89% at the current threshold.
   - Presence flips more than 4 times a day on your data.
@@ -30,4 +32,4 @@ Old FRED was one big program where listening, looking, thinking and tools all kn
 
 ## What this means for real-life FRED
 - **It can now:** hear you, know when you are done, think with tools, remember and recall, describe its own skills, and answer in text, all in one loop on the real microphone.
-- **Not yet:** no voice replies (P4), no UI (P5), nothing proactive (P6), no nightly memory jobs (P7), no 8-hour soak (P8), and the skill set is still tiny until the system, volume, time and math skills are rebuilt.
+- **Not yet:** no voice replies (P4), no UI (P5), nothing proactive (P6), no nightly memory jobs (P7), no 8-hour soak (P8). Add-on skills for what you ask most (output and input device switching, screen questions, reminders, lockdown) are not designed yet.

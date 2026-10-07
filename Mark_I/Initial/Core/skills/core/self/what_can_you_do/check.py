@@ -16,7 +16,7 @@ def _selfcheck():
         reg, problems = load(HERE, include_extra=False, ctx=ctx)
         assert not problems, problems
         index = reg.call("what_can_you_do").data
-        assert "memory (4): " in index and "self (1): what_can_you_do" in index
+        assert "memory (4): " in index and "self (2): " in index and "system (4): " in index and "math (1): calculate" in index and "what_can_you_do" in index
         grp = reg.call("what_can_you_do", {"topic": "memory"}).data
         assert all(f"{n}:" in grp for n in ("recall", "remember", "forget", "correct"))
         one = reg.call("what_can_you_do", {"topic": "forget"}).data

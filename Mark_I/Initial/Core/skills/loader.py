@@ -3,7 +3,7 @@
 Layout   skills/core/<group>/<skill>/   built-in basics (a broken one is an error: FRED must not start without them)
          skills/extra/<group>/<skill>/  add-ons (a broken one is skipped and reported, the rest load)
          a folder whose name starts with "_" is switched off
-Folder   manifest.json  {"name", "description", "args": <JSON schema object>, "examples": [3+ phrasings], "not_for": [...], "flags": {"destructive","say","reads_untrusted","sends"}, "timeout_s"}
+Folder   manifest.json  {"name", "description", "args": <JSON schema object>, "examples": [3+ phrasings], "not_for": [...], "refuse_if": [regex on the user's words that refuse the call], "flags": {"destructive","say","reads_untrusted","sends"}, "timeout_s"}
          run.py         run(**args) -> str   (raise tools.registry.ToolError for expected failures)
                         optional bind(ctx): called once at load with the shared context dict (e.g. {"recall": MemoryRecall}); raise skills.Unavailable if something it needs is missing
                         (the skill is then left out and listed in `problems`, not an error: memory skills do not exist when memory is off)
@@ -33,6 +33,15 @@ HERE = Path(__file__).resolve().parent
 FLAGS = {"destructive", "say", "reads_untrusted", "sends"}
 
 
+def _patterns(m: dict) -> list:
+    out = m.get("refuse_if", [])
+    if not isinstance(out, list) or not all(isinstance(p, str) for p in out):
+        raise ValueError("refuse_if must be a list of regex strings")
+    for p in out:
+        re.compile(p)                                                              # a bad pattern is a broken manifest, not a silent no-op
+    return out
+
+
 def _read(folder: Path, ctx: dict) -> ToolSpec:
     m = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     for k, t in (("name", str), ("description", str), ("args", dict), ("examples", list)):
@@ -57,7 +66,7 @@ def _read(folder: Path, ctx: dict) -> ToolSpec:
     if callable(getattr(mod, "bind", None)):
         mod.bind(ctx)
     return ToolSpec(m["name"], mod.run, schema, m["description"], group=folder.parent.name, timeout_s=m.get("timeout_s"), examples=tuple(m["examples"]),
-                    not_for=tuple(m.get("not_for", ())), preview=getattr(mod, "preview", None), **{k: bool(v) for k, v in m.get("flags", {}).items()})
+                    not_for=tuple(m.get("not_for", ())), refuse_if=tuple(_patterns(m)), preview=getattr(mod, "preview", None), **{k: bool(v) for k, v in m.get("flags", {}).items()})
 
 
 def load(root=None, registry=None, include_extra: bool = True, ctx=None):
@@ -121,6 +130,15 @@ def _selfcheck():
             raise AssertionError("a broken core skill must stop start-up")
         except RuntimeError as ex:
             assert "broken" in str(ex)
+    with tempfile.TemporaryDirectory() as t:
+        make(t, "core", "sys", "guarded", refuse_if=["\\bmic\\b"])
+        assert load(t)[0].spec("guarded").refuse_if == ("\\bmic\\b",)                      # carried to the engine, which refuses on the user's words
+        make(t, "core", "sys", "badpat", refuse_if=["("])
+        try:
+            load(t)
+            raise AssertionError("an invalid refuse_if pattern must be a broken manifest")
+        except RuntimeError as ex:
+            assert "badpat" in str(ex)
     with tempfile.TemporaryDirectory() as t:
         make(t, "core", "a", "same")
         make(t, "core", "b", "same")

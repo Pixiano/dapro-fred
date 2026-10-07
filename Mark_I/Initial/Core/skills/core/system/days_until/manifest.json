@@ -1,0 +1,9 @@
+{
+  "name": "days_until",
+  "description": "Count the whole days from today to a date or a named holiday (christmas, new year, halloween, ...), or since a past date.",
+  "args": {"required": ["date"], "properties": {
+    "date": {"type": "string", "description": "a holiday name (christmas), a date like 'december 25' or '25 december' or 2027-01-05, or a weekday like friday"}}},
+  "examples": ["how many days until christmas", "how long till new year", "days left until december 25", "how many days until friday", "countdown to halloween"],
+  "not_for": ["the current time or date (use time)", "setting a reminder for a date"],
+  "flags": {"say": true}
+}

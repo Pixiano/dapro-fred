@@ -1,0 +1,10 @@
+{
+  "name": "read_own_docs",
+  "description": "Read FRED's own documentation to find out what FRED is and how it was built: the README, the plan, the handoff notes, the progress snapshots and the daily docs. With no name it lists what can be read; with a name or keywords it reads that document, one page at a time.",
+  "args": {"properties": {
+    "doc": {"type": "string", "description": "which document: 'readme', a file name, or a few words from its path (progress, plan, brutal test); empty lists everything readable"},
+    "page": {"type": "integer", "minimum": 1, "description": "which page of a long document to read (default 1)"}}},
+  "examples": ["read your own readme", "what are you and how were you built", "read your documentation", "show me your progress notes", "read the plan", "what did the brutal test find"],
+  "not_for": ["listing what FRED can do right now (use what_can_you_do)", "reading the user's own files", "searching the web"],
+  "flags": {}
+}

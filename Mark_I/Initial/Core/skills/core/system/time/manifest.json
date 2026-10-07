@@ -1,0 +1,8 @@
+{
+  "name": "time",
+  "description": "Tell the current local time and today's date and weekday. Use it for any question about what time or day it is right now.",
+  "args": {"properties": {}},
+  "examples": ["what time is it", "what's the time", "what day is it today", "what's today's date", "tell me the time"],
+  "not_for": ["counting days to a date (use days_until)", "setting timers or reminders"],
+  "flags": {"say": true}
+}

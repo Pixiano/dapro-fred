@@ -1,0 +1,10 @@
+{
+  "name": "system_stats",
+  "description": "Report how the computer is doing: part 'all' gives one overview (processor, memory, graphics card, disks, battery); 'cpu' only the processor, 'gpu' only the graphics card (VRAM, load, temperature, power), 'ram' only memory, 'disk' only disk space. Processor and graphics card answers include temperatures where the machine exposes them.",
+  "args": {"properties": {
+    "part": {"type": "string", "enum": ["all", "cpu", "gpu", "ram", "disk"], "description": "which part to report; all (default) for the general question, otherwise exactly the part the user named"},
+    "drive": {"type": "string", "description": "only for disk: a drive letter such as C; empty for all drives"}}},
+  "examples": ["how is my computer doing", "give me a system status", "how busy is my cpu", "what is my cpu usage", "how much vram is in use", "what is my gpu temperature", "how much ram am I using", "how much memory is free", "how much disk space do I have", "how full is my C drive"],
+  "not_for": ["which program is using the CPU or memory", "the time or date", "volume or brightness", "finding or deleting files"],
+  "flags": {"say": true}
+}
