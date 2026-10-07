@@ -103,7 +103,7 @@ class Router:
     def rank(self, text: str) -> list:
         self._build()
         q = self._unit(self.embedder.embed([text], is_query=True)[0])
-        out = [(n, max((sum(a * b for a, b in zip(q, v)) for v in vs), default=-1.0)) for n, vs in self._vecs.items()]
+        out = [(n, max((sum(a * b for a, b in zip(q, v)) for v in vs), default=-1.0)) for n, vs in self._vecs.items() if self.registry.spec(n)]
         return sorted(out, key=lambda x: -x[1])
 
     def route(self, text: str, top_k: int = 5, floor: float | None = None, margin: float | None = None):

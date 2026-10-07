@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
 import config
 import log
-from engine import classify, gates
+from engine import classify, gates, lockdown
 from models import toolparse
 from tools.registry import Result
 
@@ -83,13 +83,16 @@ def _text(res: Result) -> str:
 
 
 class Engine:
-    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None):
+    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None, lock_chat=None):
         self.chat, self.registry, self.system, self.bus = chat, registry, system, bus
-        self.recall, self.on_say = recall, on_say
+        self.recall, self.on_say, self.embedder = recall, on_say, embedder
+        self.lock_chat, self.locked, self._private = lock_chat, False, False      # lockdown (engine/lockdown.py): lock_chat = the small talker model that answers while locked
         self.router = classify.Router(registry, embedder) if embedder is not None else None
         self.confirm = confirm or gates.Confirmer()
         registry.confirmer = self.confirm          # skills may ask a yes/no of their own (audio_device: "Do you mean X?"); the next turn's yes runs the call they stored
         self.history: list[dict] = []
+        if lockdown.saved():                       # locked before the restart: still locked
+            self._set_lockdown(True)
         self._lock = threading.Lock()         # one turn at a time: a second utterance waits for the first reply
 
     # ---- public --------------------------------------------------------------------------------------------------------------
@@ -102,19 +105,38 @@ class Engine:
                 log.session("engine_error", error=repr(ex), asked=text[:200])
                 r = Reply("I hit a problem and couldn't finish that.", via="fault")
             r.ms = int((time.monotonic() - t0) * 1000)
-            self._remember(text, r.text)
-            log.session("turn", source=source, asked=text, reply=r.text, via=r.via, reason=r.reason, offered=r.offered, calls=r.calls, rounds=r.rounds, ms=r.ms)
-            if self.bus:
+            private, self._private = self._private, False
+            quiet = self.locked or private                  # locked turns and unlock attempts leave no history, no bus event, and a spoken passphrase is never logged
+            if not quiet:
+                self._remember(text, r.text)
+            elif self.locked and not private and self.embedder is not None and r.via not in ("fault", "lockdown"):     # locked chat: a vector only, kept apart from memory
+                try:
+                    lockdown.stash(self.embedder.embed([f"{text}\n{r.text}"])[0])
+                except Exception as ex:
+                    log.session("lockdown_stash_error", error=repr(ex))
+            log.session("turn", source=source, asked="[lockdown]" if private else text, reply=r.text, via=r.via, reason=r.reason, offered=r.offered, calls=r.calls, rounds=r.rounds, ms=r.ms)
+            if self.bus and not quiet:
                 self.bus.emit("engine", "turn", text=text, reply=r.text, via=r.via, calls=[c["name"] for c in r.calls], ms=r.ms, origin=source)
             return r
 
     # ---- internals -----------------------------------------------------------------------------------------------------------
+    def _set_lockdown(self, on: bool) -> Reply:
+        self.locked = on
+        self.registry.only = frozenset(config.get().lockdown_tools) if on else None
+        self.history.clear()
+        self.confirm._p = None
+        lockdown.save(on)
+        if on:
+            how = "Say unlock and your passphrase to end it." if lockdown.has_passphrase() else "No passphrase is set, so anyone can end it by saying end lockdown."
+            return Reply(f"Locked down. I'll chat and tell the time, nothing else. {how}", via="lockdown", reason="lockdown")
+        return Reply("Lockdown ended.", via="lockdown", reason="lockdown")
+
     def _remember(self, user: str, reply: str):
         self.history += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
         del self.history[: -2 * config.get().history_turns]
 
     def _complete(self, msgs, tools):
-        return self.chat.complete(list(msgs), tools=tools or None, think=config.get().engine_think)      # a copy: the loop edits msgs afterwards
+        return (self.lock_chat if self.locked and self.lock_chat else self.chat).complete(list(msgs), tools=tools or None, think=config.get().engine_think)      # a copy: the loop edits msgs afterwards
 
     def _say(self, text: str):
         """An interim spoken line while a slow step runs ("digging deeper..."): a hook, never an error."""
@@ -130,10 +152,18 @@ class Engine:
 
     def _run(self, text: str) -> Reply:
         c = config.get()
-        r = self.confirm.resolve(text)
+        cmd = lockdown.command(text, self.locked)
+        if cmd == "engage":
+            return self._set_lockdown(True)
+        if cmd:
+            self._private = True
+            if lockdown.has_passphrase() and not lockdown.check(cmd[1]):
+                return Reply("That's not the passphrase.", via="lockdown", reason="lockdown")
+            return self._set_lockdown(False)
+        r = None if self.locked else self.confirm.resolve(text)
         if r:
             return self._confirmed(r, text)
-        rc = self.recall.context(text, self._say) if self.recall else None
+        rc = self.recall.context(text, self._say) if self.recall and not self.locked else None
         if rc and (rc.direct or (rc.ask and not rc.block)):                          # the memory needs an answer first, or has already answered
             return Reply(rc.direct or rc.ask, via="memory", reason="memory")
         d = classify.classify(text, self.registry, self.router)

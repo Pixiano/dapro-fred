@@ -19,6 +19,7 @@ def _selfcheck():
     assert reg.call("volume", {"action": "set", "level": 140}).error_kind == "bad_args"       # outside 0 to 100: refused by the schema, the mixer is never touched
     assert reg.call("volume", {"action": "explode"}).error_kind == "bad_args"
     import json
+    from engine import lockdown
     from engine.loop import Engine
     from models.fake import FakeChat, tool_call
     ran = []
@@ -30,6 +31,8 @@ def _selfcheck():
     for said, expect_run in (("set microphone to 20", False), ("switch to the headphones", False), ("set the input level to 50", False), ("engage lockdown", False),
                              ("set the volume to 30", True), ("turn it up a bit", True), ("mute", True)):
         ran.clear()
+        guarded.only = None
+        lockdown.save(False)
         e = Engine(FakeChat([tool_call("volume", action="set", level=20), "ok."]), guarded, None, "")
         e.run(said, source="test")
         assert bool(ran) == expect_run, (said, ran)                                              # refused before the speakers are touched, or allowed

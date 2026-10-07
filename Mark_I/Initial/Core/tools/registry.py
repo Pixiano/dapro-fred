@@ -91,6 +91,7 @@ def _child(q, fn, args):
 class Registry:
     def __init__(self):
         self._tools: dict[str, ToolSpec] = {}
+        self.only: frozenset | None = None            # lockdown: when set, every other tool does not exist (engine/lockdown.py)
 
     def register(self, spec: ToolSpec) -> ToolSpec:
         if spec.name in self._tools:
@@ -98,25 +99,29 @@ class Registry:
         self._tools[spec.name] = spec
         return spec
 
+    def _visible(self, name: str) -> bool:
+        return self.only is None or name in self.only
+
     def spec(self, name: str) -> ToolSpec | None:
-        return self._tools.get(name)
+        return self._tools.get(name) if self._visible(name) else None
 
     def names(self, groups=None) -> list[str]:
-        return [n for n, s in self._tools.items() if groups is None or s.group in groups]
+        return [n for n, s in self._tools.items() if self._visible(n) and (groups is None or s.group in groups)]
 
     def groups(self) -> dict[str, list[str]]:
         g: dict[str, list[str]] = {}
         for n, s in self._tools.items():
-            g.setdefault(s.group, []).append(n)
+            if self._visible(n):
+                g.setdefault(s.group, []).append(n)
         return g
 
     def schemas(self, names=None, groups=None) -> list[dict]:
-        pick = [n for n in (names if names is not None else self._tools) if n in self._tools and (groups is None or self._tools[n].group in groups)]
+        pick = [n for n in (names if names is not None else self._tools) if n in self._tools and self._visible(n) and (groups is None or self._tools[n].group in groups)]
         return [{"type": "function", "function": {"name": n, "description": self._tools[n].description + (" Not for: " + "; ".join(self._tools[n].not_for) + "." if self._tools[n].not_for else ""), "parameters": self._tools[n].schema}} for n in pick]
 
     def call(self, name: str, args=None, base_dir=None) -> Result:
         t0 = time.monotonic()
-        spec = self._tools.get(name)
+        spec = self.spec(name)
         if spec is None:
             res = Result.fail("not_found", message=f"no tool named {name!r}")
         else:

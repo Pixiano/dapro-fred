@@ -194,6 +194,46 @@ def t_refusal_with_tools_offered_is_nudged_once():
     assert g.e.run("tell me about the moon landing").text.startswith("I can't") and len(g.chat.calls) == 1
 
 
+def t_lockdown_limits_everything_but_chat_and_time():
+    from engine import lockdown
+    g = Rig([tool_call("time"), "I can't do that.", tool_call("vol"), "Sorry, no.", "Volume is 30."])
+    g.e.run("hello there") if False else None
+    g.e.history[:] = [{"role": "user", "content": "my secret plan"}, {"role": "assistant", "content": "ok"}]
+    seen = []
+    g.e.recall = type("R", (), {"context": lambda self, *a, **k: seen.append(1)})()
+    r = g.e.run("lockdown")
+    assert r.via == "lockdown" and "anyone can end it" in r.text and g.e.locked and not g.e.history and g.e.registry.only == frozenset({"time", "days_until", "calculate"})
+    assert g.e.run("what time is it").text == "It is 10:00." and g.n["time"] == 1                    # the allowed tool still works
+    assert g.e.run("turn the volume up").text == "I can't do that." and g.chat.calls[-1]["tools"] is None      # a blocked tool is not even offered
+    r = g.e.run("hello")                                                                              # the model reaching for a hidden tool gets "no such tool"
+    assert g.n["vol"] == 0 and not seen and not g.e.history, (g.n, seen, g.e.history)
+    assert g.e.registry.call("vol").error_kind == "not_found"
+    assert g.e.run("end lockdown").text == "Lockdown ended." and not g.e.locked and g.e.registry.only is None
+    assert g.e.registry.spec("vol") is not None and g.e.run("turn the volume up").via in ("say", "tools", "chat")
+
+
+def t_lockdown_passphrase_and_small_model():
+    from engine import lockdown
+    lockdown.set_passphrase("blue falcon 42")
+    g = Rig(["a"])
+    g.e.lock_chat = FakeChat(["from the small model"])
+    assert "Say unlock and your passphrase" in g.e.run("lock down now").text
+    from models.fake import FakeEmbedder
+    g.e.embedder = FakeEmbedder()
+    assert g.e.run("hi").text == "from the small model" and not g.chat.calls                       # only the talker answered; the big model never saw it
+    vf = config.data_dir() / "lockdown_vectors.jsonl"
+    rows = vf.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 1 and "small model" not in rows[0] and '"hi"' not in rows[0], rows         # one vector, no text; the engage line and the unlock attempts leave none
+    r = g.e.run("unlock blue falcon 41")
+    assert r.text == "That's not the passphrase." and g.e.locked
+    assert g.e.run("end lockdown").text == "That's not the passphrase." and g.e.locked
+    assert g.e.run("Unlock, Blue Falcon 42!").text == "Lockdown ended." and not g.e.locked
+    log_text = "".join(f.read_text(encoding="utf-8", errors="ignore") for f in config.data_dir().rglob("*") if f.is_file() and f.name != "lockdown.json")
+    assert "falcon" not in log_text.lower(), "a spoken passphrase must never reach the logs"
+    assert g.e.run("hello").text == "a"                                                              # the big model is back
+    assert len(vf.read_text(encoding="utf-8").splitlines()) == 1 and not g.e.history[:0]            # nothing was stashed after the unlock
+
+
 def t_history_rolls():
     g = Rig(["a"] * 30)
     config.get().history_turns = 3

@@ -77,6 +77,7 @@ class Settings:
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
+    lockdown_tools: tuple = ("time", "days_until", "calculate")   # the only tools that exist while locked down
     history_turns: int = 8                            # user/assistant pairs kept as conversation context
     engine_think: bool = False                        # reasoning on tool/chat turns (off: the thinking cap; arithmetic goes to the calculator tool)
     semantic_floor: float = 0.65                      # embedding similarity at which a tool counts as clearly requested
