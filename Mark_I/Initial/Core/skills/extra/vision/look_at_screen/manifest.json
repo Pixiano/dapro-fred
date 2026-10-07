@@ -1,0 +1,10 @@
+{
+  "name": "look_at_screen",
+  "description": "Look at the user's screen right now and describe it, read the text on it, or answer a question about what is on it (an error message, a page, a document, what they are working on).",
+  "args": {"properties": {
+    "question": {"type": "string", "description": "what the user wants to know about the screen, e.g. 'what does this error say'; leave empty for a general description"}}},
+  "examples": ["what's on my screen", "look at my screen", "what does this error say", "read what's on the screen", "what am I looking at", "can you see my screen", "summarise this page"],
+  "not_for": ["the webcam or the room", "screenshots to save", "files on disk", "websites the user did not open"],
+  "flags": {"reads_untrusted": true, "say": false},
+  "timeout_s": 60
+}

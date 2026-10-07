@@ -1,0 +1,11 @@
+{
+  "name": "weather",
+  "description": "Weather for a city: right now (temperature, feels like, sky, wind, humidity), today, tomorrow or the coming week, with highs, lows and the chance of rain. Use it for any weather, temperature, rain, umbrella or forecast question; never answer those from memory.",
+  "args": {"properties": {
+    "city": {"type": "string", "description": "the place the user named (Delhi, London); leave empty only if the user named none"},
+    "when": {"type": "string", "enum": ["now", "today", "tomorrow", "week"], "description": "now for current conditions, tomorrow, or week for the coming days"}}},
+  "examples": ["what's the weather like in Delhi", "will it rain tomorrow in Mumbai", "how hot is it right now", "do I need an umbrella today", "weather forecast for the week in London", "is it cold in Shimla", "what's the temperature outside"],
+  "not_for": ["climate facts or history", "weather in a made-up place", "controlling a thermostat"],
+  "flags": {"say": false},
+  "timeout_s": 25
+}

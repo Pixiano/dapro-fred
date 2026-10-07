@@ -78,6 +78,10 @@ class Settings:
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
     gmail_token_path: str = ""                        # OAuth token file of the user's Gmail client; empty = ~/VatsalDaPro/Keys/FRED_Gmail_token.json (outside the repo)
+    weather_city: str = ""                            # default city for the weather skill when none is named (set it in your own settings, not in the repo)
+    scamwatch_enabled: bool = True                    # warn (toast + bus event) when the screen shows a phishing or scam page; proactive/scamwatch.py
+    scamwatch_cooldown_s: float = 1800.0              # the same domain is not warned about again for this long
+    scamwatch_max_per_hour: int = 6
     talk_max_tokens: int = 200                        # cap on the small talker's replies: spoken answers are short, and a 2B that does not stop must not run for minutes
     ambient_enabled: bool = True                      # skills with an ambient() hook may add a digest (web facts about a named person/event) before the model answers; False = never
     ambient_timeout_s: float = 10.0                   # an ambient digest slower than this is dropped, the answer goes ahead without it
@@ -98,7 +102,7 @@ class Settings:
     screen_min_tiles: int = 1                         # tiles that must change to emit screen.change
     crop_pad_px: int = 24                             # native-resolution padding around the changed region
     ocr_enabled: bool = True                          # Windows OCR on the changed crop: approved by Vatsal 2026-10-06
-    describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model (Qwen only for now)
+    describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model: Qwen3.5-4B, 18/20 on tests/live_vision_hard.py (MiniCPM-V 4.6 scored 9/20 and was deleted, 2026-10-07)
     describe_max_tokens: int = 300
 
 
