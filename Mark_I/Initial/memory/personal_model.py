@@ -33,7 +33,7 @@ TIER_RANK = {"light": 0, "normal": 1, "deep": 2}
 DEFAULT_TIER = {"project": "light", "routine": "normal", "decision": "normal", "relationship": "normal", "trait_hypothesis": "deep", "recurrence": "normal"}
 CATS = set(DEFAULT_TIER) | {"preference", "priority", "working_style"}
 MAX_CONF = {"light": 0.9, "normal": 0.9, "deep": 0.8}
-MIN_SIM, TOP_K, BATCH = 0.45, 3, 12   # relevance cut-off (tune with the real embedder), items per turn, candidates per model call
+MIN_SIM, TOP_K, BATCH = 0.53, 3, 12   # relevance cut-off, items per turn, candidates per model call. 0.53 measured 2026-10-07 with Qwen3-Embedding-0.6B (core/tests/tune_thresholds.py): relevant pairs >= 0.58, unrelated <= 0.48
 
 PROMPT = """You maintain a model of Vatsal for his assistant FRED. Below are CANDIDATES (weekly inferences that already passed the evidence gate) and the current ITEMS.
 For each candidate return a decision:

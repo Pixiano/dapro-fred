@@ -8,7 +8,7 @@ with the precedent named. FRED only settles its OWN review items (same-person, c
   outcome(mem, domain, ok, ids)                 Vatsal confirmed (ok) or overrode a suggestion; confirmations raise the level, an override drops it
 Code holds every permission; the model only abstracts the situation and judges "what is different here?":
   - the reason is NEVER model-written: it is Vatsal's own words, or "none" (a model-offered reason counts only if it is a verbatim part of what he said)
-  - SIM 0.75 was measured with the real Qwen3 embedder (2026-10-06): questions of one kind score 0.78-0.91 with each other, a different kind about 0.5, so 0.9 never matched.
+  - SIM 0.70: re-measured 2026-10-07 with Qwen3-Embedding-0.6B (the 4B gave 0.75): questions of one kind score 0.71-0.88 with each other, a different kind at most 0.58, so 0.9 never matched.
     The embedding only separates kinds of question; what is different about THIS case is the model's difference test (it sees the full text), which is why that test must stay.
   - needs >= MIN_MATCH similar (>= SIM) live precedents of one domain, all with the same choice and none opposed; then the model's difference test
   - autonomy per domain: 0 ask, 1 suggest, 2 decide and tell (capped per domain by stakes; a silent level 3 is not used); a new level takes CONFIRM agreeing shadows/confirmations
@@ -24,7 +24,7 @@ from decisionlog import note, traced
 from graph import Graph
 
 PRECEDENT_MODEL, PRECEDENT_EFFORT, PRECEDENT_FALLBACK = "openai/gpt-oss-20b", "low", "qwen/qwen3-8b"   # measured 2026-10-06: low = same results as medium in half the time; the integration reads these
-SIM, MIN_MATCH, CONFIRM, HALF_LIFE_DAYS, MIN_WEIGHT = 0.75, 3, 3, 365, 2.0   # an old precedent counts less: weight 0.5 ** (age / half-life), the matches must weigh MIN_WEIGHT together
+SIM, MIN_MATCH, CONFIRM, HALF_LIFE_DAYS, MIN_WEIGHT = 0.70, 3, 3, 365, 2.0   # an old precedent counts less: weight 0.5 ** (age / half-life), the matches must weigh MIN_WEIGHT together
 MAX_LEVEL = {"pair": 2, "yesno": 2, "contradiction": 1}   # stakes: a contradiction is only ever suggested; unknown domains stay at 0
 STAKES = {"pair": "low", "yesno": "medium", "contradiction": "high"}
 REVERSIBLE = {"pair": 1, "yesno": 1, "contradiction": 0}
