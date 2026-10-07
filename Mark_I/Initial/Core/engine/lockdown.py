@@ -114,9 +114,12 @@ def _selfcheck():
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] == ["set"]:
-        import getpass
-        a, b = getpass.getpass("New lockdown passphrase: "), getpass.getpass("Again: ")
+    if sys.argv[1:2] == ["set"]:
+        if len(sys.argv) > 2:                                                        # python -m engine.lockdown set 1234   (no echo prompt needed, e.g. from a "!" line)
+            a = b = " ".join(sys.argv[2:])
+        else:
+            import getpass
+            a, b = getpass.getpass("New lockdown passphrase: "), getpass.getpass("Again: ")
         if a != b:
             sys.exit("They differ; nothing saved.")
         set_passphrase(a)
