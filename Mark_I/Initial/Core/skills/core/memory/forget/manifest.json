@@ -1,0 +1,16 @@
+{
+  "name": "forget",
+  "description": "Make FRED forget one thing it has learned about the user. Say which one by its number or by a few words from it. Asks the user to confirm first; the item is hidden everywhere and kept only in the private log.",
+  "args": {"required": ["item"], "properties": {
+    "item": {"type": "string", "description": "the item's number (from recall with no query) or a few words from it"}}},
+  "examples": [
+    "forget that I like spicy food",
+    "forget number three",
+    "stop remembering that I wake up at six",
+    "delete what you know about my gym routine",
+    "I don't want you to remember my exam schedule",
+    "erase that from your memory"
+  ],
+  "not_for": ["fixing a wrong memory (use correct)", "deleting files", "ending the conversation"],
+  "flags": {"destructive": true, "say": true}
+}

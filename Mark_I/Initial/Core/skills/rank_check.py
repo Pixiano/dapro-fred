@@ -49,7 +49,7 @@ if __name__ == "__main__":
     else:
         from models.client import Embedder
         from skills.loader import load
-        reg, problems = load()
+        reg, problems = load(ctx={"recall": None})                                    # only the manifests matter here; bind() just stores the context
         bad = check(reg, Embedder(), 0.03 if "--margin" in sys.argv else 0.0)
         print(f"{len(reg.names())} skills, {sum(len(reg.spec(n).examples) for n in reg.names())} examples; {len(problems)} skipped add-ons")
         for b in bad:

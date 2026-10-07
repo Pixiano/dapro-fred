@@ -1,0 +1,19 @@
+{
+  "name": "correct",
+  "description": "Fix something FRED got wrong in memory: either a person's name (wrong name and right name), or a remembered item (which one, and what it should say). Asks the user to confirm first.",
+  "args": {"properties": {
+    "wrong": {"type": "string", "description": "for a name fix: the wrong name"},
+    "right": {"type": "string", "description": "for a name fix: the right name"},
+    "item": {"type": "string", "description": "for an item fix: its number or a few words from it"},
+    "text": {"type": "string", "description": "for an item fix: what it should say instead, in the user's words"}}},
+  "examples": [
+    "my sister is Nitya, not Navya",
+    "that's wrong, I wake up at seven, not six",
+    "no, his name is Rohan not Rohit",
+    "correct that: I study chemistry on fridays",
+    "you got that wrong about my favourite food",
+    "actually it's Priya, not Pria"
+  ],
+  "not_for": ["adding something new (use remember)", "removing a memory (use forget)", "correcting the user's spelling or grammar"],
+  "flags": {"destructive": true, "say": true}
+}

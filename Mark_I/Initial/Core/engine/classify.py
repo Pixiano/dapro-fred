@@ -144,7 +144,7 @@ def classify(text: str, registry, router: Router | None = None) -> Decision:
     if not (text or "").strip():
         return Decision(False, [], "empty")
     groups = match_groups(text, registry)
-    if looks_social(text) and "selfdoc" not in groups:
+    if looks_social(text) and "selfdoc" not in groups and not (router is not None and router.route(text, top_k=1, floor=0.9)[0]):     # "what can you do" is social-shaped but is also a skill's own example
         return Decision(False, [], "social/meta phrasing")
     if groups:
         names = [n for g in groups for n in registry.groups()[g]]
@@ -160,6 +160,8 @@ def classify(text: str, registry, router: Router | None = None) -> Decision:
         return Decision(True, names, f"cues {'+'.join(groups)} -> {len(names)} tools")
     if router is not None:
         names, best = router.route(text, top_k=5, margin=0.08)
+        if names and len(names) < 3:                                                      # never a one-tool menu from embeddings alone: "forget that I like X" sits next to "remember that I like X"
+            names = router.route(text, top_k=3)[0]
         if names:
             return Decision(True, names, f"embedding {best:.2f} -> {len(names)} tools")
     return Decision(False, [], "no cue, no embedding hit: chat")

@@ -4,7 +4,7 @@
 Loads the chat (and embedding) model into the playground if its slot is empty, and unloads what IT loaded on exit unless --keep.
 --memory attaches the memory: turns are archived under <data_dir>/memory, recall joins the prompt, the memory tools exist (needs the embed slot).
 Each reply is followed by a trace line: how it was routed (chat / tools / say / confirm / fault), the tools offered and called with their outcome, the rounds and the time.
-Sockets: engine.loop.Engine over tools.builtin.build_registry(), models.client.Chat/Embedder. `run_lines(engine, lines, out)` is the testable core.
+Sockets: engine.loop.Engine over skills.loader.build() (the skills folders; the self-check below uses the legacy tools/ set), models.client.Chat/Embedder. `run_lines(engine, lines, out)` is the testable core.
 Self-check: python engine/cli.py (no --live: scripted model)
 """
 import sys
@@ -43,7 +43,7 @@ def _ensure(pg, model: str, slot: str, loaded: list, **kw):
 def main(argv):
     from engine import prompt
     from models.client import Chat, Embedder, Playground
-    from tools.builtin import build_registry
+    from skills.loader import build
     brain = argv[argv.index("--brain") + 1] if "--brain" in argv else config.get().brain
     pg, loaded = Playground(), []
     if not pg.healthy():
@@ -63,7 +63,7 @@ def main(argv):
         bus, mem, chat = ev.EventBus(), open_memory(), Chat(brain)
         recall, feed = MemoryRecall(mem, emb, chat, config.get().embedder), Feed(mem, bus)
         feed.start()
-    e = Engine(Chat(brain), build_registry(recall=recall), emb, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: print(f"FRED (interim): {t}"))
+    e = Engine(Chat(brain), build(recall), emb, prompt.build_system(), bus=bus, recall=recall, on_say=lambda t: print(f"FRED (interim): {t}"))
     try:
         print("type a request (empty line quits)")
         run_lines(e, (l for l in sys.stdin))

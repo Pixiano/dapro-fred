@@ -1,0 +1,16 @@
+{
+  "name": "what_can_you_do",
+  "description": "Read FRED's own list of skills as plain text, straight from the installed skill folders: with no topic, the skill groups; with a group name, that group's skills; with a skill name, its full details; with any other words, the skills that mention them.",
+  "args": {"properties": {
+    "topic": {"type": "string", "description": "empty = list the groups; a group or skill name = details; other words = search the skills"}}},
+  "examples": [
+    "what can you do",
+    "what skills do you have",
+    "what are your abilities",
+    "tell me about your memory skills",
+    "how does the recall skill work",
+    "can you control the volume",
+    "list all your skills"
+  ],
+  "not_for": ["using a skill (just ask for the thing itself)", "questions about the project's history or code (use read_own_docs)"]
+}

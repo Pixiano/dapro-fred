@@ -1,0 +1,17 @@
+{
+  "name": "remember",
+  "description": "Save something the user states about themselves (a fact, preference, routine, project or relationship) so FRED remembers it for good. Asks the user to confirm before saving.",
+  "args": {"required": ["text"], "properties": {
+    "text": {"type": "string", "description": "the thing to remember, in the user's own words, as a short statement"},
+    "category": {"type": "string", "enum": ["priority", "preference", "working_style", "project", "routine", "decision", "relationship"], "description": "best fit; preference if unsure"}}},
+  "examples": [
+    "remember that I prefer dark mode",
+    "note that I work best in the morning",
+    "keep in mind that my sister's birthday is in March",
+    "don't forget I'm allergic to peanuts",
+    "save this: I study physics on tuesdays and thursdays",
+    "make a note that I'm working on a robotics project"
+  ],
+  "not_for": ["looking something up (use recall)", "setting a reminder for a time", "changing an existing memory (use correct)"],
+  "flags": {"destructive": true, "say": true}
+}

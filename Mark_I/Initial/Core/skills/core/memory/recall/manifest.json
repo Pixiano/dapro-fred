@@ -1,0 +1,16 @@
+{
+  "name": "recall",
+  "description": "Look something up in FRED's memory: a topic, a person, or an earlier conversation. With no query it lists everything FRED has learned about the user; with days it reads back the recent conversation.",
+  "args": {"properties": {
+    "query": {"type": "string", "description": "what to look up (a topic, person or event); empty = list everything FRED knows about the user"},
+    "days": {"type": "integer", "minimum": 0, "maximum": 7, "description": "instead of searching: read the recent conversation (1 = today, 2 = since yesterday)"}}},
+  "examples": [
+    "what do you remember about my dentist appointment",
+    "do you remember what I told you about my sister",
+    "what did we talk about yesterday",
+    "what do you know about me",
+    "when did I mention the physics project",
+    "what was that thing I said last week about the trip"
+  ],
+  "not_for": ["saving something new (use remember)", "fixing a wrong memory (use correct)", "general knowledge questions"]
+}

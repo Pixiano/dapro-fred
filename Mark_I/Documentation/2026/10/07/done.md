@@ -12,3 +12,8 @@
 - The 4B GGUF and its `models.json` entry were deleted on request.
 
 **Skills loader** (`Core/skills/loader.py`, `rank_check.py`): every tool is a folder with `manifest.json` + `run.py`; `core/` and `extra/` tiers; see the module docstrings. `ToolSpec.not_for` added.
+
+**Memory skills built** (`Core/skills/core/memory/`: `recall`, `remember`, `forget`, `correct`) and **`what_can_you_do`** (`skills/core/self/`). Each folder: `manifest.json`, `run.py`, `check.py`. `remember`/`forget`/`correct` ask yes/no first (the `destructive` flag, with a `preview()` naming the real target). `recall` always runs the judged search (`MemoryRecall.context(force=True)`); with no query it lists what is known; `days` reads back recent conversation. `what_can_you_do` reads the installed skills as text, no embedder: groups, then a group, then one skill, then word search; output is capped at 1200 characters so 50 skills still fit.
+- The runtime (`engine/cli.py`, `engine/live.py`) now uses `skills.loader.build()`: only the skills folders. The old `tools/` modules are no longer wired in (kept for the legacy tests and `replay_voice`).
+- `rank_check.py --live`: 5 skills, 31 examples, every one ranks its own skill first with a margin of at least 0.03.
+- Fixes found by a live dialog: "remember that ..." and "what do you know about me" no longer trigger the automatic lookup (they belong to the skills); a social-shaped phrase that equals a skill example ("what can you do") now reaches the tools; an embedding-only menu is never smaller than 3 skills ("forget that I like X" sits next to "remember that I like X"); forget/correct find items by shared words, not only exact substrings.

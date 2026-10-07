@@ -36,7 +36,8 @@ def main():
     k = Kokoro(str(KOKORO / "kokoro-v1.0.onnx"), str(KOKORO / "voices-v1.0.bin"))
     bus, lines = ev.EventBus(), []
     mic = Mic(bus, device="")
-    rt = live.build(bus, mic, wake=False, out=lines.append)
+    from tools.builtin import build_registry                                          # the voice path is tested with the legacy tool set (time, calculator, timer); skills are tested by their own checks
+    rt = live.build(bus, mic, wake=False, out=lines.append, registry=build_registry())
     rt.stt.transcribe(np.ones(16000, "int16") * 1000, final=False)
     rng, bad = np.random.default_rng(3), 0
     sil = lambda s: (rng.normal(size=int(16000 * s)) * 25).astype(np.int16)

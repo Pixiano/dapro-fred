@@ -32,8 +32,8 @@ from memory_bridge.link import memory_modules
 MAX_EVENTS, MAX_CHARS = 5, 1400
 JUDGE_SCHEMA = {"title": "recall_judge", "type": "object", "additionalProperties": False, "required": ["relevant", "retry_queries", "ask"],
                 "properties": {"relevant": {"type": "array", "items": {"type": "integer"}}, "retry_queries": {"type": "array", "items": {"type": "string"}}, "ask": {"type": "string"}}}
-_PAST = re.compile(r"\b(?:remember|recall|remind me what|last (?:time|week|month|year|night)|yesterday|earlier|previously|before|did (?:i|we)|what did (?:i|we|you)|"
-                   r"told you|i mentioned|we (?:said|discussed|talked)|talked about|have i (?:ever|told)|when (?:did|was)|who (?:is|was)|what do you know about)\b", re.IGNORECASE)
+_PAST = re.compile(r"\b(?:remember(?! (?:that|to|this|it)\b(?! (?:time|day|night|week)))|recall|remind me what|last (?:time|week|month|year|night)|yesterday|earlier|previously|before|did (?:i|we)|what did (?:i|we|you)|"
+                   r"told you|i mentioned|we (?:said|discussed|talked)|talked about|have i (?:ever|told)|when (?:did|was)|who (?:is|was)|what do you know about(?! me\b| myself\b))\b", re.IGNORECASE)
 
 
 @dataclass
@@ -67,14 +67,15 @@ class MemoryRecall:
         except Exception:
             return False
 
-    def context(self, text: str, say=None) -> Recalled:
+    def context(self, text: str, say=None, force: bool = False) -> Recalled:
+        """`force` = search even if the text does not look memory-bound (the recall skill: the user asked to look something up)."""
         try:
-            return self._context(text, say)
+            return self._context(text, say, force)
         except Exception as ex:                                           # memory never breaks a turn: no recall beats no answer
             log.session("recall_error", error=repr(ex), asked=text[:120])
             return Recalled()
 
-    def _context(self, text: str, say) -> Recalled:
+    def _context(self, text: str, say, force: bool = False) -> Recalled:
         if self._pending:
             (word, eid), self._pending = self._pending, None
             if classify.is_affirmative(text):
@@ -83,7 +84,7 @@ class MemoryRecall:
             if classify.is_negative(text):
                 return Recalled(direct="Okay, I won't assume that.")
         lines, about = [], [f"- {i['text']}" for i in self.model.relevant(text)]
-        if self.wants_search(text):
+        if force or self.wants_search(text):
             r = self._judged(self.index, text, self._llm, k=MAX_EVENTS, say=say, graph=self.graph)
             if r.get("maybe") and not r.get("events") and not r.get("facts"):
                 self._pending = tuple(r["maybe"][0])
@@ -133,6 +134,8 @@ def _selfcheck():
         r = rc.context("what is Pri's favourite colour?")
         assert r.ask and "Priya" in r.ask and rc._pending, r                                          # unsure name: asked first
         assert rc.context("yes").direct == "Got it, I'll remember that." and rc._pending is None
+        assert not rc.wants_search("remember that I prefer dark mode") and not rc.wants_search("what do you know about me") and rc.wants_search("do you remember my dentist")       # saving and "show what you know" belong to the skills
+        assert rc.wants_search("remember that time we went hiking") and rc.wants_search("what do you know about Priya")
         assert rc.wants_search("what is Pri's favourite colour?") and rc.graph.find_in_text("Pri")[0]  # the alias now resolves
         mem.close()
     print("turn_recall ok")
