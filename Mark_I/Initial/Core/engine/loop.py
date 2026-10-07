@@ -91,6 +91,7 @@ class Engine:
         self.lock_chat, self.locked, self._private = lock_chat, False, False      # lockdown (engine/lockdown.py): lock_chat = the small talker model that answers while locked
         self.router = classify.Router(registry, embedder) if embedder is not None else None
         self.confirm = confirm or gates.Confirmer()
+        registry.brain, registry.talk, registry.say = chat, talk or chat, self._say      # skills that write (email_draft) use the brain; the talker fills the wait with a spoken line
         registry.confirmer = self.confirm          # skills may ask a yes/no of their own (audio_device: "Do you mean X?"); the next turn's yes runs the call they stored
         self.history: list[dict] = []
         if lockdown.saved():                       # locked before the restart: still locked

@@ -45,7 +45,7 @@ def _selfcheck():
         confirmer = conf
     m.bind({"registry": Reg()})
 
-    for bad, word in (({}, "who it's to"), ({"to": "Dad", "subject": "Hi"}, "what it should say")):
+    for bad, word in (({}, "Who is the email to"), ({"to": "Dad"}, "What should the email say")):
         try:
             m.run(**bad)
             raise AssertionError(bad)
@@ -53,12 +53,28 @@ def _selfcheck():
             assert ex.kind == "bad_args" and word in ex.speakable, ex.speakable
     for who, word in (("Nobody", "can't find"), ("Sam", "Which one")):
         try:
-            m.run(to=who, subject="s", body="b")
+            m.run(to=who, gist="g")
             raise AssertionError(who)
         except Exception as ex:
             assert word in ex.speakable, ex.speakable
 
-    q = m.run(to="Dad", subject="Dinner", body="I'll be late tonight.")
+    # the brain writes it, the talker speaks first
+    class Brain:
+        def complete(self, msgs, schema=None, think=None, **kw):
+            assert schema and think is False and "Dad" in msgs[1]["content"] and "late for dinner" in msgs[1]["content"]
+            return type("R", (), {"json": lambda s: {"subject": "Dinner", "body": "I'll be late tonight."}})()
+
+    class Talker:
+        def complete(self, msgs, **kw):
+            assert kw["max_tokens"] <= 30
+            return type("R", (), {"text": "Sure, drafting that now."})()
+    said = []
+    Reg.brain, Reg.talk, Reg.say = Brain(), Talker(), said.append
+    q = m.run(to="Dad", gist="I will be late for dinner")
+    assert said == ["Sure, drafting that now."] and not sent, said
+    m.cancel({"send_draft": Path(opened[-1]).name})
+    opened.clear()
+    q = m.run(to="Dad", gist="I will be late for dinner")
     assert q == "Draft to dad@example.com is open in Notepad. Send it? Yes or no?" and len(opened) == 1 and not sent
     f = Path(opened[0])
     assert f.read_text().startswith("To: dad@example.com\nSubject: Dinner\n\nI'll be late tonight.")
@@ -72,7 +88,8 @@ def _selfcheck():
     except Exception as ex:
         assert ex.kind == "bad_args" and len(sent) == 1
 
-    m.run(to="a@b.com", subject="x", body="y")                                                              # "no" removes the file
+    Reg.brain = None
+    m.run(to="a@b.com", subject="x", body="y")                                                              # a caller-supplied body needs no writer; "no" removes the file
     f2 = Path(opened[1])
     r = conf.resolve("no")
     assert r[0] == "cancel" and f2.exists()

@@ -1,10 +1,11 @@
 {
   "name": "email_draft",
-  "description": "Write an email for the user: shows the draft in Notepad and asks whether to send it. Compose the subject and the message yourself from what the user said ('email Dad that I'll be late' is enough: write a short natural note in their voice). Only ask the user when the recipient or the point of the message is truly unknown.",
+  "description": "Write an email for the user: a writer model composes it from your one-line gist, it opens in Notepad, and the user is asked whether to send it. Pass who it is to (a name like Dad, or an address) and the gist of what to say (the user's own words are enough: 'late for dinner'). Do not write the email yourself. Ask the user only when the recipient or the point of the message is truly unknown.",
   "args": {"properties": {
     "to": {"type": "string", "description": "a person's name as the user said it (Dad, Rohan) or an email address"},
-    "subject": {"type": "string", "description": "short subject line"},
-    "body": {"type": "string", "description": "the full message text, written in the user's voice, ready to send"},
+    "gist": {"type": "string", "description": "what the email should say, in one short line, from the user's words (e.g. 'I will be late for dinner')"},
+    "subject": {"type": "string", "description": "only if the user dictated an exact subject"},
+    "body": {"type": "string", "description": "only if the user dictated the exact text; otherwise leave empty so the writer composes it"},
     "send_draft": {"type": "string", "description": "internal follow-up only, never set it"}}},
   "examples": ["email Dad that I'll be late for dinner", "write an email to Rohan about Sunday lunch", "send a mail to my professor asking for an extension", "draft an email to hr@example.com about my leave", "mail Mom that I reached home"],
   "not_for": ["reading or summarising emails", "replying on a messaging app", "deleting emails"],
