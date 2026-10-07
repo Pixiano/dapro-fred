@@ -85,6 +85,8 @@ Order rule (Vatsal, 2026-10-06): build bottom-up by layer, L0 to L5. Every layer
 
 **P8 Soak and cut-over.** 8 h run with flat VRAM, all acceptance and live metrics from the Mark II master plan section 7, then extract `Initial/Core` to `Mark_I/Core`. Tuning (thresholds, offer sizes, brain choice, talker 1B vs 2B, thinking cap) happens here with the finished stack.
 
+**Polish (after P8, not scheduled).** Headphone auto-switch: the old `Old/Core/orchestrator/headphone_watch.py` (presence camera frame + trained classifier or vision fallback, media-playing-means-headphones shortcut, absence is a hard stop, streak debounce) rebuilt as a P6 proactive check that calls `audio_device` and targets whichever headphone-type device is connected, no hard-coded names. First check whether the old trained classifier and reference photos survived.
+
 ## Dependencies and installs
 - Per phase only what it needs, listed in `Core/requirements.txt` with the phase tag; no venv per the "no complexity" rule. Open: the system Python lacks the audio/ML packages and is 3.10 (the old venv has them, Python version to confirm). Decide before P1: install into the system Python (check `torch.cuda.is_available()` and ctranslate2 CUDA there first) or run Core on the old venv's interpreter.
 - GPU-only rule applies to every model; CPU only for Kokoro, wake word, VAD, Smart Turn, voice ID, Nemotron (per standing permissions). Windows OCR stays flagged off until approved.
