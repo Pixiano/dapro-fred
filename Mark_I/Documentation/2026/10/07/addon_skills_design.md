@@ -6,7 +6,7 @@ Shares below are of 835 logged requests in the old FRED.
 
 | Category | Skills | Old share | Status |
 |---|---|---|---|
-| audio | `audio_device` | 16.6% | built (see below) |
+| audio | `audio_device` | 16.6% | scrapped 2026-10-07: FRED just uses the Windows default for everything |
 | screen | `look_at_screen`, `look_with_camera` | 8.2% | proposed |
 | lockdown | engine mode, not a skill | 8.0% | built (see below), 2B swap waits for P4 |
 | files and vault | `files`, `vault` | about 8% | proposed |
@@ -25,8 +25,8 @@ Skipped on purpose: `restart_fred` (FRED stays down until the revamp ends), `pow
 - **Audio**: scope Windows default + FRED; matching by name and meaning, memory of what the user called it, elimination, and asking when unsure; ask before remembering a name; headsets switch speaker and microphone together; a device that is not connected is named and left alone (no Bluetooth connecting).
 - Questions to the user go through the multiple-choice mechanism (answers separated by ";").
 
-## audio_device (built)
-`skills/extra/audio/audio_device/`. Windows Core Audio through pycaw lists every endpoint with its state; paired Bluetooth devices that are not connected show as `unplugged`, ghosts of old hardware are ignored. The default device is set with IPolicyConfig for the console, multimedia and communications roles. A headset group's stereo output is chosen over its hands-free twin; its hands-free capture endpoint is the microphone.
+## audio_device (built, then scrapped; the code is in git history at 6f687b4's parent a126dc3)
+Was `skills/extra/audio/audio_device/`. Windows Core Audio through pycaw lists every endpoint with its state; paired Bluetooth devices that are not connected show as `unplugged`, ghosts of old hardware are ignored. The default device is set with IPolicyConfig for the console, multimedia and communications roles. A headset group's stereo output is chosen over its hands-free twin; its hands-free capture endpoint is the microphone.
 Matching (`resolve`, pure): remembered alias +3; each informative word shared with the device name +2; embedding similarity (when the runtime passes `embed`) up to +2; category agreement +1.5 (headphone words vs a headset-like name, speaker words vs "Speakers", monitor words vs a display-like name), contradiction -1.5; generic wording +1.5 for every candidate (the current device then gets -1, so "the other mic" is elimination); "new" favours a device never seen before (+0.5). Accepted at 1.5 with a lead of 1.0, else it asks "Which one: A or B?" (the next request with the name finishes it, no hidden state). One connected device whose name says nothing is asked about ("Do you mean X? Yes or no?") through the engine's yes/no slot, never switched to on category wording alone. After a switch that was not picked by an explicit name or an existing alias it asks "Should I remember that <word> means <device>?"; yes saves `audio device alias: <word> = <device>` as an ordinary, visible personal-model item.
 Engine socket added for this: `registry.confirmer` (the engine's Confirmer), so any skill can ask a yes/no whose "yes" runs a call it stored. `skills.loader.build(recall, **shared)` passes `mic`, `bus`, `embed` to `bind(ctx)`; a switch also reopens FRED's mic on the new input and emits `audio.device_changed`.
 Tested with a fake backend and invented names (63/63 self-checks; 12 skills, 78 examples all route to their own skill with the real embedder; live brain on a fake backend). The real Windows layer was checked read-only plus a no-op "set the current default again". Lesson: a first probe of mine really switched the real microphone before I stubbed the backend; it was restored at once, and real-device experiments are now no-op or fake only.
