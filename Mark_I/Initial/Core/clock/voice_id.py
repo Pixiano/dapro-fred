@@ -6,6 +6,7 @@ Sockets
        audio = 16 kHz mono int16 or float32 ndarray of ONE speaker's speech
   out: score = best cosine similarity to any stored reference, or None when nothing is enrolled or the clip is shorter than `voice_min_s` (too short to judge: callers
        must treat None as "unknown", never as "not Vatsal" or "Vatsal"). is_me = score >= `voice_threshold`, or None when the score is None.
+Switch: `voice_id_enabled` (default False, FRED_VOICE_ID_ENABLED=1): off -> score/is_me return None for everything (the gate passes all speech, no CPU spent); enrolment and the stored references are untouched.
 Stored at <FRED_DATA>/voice_refs.json, outside the repo (biometric: never logged, never in an event, never committed). Embedder default loads <Core>/weights/ecapa (the
   speechbrain/spkrec-ecapa-voxceleb checkpoint files, git-ignored; copied from the old FRED model folder or downloaded by speechbrain), lazily, CPU only.
 Self-check: python clock/voice_id.py (fake embedder); real-voice numbers: tests/voice_eval.py
@@ -86,6 +87,8 @@ class VoiceId:
         return len(keep)
 
     def score(self, audio) -> float | None:
+        if not config.get().voice_id_enabled:                                           # switched off: unknown, nothing is embedded, nobody is rejected
+            return None
         refs = self._load()
         if len(refs) == 0 or len(audio) < config.get().voice_min_s * SR:
             return None
@@ -110,6 +113,7 @@ def _selfcheck():
         x[0] = 0.5 if who == "me" else -0.5
         return x
 
+    config.get().voice_id_enabled = True
     with tempfile.TemporaryDirectory() as d:
         v = VoiceId(Path(d) / "v.json", fake)
         assert v.score(clip("me")) is None and v.is_me(clip("me")) is None            # nothing enrolled: unknown, not "no"
@@ -120,6 +124,9 @@ def _selfcheck():
         assert v.score(np.zeros(1000, np.float32)) is None                              # too short to judge
         assert VoiceId(Path(d) / "v.json", fake).enrolled() == 8                        # persisted
         assert (v.score(clip("me")) or 0) > 0.8 > (v.score(clip("other")) or 1)
+        config.get().voice_id_enabled = False                                           # the switch: enrolled references stay, every answer becomes unknown
+        assert v.enrolled() == 8 and v.score(clip("other")) is None and v.is_me(clip("other")) is None
+        config.get().voice_id_enabled = True
     print("voice_id ok")
 
 

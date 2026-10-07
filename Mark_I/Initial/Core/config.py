@@ -63,6 +63,7 @@ class Settings:
     faces_static_cap: int = 13                        # face references: deliberate shots (never auto-changed)
     faces_dynamic_cap: int = 7                        # face references: FIFO of recent confident matches (static : dynamic = 13 : 7)
     turn_prob_threshold: float = 0.5                  # Smart Turn: at or above = the turn is complete
+    voice_id_enabled: bool = False                    # the speaker gate is OFF until it is trained on the captured live-mic recordings (2026-10-07: 89% of real live clips fell below the threshold); FRED_VOICE_ID_ENABLED=1 turns it on
     voice_threshold: float = 0.30                     # cosine similarity at or above = Vatsal. Measured on 1-s real clips: same-speaker median 0.42, synthetic other voices max 0.23; 0.5 would reject 78% of his clips (tests/voice_eval.py); retune with real other speakers
     voice_min_s: float = 1.0                          # shorter clips are too short to judge (score None); 1 s clips scored median 0.50, 2 s 0.62, 0.6 s 0.40 (tests/voice_eval.py)
     voice_refs_cap: int = 20                          # enrolled voice references kept (most diverse)

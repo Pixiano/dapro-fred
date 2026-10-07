@@ -33,6 +33,7 @@ def run(query: str = "", days: int = 0) -> str:
     if days:
         return _recent(days)
     if not query.strip():
-        return _rc.model.show()
+        shown = _rc.model.show()
+        return shown if shown == "Nothing yet." else "Saved about the user (this is FRED's memory of them, not the screen and not the conversation):\n" + shown
     r = _rc.context(query, force=True)
     return r.ask or r.direct or r.block or "I don't remember anything about that."

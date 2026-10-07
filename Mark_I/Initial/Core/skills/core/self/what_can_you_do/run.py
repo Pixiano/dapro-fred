@@ -3,14 +3,14 @@
 Sockets
   in : run(topic="")   "" -> groups with their skill names; a group name -> its skills, one line each; a skill name -> description, arguments, examples, not-for;
                        other words -> up to 5 skills whose name, description or examples contain the most of those words
-  out: plain text, never longer than MAX_CHARS. With many skills it stays short by drilling down: groups first, then a group, then one skill; what was cut is said ("N more: ask about <group>")
+  out: plain text, never longer than MAX_CHARS. Words that match no skill are a normal answer ("I don't have a skill for X" plus the group list), not an error.
+        With many skills it stays short by drilling down: groups first, then a group, then one skill; what was cut is said ("N more: ask about <group>")
   bind(ctx): needs ctx["registry"] (the loader sets it)
 Scaling: 50 skills in ~10 groups is one short index line per group; a group of 20 shows the first lines plus "N more"; search finds a skill without listing anything else.
 """
 import re
 
 from skills import Unavailable
-from tools.registry import ToolError
 
 MAX_CHARS = 1200
 _ctx = {}
@@ -71,6 +71,7 @@ def run(topic: str = "") -> str:
         if hit:
             scored.append((hit, n))
     if not scored:
-        raise ToolError("not_found", f"I don't have a skill for {topic}.", f"no skill name, group, description or example mentions {topic!r}")
+        # "do you have X?" with the answer no is a successful answer, not a failure (an error here made the engine stop the tool and report a fault)
+        return _cut([f"I don't have a skill for {topic}. What I do have, by group:"] + [f"{g} ({len(n)}): {', '.join(n)}" for g, n in sorted(groups.items())], "")
     scored.sort(key=lambda x: (-x[0], x[1]))
     return _cut([f"{n}: {_first(reg.spec(n).description)}" for _, n in scored[:5]], "Ask about a skill by name.")

@@ -47,6 +47,7 @@ def main():
     train_src = [s for s in srcs if s not in test_src]
     train = [read16k(f) for s in train_src for f in segs[s][::3]][:150]     # a sample of segments, 3 s or longer
     held = [f for s in test_src for f in segs[s][::4]][:80]
+    config.get().voice_id_enabled = True                                           # measuring the gate, whatever the runtime switch says
     v = VoiceId(Path(tempfile.mkdtemp()) / "v.json")
     n = v.enroll(train)
     print(f"enrolled {n} references from {len(train)} segments of {train_src}; held-out sources {test_src}: {len(held)} segments")
@@ -66,6 +67,9 @@ def main():
     for sec in (0.6, 1.0, 2.0, 4.0):
         m = np.array([s for s in (v.score(a[:int(16000 * sec)]) for a in held_a) if s is not None])
         o = np.array([s for s in (v.score(a[:int(16000 * sec)]) for a in imp) if s is not None])
+        if not len(m) or not len(o):                                                  # shorter than voice_min_s: the verifier refuses to score, which is the designed answer
+            print(f"  {sec:3.1f}s: too short to score ({len(m)} of mine, {len(o)} others scored)")
+            continue
         print(f"  {sec:3.1f}s: me {pct(m)} | others max={o.max():.2f} p95={np.percentile(o, 95):.2f} | at 0.30: reject {np.mean(m < 0.3):5.1%} accept {np.mean(o >= 0.3):5.1%}; at 0.35: reject {np.mean(m < 0.35):5.1%} accept {np.mean(o >= 0.35):5.1%}")
     print(f"\n3. other voices, full clips (n={len(other)}): {pct(other)} max={other.max():.2f}")
     table(me, other, "me", "others")

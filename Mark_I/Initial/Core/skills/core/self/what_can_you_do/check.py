@@ -22,7 +22,8 @@ def _selfcheck():
         one = reg.call("what_can_you_do", {"topic": "forget"}).data
         assert "Arguments (* needed): item*" in one and "It asks for confirmation first." in one and "Not for:" in one
         assert reg.call("what_can_you_do", {"topic": "what do you remember about my dentist"}).data.startswith("recall:")        # search by words, no embedder
-        assert reg.call("what_can_you_do", {"topic": "zebra juggling"}).error_kind == "not_found"
+        nope = reg.call("what_can_you_do", {"topic": "zebra juggling"})
+        assert nope.ok and nope.data.startswith("I don't have a skill for zebra juggling.") and "memory (4)" in nope.data        # an honest no is a result, not an error
         mem.close()
     with tempfile.TemporaryDirectory() as t:                                                                                       # 50 skills in 10 groups
         root = Path(t)

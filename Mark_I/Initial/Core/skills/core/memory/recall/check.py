@@ -19,7 +19,7 @@ def _selfcheck():
         reg, _ = skill("recall", ctx)
         assert not reg.spec("recall").destructive and reg.call("recall").data == "Nothing yet."                           # no query: what is known (nothing yet)
         rc.model.add("preference", "likes dark mode")
-        assert "likes dark mode" in reg.call("recall").data
+        assert "likes dark mode" in reg.call("recall").data and "not the screen" in reg.call("recall").data
         assert reg.call("recall", {"days": 2}).data == "We haven't talked in that time."
         mem.archive.write("conversation", {"role": "user", "text": "hello fred"}, ts=datetime.now(timezone.utc).isoformat())
         assert "You: hello fred" in reg.call("recall", {"days": 2}).data

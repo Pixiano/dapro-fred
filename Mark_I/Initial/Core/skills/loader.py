@@ -17,6 +17,7 @@ Self-check: python skills/loader.py (temporary skill folders: good, broken core,
 """
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -38,6 +39,8 @@ def _read(folder: Path, ctx: dict) -> ToolSpec:
         if not isinstance(m.get(k), t) or not m[k]:
             if not (k == "args" and m.get(k) == {}):
                 raise ValueError(f"manifest needs a non-empty {k}")
+    if not re.fullmatch(r"[a-z][a-z0-9_]{1,40}", m["name"]):
+        raise ValueError("name must be lowercase letters, digits and underscores (it is the tool name the model sees)")
     if m["name"] != folder.name:
         raise ValueError(f"name {m['name']!r} must match the folder name {folder.name!r}")
     if len(m["examples"]) < 3 or not all(isinstance(e, str) and e.strip() for e in m["examples"]):
@@ -69,7 +72,7 @@ def load(root=None, registry=None, include_extra: bool = True, ctx=None):
                 reg.register(_read(folder, ctx))
             except Unavailable as ex:
                 problems.append(f"{folder.relative_to(root)}: unavailable ({ex})")
-            except Exception as ex:
+            except (Exception, SystemExit) as ex:                                       # a skill that calls sys.exit() at import must not end the runtime
                 if tier == "core":
                     raise RuntimeError(f"core skill {folder.relative_to(root)} is broken: {ex}") from ex
                 problems.append(f"{folder.relative_to(root)}: {ex}")
@@ -102,13 +105,14 @@ def _selfcheck():
         make(t, "extra", "misc", "noexamples", examples=["only one"])
         make(t, "extra", "misc", "norun", run="x = 1\n")
         make(t, "extra", "misc", "flagged", flags={"explode": True})
+        make(t, "extra", "misc", "Bad-Name")
         needs = ("from skills import Unavailable", "X = None", "def bind(ctx):", "    global X", "    if 'recall' not in ctx:", "        raise Unavailable('no memory')", "    X = ctx['recall']", "def run(**a):", "    return X", "def preview(args):", "    return 'p'")
         make(t, "core", "mem", "needs_ctx", run=chr(10).join(needs) + chr(10))
         r, problems = load(t)
         assert sorted(r.names()) == ["cpu", "ok"] and r.spec("cpu").group == "sys" and r.spec("cpu").say and r.call("cpu").data == "x"
-        assert len(problems) == 4 and any("unavailable (no memory)" in p for p in problems) and sum("noexamples" in p or "norun" in p or "flagged" in p for p in problems) == 3, problems
+        assert len(problems) == 5 and any("unavailable (no memory)" in p for p in problems) and sum("noexamples" in p or "norun" in p or "flagged" in p or "Bad-Name" in p for p in problems) == 4, problems
         r2, p2 = load(t, ctx={"recall": "R"})
-        assert r2.call("needs_ctx").data == "R" and r2.spec("needs_ctx").preview({}) == "p" and len(p2) == 3        # bound: present, with its preview
+        assert r2.call("needs_ctx").data == "R" and r2.spec("needs_ctx").preview({}) == "p" and len(p2) == 4        # bound: present, with its preview
         assert "Not for: GPU." in r.schemas(["cpu"])[0]["function"]["description"] and "GPU" not in r.spec("cpu").description        # shown to the model, never embedded
         assert load(t, include_extra=False)[0].names() == ["cpu"]
         make(t, "core", "sys", "broken", examples=[])

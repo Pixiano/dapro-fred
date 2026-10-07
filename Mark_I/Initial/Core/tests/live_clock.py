@@ -38,7 +38,7 @@ def main():
     vad = Vad(bus)
     vad.attach(mic)
     stt, voice, smart = Stt(bus), VoiceId(), SmartTurn()
-    print(f"voice references enrolled: {voice.enrolled()}  (0 = voice gate passes everything)")
+    print(f"voice references enrolled: {voice.enrolled()}  (0, or voice_id_enabled off = voice gate passes everything; enabled: {config.get().voice_id_enabled})")
     smart.prob(np.zeros(16000, "int16"))                                               # load the model before the first turn
     stt.transcribe(np.ones(16000, "int16") * 1000, final=False)       # warm the GPU model before the first real turn
     cap = Capture(mic)
