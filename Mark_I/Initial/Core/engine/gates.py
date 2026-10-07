@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
 from engine import classify
 
-_ACTION_DONE = re.compile(r"\b(?:deleted|removed|erased|created|moved|renamed|updated|added|saved|written|wrote|scheduled|cancell?ed|muted|unmuted|launched|installed|uninstalled|engaged|lifted|set)\b|^\s*(?:opening|launching|starting|sending|playing|closing)\b", re.IGNORECASE)
+_ACTION_DONE = re.compile(r"\b(?:deleted|removed|erased|created|moved|renamed|updated|added|saved|written|wrote|scheduled|cancell?ed|muted|unmuted|launched|installed|uninstalled|engaged|lifted|set)\b|^\s*(?:i(?:'m| am|'ll| will)\s+(?:now\s+)?)?(?:opening|launching|starting|sending|playing|closing|open|launch|start)\b", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(?:not|never|won't|will not|can't|cannot|unable)\b", re.IGNORECASE)
 _WRITE_CLAIM = re.compile(r"\b(?:created|wrote|written|saved|appended|updated|deleted|removed|moved|renamed)\b", re.IGNORECASE)
 _NAMED_ARTIFACT = re.compile(r"[\w\-.]+\.(?:md|txt|json|jsonl|py|csv|pdf|png|jpg|docx?|xlsx?)\b")           # an extension is required: bare words are not evidence of a claim

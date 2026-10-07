@@ -83,8 +83,9 @@ def _text(res: Result) -> str:
 
 
 class Engine:
-    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None, lock_chat=None):
+    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None, lock_chat=None, talk=None):
         self.chat, self.registry, self.system, self.bus = chat, registry, system, bus
+        self.talk = talk                           # optional small talker: answers turns that offer no tools (chit-chat); the brain (chat) picks and runs every tool
         self.recall, self.on_say, self.embedder = recall, on_say, embedder
         self._since_time = 0                       # turns since the model last knew the time (the time tool ran, or the note was shown)
         self.lock_chat, self.locked, self._private = lock_chat, False, False      # lockdown (engine/lockdown.py): lock_chat = the small talker model that answers while locked
@@ -109,7 +110,7 @@ class Engine:
             private, self._private = self._private, False
             self._since_time = 0 if any(c["name"] == "time" for c in r.calls) else self._since_time + 1
             quiet = self.locked or private                  # locked turns and unlock attempts leave no history, no bus event, and a spoken passphrase is never logged
-            if not quiet:
+            if not quiet and not (r.offered and not r.calls and r.via != "memory" and not r.text.rstrip().endswith("?")):      # a tool-routed turn where no tool ran is a miss: remembering it teaches the model to repeat it
                 self._remember(text, r.text)
             elif self.locked and not private and self.embedder is not None and r.via not in ("fault", "lockdown"):     # locked chat: a vector only, kept apart from memory
                 try:
@@ -170,8 +171,9 @@ class Engine:
         self.history += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
         del self.history[: -2 * config.get().history_turns]
 
-    def _complete(self, msgs, tools):
-        return (self.lock_chat if self.locked and self.lock_chat else self.chat).complete(list(msgs), tools=tools or None, think=config.get().engine_think)      # a copy: the loop edits msgs afterwards
+    def _complete(self, msgs, tools, force=False, brain=False):
+        m = self.lock_chat if self.locked and self.lock_chat else self.talk if self.talk and not tools and not brain else self.chat
+        return m.complete(list(msgs), tools=tools or None, think=config.get().engine_think, **({"tool_choice": "required"} if force and tools else {}), **({"max_tokens": config.get().talk_max_tokens} if m is self.talk else {}))      # a copy: the loop edits msgs afterwards
 
     def _say(self, text: str):
         """An interim spoken line while a slow step runs ("digging deeper..."): a hook, never an error."""
@@ -220,7 +222,7 @@ class Engine:
                     t.nudged = True
                     msgs.append({"role": "assistant", "content": res.text})
                     msgs.append({"role": "user", "content": "You do have tools for this: " + ", ".join(offered) + ". Do not guess and do not say anything was done or found unless a tool did it. If one of them can do what I asked, call it now. Otherwise answer normally."})
-                    res = self._complete(msgs, self.registry.schemas(offered))
+                    res = self._complete(msgs, self.registry.schemas(offered), force=gates.claims_completed_action(res.text, text) or gates.looks_like_refusal(res.text))      # a claim or a refusal on a tool-routed turn: the second ask must call a tool
                     msgs[-2:] = []                                                       # the nudge is not part of the conversation
                     continue
                 done = self._finish(res, t, msgs, offered)
@@ -256,7 +258,7 @@ class Engine:
         if toolparse.looks_leaked(raw):
             if t.results:
                 return " ".join(t.results), "fault"
-            return toolparse.strip_debris(self._complete(msgs, None).text) or HONEST_NOTHING_RAN, None
+            return toolparse.strip_debris(self._complete(msgs, None, brain=True).text) or HONEST_NOTHING_RAN, None
         text = toolparse.strip_debris(raw)
         if gates.unsupported_claim(text, t.results, t.asked):
             if not t.widened:
