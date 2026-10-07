@@ -1,14 +1,14 @@
 """volume: the Windows master speaker volume and mute, one skill with an action (get, set, up, down, mute, unmute).
 
 Sockets
-  in : run(action, level=None, amount="normal")   set needs level (0 to 100, else bad_args); up/down step by 10 / 20 / 40 for small / normal / large and stop at 0 and 100
+  in : run(action, level=None, amount="normal")   set needs level (0 to 100, else bad_args); up/down step by 5 / 10 / 25 for small (a notch, a bit) / normal / large (a lot) and stop at 0 and 100
   out: a spoken sentence ("Volume is at 40 percent." / "Volume up to 60 percent." / "Muted."); every Windows or COM failure is ToolError(unavailable)
 FRED's own voice mute belongs to the voice output (P4), not here. COM (pycaw) is initialised per call because the registry runs each tool in its own thread.
 Pure logic is `next_level`; the real mixer is touched only when the skill actually runs.
 """
 from tools.registry import ToolError
 
-STEPS = {"small": 10, "normal": 20, "large": 40}
+STEPS = {"small": 5, "normal": 10, "large": 25}
 
 
 def next_level(current: int, direction: str, amount: str = "normal") -> int:

@@ -1,9 +1,9 @@
 {
   "name": "calculate",
-  "description": "Work out an arithmetic expression exactly: sums, percentages, multiplication, division, powers, square roots. Use it for any calculation instead of working it out in your head.",
+  "description": "Work out arithmetic exactly and convert units: sums, percentages, multiplication, division, powers, square and cube roots, and conversions between SI and common units (length, weight, volume, area, speed, time, temperature, data size, energy, pressure) including lakh and crore. Use it for any calculation or conversion instead of working it out in your head.",
   "args": {"required": ["expression"], "properties": {
-    "expression": {"type": "string", "description": "plain arithmetic such as 17 * 300 / 100 or sqrt(144) + 2 ^ 5; write 'x percent of y' as x / 100 * y"}}},
-  "examples": ["what is 12 times 8", "calculate 17 percent of 300", "how much is 45 plus 38", "what is the square root of 144", "divide 1200 by 7", "what is 2 to the power of 10"],
-  "not_for": ["counting days between dates (use days_until)", "unit or currency conversion", "anything that is not arithmetic"],
+    "expression": {"type": "string", "description": "plain arithmetic such as 17 * 300 / 100, 17 percent of 300 or sqrt(144) + 2 ^ 5; or a conversion written as a number, a unit and a target such as 5 km in miles, 98.6 F to C or 2.5 crore to million (leave the target out to get a few alternatives)"}}},
+  "examples": ["what is 12 times 8", "calculate 17 percent of 300", "how much is 45 plus 38", "what is the square root of 144", "divide 1200 by 7", "what is 2 to the power of 10", "convert 5 kilometres to miles", "how many pounds is 70 kg", "what is 98.6 fahrenheit in celsius", "how many millions is 3 crore"],
+  "not_for": ["counting days between dates (use days_until)", "currency conversion (needs live rates)", "anything that is not arithmetic"],
   "flags": {}
 }

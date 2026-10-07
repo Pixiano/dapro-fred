@@ -1,0 +1,14 @@
+{
+  "name": "email_read",
+  "description": "Read the user's emails and summarise them: the latest from a person, what came in yesterday or last week, unread mail, or mail about a topic. Gives the model the email text; reply with a short summary of what it says, what is asked of the user and whether it needs an answer.",
+  "args": {"properties": {
+    "sender": {"type": "string", "description": "who it is from as the user said it (Dad, Rohan, a company), or an address"},
+    "when": {"type": "string", "description": "when it came, in the user's words: yesterday, last week, March, 3 days ago"},
+    "topic": {"type": "string", "description": "words to search for in the mail, only if the user named a subject"},
+    "unread": {"type": "boolean", "description": "true for unread mail only"},
+    "thread": {"type": "boolean", "description": "true to read the whole recent conversation instead of one mail"}}},
+  "examples": ["read yesterday's email from Dad", "what did Rohan email me", "any unread emails", "summarise the emails about the internship", "did the college send anything last week", "what's the latest email from Amazon", "read my unread mail"],
+  "not_for": ["writing or sending an email", "deleting or archiving emails", "messages on other apps"],
+  "flags": {"reads_untrusted": true, "say": false},
+  "timeout_s": 60
+}

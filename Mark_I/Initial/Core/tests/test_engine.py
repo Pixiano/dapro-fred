@@ -196,7 +196,7 @@ def t_refusal_with_tools_offered_is_nudged_once():
 
 def t_lockdown_limits_everything_but_chat_and_time():
     from engine import lockdown
-    g = Rig([tool_call("time"), "I can't do that.", tool_call("vol"), "Sorry, no.", "Volume is 30."])
+    g = Rig([tool_call("time"), "I can't do that.", tool_call("vol"), "Sorry, no.", tool_call("vol"), "Volume is 30."])
     g.e.run("hello there") if False else None
     g.e.history[:] = [{"role": "user", "content": "my secret plan"}, {"role": "assistant", "content": "ok"}]
     seen = []
@@ -209,7 +209,8 @@ def t_lockdown_limits_everything_but_chat_and_time():
     assert g.n["vol"] == 0 and not seen and not g.e.history, (g.n, seen, g.e.history)
     assert g.e.registry.call("vol").error_kind == "not_found"
     assert g.e.run("end lockdown").text == "Lockdown ended." and not g.e.locked and g.e.registry.only is None
-    assert g.e.registry.spec("vol") is not None and g.e.run("turn the volume up").via in ("say", "tools", "chat")
+    r = g.e.run("turn the volume up")
+    assert g.e.registry.spec("vol") is not None and r.via in ("say", "tools", "chat"), (r.via, r.text)
 
 
 def t_lockdown_passphrase_and_small_model():
@@ -232,6 +233,64 @@ def t_lockdown_passphrase_and_small_model():
     assert "falcon" not in log_text.lower(), "a spoken passphrase must never reach the logs"
     assert g.e.run("hello").text == "a"                                                              # the big model is back
     assert len(vf.read_text(encoding="utf-8").splitlines()) == 1 and not g.e.history[:0]            # nothing was stashed after the unlock
+
+
+def t_time_note_after_quiet_turns():
+    g = Rig(["a"] * 7 + [tool_call("time")] + ["b"] * 8)
+    config.get().time_note_every = 3
+    sysm = lambda: g.chat.calls[-1]["messages"][0]["content"]
+    for _ in range(3):
+        g.e.run("hello")
+        assert "Background note" not in sysm()
+    g.e.run("hello")                                                                                 # the 4th: three quiet turns behind it
+    assert "Background note, not from the user: it is " in sysm()
+    g.e.run("hello")
+    assert "Background note" not in sysm()                                                          # shown once, then the count restarts
+    g.e.run("hello"); g.e.run("hello")
+    g.e.run("what time is it")                                                                       # the time tool resets the count
+    for _ in range(3):
+        g.e.run("hello")
+        assert "Background note" not in sysm()
+    config.get().time_note_every = 0
+    for _ in range(5):
+        g.e.run("hello")
+        assert "Background note" not in sysm()
+    config.reload()
+
+
+def t_ambient_digest_reaches_the_model():
+    g = Rig(["answer"] * 8)
+    seen = []
+
+    def amb(text):
+        seen.append(text)
+        if "slow" in text:
+            time.sleep(1.0)
+        if "boom" in text:
+            raise RuntimeError("x")
+        return "DIGEST about swift" if "Swift" in text else None
+    g.e.registry.register(ToolSpec("lookup", lambda: "x", description="look things up", group="web", ambient=amb))
+    sysm = lambda: g.chat.calls[-1]["messages"][0]["content"]
+    g.e.run("Who is Taylor Swift")
+    assert "DIGEST about swift" in sysm() and seen == ["Who is Taylor Swift"]
+    g.e.run("how are you")
+    assert "DIGEST" not in sysm()
+    config.get().ambient_timeout_s = 0.2
+    g.e.run("slow Swift")                                                                           # slower than the cap: dropped, the answer still comes
+    assert "DIGEST" not in sysm()
+    g.e.run("boom Swift")                                                                           # a failing hook never breaks the turn
+    assert "DIGEST" not in sysm()
+    config.get().ambient_timeout_s = 8
+    config.get().ambient_enabled = False
+    n = len(seen)
+    g.e.run("Who is Taylor Swift")
+    assert "DIGEST" not in sysm() and len(seen) == n                                                # switched off: never called
+    config.get().ambient_enabled = True
+    g.e.run("lockdown")
+    n = len(seen)
+    g.e.run("Who is Taylor Swift")
+    assert "DIGEST" not in sysm() and len(seen) == n                                                # locked: never called
+    config.reload()
 
 
 def t_history_rolls():

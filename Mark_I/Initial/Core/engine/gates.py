@@ -2,7 +2,7 @@
 
 Sockets
   in : claims_completed_action(text, asked) / unsupported_claim(text, results, asked) / reflects_failure(text)   reply guards; `results` = this turn's tool result strings
-       Confirmer: .ask(name, args, prompt) stores one pending destructive call;  .resolve(user_text) -> ("run", name, args) | ("cancel",) | None
+       Confirmer: .ask(name, args, prompt) stores one pending destructive call;  .resolve(user_text) -> ("run", name, args) | ("cancel", name, args) | None
        untrusted_then_send(spec, read_untrusted) -> True when a `sends` tool is called in a turn that already read untrusted content (web page, mail, file): refused
   out: plain booleans / tuples; no state except Confirmer's single pending slot (it expires after `ttl_s` and on any other kind of reply)
 Guards (all deterministic):
@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
 from engine import classify
 
-_ACTION_DONE = re.compile(r"\b(?:deleted|removed|erased|created|moved|renamed|updated|added|saved|written|wrote|scheduled|cancell?ed|muted|unmuted|launched|installed|uninstalled|engaged|lifted|set)\b", re.IGNORECASE)
+_ACTION_DONE = re.compile(r"\b(?:deleted|removed|erased|created|moved|renamed|updated|added|saved|written|wrote|scheduled|cancell?ed|muted|unmuted|launched|installed|uninstalled|engaged|lifted|set)\b|^\s*(?:opening|launching|starting|sending|playing|closing)\b", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(?:not|never|won't|will not|can't|cannot|unable)\b", re.IGNORECASE)
 _WRITE_CLAIM = re.compile(r"\b(?:created|wrote|written|saved|appended|updated|deleted|removed|moved|renamed)\b", re.IGNORECASE)
 _NAMED_ARTIFACT = re.compile(r"[\w\-.]+\.(?:md|txt|json|jsonl|py|csv|pdf|png|jpg|docx?|xlsx?)\b")           # an extension is required: bare words are not evidence of a claim
@@ -91,7 +91,7 @@ class Confirmer:
         if classify.is_affirmative(user_text):
             return ("run", p[0], p[1])
         if classify.is_negative(user_text):
-            return ("cancel",)
+            return ("cancel", p[0], p[1])
         return None
 
 
@@ -110,7 +110,7 @@ def _selfcheck():
     c.ask("delete_file", {"path": "a"}, "Delete a?")
     assert c.resolve("yes please") == ("run", "delete_file", {"path": "a"}) and c.resolve("yes") is None          # consumed
     c.ask("x", {}, "?")
-    assert c.resolve("no") == ("cancel",)
+    assert c.resolve("no") == ("cancel", "x", {})
     c.ask("x", {}, "?")
     assert c.resolve("what time is it") is None and c.pending is None
     c.ask("x", {}, "?")

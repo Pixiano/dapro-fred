@@ -1,0 +1,15 @@
+{
+  "name": "find_files",
+  "description": "Find a file on this computer from how the user describes it, and open it or show it in File Explorer: words from its name, the kind of file (pdf, photo, spreadsheet, video), when it was made or changed (yesterday, last week, March) and where it is (downloads, desktop, documents). Lists the best matches, or opens the clear winner.",
+  "args": {"properties": {
+    "query": {"type": "string", "description": "words from the file name or what it is about, e.g. 'invoice', 'resume', 'tax return'; leave out the kind, the time and the folder (they have their own fields)"},
+    "kind": {"type": "string", "enum": ["any", "pdf", "document", "spreadsheet", "presentation", "image", "video", "audio", "code", "archive", "installer"], "description": "the kind of file if the user said one (a photo is image, a word file is document)"},
+    "when": {"type": "string", "description": "when the file was made or changed, in the user's words: yesterday, last week, March, 2024, 3 days ago"},
+    "folder": {"type": "string", "description": "downloads, desktop, documents, pictures, videos or music, only if the user said where"},
+    "action": {"type": "string", "enum": ["find", "open", "show"], "description": "find lists matches (default); open launches the best one; show reveals it in File Explorer"},
+    "path": {"type": "string", "description": "internal follow-up only, never set it"}}},
+  "examples": ["find the invoice pdf I downloaded yesterday", "where is my resume", "open the tax return from last year", "find that photo from March", "show me the spreadsheet in downloads", "where did I save the project proposal", "open my latest screenshot", "find the presentation from last week"],
+  "not_for": ["searching inside file contents", "opening an app or a website", "files that are not on this computer", "emails"],
+  "flags": {"say": false},
+  "timeout_s": 60
+}

@@ -76,7 +76,10 @@ class ToolSpec:
     preview: Callable | None = None   # preview(args) -> str: what exactly a destructive call would hit, shown in the confirmation question ("kills chrome.exe x7")
     examples: tuple = ()              # how a person actually asks for it; embedded once for the semantic ranking
     refuse_if: tuple = ()             # regexes (case-insensitive) on what the USER said: a match refuses the call before it runs (the 4B brain sometimes picks the nearest tool for a request it was told is not its job)
-    not_for: tuple = ()               # what this tool must NOT be used for; shown to the model after the description, never embedded (naming a neighbour there would pull the ranking toward it)
+    ambient: Callable | None = None   # ambient(text) -> str | None: run by the engine BEFORE the model answers; a digest to give it as untrusted reference, or None (skills/extra/web/web_search)
+    cancel: Callable | None = None    # cancel(args): the user said no to this skill's yes/no question; remove what it prepared
+    reindex: Callable | None = None   # reindex() -> int: rebuilds the skill's own index (apps, files); skills/reindex.py runs every one of them
+    not_for: tuple = ()             # what this tool must NOT be used for; shown to the model after the description, never embedded (naming a neighbour there would pull the ranking toward it)
 
 
 def _child(q, fn, args):

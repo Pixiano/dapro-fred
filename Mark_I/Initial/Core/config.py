@@ -77,6 +77,10 @@ class Settings:
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
+    gmail_token_path: str = ""                        # OAuth token file of the user's Gmail client; empty = ~/VatsalDaPro/Keys/FRED_Gmail_token.json (outside the repo)
+    ambient_enabled: bool = True                      # skills with an ambient() hook may add a digest (web facts about a named person/event) before the model answers; False = never
+    ambient_timeout_s: float = 10.0                   # an ambient digest slower than this is dropped, the answer goes ahead without it
+    time_note_every: int = 5                          # turns (proactive ones too) without the time tool after which the model is quietly told the time, so it can suggest winding down; 0 = never
     lockdown_tools: tuple = ("time", "days_until", "calculate")   # the only tools that exist while locked down
     history_turns: int = 8                            # user/assistant pairs kept as conversation context
     engine_think: bool = False                        # reasoning on tool/chat turns (off: the thinking cap; arithmetic goes to the calculator tool)

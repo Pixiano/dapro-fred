@@ -7,6 +7,9 @@ Folder   manifest.json  {"name", "description", "args": <JSON schema object>, "e
          run.py         run(**args) -> str   (raise tools.registry.ToolError for expected failures)
                         optional bind(ctx): called once at load with the shared context dict (e.g. {"recall": MemoryRecall}); raise skills.Unavailable if something it needs is missing
                         (the skill is then left out and listed in `problems`, not an error: memory skills do not exist when memory is off)
+                        optional ambient(text) -> str | None: run by the engine before every answer (read-only skills only); a digest is handed to the model as untrusted reference, None = nothing to add
+                        optional cancel(args): called when the user answers no to the skill's own yes/no question (tidy up, e.g. a draft file)
+                        optional reindex() -> int: rebuild the skill's own index; skills/reindex.py (the FRED reindex) calls every skill's
                         optional preview(args) -> str: what a destructive/confirmed call would do, shown in the yes/no question (a manifest cannot hold code)
          check.py       optional self-check, picked up by tests/run_all.py when it defines _selfcheck
 Sockets
@@ -66,7 +69,7 @@ def _read(folder: Path, ctx: dict) -> ToolSpec:
     if callable(getattr(mod, "bind", None)):
         mod.bind(ctx)
     return ToolSpec(m["name"], mod.run, schema, m["description"], group=folder.parent.name, timeout_s=m.get("timeout_s"), examples=tuple(m["examples"]),
-                    not_for=tuple(m.get("not_for", ())), refuse_if=tuple(_patterns(m)), preview=getattr(mod, "preview", None), **{k: bool(v) for k, v in m.get("flags", {}).items()})
+                    not_for=tuple(m.get("not_for", ())), refuse_if=tuple(_patterns(m)), preview=getattr(mod, "preview", None), ambient=getattr(mod, "ambient", None), reindex=getattr(mod, "reindex", None), cancel=getattr(mod, "cancel", None), **{k: bool(v) for k, v in m.get("flags", {}).items()})
 
 
 def load(root=None, registry=None, include_extra: bool = True, ctx=None):

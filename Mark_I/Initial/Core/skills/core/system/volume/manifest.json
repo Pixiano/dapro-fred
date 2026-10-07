@@ -4,7 +4,7 @@
   "args": {"required": ["action"], "properties": {
     "action": {"type": "string", "enum": ["get", "set", "up", "down", "mute", "unmute"], "description": "get reads the level; set needs level; up and down take an optional amount"},
     "level": {"type": "integer", "minimum": 0, "maximum": 100, "description": "only for set: the target volume in percent"},
-    "amount": {"type": "string", "enum": ["small", "normal", "large"], "description": "only for up and down: how big a step (default normal)"}}},
+    "amount": {"type": "string", "enum": ["small", "normal", "large"], "description": "only for up and down: small = a notch, a bit or a little (5 points), normal (10, the default), large = a lot or much (25)"}}},
   "examples": ["what is the volume", "set the volume to 40", "turn the volume up a bit", "volume down", "mute", "unmute the speakers", "make it much louder"],
   "not_for": ["the microphone or any input level", "choosing, switching or numbering audio devices (speakers, headphones, microphone)", "screen brightness", "FRED's own voice volume or mute", "pausing or skipping music", "choosing the output or input device"],
   "refuse_if": ["\\bmic(rophone)?s?\\b", "\\binput\\b", "\\b(change|switch|swap)\\b.*\\b(to|the)\\b.*\\b(speakers?|headphones?|headset|output|device)\\b", "\\block\\s?down\\b"],

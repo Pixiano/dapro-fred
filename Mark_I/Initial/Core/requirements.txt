@@ -38,3 +38,6 @@ psutil==7.2.2
 requests
 pytest
 screen_brightness_control
+
+ddgs
+google-auth

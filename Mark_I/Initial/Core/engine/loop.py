@@ -86,6 +86,7 @@ class Engine:
     def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None, lock_chat=None):
         self.chat, self.registry, self.system, self.bus = chat, registry, system, bus
         self.recall, self.on_say, self.embedder = recall, on_say, embedder
+        self._since_time = 0                       # turns since the model last knew the time (the time tool ran, or the note was shown)
         self.lock_chat, self.locked, self._private = lock_chat, False, False      # lockdown (engine/lockdown.py): lock_chat = the small talker model that answers while locked
         self.router = classify.Router(registry, embedder) if embedder is not None else None
         self.confirm = confirm or gates.Confirmer()
@@ -106,6 +107,7 @@ class Engine:
                 r = Reply("I hit a problem and couldn't finish that.", via="fault")
             r.ms = int((time.monotonic() - t0) * 1000)
             private, self._private = self._private, False
+            self._since_time = 0 if any(c["name"] == "time" for c in r.calls) else self._since_time + 1
             quiet = self.locked or private                  # locked turns and unlock attempts leave no history, no bus event, and a spoken passphrase is never logged
             if not quiet:
                 self._remember(text, r.text)
@@ -131,6 +133,39 @@ class Engine:
             return Reply(f"Locked down. I'll chat and tell the time, nothing else. {how}", via="lockdown", reason="lockdown")
         return Reply("Lockdown ended.", via="lockdown", reason="lockdown")
 
+    def _ambient(self, text: str) -> str:
+        """Read-only skills volunteering a digest before the answer (web facts about a named person or event). Never while locked; slow or failing ones are dropped, not raised."""
+        c = config.get()
+        if self.locked or not c.ambient_enabled:
+            return ""
+        out = []
+        for n in self.registry.names():
+            s = self.registry.spec(n)
+            if not s or not s.ambient:
+                continue
+            box = {}
+
+            def work(fn=s.ambient):
+                try:
+                    box["r"] = fn(text)
+                except Exception as ex:
+                    log.session("ambient_error", skill=n, error=repr(ex))
+            th = threading.Thread(target=work, daemon=True, name=f"ambient-{n}")
+            th.start()
+            th.join(c.ambient_timeout_s)
+            if box.get("r"):
+                out.append(box["r"])
+                log.session("ambient", skill=n, chars=len(box["r"]))
+        return "\n\n".join(out)
+
+    def _time_note(self) -> str:
+        """After `time_note_every` turns with no time tool, a one-line background note with the clock, so a late night or a long session can be noticed without being asked."""
+        n = config.get().time_note_every
+        if self.locked or n <= 0 or self._since_time < n:
+            return ""
+        self._since_time = 0
+        return f"Background note, not from the user: it is {time.strftime('%A %H:%M')}. Mention it only if it truly helps (for example very late, or a long session: suggest winding down); otherwise ignore it."
+
     def _remember(self, user: str, reply: str):
         self.history += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
         del self.history[: -2 * config.get().history_turns]
@@ -147,7 +182,8 @@ class Engine:
             log.session("say_error", error=repr(ex))
 
     def _messages(self, text: str, memory: str = "") -> list:
-        system = (self.system + ("\n\n---\n\n" + memory if memory else "")).strip()
+        note = self._time_note()
+        system = (self.system + ("\n\n---\n\n" + memory if memory else "") + ("\n\n---\n\n" + note if note else "")).strip()
         return ([{"role": "system", "content": system}] if system else []) + self.history + [{"role": "user", "content": text}]
 
     def _run(self, text: str) -> Reply:
@@ -168,7 +204,9 @@ class Engine:
             return Reply(rc.direct or rc.ask, via="memory", reason="memory")
         d = classify.classify(text, self.registry, self.router)
         t = _Turn(text)
-        msgs = self._messages(text, rc.block if rc else "")
+        amb = self._ambient(text)
+        t.read_untrusted = bool(amb)                                                 # web text was read: nothing may be sent out in this turn
+        msgs = self._messages(text, "\n\n".join(x for x in (rc.block if rc else "", amb) if x))
         offered = list(d.names) if d.needs_tools else []
         res = self._complete(msgs, self.registry.schemas(offered) if offered else None)
         if not d.needs_tools and gates.unsupported_claim(res.text, [], text):          # the chat path runs no tools, so a completion claim is false every time
@@ -178,10 +216,10 @@ class Engine:
         while True:
             calls = res.tool_calls[: c.max_calls_per_round]
             if not calls:
-                if offered and not t.results and not t.nudged and gates.looks_like_refusal(res.text):      # "I can't..." with tools on the menu: remind the model what it has, once
+                if offered and not t.results and not t.nudged and (gates.looks_like_refusal(res.text) or (d.needs_tools and not (res.text or "").strip().endswith("?"))):      # "I can't..." or an answer made up without any tool, with tools on the menu: remind the model what it has, once
                     t.nudged = True
                     msgs.append({"role": "assistant", "content": res.text})
-                    msgs.append({"role": "user", "content": "You do have tools for this: " + ", ".join(offered) + ". If one of them can do what I asked, call it now. Otherwise answer normally."})
+                    msgs.append({"role": "user", "content": "You do have tools for this: " + ", ".join(offered) + ". Do not guess and do not say anything was done or found unless a tool did it. If one of them can do what I asked, call it now. Otherwise answer normally."})
                     res = self._complete(msgs, self.registry.schemas(offered))
                     msgs[-2:] = []                                                       # the nudge is not part of the conversation
                     continue
@@ -246,6 +284,12 @@ class Engine:
 
     def _confirmed(self, r, text: str) -> Reply:
         if r[0] == "cancel":
+            hook = getattr(self.registry.spec(r[1]), "cancel", None)          # a skill may tidy up what it prepared (an email draft file)
+            if hook:
+                try:
+                    hook(r[2])
+                except Exception:
+                    pass
             return Reply("Okay, cancelled.", via="confirm")
         t = _Turn(text)
         res = self._one(r[1], r[2], t)

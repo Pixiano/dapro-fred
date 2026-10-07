@@ -12,7 +12,7 @@ def _selfcheck():
     spec = importlib.util.spec_from_file_location("vol_run", Path(__file__).with_name("run.py"))
     v = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(v)
-    assert v.next_level(50, "up") == 70 and v.next_level(50, "down", "small") == 40 and v.next_level(95, "up", "large") == 100 and v.next_level(5, "down") == 0 and v.next_level(50, "up", "bogus") == 70
+    assert v.next_level(50, "up") == 60 and v.next_level(50, "down", "small") == 45 and v.next_level(90, "up", "large") == 100 and v.next_level(5, "down") == 0 and v.next_level(50, "up", "bogus") == 60
     reg, problems = skill("volume", {})
     assert not problems and not reg.spec("volume").destructive
     assert reg.call("volume", {"action": "set"}).error_kind == "bad_args"                    # set without a level

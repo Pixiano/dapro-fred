@@ -1,0 +1,11 @@
+{
+  "name": "open_app",
+  "description": "Open an installed app or program on the computer by its name or what it is: Spotify, WhatsApp, Chrome, VS Code, Notepad, Excel, the browser, the terminal, File Explorer. Understands loose names and abbreviations and asks when more than one app could be meant.",
+  "args": {"required": ["app"], "properties": {
+    "app": {"type": "string", "description": "the app as the user said it, e.g. 'spotify', 'vs code', 'the browser'; never a file or a website"},
+    "exact": {"type": "boolean", "description": "internal follow-up only, never set it"}}},
+  "examples": ["open spotify", "launch chrome", "start notepad", "open the browser", "open whatsapp", "open vs code", "fire up the terminal", "open file explorer", "open discord", "open the discord app", "launch zoom", "start steam", "open word", "open the calculator", "run obs", "open whatsapp please"],
+  "not_for": ["opening a file or a folder", "opening a website", "closing an app", "switching to a window that is already open"],
+  "flags": {"say": true},
+  "timeout_s": 40
+}
