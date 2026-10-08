@@ -87,7 +87,12 @@ class _Kokoro:
 
 def _device_stream(rate: int):
     import sounddevice as sd
-    return sd.OutputStream(samplerate=rate, channels=1, dtype="float32")
+    want, idx = config.get().speaker_device.lower(), None
+    for i, d in enumerate(sd.query_devices()):
+        if want and d["max_output_channels"] > 0 and want in d["name"].lower():
+            idx = i
+            break
+    return sd.OutputStream(samplerate=rate, channels=1, dtype="float32", device=idx)       # idx None = the system default
 
 
 class Speaker:

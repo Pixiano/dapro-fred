@@ -25,3 +25,4 @@ Mark I (aka v2) is the clean rebuild of FRED. The predecessor (v1.x, `Core/`) is
 | 2026-10-07 | [brutal test report](2026/10/07/brutal_test_report.md) | Brutal test of everything built with real usage projected; 4 bugs fixed; voice ID switch |
 | 2026-10-08 | [usage so far](2026/10/08/usage_so_far.md) | What Mark I can do and how it is used (P0 to P7), honest limits |
 | 2026-10-08 | [code review fixes](2026/10/08/code_review_fixes.md) | Six-agent review of P0 to P7: what was fixed, what waits for your decision |
+| 2026-10-08 | [production fixes](2026/10/08/production_fixes.md) | First live session: why the pill flashed, the noise loop, and the fixes |

@@ -27,3 +27,6 @@ The rebuild keeps every layer separate, each with a clear input and output and i
 ## What this means for real-life FRED
 - **It can now:** everything in the 80% report, plus it addresses you as sir, watches for you with the camera, pauses that watch for its night work, and asks before running a program.
 - **Left:** live testing, then the tuning that comes out of it.
+
+## First live session (same day): what it showed
+The first run on the lavalier mic and the Rockerz headset flashed the pill about once a second and then looped on noise (Whisper wrote text for room noise, and our own hint phrases came back as "requests"). The cause was the auto-gain boosting the lavalier 23 times. Fixed: the pill appears only once FRED has decided an utterance is for it and it has lasted 0.3 s, the gain and detector are stricter, the Whisper hint list is just "Fred.", noise-like segments are dropped, follow-ups need 0.4 s of speech, and barge-in needs 0.5 s. Full table and tuning knobs: `Mark_I/Documentation/2026/10/08/production_fixes.md`. Mic and speaker are now the lavalier and the Rockerz. These need the next live session to confirm.

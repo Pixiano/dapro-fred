@@ -1,6 +1,6 @@
 """The interaction clock (L1): decides whose turn it is. One tick every `clock_tick_s` (160 ms), one output state at a time.
 
-States (bus events, source "clock", kind "state"): LISTEN, END_OF_TURN, BARGE_IN, BACKCHANNEL, IGNORE.
+States (bus events, source "clock", kind "state"): LISTEN, ADDRESSED, END_OF_TURN, BARGE_IN, BACKCHANNEL, IGNORE.
 Sockets
   in : TurnController(bus, capture, smart_turn=None, voice=None, mic=None)
          bus events consumed: audio.vad {speaking, ts}, audio.wake, audio.hotkey {down}, tts.start / tts.end (from P4; until then call tts_active()),
@@ -17,7 +17,8 @@ Rules (all thresholds are settings):
                (voice ID False, not for hotkey turns) ends as IGNORE reason "not_vatsal". Voice unknown (None) passes: never reject on a missing enrolment.
   BARGE_IN     while FRED speaks: speech >= `barge_ms` (300) AND voice ID not False AND (headphones OR mic level >= `barge_level`): emitted once, the utterance then
                continues as a normal turn. Speech that ends before `barge_ms` while FRED speaks is a BACKCHANNEL ("mm-hm"): nothing is cancelled.
-  LISTEN       an utterance started.
+  LISTEN       an utterance started (not yet known to be for FRED: the UI must not react to it).
+  ADDRESSED    once per utterance, when it is addressed (hotkey at once; wake word or follow-up window after `listen_show_s`): the pill and HUD show "listening" from here.
 Echo: with headphones nothing is needed; on speakers the level gate stands in until voice ID is enrolled and the real echo floor is measured (P4).
 Self-check: python clock/turn_controller.py (scripted VAD / Smart Turn / voice, simulated time).  Real audio: tests/offline_clock.py
 """
@@ -33,7 +34,7 @@ if __name__ == "__main__":
 import config
 import events as ev
 
-LISTEN, END_OF_TURN, BARGE_IN, BACKCHANNEL, IGNORE = "LISTEN", "END_OF_TURN", "BARGE_IN", "BACKCHANNEL", "IGNORE"
+LISTEN, END_OF_TURN, BARGE_IN, BACKCHANNEL, IGNORE, ADDRESSED = "LISTEN", "END_OF_TURN", "BARGE_IN", "BACKCHANNEL", "IGNORE", "ADDRESSED"
 
 
 class TurnController:
@@ -58,6 +59,7 @@ class TurnController:
         self.t_start = self.t_voice = 0.0
         self.hotkey = False
         self.hotkey_turn = False
+        self._announced = False
         self.wake_ts = -1e9
         self.tts_on = False
         self.open_until = -1e9
@@ -96,7 +98,7 @@ class TurnController:
             self.speaking = True
             self.t_voice = ts
             if not self.active:
-                self.active, self.t_start, self.barged = True, ts, False
+                self.active, self.t_start, self.barged, self._announced = True, ts, False, False
                 self.hotkey_turn = self.hotkey
                 self.capture.begin(0.5)
                 self._emit(LISTEN, reason="speech_start")
@@ -119,6 +121,9 @@ class TurnController:
             if not self.active:
                 return
             c = config.get()
+            if not self._announced and (self.hotkey_turn or now - self.t_start >= c.listen_show_s) and self._addressed(now):
+                self._announced = True
+                self._emit(ADDRESSED)
             if self.speaking:
                 voiced = (self._vad_src.last_voice_ts if self._vad_src is not None else now) - self.t_start
                 if self.tts_on and not self.barged and voiced >= c.barge_ms / 1000.0:
@@ -156,7 +161,9 @@ class TurnController:
 
     def _addressed(self, now: float) -> bool:
         c = config.get()
-        return self.hotkey_turn or self.wake_ts >= self.t_start - c.wake_open_s or now <= self.open_until
+        last = max(self.t_voice, self._vad_src.last_voice_ts if self._vad_src is not None else 0.0)
+        followup = now <= self.open_until and last - self.t_start >= c.followup_min_s           # noise right after FRED spoke is not an answer
+        return self.hotkey_turn or self.wake_ts >= self.t_start - c.wake_open_s or followup
 
     def _end(self, now: float, reason: str, p):
         audio = self.capture.end()
@@ -194,7 +201,8 @@ def _selfcheck():
     c = config.get()
     c.vad_hangover_ms, c.eot_silence_ms, c.eot_hard_cap_s, c.barge_ms, c.followup_s, c.wake_open_s = 200, 200, 1.2, 300, 8.0, 8.0
     bus, states, turns = ev.EventBus(), [], []
-    bus.subscribe(lambda e: states.append((e.data["state"], e.data.get("reason"))), sources={"clock"})
+    addr = []
+    bus.subscribe(lambda e: (addr if e.data["state"] == ADDRESSED else states).append((e.data["state"], e.data.get("reason"))), sources={"clock"})
 
     class Cap:
         def __init__(self):
@@ -257,16 +265,16 @@ def _selfcheck():
     run(33.2, 33.6)
     assert [s for s, _ in states].count(LISTEN) == 1 and len(turns) == 1, states
     # 4. nobody addressed it (no wake, no hotkey, no follow-up window) -> IGNORE
-    states.clear(); turns.clear()
+    states.clear(); turns.clear(); addr.clear()
     say(100.0, 101.0)
     run(101.2, 101.6)
-    assert states[-1] == (IGNORE, "not_addressed") and not turns
+    assert states[-1] == (IGNORE, "not_addressed") and not turns and not addr          # an ignored utterance never announces itself (the pill stays hidden)
     # 5. wake word 3 s BEFORE the speech starts still addresses it
-    states.clear(); turns.clear()
+    states.clear(); turns.clear(); addr.clear()
     t.wake_ts = 197.0
     say(200.0, 201.0)
     run(201.2, 201.6)
-    assert states[-1][0] == END_OF_TURN
+    assert states[-1][0] == END_OF_TURN and len(addr) == 1                                # addressed: announced once
     # 6. not Vatsal's voice -> IGNORE not_vatsal; unknown voice (None) passes
     states.clear(); turns.clear()
     t.wake_ts = 300.0

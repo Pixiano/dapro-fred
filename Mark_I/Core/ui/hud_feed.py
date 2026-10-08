@@ -23,7 +23,7 @@ if __name__ == "__main__":
 import log
 
 WAVE_EVERY_S, BEAT_S, CMD_POLL_S, CMD_MAX_AGE_S, ALERT_HOLD_S, STUCK_S = 0.1, 1.0, 0.4, 15.0, 2.5, 60.0
-STATES = {("clock", "LISTEN"): "listening", ("clock", "BARGE_IN"): "listening", ("clock", "END_OF_TURN"): "thinking"}
+STATES = {("clock", "ADDRESSED"): "listening", ("clock", "BARGE_IN"): "listening", ("clock", "END_OF_TURN"): "thinking"}
 
 
 class HudFeed:
@@ -131,6 +131,8 @@ def _selfcheck():
     rd = lambda n: (d / n).read_text(encoding="utf-8")
     assert rd("state") == "idle"
     bus.emit("clock", "state", state="LISTEN")
+    assert rd("state") == "idle"
+    bus.emit("clock", "state", state="ADDRESSED")
     assert rd("state") == "listening"
     bus.emit("clock", "state", state="END_OF_TURN")
     assert rd("state") == "thinking"

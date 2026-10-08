@@ -1,0 +1,33 @@
+# Production fixes: the first live session (2026-10-08)
+
+First time the full system ran on the real lavalier mic and the Rockerz headset. These are the problems the session logs showed and what was changed. Nothing here has been tested live yet: the self-checks pass (90 of 90), and the next live session is the proof. Every number below is a first guess to tune.
+
+## What happened (from `FRED_Private/events/2026-10-08.jsonl`)
+- **The pill flashed about once a second.** In 91 s there were 37 LISTEN events and 25 IGNORE "not_addressed" ones: the voice detector kept hearing speech-like sound and the pill showed "listening" on each one. The wake word fired once (score 0.52); it was not the cause.
+- **Why the detector fired:** the lavalier picks up the room, and the auto-gain had boosted it 23 times (logged on the wake event), so room noise looked like speech. 58 short bursts, median 0.7 s.
+- **A runaway loop after the one real wake word:**
+  1. The wake word opened the 8 s follow-up window, so anything heard counted as addressed.
+  2. Whisper wrote text for noise: "All right. Thank you.", "I'll see you next time." (its usual hallucinations on near-silence).
+  3. It also wrote "Open the file." (three times), "What's on my agenda?" and "Search the web." These came from our own `whisper_prompt` hint list, which Whisper repeats on noise. FRED answered "I can't open files" to a request nobody made.
+  4. Each reply was cut off 0.1 to 0.3 s after it started by barge-in (8 times), and each cut-off reopened the follow-up window.
+
+## Fixed
+
+| # | Problem | Fix | Setting |
+|---|---------|-----|---------|
+| 1 | Pill (and HUD) showed "listening" for every sound | The clock now announces a new state `ADDRESSED` once per utterance, when it is for FRED: at once for the hotkey, or after 0.3 s for a wake word or the follow-up window. The pill and HUD show "listening" only from then. A heard-but-ignored utterance never touches the screen | `listen_show_s` 0.3 |
+| 2 | Room noise amplified up to 100 times | Quiet sound is no longer boosted (floor raised), and the maximum boost is lower | `agc_min_peak` 0.01 to 0.03, `agc_max_gain` 100 to 40 |
+| 3 | Detector too trigger-happy | Stricter mode, longer onset | `vad_mode` 2 to 3, `vad_onset_ms` 100 to 200 |
+| 4 | Whisper repeated our hint list on noise | The hint is now just "Fred." | `whisper_prompt` |
+| 5 | Whisper invented text for noise | Segments that are probably not speech and low confidence are dropped | `stt_no_speech_prob` 0.6, `stt_min_logprob` -1.0 |
+| 6 | Any noise right after FRED spoke counted as an answer | Inside the follow-up window the speech must last 0.4 s to count | `followup_min_s` 0.4 |
+| 7 | A reply was cut off by 0.3 s of noise | Barge-in needs 0.5 s of speech | `barge_ms` 300 to 500 |
+| 8 | Mic and speaker were the system defaults | Mic is the lavalier, speaker is the Rockerz headset (name match, case-insensitive; an empty setting means the system default) | `mic_device` "Lavalier", `speaker_device` "Rockerz" |
+
+## Tuning knobs for the next live session
+If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRED" is missed: lower `agc_min_peak` back toward 0.02, or `vad_mode` to 2. If real interruptions feel sluggish: `barge_ms` back to 400. If follow-ups without the wake word stop working: lower `followup_min_s`.
+
+## Still open (not fixed)
+- `headphones` is never set, so the barge-in cannot tell FRED's own echo from you. A voice-ID match would fix it but voice ID is off.
+- System audio input (loopback) is not built; waiting on your answers to the design questions.
+- Everything above needs a live check: the same hour of use, with the event log read again.

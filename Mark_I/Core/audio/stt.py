@@ -85,7 +85,8 @@ class Stt:
             def work():
                 segs, info = self._load().transcribe(x, language=c.whisper_language, beam_size=c.whisper_beam, initial_prompt=prompt or c.whisper_prompt,
                                                      condition_on_previous_text=False, vad_filter=False)
-                return " ".join(s.text.strip() for s in segs).strip(), getattr(info, "language", c.whisper_language)
+                keep = [s for s in segs if not (getattr(s, "no_speech_prob", 0.0) > c.stt_no_speech_prob and getattr(s, "avg_logprob", 0.0) < c.stt_min_logprob)]
+                return " ".join(s.text.strip() for s in keep).strip(), getattr(info, "language", c.whisper_language)
             text, lang = gpu.run("stt", priority, work, timeout=max(30.0, dur * 2 + 20))
             t = Transcript(text, lang, dur, int((time.monotonic() - t0) * 1000))
         self.bus.emit("stt", "transcript", text=t.text, final=final, audio_s=round(dur, 2), ms=t.ms)

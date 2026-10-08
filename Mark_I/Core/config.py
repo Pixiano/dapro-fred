@@ -41,25 +41,28 @@ class Settings:
     log_max_bytes: int = 20_000_000                   # one jsonl before it rotates
     # --- audio (P1a) ---
     sample_rate: int = 16000
-    mic_device: str = ""                              # input device name substring; "" = system default
+    mic_device: str = "Lavalier"                      # input device name substring; "" = system default (Vatsal's lavalier, 2026-10-08)
+    speaker_device: str = "Rockerz"                   # output device name substring; "" = system default (Vatsal's Rockerz headset)
     mic_ring_s: float = 6.0                           # raw audio kept for pre-roll / pre-trigger
     wakeword_model: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "wakeword" / "hey_fred.onnx")   # FROZEN model, read in place, never copied or swapped
     wakeword_threshold: float = 0.35
     wake_cooldown_s: float = 2.0                      # refuse a second fire this soon after one
     wake_near_miss: float = 0.10                      # scores at/above this but under threshold are logged as audio.wake_near
     agc_target_peak: float = 0.7
-    agc_max_gain: float = 100.0
-    agc_min_peak: float = 0.01                        # quieter than this: hold the gain, do not amplify noise
+    agc_max_gain: float = 40.0
+    agc_min_peak: float = 0.03                        # quieter than this: hold the gain, do not amplify noise
     agc_smoothing: float = 0.3
-    vad_mode: int = 2                                 # webrtcvad aggressiveness 0-3
-    vad_onset_ms: int = 100                           # voiced time needed to call speech started
+    vad_mode: int = 3                                 # webrtcvad aggressiveness 0-3
+    vad_onset_ms: int = 200                           # voiced time needed to call speech started
     vad_hangover_ms: int = 200                        # silence needed to call speech ended (L1 adds Smart Turn on top)
     whisper_model: str = "large-v3-turbo"
     whisper_language: str = "en"
     whisper_beam: int = 5
     whisper_device: str = "cuda"                      # GPU-only rule: change only for an explicit CPU test (FRED_WHISPER_DEVICE=cpu FRED_WHISPER_COMPUTE=int8)
     whisper_compute: str = "float16"
-    whisper_prompt: str = "Fred. Call Mom. Hang up. What's on my agenda? Open the file. Set a timer. Search the web."
+    whisper_prompt: str = "Fred."                       # a longer list of commands came back as the transcript of room noise (2026-10-08 live session)
+    stt_no_speech_prob: float = 0.6                   # a Whisper segment this likely to be non-speech AND with low confidence is dropped
+    stt_min_logprob: float = -1.0
     stt_min_peak: float = 0.02                        # a buffer whose peak stays under this is silence: no Whisper pass
     max_utterance_s: float = 60.0
     # --- screen (P1b) ---
@@ -83,8 +86,10 @@ class Settings:
     clock_tick_s: float = 0.16                        # interaction clock tick
     eot_silence_ms: int = 200                         # VAD silence before Smart Turn is consulted
     eot_hard_cap_s: float = 0.9                       # silence that ends a turn regardless of Smart Turn (Vatsal 2026-10-06: 0.9 instead of the planned 1.2)
-    barge_ms: int = 300                               # speech while FRED talks that counts as a real interruption
+    barge_ms: int = 500                               # speech while FRED talks that counts as a real interruption
     barge_level: float = 1500.0                       # mic RMS (int16 units) needed to barge in when not on headphones
+    listen_show_s: float = 0.3                        # an addressed utterance must last this long before the pill shows "listening"
+    followup_min_s: float = 0.4                       # speech must last this long inside the follow-up window to count as an answer
     followup_s: float = 8.0                           # open-mic window after FRED speaks
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn

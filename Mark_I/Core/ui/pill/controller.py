@@ -6,7 +6,7 @@ turn logic lives here, only bus events in and a few callbacks out.
 Sockets
   in : PillController(bus, window, speaker=None, mic=None, on_text=None, speaks=True, linger_s=1.0, on_cancel=None)
          window: ui.pill.window.PillWindow (any object with set_state/set_level/set_transcript/clear_transcript/show/hide works: tests pass a fake)
-         bus events  clock.state LISTEN -> listening (shown) | END_OF_TURN -> thinking | BARGE_IN -> listening | IGNORE while listening -> hidden
+         bus events  clock.state ADDRESSED -> listening (shown; LISTEN alone is not, an utterance nobody addressed never shows the pill) | END_OF_TURN -> thinking | BARGE_IN -> listening | IGNORE while listening -> hidden
                      stt.transcript (final) -> what was heard, 2.5 s+ | tts.start -> speaking | tts.end -> idle, hidden after `linger_s`
                      engine.turn when speaks is False -> the reply as text for 6 s+, then hidden | proactive.warn -> its title as red warning text for 8 s (the toast carries the detail); while it shows it is not overwritten, and a turn in progress keeps its state
                      a turn that never answers (no tts.start/end) is hidden after 60 s; the longer a caption, the longer it stays (0.35 s per word, max 20 s)
@@ -76,7 +76,7 @@ class PillController:
     def _handle(self, k, d):
         if k == ("clock", "state"):
             s = d.get("state")
-            if s in ("LISTEN", "BARGE_IN"):
+            if s in ("ADDRESSED", "BARGE_IN"):
                 self._show("listening", LISTEN_MAX_S)
             elif s == "END_OF_TURN":
                 self._show("thinking", THINK_MAX_S)
@@ -278,6 +278,8 @@ def _selfcheck():
             time.sleep(0.02)
         assert cond()
     bus.emit("clock", "state", state="LISTEN")
+    assert p.state == "idle" and ("show",) not in w.calls                                              # heard something, not yet addressed: nothing on screen
+    bus.emit("clock", "state", state="ADDRESSED")
     assert w.calls[-2:] == [("set_state", "listening"), ("show",)]
     bus.emit("stt", "transcript", text="what time is it", final=True)
     assert ("set_transcript", "what time is it", 2.5) in w.calls
@@ -291,15 +293,16 @@ def _selfcheck():
     bus.emit("tts", "end")
     until(lambda: w.calls.count(("hide",)) == 1)
     assert p.state == "idle"                                       # idle, then hidden after the linger
+    shows, hides = w.calls.count(("show",)), w.calls.count(("hide",))
     bus.emit("clock", "state", state="LISTEN")
     bus.emit("clock", "state", state="IGNORE")
-    until(lambda: w.calls.count(("hide",)) == 2)
-    assert True                                                             # an ignored wake word leaves nothing on screen
-    bus.emit("clock", "state", state="LISTEN")
+    time.sleep(0.2)
+    assert w.calls.count(("show",)) == shows and w.calls.count(("hide",)) == hides and p.state == "idle"          # an ignored utterance leaves nothing on screen
+    bus.emit("clock", "state", state="ADDRESSED")
     bus.emit("tts", "end")
     bus.emit("clock", "state", state="END_OF_TURN")
     time.sleep(0.5)                                                                                  # longer than the pending hide would have taken
-    assert p.state == "thinking" and w.calls.count(("hide",)) == 2                                   # a new turn cancels a pending hide
+    assert p.state == "thinking" and w.calls.count(("hide",)) == hides                                   # a new turn cancels a pending hide
     bus.emit("proactive", "warn", title="Possible phishing page", level="high")
     assert ("set_transcript", "Possible phishing page", 8.0, True) in w.calls                       # a warning is flagged so it draws red
     assert p.state == "thinking"                                                                     # ... and does not hijack a turn in progress

@@ -7,7 +7,7 @@ Status in one line: about 80% built (P0 to P7 built; P8 soak, tuning and cut-ove
 - It loads the 4B brain, the embedder and the 2B talker. `--memory` turns on the long-term memory, the ask queue and the nightly jobs.
 
 ## Talking to it
-- Say "Hey FRED, ..." or hold Left Ctrl + Left Alt. A floating pill shows listening, thinking and speaking, with your words as a caption.
+- Say "Hey FRED, ..." or hold Left Ctrl + Left Alt. A floating pill shows listening, thinking and speaking, with your words as a caption. It appears only once FRED has decided you are talking to it (wake word, hotkey or the follow-up window) and you have spoken for 0.3 s, so room noise never flashes it.
 - A short filler ("On it.") plays if a reply takes more than 0.8 s. Talking over FRED stops it in about 40 ms, and only what you heard is remembered.
 - The pill has a cancel button (stops speech and thinking), a tick (stops speech only) and a type box for typed messages. A browser HUD page shows the same feed.
 - Lockdown swaps the 4B for the small talker until you unlock.
