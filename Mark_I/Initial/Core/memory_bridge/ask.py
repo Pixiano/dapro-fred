@@ -5,7 +5,7 @@ Sockets
          speak(text): FRED says it; show(item, answer, done): the pill popup (PillController.ask); ask/answer default to askqueue.ask / askqueue.answer, injectable for tests
        .start() / .stop(): a 2 s tick; .tick() does one check (tests call it)
        .take(user_text) -> reply | None: engine/live.py offers every typed or spoken turn here first; a clear answer to the waiting question is recorded and acknowledged, anything else returns None and goes to the engine
-  out: "the conversation is over" = at least one turn happened, FRED is not speaking, and idle_s have passed with no new turn. Then askqueue.ask(mem, topic, turns) runs ONCE for that conversation (its own rules decide
+  out: "the conversation is over" = at least one turn happened, FRED is not speaking, and idle_s have passed since the last spoken word (or the reply, if nothing was spoken) with no new turn. Then askqueue.ask(mem, topic, turns) runs ONCE for that conversation (its own rules decide
        whether anything is asked: turns, daily cap, snooze). A question waits ttl_s for an answer, then is dropped (it comes back on a later day per the queue's own limits).
        Topic = the words of the conversation's user turns, so questions about what was just discussed go first. Nothing from the conversation is logged here.
 Self-check: python memory_bridge/ask.py

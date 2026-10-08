@@ -35,9 +35,10 @@ class Aborted(BaseException):                                                # n
 
 
 class Jobs:
-    def __init__(self, mem, playground, embed, present=None, pm=None, now=time.time, mods=None, backup_dir=None, bus=None):
+    def __init__(self, mem, playground, embed, present=None, pm=None, now=time.time, mods=None, backup_dir=None, bus=None, presence=None):
         self.mem, self.pg, self.embed, self.pm, self.now, self.backup_dir = mem, playground, embed, pm, now, backup_dir
         self.present = present or (lambda: None)
+        self.presence, self._peek = presence, 0.0                                    # presence is paused while a run is going; _need takes a one-shot look every jobs_peek_s instead
         self.mods = mods or self._real_mods()
         self.last_turn, self.last_run, self.retry_at = now(), 0.0, 0.0                   # FRED just started: not quiet yet
         self._open, self._cur, self._stop = False, None, threading.Event()
@@ -55,6 +56,11 @@ class Jobs:
         """Called before every model call: stop if Vatsal is back, open the window once, and make `model` the loaded chat model."""
         if self._stop.is_set() or self.present() is True or self.now() - self.last_turn < config.get().jobs_quiet_s:
             raise Aborted()
+        if self.presence and self.now() - self._peek >= config.get().jobs_peek_s:
+            self._peek = self.now()
+            r = self.presence.poll()
+            if r and r["faces"]:
+                raise Aborted()                                                      # someone is at the desk
         if not self._open:
             self.pg.window_open()
             self._open = True                                                        # from here the window must be closed, whatever fails next
@@ -87,6 +93,7 @@ class Jobs:
                   ("monthly", lambda: m["period"].run_monthly_pending(self.mem, gpt("monthly"), index, "gpt-oss-20b", pm_update=pm_update)),
                   ("yearly", lambda: m["period"].run_yearly_pending(self.mem, gpt("yearly"), index, "gpt-oss-20b")),
                   ("selfanalysis", lambda: m["selfanalysis"].run_selfanalysis_pending(self.mem, gpt("yearly"), index, "gpt-oss-20b", pm=self.pm))]
+        self.presence and self.presence.stop()
         try:
             for name, fn in stages:
                 out[name] = fn()
@@ -104,6 +111,7 @@ class Jobs:
                     log.session("jobs_error", stage="window_close", error=type(ex).__name__)
                 finally:
                     self._open, self._cur = False, None
+        self.presence and self.presence.start()                                        # the camera watch is back (the backup below needs no model)
         try:
             out["backup"] = bool(m["backup"].run_backup_pending(self.mem, self.backup_dir))
         except Exception as ex:
@@ -220,6 +228,19 @@ def _selfcheck():
     state["clock"] = datetime(2031, 3, 4, 3).timestamp(); assert j.maybe() == {} and len(runs) == 1             # no camera reading, 03:00
     j.last_run = state["clock"] - 3600; assert j.maybe() is None                     # ran an hour ago
     state["present"] = False; j.last_run = 0.0; j.retry_at = state["clock"] + 100; assert j.maybe() is None; j.retry_at = 0.0; assert j.maybe() == {}
+    # camera watch: paused for the run, one snapshot per jobs_peek_s before a model call, resumed after
+    log2, face = [], [0]
+    class Pres:
+        stop = lambda s: log2.append("stop")
+        start = lambda s: log2.append("start")
+        poll = lambda s: log2.append("poll") or {"faces": face[0]}
+    j2 = Jobs(type("Mem", (), {"store": None})(), PG(), None, present=lambda: False, mods=mods, presence=Pres(), now=lambda: state["clock"])
+    j2.last_turn = 0.0; pending["nightly"] = 2; calls.clear()
+    j2.run_once()
+    assert log2[0] == "stop" and log2[-1] == "start" and log2.count("poll") == 1                     # two model calls close together: one look
+    face[0] = 1; log2.clear(); state["clock"] += 120; j2._peek = 0.0
+    r = j2.run_once()
+    assert r.get("aborted") and log2[-1] == "start"                                                   # a face at the desk: stop, and the watch is back
     print("jobs ok")
 
 

@@ -3,7 +3,7 @@
 Sockets
   in : run(date, today=None)   `today` is for the self-check only
   out: "80 days until Christmas." / "That's today." / "5 days since 1 October."; a date it cannot read is bad_args naming what it accepts
-Named holidays roll to next year once passed; explicit dates and weekdays do not (a past explicit date counts "since"). A weekday means the next one, never today.
+Named holidays and "december 25" style dates roll to next year once passed; only ISO dates count "since". A weekday means the next one, never today.
 """
 import re
 from datetime import date as D, timedelta

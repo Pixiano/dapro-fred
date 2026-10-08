@@ -11,7 +11,7 @@ Sockets
          smart_turn.prob(audio) -> float, voice.is_me(audio) -> bool | None (None = unknown, counts as a pass), headphones() -> bool via attribute `headphones`
   out: clock.state {state, reason, ...}; on_turn(audio, info) callback for END_OF_TURN (the thinker, or the echo stand-in); stats()
 Rules (all thresholds are settings):
-  END_OF_TURN  VAD silence >= `eot_silence_ms` (200) AND Smart Turn >= `turn_prob_threshold` (0.5), OR silence >= `eot_hard_cap_s` (1.2), OR the hotkey chord released
+  END_OF_TURN  VAD silence >= `eot_silence_ms` (200) AND Smart Turn >= `turn_prob_threshold` (0.5), OR silence >= `eot_hard_cap_s` (0.9; the self-check overrides it to 1.2), OR the hotkey chord released
                (while the chord is held only release ends the turn), OR the utterance hit `max_utterance_s`. A turn that nobody addressed (no hotkey, no wake word in the
                `wake_open_s` before or during it, not inside the `followup_s` window after FRED spoke) ends as IGNORE reason "not_addressed"; a voice that is not Vatsal's
                (voice ID False, not for hotkey turns) ends as IGNORE reason "not_vatsal". Voice unknown (None) passes: never reject on a missing enrolment.

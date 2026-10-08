@@ -21,7 +21,7 @@ Rules (PLAN.md "The tool loop"):
   - `say` tools (data is already a spoken sentence) skip the second model round unless the request is compound or derived ("how many days until...")
 Memory (3b): `recall` = memory_bridge/turn_recall.MemoryRecall (anything with context(text, say) -> Recalled(block, ask, direct)); its block joins the system prompt for that turn only,
   an ask/direct reply is spoken without the model; `on_say(text)` / bus engine.say carries the interim "digging deeper" line.
-Not here (later phases): sentence streaming to TTS (P4), agent allowlists (L4).
+Not here: agent allowlists (L4). Sentence streaming to TTS is done (P4, audio/tts.py).
 Self-check: python engine/loop.py (scripted FakeChat, no GPU); the full scenario suite is tests/test_engine.py
 """
 import json
@@ -73,6 +73,9 @@ class _Turn:
         self.widened = False
         self.nudged = False                   # the refusal nudge fires at most once per turn
         self.rounds = 0
+
+
+SIR_LINE = "\n\nAddress the user as 'sir' in most of your replies, naturally, usually at the end."
 
 
 def _canon(name: str, args: dict) -> str:
@@ -200,7 +203,10 @@ class Engine:
 
     def _complete_(self, msgs, tools, force=False, brain=False):
         m = self.lock_chat if self.locked and self.lock_chat else self.talk if self.talk and not tools and not brain else self.chat
-        return m.complete(list(msgs), tools=tools or None, think=config.get().engine_think, **({"tool_choice": "required"} if force and tools else {}), **({"max_tokens": config.get().talk_max_tokens} if m is self.talk else {}))      # a copy: the loop edits msgs afterwards
+        msgs = list(msgs)
+        if m is not self.chat and config.get().sir_rate and msgs and msgs[0].get("role") == "system":       # the small talker is told to say it too (engine/sir.py adds the rest at the output edge)
+            msgs[0] = dict(msgs[0], content=msgs[0]["content"] + SIR_LINE)
+        return m.complete(msgs, tools=tools or None, think=config.get().engine_think, **({"tool_choice": "required"} if force and tools else {}), **({"max_tokens": config.get().talk_max_tokens} if m is self.talk else {}))      # a copy: the loop edits msgs afterwards
 
     def _say(self, text: str):
         """An interim spoken line while a slow step runs ("digging deeper..."): a hook, never an error."""

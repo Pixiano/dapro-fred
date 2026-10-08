@@ -1,6 +1,6 @@
 """The voice loop: microphone -> wake/VAD -> turn clock -> Whisper -> engine -> reply printed and spoken (Kokoro, audio/tts.py).
 
-  python engine/live.py [seconds=120] [--memory] [--brain MODEL] [--silent] [--no-pill] [--no-hud] [--no-screen]
+  python engine/live.py [seconds=120] [--memory] [--brain MODEL] [--silent] [--no-pill] [--no-hud] [--no-screen] [--no-presence]
 Say "Hey FRED, <request>" or hold Left Ctrl + Left Alt and talk. Each turn prints what was heard, FRED's reply and the trace line (route, tools, timings).
 Sockets
   in : build(bus, mic, memory=False, brain=None) -> Runtime     wires Mic/Vad/Wake/Capture/Stt/SmartTurn/VoiceId/TurnController to an Engine
@@ -47,6 +47,7 @@ class Runtime:
     bus: ev.EventBus
     replies: list = field(default_factory=list)
     _closers: list = field(default_factory=list)
+    presence: object = None                     # senses.presence.Presence: main() starts it (--no-presence skips); Jobs pauses it during a night run
     jobs: object = None                         # memory_bridge.jobs.Jobs (memory on and a playground only): main() starts its check
     ask: object = None                          # memory_bridge.ask.AskDelivery (memory on only): offered every turn first, started by main()
     scheduler: object = None                    # proactive.scheduler.Scheduler: main() starts its tick, tests drive tick() themselves
@@ -60,7 +61,7 @@ class Runtime:
                 pass
 
 
-def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, embedder=None, stt=None, smart=None, wake: bool = True, out=print, registry=None, speaker=None, playground=None, talk=None) -> Runtime:
+def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, embedder=None, stt=None, smart=None, wake: bool = True, out=print, registry=None, speaker=None, playground=None, talk=None, presence: bool = False) -> Runtime:
     """`chat`/`embedder`/`stt`/`smart` can be injected (tests); by default the playground's Chat/Embedder, real Whisper and Smart Turn."""
     from models.client import Chat, Embedder
     from skills.loader import build as build_skills
@@ -113,13 +114,16 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     vad.attach(mic)
     stt, smart, voice = stt or Stt(bus), smart or SmartTurn(), VoiceId()
     rt = Runtime(engine, None, stt, mic, bus, _closers=closers, scheduler=sched)
+    if presence:
+        from senses.presence import Presence
+        rt.presence = Presence(bus)
     if memory:
         from memory_bridge.ask import AskDelivery
         if playground:
             from memory_bridge.jobs import Jobs
             seen = {"p": None}
             bus.subscribe(lambda e: seen.update(p=e.data.get("present")), kinds=("state",), sources=("presence",))
-            rt.jobs = Jobs(mem, playground, embedder.embed, present=lambda: seen["p"], pm=recall.model, bus=bus)
+            rt.jobs = Jobs(mem, playground, embedder.embed, present=lambda: seen["p"], pm=recall.model, bus=bus, presence=rt.presence)
         rt.ask = AskDelivery(bus, mem, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
@@ -184,7 +188,7 @@ def main(argv):
     mic = Mic(bus)
     speaker = None if "--silent" in argv else Speaker(bus)
     speaker and speaker.warm()
-    rt = build(bus, mic, memory="--memory" in argv, brain=brain, speaker=speaker, playground=pg)
+    rt = build(bus, mic, memory="--memory" in argv, brain=brain, speaker=speaker, playground=pg, presence="--no-presence" not in argv)
     rt.stt.transcribe(__import__("numpy").ones(16000, "int16") * 1000, final=False)          # warm Whisper
     if "--no-pill" not in argv:
         from ui.pill.controller import PillController
@@ -221,6 +225,9 @@ def main(argv):
         return 1
     hk.start()
     rt.scheduler.start()
+    if rt.presence:
+        rt.presence.start()                                                      # always on; the night jobs pause it themselves
+        rt._closers.append(rt.presence.stop)
     if rt.jobs:
         rt.jobs.start()
         rt._closers.append(rt.jobs.stop)

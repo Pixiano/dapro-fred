@@ -31,6 +31,7 @@ class Settings:
     jobs_enabled: bool = True                         # memory_bridge/jobs.py: nightly/weekly/monthly/yearly runs through the GPU window (memory on only)
     jobs_check_s: float = 300.0                       # how often it looks whether a run is due
     jobs_quiet_s: float = 600.0                       # no turn or speech for this long before a run may start, and a turn during a run aborts it
+    jobs_peek_s: float = 60.0                         # during a night run the camera watch is paused; before a model call, at most this often, one snapshot looks for a face
     jobs_retry_s: float = 1800.0                      # retry delay after an aborted or failed run
     jobs_gap_h: float = 4.0                           # at least this long between runs
     judge_threshold: float = 0.6                      # proactive judge: classifier p needed to speak (invented-case sweep: 0.5 P .96 R .77, 0.6 P .97 R .62, 0.7 P 1.0 R .47); retune on the shadow log
@@ -88,7 +89,7 @@ class Settings:
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
-    sir_rate: float = 0.0                             # share of replies, interim and talker lines that end with "sir" (engine/sir.py); the 2-3 word fillers stay bare. OFF until the P8 tuning pass, then 0.85 (Vatsal's target)
+    sir_rate: float = 0.85                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); the 2-3 word fillers stay bare. 0.85 is Vatsal's target (switched on in P8, 2026-10-08); 0 turns it off
     tts_enabled: bool = True                          # False = nothing is spoken (text only)
     kokoro_model: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
     kokoro_voices: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")

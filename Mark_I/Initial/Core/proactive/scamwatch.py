@@ -7,7 +7,7 @@ Signals (all from the OCR text)
   domain   every host in the text: legitimate (a brand's own registrable domain) -> 0; imitating a brand (homoglyphs 0/o 1/l rn/m, the brand inside a foreign domain such as
            secure-paypal-login.com or paypal.com.verify-login.net, one typo away) -> 3; odd TLD (.xyz .top ...), punycode, raw IP, many hyphens -> +1..2
   page     asks for credentials (password, PIN, OTP, CVV, card number ...) and/or pressures (account suspended, within 24 hours, verify your identity ...), or tech-support scam text
-Verdict  imitated brand + (credentials or pressure) -> high;  domain risk >= 2 + credentials + pressure -> medium;  unfamiliar site + credentials + pressure -> medium;  tech-support scam -> medium
+Verdict  imitated brand + (credentials or pressure) -> high;  domain risk >= 2 + credentials + pressure -> medium;  any host with a risk point (odd ending, many hyphens...) + credentials + pressure -> medium (never spoken);  tech-support scam -> medium
          A genuine brand domain never warns, whatever the page says.
 
 Sockets
@@ -17,7 +17,7 @@ Sockets
          ocr_read(rgb) -> str | None   (default senses.ocr.read);  notify(title, text) -> bool   (default ui.toast.show)
   out: bus event proactive.warn {scam: "phishing"|"scam", level, domain, reasons}; a Windows toast; log.session("scam_warning", domain, reasons)
        cooldown per domain / page kind (scamwatch_cooldown_s, 30 min) and at most scamwatch_max_per_hour warnings; config.scamwatch_enabled turns it off
-       The L4 judge (P6) subscribes to proactive.warn to also say it aloud.
+       engine/live.py speaks a HIGH warning aloud itself (medium: toast and pill caption only); the shadow judge only logs.
 Self-check: python proactive/scamwatch.py (invented texts, fake OCR and toast); real OCR on rendered pages: tests/live_scamwatch.py
 """
 import queue

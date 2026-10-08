@@ -6,7 +6,7 @@ Sockets
                                       current event the 4B model cannot know, otherwise None. Only the extracted subject leaves the PC, never the sentence; nothing runs for personal, command or chat wording.
   out: text for the MODEL (not spoken as is, not `say`): at most 3 results, one trimmed snippet each, plus a two-sentence encyclopedia summary when a Wikipedia page is among them,
        headed "Web results for ...; answer in one or two spoken sentences, do not read this list out". Flags: reads_untrusted (after reading, nothing may be sent out this turn).
-Quality (the "no dumb results, try again" rule): a result must share at least half of the query's informative words (title + snippet), come from a non-blocked domain (YouTube is out by the
+Quality (the "no dumb results, try again" rule): a result must share at least 0.6 of the query's informative words (title + snippet), come from a non-blocked domain (YouTube is out by the
   user's call; link farms and social posts are dropped) and domains are capped at two. If fewer than two results pass, the query is rewritten and tried again, up to three attempts:
   as asked -> filler words and question phrasing removed -> subject plus "wikipedia" (or "news" for current events). If nothing passes it says so plainly; it never returns the rejects.
 Backend: ddgs (DuckDuckGo, no key). Tests replace `SEARCH` and `WIKI` with fakes and never touch the network.

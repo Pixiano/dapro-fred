@@ -1,8 +1,8 @@
-"""Address the user as "sir" in about 85% of what FRED says once config.sir_rate is set to 0.85 (default 0.0 = dormant until the P8 tuning pass), decided by code per line, never by the model (a 4B told to do it drifts). Applied at the output edge only (engine/live.py:
+"""Address the user as "sir" in about 85% of what FRED says once config.sir_rate is set to 0.85 (default 0.85, 0 = off), decided by code per line, never by the model (a 4B told to do it drifts). Applied at the output edge only (engine/live.py:
 the reply that is spoken and shown, interim lines, talker lines), never to what is remembered in history, or the model would start adding it itself and overshoot.
 
 Sockets
-  in : sirify(text, rng=random.random) -> str      config.sir_rate (default 0.0 = off; the target is 0.85)
+  in : sirify(text, rng=random.random) -> str      config.sir_rate (default 0.85, 0 = off)
   out: the same text with ", sir" before the final punctuation ("Done." -> "Done, sir."; "Apply it? Yes or no?" -> "Apply it? Yes or no, sir?"), or appended when there is none;
        unchanged for an empty line, a line that already says sir, or a roll above the rate. The 2-3 word fillers (audio/tts.FILLERS) never pass through here, so they stay bare.
 Self-check: python engine/sir.py

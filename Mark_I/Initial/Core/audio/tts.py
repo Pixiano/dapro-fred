@@ -9,7 +9,7 @@ Sockets
        synth(text) -> (float32 samples, rate)   default: Kokoro read in place from the frozen Old/Core/models/kokoro; stream(rate) -> object with start/write/abort/stop/close   default: sounddevice
        output device: the Windows default, always (config has no device setting)
   out: bus events tts.start {} / tts.end {cancelled} (the turn controller uses them for barge-in and the follow-up window); config.tts_enabled False = nothing is spoken, the text is still returned
-Bluetooth: the link ramps its volume at the start and buffers at the end, so `tts_preroll_s` of silence is written at once (while the first sentence is still synthesising, so it costs no time) and `tts_postroll_s` after the last word (measured live on Vatsal's headphones, 2026-08); set both to 0 on a wired output.
+Bluetooth: the link ramps its volume at the start and buffers at the end, so `tts_preroll_s` of silence is written at once (after the first sentence has been synthesised, so every spoken reply starts about that long after the sentence is ready; it is skipped when audio ended less than `tts_preroll_gap_s` ago, and fillers/interim lines get no tail) and `tts_postroll_s` after the last word (measured live on Vatsal's headphones, 2026-08); set both to 0 on a wired output.
 Self-check: python audio/tts.py (fake synth and stream; Kokoro itself is exercised by tests/live_tts.py)
 """
 import queue

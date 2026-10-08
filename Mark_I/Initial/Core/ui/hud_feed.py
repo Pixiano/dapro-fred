@@ -1,6 +1,6 @@
 """Feeds the HUD (ui/hud/server.py, the browser page) from the event bus, over the plain-file bus in ~/voice-line/ that the page's server reads: state, waveform, a heartbeat, and the typed console.
 
-Same contract as the old build's voice_line.py, so the HUD page and server are unchanged:
+Written like the old build's voice_line.py, for the HUD page and server. NOT fully the same contract: nothing writes the `systems` file (no real subsystem/mute state) and the timer pod reads a scheduler database that no longer exists (the scheduler now keeps schedule.json); the HUD's mute and device buttons are sent as ordinary typed turns:
   state     one word: idle | listening | thinking | speaking | alert; re-stamped every second while not idle (the reader ignores a state file older than 5 s)
   waveform  FRED's voice level 0..1, written only while speaking, at most 10 per second (a fresh waveform makes the reader say "speaking" even if the state file is stale)
   command.json / command_reply.json   text typed in the HUD console: on_command(text) -> reply text is answered into the reply file; a command older than 15 s is ignored
