@@ -62,7 +62,12 @@ class Jobs:
             if r and r["faces"]:
                 raise Aborted()                                                      # someone is at the desk
         if not self._open:
-            self.pg.window_open()
+            from models.client import ModelError
+            try:
+                self.pg.window_open()
+            except ModelError as ex:
+                if "already open" not in str(ex):
+                    raise                                                            # a window left open by a killed run is adopted; its stash is the live stack
             self._open = True                                                        # from here the window must be closed, whatever fails next
             self.pg.load(config.get().embedder, slot="embed")
         if self._cur != model:
@@ -157,7 +162,11 @@ def _selfcheck():
     calls, state = [], {"present": False, "clock": 100000.0}
 
     class PG:
-        window_open = lambda s: calls.append("open")
+        def window_open(s):
+            calls.append("open")
+            if state.get("stale"):
+                from models.client import ModelError
+                raise ModelError("bad_request", "HTTP 409: window already open")
         window_close = lambda s: calls.append("close")
         load = lambda s, model, slot=None, **k: calls.append(f"load {slot}")
 
@@ -186,6 +195,11 @@ def _selfcheck():
     r = j.run_once()
     assert r["nightly"] == ["d", "d"] and r["weekly"] == ["w"]
     assert calls == ["open", "load embed", "load chat", "call nightly", "call nightly", "load chat", "call weekly", "close"], calls
+    calls.clear()
+    state["stale"] = True
+    pending.update(nightly=1, weekly=0)
+    assert j.run_once()["nightly"] == ["d"] and calls[-1] == "close", calls                  # a window left open by a killed run is adopted, not a failure
+    state["stale"] = False
     # Vatsal comes back mid-run: aborted at the next model call, the live stack is restored
     calls.clear()
     state["present"] = None

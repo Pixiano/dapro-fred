@@ -47,3 +47,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 17 | No real-world data saved | Central usage store, by component / year / month / day | `usage_clip_cap`, `usage_wake_clip_s` |
 | 18 | A tool call written as text was spoken, and the HUD showed nothing | Such replies become a plain apology, never spoken, shown or remembered | none |
 | 19 | Idle memory leak of 35 MB/min (webcam open/close leaks in OpenCV) | Each snapshot is read in a child process | none |
+| 20 | Night job failed (409) after a killed run left the playground window open | An already-open window is adopted | none |
