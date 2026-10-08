@@ -101,7 +101,7 @@ class Settings:
     kokoro_model: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
     kokoro_voices: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")
     tts_voice: str = "am_michael"                     # the voice Vatsal picked in the old build
-    tts_speed: float = 1.0                            # 1x only (Vatsal, 2026-10-07; the old build used 1.2)
+    tts_speed: float = 1.17                           # Vatsal, 2026-10-08 (was 1.0 on 2026-10-07; the old build used 1.2)
     tts_preroll_s: float = 1.5                        # silence written first: a Bluetooth link ramps its volume at the start (measured on Vatsal's headphones); 0 on a wired output
     tts_preroll_gap_s: float = 3.0                    # the lead-in is skipped when the previous audio ended less than this long ago (a filler right before the answer): the link is still awake
     tts_postroll_s: float = 1.0                       # silence after the last word: the link buffers and would clip the end; 0 on a wired output
