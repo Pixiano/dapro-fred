@@ -29,6 +29,7 @@ class Settings:
     alert_disk_gb: float = 10.0                       # system drive with less free space than this (GB), or under alert_disk_pct percent, is critical
     alert_disk_pct: float = 5.0
     alert_cooldown_s: float = 1800.0                  # one alert per kind this often
+    ask_idle_s: float = 10.0                          # memory_bridge/ask.py: a conversation counts as over after this much silence (no turn, FRED not speaking); the ask queue's question comes then
     jobs_enabled: bool = True                         # memory_bridge/jobs.py: nightly/weekly/monthly/yearly runs through the GPU window (memory on only)
     jobs_check_s: float = 300.0                       # how often it looks whether a run is due
     jobs_quiet_s: float = 600.0                       # no turn or speech for this long before a run may start, and a turn during a run aborts it

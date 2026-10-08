@@ -25,7 +25,7 @@ Status in one line: about 80% built (P0 to P7 built; P8 soak, tuning and cut-ove
 ## What it does by itself (proactive)
 - **Reminders and timers** are spoken when due.
 - **Scam warnings:** it reads the screen text and warns about lookalike login pages and spoofed senders with a Windows toast from "FRED", a pill caption and a spoken line.
-- **Ask queue:** 90 s after a conversation ends it may ask one either/or question about something it is unsure of; you answer by voice or in the pill, or ignore it.
+- **Ask queue:** 10 s after a conversation ends it may ask one either/or question about something it is unsure of; you answer by voice or in the pill, or ignore it.
 - **System alerts:** a battery at 10% or a nearly full system drive raises a critical alert.
 - **Judge (shadow mode):** logs whether it would have spoken up, but speaks nothing. After 2-3 days of real use I review the log and retrain it.
 - **Nightly memory jobs (P7):** when you are away or it is the small hours, the memory is consolidated (days, weeks, months, a yearly review, a quarterly self-analysis), tidied and backed up. The live stack is unloaded for the heavy models and comes back afterwards; if you return mid-run it stops and restores FRED.

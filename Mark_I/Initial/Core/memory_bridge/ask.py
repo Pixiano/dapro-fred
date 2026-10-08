@@ -1,9 +1,9 @@
 """Ask delivery: when a conversation winds down FRED asks the ask queue's one either/or question, spoken and (when a pill exists) in the pill's text box. (P6; the queue itself is the frozen memory/askqueue.py.)
 
 Sockets
-  in : AskDelivery(bus, mem, speak, show=None, now=time.time, idle_s=90, ttl_s=300, ask=None, answer=None)
+  in : AskDelivery(bus, mem, speak, show=None, now=time.time, idle_s=None, ttl_s=300, ask=None, answer=None)   idle_s defaults to config.ask_idle_s (10 s)
          speak(text): FRED says it; show(item, answer, done): the pill popup (PillController.ask); ask/answer default to askqueue.ask / askqueue.answer, injectable for tests
-       .start() / .stop(): a 5 s tick; .tick() does one check (tests call it)
+       .start() / .stop(): a 2 s tick; .tick() does one check (tests call it)
        .take(user_text) -> reply | None: engine/live.py offers every typed or spoken turn here first; a clear answer to the waiting question is recorded and acknowledged, anything else returns None and goes to the engine
   out: "the conversation is over" = at least one turn happened, FRED is not speaking, and idle_s have passed with no new turn. Then askqueue.ask(mem, topic, turns) runs ONCE for that conversation (its own rules decide
        whether anything is asked: turns, daily cap, snooze). A question waits ttl_s for an answer, then is dropped (it comes back on a later day per the queue's own limits).
@@ -19,16 +19,17 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import config
 from memory_bridge.link import memory_modules
 
 
 class AskDelivery:
-    def __init__(self, bus, mem, speak, show=None, now=time.time, idle_s=90.0, ttl_s=300.0, ask=None, answer=None):
+    def __init__(self, bus, mem, speak, show=None, now=time.time, idle_s=None, ttl_s=300.0, ask=None, answer=None):
         if ask is None:
             memory_modules()
             q = importlib.import_module("askqueue")
             ask, answer = q.ask, q.answer
-        self.mem, self.speak, self.show, self.now, self.idle_s, self.ttl_s, self._ask, self._answer = mem, speak, show, now, idle_s, ttl_s, ask, answer
+        self.mem, self.speak, self.show, self.now, self.idle_s, self.ttl_s, self._ask, self._answer = mem, speak, show, now, config.get().ask_idle_s if idle_s is None else idle_s, ttl_s, ask, answer
         self.turns, self.topic, self.last, self.pending, self.asked_at, self.talking = 0, [], now(), None, 0.0, False
         self._stop = threading.Event()
         bus.subscribe(self._turn, kinds=("turn",), sources=("engine",))
@@ -65,7 +66,7 @@ class AskDelivery:
         threading.Thread(target=self._loop, daemon=True).start()
 
     def _loop(self):
-        while not self._stop.wait(5.0):
+        while not self._stop.wait(2.0):
             try:
                 self.tick()
             except Exception:
@@ -82,10 +83,10 @@ def _selfcheck():
     script = [item, None]
     ask = lambda mem, topic, turns: asked.append((topic, turns)) or script.pop(0)
     answer = lambda mem, i, r: {"ok": True, "choice": "yes"} if r == "same" else {"error": "unclear"}
-    d = AskDelivery(bus, "mem", said.append, lambda it, a, done: shown.append((it, a, done)), now=lambda: clock[0], idle_s=90, ttl_s=300, ask=ask, answer=answer)
+    d = AskDelivery(bus, "mem", said.append, lambda it, a, done: shown.append((it, a, done)), now=lambda: clock[0], idle_s=10, ttl_s=300, ask=ask, answer=answer)
     d.tick(); assert not asked                                                      # no conversation yet
     bus.emit("engine", "turn", text="we talked about Rohan"); bus.emit("engine", "turn", text="and the trip")
-    clock[0] = 30; d.tick(); assert not asked                                       # still warm
+    clock[0] = 5; d.tick(); assert not asked                                        # still warm
     bus.emit("tts", "start"); clock[0] = 200; d.tick(); assert not asked            # FRED is speaking: wait
     bus.emit("tts", "end", cancelled=False); d.tick()
     assert asked == [("we talked about Rohan and the trip", 2)] and said == ["Is Rohan the same as Ro? Same person, or Two people?"] and shown[0][0] is item
