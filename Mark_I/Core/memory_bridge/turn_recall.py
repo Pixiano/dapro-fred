@@ -33,7 +33,7 @@ from memory_bridge.link import memory_modules
 MAX_EVENTS, MAX_CHARS = 5, 1400
 JUDGE_SCHEMA = {"title": "recall_judge", "type": "object", "additionalProperties": False, "required": ["relevant", "retry_queries", "ask"],
                 "properties": {"relevant": {"type": "array", "items": {"type": "integer"}}, "retry_queries": {"type": "array", "items": {"type": "string"}}, "ask": {"type": "string"}}}
-_PAST = re.compile(r"\b(?:remember(?! (?:that|to|this|it)\b(?! (?:time|day|night|week)))|recall|remind me what|last (?:time|week|month|year|night)|yesterday|earlier|previously|before|did (?:i|we)|what did (?:i|we|you)|"
+_PAST = re.compile(r"\b(?:remember(?! (?:that|to|this|it|all this|these|those)\b(?! (?:time|day|night|week)))|recall|remind me what|last (?:time|week|month|year|night)|yesterday|earlier|previously|before|did (?:i|we)|what did (?:i|we|you)|"
                    r"told you|i mentioned|we (?:said|discussed|talked)|talked about|have i (?:ever|told)|when (?:did|was)|who (?:is|was)|what do you know about(?! me\b| myself\b))\b", re.IGNORECASE)
 
 
@@ -136,7 +136,7 @@ def _selfcheck():
         assert r.ask and "Priya" in r.ask and rc._pending, r                                          # unsure name: asked first
         assert rc.context("yes").direct == "Got it, I'll remember that." and rc._pending is None
         assert not rc.wants_search("remember that I prefer dark mode") and not rc.wants_search("what do you know about me") and rc.wants_search("do you remember my dentist")       # saving and "show what you know" belong to the skills
-        assert rc.wants_search("remember that time we went hiking") and rc.wants_search("what do you know about Priya")
+        assert not rc.wants_search("can you remember all this") and rc.wants_search("remember that time we went hiking") and rc.wants_search("what do you know about Priya")
         assert rc.wants_search("what is Pri's favourite colour?") and rc.graph.find_in_text("Pri")[0]  # the alias now resolves
         mem.close()
     print("turn_recall ok")

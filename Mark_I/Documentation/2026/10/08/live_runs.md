@@ -22,3 +22,7 @@ Ported from the old FRED (`pill_app._start_tray`, `utils/hud_manager.py`) and re
 - Run 3 was ended from the tray (clean exit). Run 4 was killed by hand: with the TV on, background voices still became turns ("What are you doing?" x3 from a 1.4 s clip, "Thank you." and similar). Volume cannot separate them: real phrases and TV clips both peak 0.05 to 0.13.
 - Fix: the voice-ID gate switched on (`voice_id_enabled` True, `voice_threshold` 0.33), enrolled from 11 of Vatsal's own saved lavalier clips (the wake word and plain commands; the file stays in `FRED_Private`, never in the repo). Leave-one-out check on the saved clips: Vatsal 0.39 to 0.62, TV/room noise 0.15 to 0.28.
 - Caveat: the gate only judges clips of 1 s or more (`voice_min_s`); shorter ones pass as "unknown". Eleven clips is a small enrolment; more real speech will make it steadier.
+
+## Run 5 - 2026-10-08, ~23:04 (voice ID on, TV in the other room)
+- Voice gate worked in use: about 12 turns, all Vatsal's own speech, no TV turns. Misheard words still happen on short phrases ("Dear Fred.", "Alfred.", "Hey friend." for "Hey Fred").
+- Wrong route found: "Can you remember all this?" with a table on screen went to memory search ("I could not find that"). "remember" plus "all this" counted as asking about the past. Fix: "all this / these / those" no longer trigger a memory search (`turn_recall._PAST`), and `look_at_screen` got three examples ("can you remember all this", "what does this table say", "look at this table"). The new examples take effect at the next start.
