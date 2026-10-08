@@ -30,3 +30,7 @@ Ported from the old FRED (`pill_app._start_tray`, `utils/hud_manager.py`) and re
 - Usage data: the central store started, see `usage_data.md`.
 - Also from run 5: "Solve this - x*x + 4x + 4 = 0 for x" went to chat (the calculate skill does arithmetic and units, not equations), the model offered to solve it, and after "Yes" it wrote a tool call as plain text (`<function name="calculator">...`). That text was spoken as garbage and the HUD page swallowed it as an HTML tag, so the HUD showed no answer. The model never reached a tool (0 rounds). Fixed: a reply containing tool-call markup is replaced by "Sorry, I couldn't work that one out." and is never spoken, shown or remembered (`engine/loop.py`). Equation solving is a missing capability, logged under Phase 8.1.
 - Phase 8.1 now also lists plugging in DU_Automation as a tool (logged only, see `Core/PLAN.md`).
+
+## Soak run - started 2026-10-09 00:05 (silent, 5.5 h, voice gate on)
+Idle overnight run (no screen change, no audio) to check stability: process alive, RAM and GPU memory over time, `Data/` growth, the night jobs. Health sampler every 10 minutes (process count, RSS, GPU memory and load, size of `Data/`). The playground server had to be started first (it was down). Result to be added here in the morning.
+- Decision logged the same night: the playground becomes fully independent of FRED at the end of Phase 8 (see `Core/PLAN.md`).
