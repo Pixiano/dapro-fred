@@ -29,7 +29,7 @@ _SOCIAL = re.compile(
     r"^(?:how(?:'s| is| are|s)?\s+(?:you|it going|things|your day|everything)\b.*|what(?:'s| is)?\s*up\b.*"
     r"|(?:i'm |im )?(?:good|fine|great|ok|okay|alright)\b.*|(?:thanks?|thank you|cheers|ta|nice|cool|awesome|great|perfect|lovely|sweet)\b.*"
     r"|(?:bye|goodbye|good\s?night|see ya|see you|later)\b.*|(?:who|what)\s+(?:are|r)\s+you\b.*|what(?:'s| is)?\s+your\s+name\b.*"
-    r"|what\s+can\s+you\s+do\b.*|tell me about (?:yourself|you)\b.*|(?:are you|you) (?:there|awake|alive|online|ready|listening)\b.*"
+    r"|what\s+can\s+you\s+do\b.*|who\s+am\s+i\b.*|what(?:'s| is)\s+my\s+name\b.*|tell me about (?:yourself|you)\b.*|(?:are you|you) (?:there|awake|alive|online|ready|listening)\b.*"
     r"|(?:nothing|never ?mind|forget it|no)\b\.?$|(?:yes|yeah|yep|no|nope|sure|maybe)\b\.?$)$", re.IGNORECASE)
 _ECHO = re.compile(r"""^(?:just\s+|please\s+)*(?:say|repeat|reply\s+with|respond\s+with)\s+["'‘“].+["'’”](?:\s+and\s+(?:nothing|only|just)\b.*|\s+only)?[\s.!]*$""", re.IGNORECASE | re.VERBOSE)
 _INFO_QUESTION = re.compile(r"^(?:who|what|which|when|where|why|how)\b", re.IGNORECASE)

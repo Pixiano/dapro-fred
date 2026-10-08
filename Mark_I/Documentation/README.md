@@ -27,3 +27,4 @@ Mark I (aka v2) is the clean rebuild of FRED. The predecessor (v1.x, `Core/`) is
 | 2026-10-08 | [code review fixes](2026/10/08/code_review_fixes.md) | Six-agent review of P0 to P7: what was fixed, what waits for your decision |
 | 2026-10-08 | [production fixes](2026/10/08/production_fixes.md) | First live session: why the pill flashed, the noise loop, and the fixes |
 | 2026-10-08 | [live runs](2026/10/08/live_runs.md) | Log of each live run: setup, what the logs showed, what changed |
+| 2026-10-08 | [usage data](2026/10/08/usage_data.md) | The central usage store: what is saved, where, by component and day |

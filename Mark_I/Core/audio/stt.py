@@ -8,9 +8,8 @@ Sockets
          audio = int16 or float32 mono at the Core rate; model = anything with transcribe(float32, **kw) -> (segments, info), default faster-whisper
        Capture(mic).begin(preroll_s=0.5) / snapshot() / end() -> int16 audio     collects from the Mic (plus pre-roll from its ring), capped at max_utterance_s
   out: Transcript(text, language, audio_s, ms, silent); bus event stt.transcript {text, final, audio_s, ms}  (a text event only, never the audio)
-       data collection (`stt_save_audio`, Vatsal 2026-10-06): every FINAL, non-silent utterance is also saved as <FRED_DATA>/voice_data/YYYY-MM-DD/HHMMSS_mmm.wav (16 kHz mono int16, the exact
-       audio Whisper heard) with one line in voice_data/index.jsonl {ts, file, text, audio_s, ms, peak}: real live-mic speech with its transcript, for voice ID enrolment / tuning,
-       wake-word and STT evaluation. Lives outside the repo (personal data); a failed save is logged and never breaks the turn. Tests turn it off or use a temp data dir.
+       data collection (`stt_save_audio`, Vatsal 2026-10-06): every FINAL, non-silent utterance is also saved through usage.save_clip as a wav (the exact audio Whisper heard) plus a
+       {kind: clip, text, ms, audio_s, peak} line under <usage root>/stt/YYYY/MM/DD (see usage.py). Real live-mic speech with its transcript, for voice ID, wake-word and STT tuning. Git-ignored; tests use a temp dir.
 Rules: the model runs ONLY through gpu.run (one in-process GPU user at a time) and on settings.whisper_device, default CUDA, never a silent CPU fallback (standing GPU-only rule; CPU only by explicit setting, e.g. for a test); a load/CUDA failure raises
        SttError and emits stt.error. A buffer whose peak stays under stt_min_peak is silence: empty Transcript, no GPU pass (the old "listening for seconds on nothing").
        unload() frees the VRAM (L5 windows). Vocabulary bias: settings.whisper_prompt, or `prompt=` per call.
@@ -31,6 +30,7 @@ if __name__ == "__main__":
 
 import config
 import events as ev
+import usage
 import gpu
 
 
@@ -97,23 +97,7 @@ class Stt:
         return t
 
     def _save(self, x: np.ndarray, t: Transcript):
-        try:
-            now = datetime.now()
-            d = config.data_dir() / "voice_data"
-            day = d / now.strftime("%Y-%m-%d")
-            day.mkdir(parents=True, exist_ok=True)
-            f = day / (now.strftime("%H%M%S_") + f"{now.microsecond // 1000:03d}.wav")
-            with wave.open(str(f), "wb") as w:
-                w.setnchannels(1)
-                w.setsampwidth(2)
-                w.setframerate(config.get().sample_rate)
-                w.writeframes((np.clip(x, -1.0, 1.0) * 32767).astype(np.int16).tobytes())
-            with open(d / "index.jsonl", "a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"ts": now.isoformat(timespec="milliseconds"), "file": f.relative_to(d).as_posix(), "text": t.text, "audio_s": round(t.audio_s, 2),
-                                     "ms": t.ms, "peak": round(float(np.max(np.abs(x))), 3)}) + "\n")
-        except Exception as ex:
-            self.bus.emit("stt", "save_error", error=repr(ex))
-
+        usage.save_clip("stt", x, text=t.text, ms=t.ms)                              # the central usage store (usage.py): never raises
 
 def is_ghost(text: str, peak: float, c) -> bool:
     return text.strip().lower() in c.stt_ghosts and peak < c.stt_ghost_peak
@@ -191,14 +175,15 @@ def _selfcheck():
     assert s.transcribe(np.zeros(0, dtype=np.int16)).silent
     assert [(e.kind, e.data["final"]) for e in seen] == [("transcript", False), ("transcript", True), ("transcript", True), ("transcript", True)]
     assert "audio" not in seen[0].data                                            # events carry text only
-    idx = [json.loads(l) for l in (Path(tmp.name) / "voice_data" / "index.jsonl").read_text(encoding="utf-8").splitlines()]
+    day = Path(tmp.name) / "usage" / "stt" / f"{datetime.now():%Y}" / f"{datetime.now():%m}"
+    idx = [json.loads(l) for l in (day / f"{datetime.now():%d}.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(idx) == 1 and idx[0]["text"] == "hello there again" and idx[0]["audio_s"] == 1.0          # the final, non-silent utterances were saved; the partial (final=False) and silence were not
-    with wave.open(str(Path(tmp.name) / "voice_data" / idx[0]["file"]), "rb") as w:
+    with wave.open(str(day / f"{datetime.now():%d}" / idx[0]["file"]), "rb") as w:
         assert w.getframerate() == 16000 and w.getnchannels() == 1 and w.getnframes() == 16000
         assert abs(np.frombuffer(w.readframes(16000), dtype=np.int16).astype(int) - loud.astype(int)).max() <= 1
     config.get().stt_save_audio = False
     s.transcribe(loud)
-    assert len(list((Path(tmp.name) / "voice_data").rglob("*.wav"))) == 1         # switched off: nothing more saved
+    assert len(list((day / f"{datetime.now():%d}").rglob("*.wav"))) == 1         # switched off: nothing more saved
     config.get().stt_save_audio = True
     f32 = s.transcribe(loud.astype(np.float32) / 32768.0)
     assert f32.text and abs(fm.calls[-1][0] - 16000) == 0

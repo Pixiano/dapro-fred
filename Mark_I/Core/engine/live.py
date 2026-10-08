@@ -32,6 +32,7 @@ from audio.wakeword import WakeDetector
 from clock.smart_turn import SmartTurn
 from clock.turn_controller import TurnController
 from clock.voice_id import VoiceId
+import usage
 from engine import prompt
 from engine.cli import trace
 from engine.loop import Engine
@@ -137,7 +138,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             speaker and speaker.speak(sirify(note))
             return note
         fev = threading.Event()                                                    # the filler's own cancel: set the moment the reply is ready, so it never delays or follows the answer
-        slow = speaker and threading.Timer(c.filler_after_s, lambda: speaker.speak(pick_filler(), cancel=fev, quiet=True))
+        slow = speaker and threading.Timer(c.filler_after_s, lambda: speaker.speak(sirify(pick_filler()), cancel=fev, quiet=True))
         slow and slow.start()
         r = engine.run(text, source=source)
         slow and slow.cancel()
@@ -168,7 +169,8 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
 
     rt.handle_text = lambda text: handle(text, source="typed")                  # returns the reply text (the HUD console shows it)
 
-    rt.controller = TurnController(bus, Capture(mic), smart, voice, mic=mic, vad=vad, on_turn=on_turn)
+    rt.controller = TurnController(bus, Capture(mic), smart, voice, mic=mic, vad=vad, on_turn=on_turn,
+                                   on_ignored=lambda a, r: usage.save_clip("clock", a, kind="ignored", reason=r))
     return rt
 
 
@@ -188,8 +190,11 @@ def main(argv):
             pg.load(model, slot=slot)
             loaded.append(slot)
     stop, restart = threading.Event(), []
+    usage.use_repo_data()                                                       # live runs keep their usage data in Project_FRED/Data
     bus = ev.EventBus()
     mic = Mic(bus)
+    usage_log = usage.UsageLog(bus, mic)
+    usage_log.start()
     speaker = None if "--silent" in argv else Speaker(bus)
     speaker and speaker.warm()
     rt = build(bus, mic, memory="--memory" in argv, brain=brain, speaker=speaker, playground=pg, presence="--no-presence" not in argv)

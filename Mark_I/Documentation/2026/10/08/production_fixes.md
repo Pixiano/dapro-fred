@@ -39,3 +39,9 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 9 | Replies became "(interrupted)": a cut-off reply left that placeholder in the history and the 4B model copied it | A turn that was not heard at all is dropped from the history; a partly heard one keeps the words that were heard | none |
 | 10 | TV noise became "Thank you." turns | Whisper ghost phrases are dropped when the utterance was quieter than a real one | `stt_ghosts`, `stt_ghost_peak` 0.1 |
 | 11 | No tray icon or HUD in Mark I | Ported from the old build, rebranded (`ui/tray.py`, `ui/hud_launcher.py`) | `--no-hud` turns both off |
+| 12 | Voice ID gate off, TV voices became turns | On, enrolled from real lavalier clips, threshold 0.33 | `voice_id_enabled`, `voice_threshold` |
+| 13 | "remember all this" went to memory search | Not a memory search; examples added to look_at_screen | none |
+| 14 | A foreign or too-short voice cut FRED off mid-sentence | Barge-in needs a passed voice check | none |
+| 15 | "sir" missed in 15% of lines | Every line, fillers included; MUST in the prompt of every model | `sir_rate` 1.0 |
+| 16 | "Who am I?" answered by the screen tool | Treated as small talk | none |
+| 17 | No real-world data saved | Central usage store, by component / year / month / day | `usage_clip_cap`, `usage_wake_clip_s` |

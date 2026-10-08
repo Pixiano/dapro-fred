@@ -9,7 +9,7 @@ Sockets
          vad (optional, audio.vad.Vad): its last_voice_ts lets barge-in measure real voiced time instead of time since onset (which includes the VAD hangover, so a 250 ms
          "mm-hm" would otherwise look like 450 ms of speech)
          smart_turn.prob(audio) -> float, voice.is_me(audio) -> bool | None (None = unknown, counts as a pass), headphones() -> bool via attribute `headphones`
-  out: clock.state {state, reason, ...}; on_turn(audio, info) callback for END_OF_TURN (the thinker, or the echo stand-in); stats()
+  out: clock.state {state, reason, ...}; on_ignored(audio, reason) for each ignored utterance; on_turn(audio, info) callback for END_OF_TURN (the thinker, or the echo stand-in); stats()
 Rules (all thresholds are settings):
   END_OF_TURN  VAD silence >= `eot_silence_ms` (200) AND Smart Turn >= `turn_prob_threshold` (0.5), OR silence >= `eot_hard_cap_s` (0.9; the self-check overrides it to 1.2), OR the hotkey chord released
                (while the chord is held only release ends the turn), OR the utterance hit `max_utterance_s`. A turn that nobody addressed (no hotkey, no wake word in the
@@ -38,8 +38,9 @@ LISTEN, END_OF_TURN, BARGE_IN, BACKCHANNEL, IGNORE, ADDRESSED = "LISTEN", "END_O
 
 
 class TurnController:
-    def __init__(self, bus: ev.EventBus, capture, smart_turn=None, voice=None, mic=None, on_turn=None, headphones: bool = True, vad=None):
+    def __init__(self, bus: ev.EventBus, capture, smart_turn=None, voice=None, mic=None, on_turn=None, headphones: bool = True, vad=None, on_ignored=None):
         self.bus, self.capture, self.smart, self.voice, self.on_turn, self.headphones, self._vad_src = bus, capture, smart_turn, voice, on_turn, headphones, vad
+        self.on_ignored = on_ignored                                  # (audio, reason) for every utterance the clock ignores: usage data
         self._lock = threading.RLock()
         self._now = 0.0
         self._last_tick = -1e9
@@ -153,8 +154,8 @@ class TurnController:
         c = config.get()
         if not (self.headphones or self.level >= c.barge_level):
             return
-        if self.voice is not None and self.voice.is_me(self.capture.snapshot()) is False:
-            return
+        if self.voice is not None and c.voice_id_enabled and self.voice.is_me(self.capture.snapshot()) is not True:
+            return                                                  # not Vatsal, or too short to tell yet: FRED keeps talking (asked again every tick)
         self.barged = True
         self.counts["barge_in"] += 1
         self._emit(BARGE_IN, speech_ms=int((now - self.t_start) * 1000))
@@ -172,16 +173,18 @@ class TurnController:
         self.active = self.speaking = False
         self.hotkey_turn = False
         if not addressed:
-            return self._ignored("not_addressed")
+            return self._ignored("not_addressed", audio)
         if self.voice is not None and not hk and self.voice.is_me(audio) is False:
-            return self._ignored("not_vatsal")
+            return self._ignored("not_vatsal", audio)
         self.counts["turns"] += 1
         self._emit(END_OF_TURN, **info)
         if self.on_turn:
             self.on_turn(audio, info)
 
-    def _ignored(self, reason: str):
+    def _ignored(self, reason: str, audio=None):
         self.counts["ignored"] += 1
+        if self.on_ignored and audio is not None:
+            self.on_ignored(audio, reason)
         self._emit(IGNORE, reason=reason)
 
     def _finish_silently(self, state: str, reason: str, count: str):
@@ -329,6 +332,18 @@ def _selfcheck():
     assert BARGE_IN in [s for s, _ in states]
     t.active = t.speaking = False
     bus.emit("tts", "end")
+    # 9b. voice ID on: an unknown or foreign voice never cuts FRED off; Vatsal's does
+    config.get().voice_id_enabled, t.headphones, keep = True, True, vo.me
+    for who, cuts, t0 in ((None, False, 620.0), (False, False, 630.0), (True, True, 640.0)):
+        vo.me = who
+        states.clear()
+        bus.emit("tts", "start")
+        t.vad(True, t0)
+        t.tick(t0 + 0.7)
+        assert (BARGE_IN in [s for s, _ in states]) == cuts, (who, states)
+        t.active = t.speaking = False
+        bus.emit("tts", "end")
+    vo.me = keep
     # 10. follow-up window: speech within 8 s after FRED spoke needs no wake word
     states.clear(); turns.clear()
     t._now = 700.0

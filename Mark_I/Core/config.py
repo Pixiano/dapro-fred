@@ -84,6 +84,8 @@ class Settings:
     voice_threshold: float = 0.33                     # cosine similarity at or above = Vatsal. 0.33 sits between the noise (max 0.28) and the quietest real clip (0.39), first guess, tune from the logs
     voice_min_s: float = 1.0                          # shorter clips are too short to judge (score None); 1 s clips scored median 0.50, 2 s 0.62, 0.6 s 0.40 (tests/voice_eval.py)
     voice_refs_cap: int = 20                          # enrolled voice references kept (most diverse)
+    usage_clip_cap: int = 400                         # audio clips kept per component and day (usage.py); events are always kept
+    usage_wake_clip_s: float = 2.0                    # the mic audio saved around every wake word and near-miss
     stt_save_audio: bool = True                       # save each final utterance + transcript to <FRED_DATA>/voice_data (real-voice data collection)
     clock_tick_s: float = 0.16                        # interaction clock tick
     eot_silence_ms: int = 200                         # VAD silence before Smart Turn is consulted
@@ -96,7 +98,7 @@ class Settings:
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
-    sir_rate: float = 0.85                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); the 2-3 word fillers stay bare. 0.85 is Vatsal's target (switched on in P8, 2026-10-08); 0 turns it off
+    sir_rate: float = 1.0                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); fillers too. 1.0 = every line (Vatsal, 2026-10-08, was 0.85); 0 turns it off
     tts_enabled: bool = True                          # False = nothing is spoken (text only)
     kokoro_model: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
     kokoro_voices: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")

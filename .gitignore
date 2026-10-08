@@ -20,3 +20,6 @@ Mark_I/**/blobs/
 
 # Downloaded model weights (regenerate with the recipe in Core/README)
 Mark_I/Initial/Core/weights/
+
+# Real usage data (voice clips, transcripts, event logs) from live runs: personal, never in the repo
+Data/

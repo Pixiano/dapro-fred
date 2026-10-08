@@ -75,7 +75,7 @@ class _Turn:
         self.rounds = 0
 
 
-SIR_LINE = "\n\nAddress the user as 'sir' in most of your replies, naturally, usually at the end."
+SIR_LINE = "\n\nYou MUST address the user as 'sir' in EVERY reply, with no exception: end each reply with ', sir' (for example: 'It is three o'clock, sir.')."
 
 
 def _canon(name: str, args: dict) -> str:
@@ -204,7 +204,7 @@ class Engine:
     def _complete_(self, msgs, tools, force=False, brain=False):
         m = self.lock_chat if self.locked and self.lock_chat else self.talk if self.talk and not tools and not brain else self.chat
         msgs = list(msgs)
-        if m is not self.chat and config.get().sir_rate and msgs and msgs[0].get("role") == "system":       # the small talker is told to say it too (engine/sir.py adds the rest at the output edge)
+        if (m is not self.chat or config.get().sir_rate >= 1.0) and config.get().sir_rate and msgs and msgs[0].get("role") == "system":       # the small talker is told to say it too (engine/sir.py adds the rest at the output edge)
             msgs[0] = dict(msgs[0], content=msgs[0]["content"] + SIR_LINE)
         return m.complete(msgs, tools=tools or None, think=config.get().engine_think, **({"tool_choice": "required"} if force and tools else {}), **({"max_tokens": config.get().talk_max_tokens} if m is self.talk else {}))      # a copy: the loop edits msgs afterwards
 
