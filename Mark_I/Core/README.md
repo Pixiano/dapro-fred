@@ -59,7 +59,7 @@ Gates by hand: `python tests/offline_clock.py`, `python tests/live_clock.py`, `p
 ## Environment
 Two Python 3.11 venvs, both gitignored: `Core/.venv` (everything Core needs, includes the memory dependencies since Core runs memory in-process) and `memory/.venv` (the memory pipeline alone). Brain: Qwen only for now (`brain` default `unsloth/qwen3.5-4b`).
 ```
-# Core (from Mark_I/Initial/Core)
+# Core (from Mark_I/Core)
 py -3.11 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements-torch.txt     # CUDA 12.8 torch, own index
 .venv\Scripts\python -m pip install -r requirements.txt

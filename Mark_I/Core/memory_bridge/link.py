@@ -1,4 +1,4 @@
-"""Opens the memory pipeline (Mark_I/Initial/memory, frozen) inside the Core process.
+"""Opens the memory pipeline (Mark_I/Initial/memory, frozen; Core itself lives in Mark_I/Core since the P8 cut-over) inside the Core process.
 
 Sockets
   in : open_memory(root=None) -> manager.Memory      root defaults to <data_dir>/memory (personal data, outside the repo)
@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
 import config
 
-MEMORY_DIR = Path(__file__).resolve().parents[2] / "memory"
+MEMORY_DIR = Path(__file__).resolve().parents[2] / "Initial" / "memory"
 
 
 def memory_modules() -> dict:

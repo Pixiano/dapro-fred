@@ -75,7 +75,7 @@ Mark I is the rebuilt FRED: a voice assistant that runs on your PC with local mo
 
 ## What is left
 - **Shadow review:** 2 to 3 days of real use so the judge's log can be reviewed and it can be retrained on real events.
-- **P8:** an 8-hour soak with flat VRAM, tuning, then moving `Initial/Core` to `Mark_I/Core`. Tuning covers the judge threshold, the talker size (1B or 2B), the thinking cap, switching "sir" on at 85% and adding it to the talker's prompt.
+- **P8:** an 8-hour soak with flat VRAM, tuning, then moving `Core` to `Mark_I/Core`. Tuning covers the judge threshold, the talker size (1B or 2B), the thinking cap, switching "sir" on at 85% and adding it to the talker's prompt.
 - **Polish:** headphone auto-switch, a full self-documentation system.
 - **Later:** a spoken digest of what happened while you were away, spoken wording for judge lines, a keyboard shortcut for the type box, spoken progress narration of long tool runs, a contacts source for email, agenda capture, scheduling the yearly festival-date recompute (needs a date source).
 

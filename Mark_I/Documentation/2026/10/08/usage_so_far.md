@@ -1,6 +1,6 @@
 # What Mark I can do so far, and how you would use it (2026-10-08)
 
-Status in one line: about 80% built (P0 to P7 built; P8 soak, tuning and cut-over remain). Nothing has run on the real microphone and screen since P4/P5, because FRED stays down until the revamp is finished, so everything below was proven with fakes, recorded audio, invented data and live tests on the models, not by living with it. Progress reports: `Mark_I/Initial/Core/Progress/` (20, 35, 40, 70 percent, and the 80 percent one).
+Status in one line: about 80% built (P0 to P7 built; P8 soak, tuning and cut-over remain). Nothing has run on the real microphone and screen since P4/P5, because FRED stays down until the revamp is finished, so everything below was proven with fakes, recorded audio, invented data and live tests on the models, not by living with it. Progress reports: `Mark_I/Core/Progress/` (20, 35, 40, 70 percent, and the 80 percent one).
 
 ## Starting it
 - Start the playground (`Mark_I/Initial/playground/server.py`), then `python engine/live.py [seconds] [--memory] [--silent] [--no-pill] [--no-hud] [--no-screen]`.

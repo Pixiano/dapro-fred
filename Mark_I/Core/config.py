@@ -43,7 +43,7 @@ class Settings:
     sample_rate: int = 16000
     mic_device: str = ""                              # input device name substring; "" = system default
     mic_ring_s: float = 6.0                           # raw audio kept for pre-roll / pre-trigger
-    wakeword_model: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "wakeword" / "hey_fred.onnx")   # FROZEN model, read in place, never copied or swapped
+    wakeword_model: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "wakeword" / "hey_fred.onnx")   # FROZEN model, read in place, never copied or swapped
     wakeword_threshold: float = 0.35
     wake_cooldown_s: float = 2.0                      # refuse a second fire this soon after one
     wake_near_miss: float = 0.10                      # scores at/above this but under threshold are logged as audio.wake_near
@@ -91,8 +91,8 @@ class Settings:
     max_calls_per_round: int = 4                      # tool calls executed from one model message
     sir_rate: float = 0.85                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); the 2-3 word fillers stay bare. 0.85 is Vatsal's target (switched on in P8, 2026-10-08); 0 turns it off
     tts_enabled: bool = True                          # False = nothing is spoken (text only)
-    kokoro_model: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
-    kokoro_voices: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")
+    kokoro_model: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
+    kokoro_voices: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")
     tts_voice: str = "am_michael"                     # the voice Vatsal picked in the old build
     tts_speed: float = 1.0                            # 1x only (Vatsal, 2026-10-07; the old build used 1.2)
     tts_preroll_s: float = 1.5                        # silence written first: a Bluetooth link ramps its volume at the start (measured on Vatsal's headphones); 0 on a wired output

@@ -14,7 +14,7 @@ import config
 from tools.registry import ToolError
 
 CORE = Path(config.CORE_DIR)                                                        # not __file__: the self-check copies this skill to a temp folder
-ROOT = CORE.parents[1]
+ROOT = CORE.parent
 PAGE_CHARS = 2500
 MAX_LIST = 12
 
