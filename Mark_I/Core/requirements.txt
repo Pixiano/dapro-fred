@@ -42,3 +42,4 @@ screen_brightness_control
 ddgs
 google-auth
 scikit-learn==1.9.1
+pystray==0.19.5

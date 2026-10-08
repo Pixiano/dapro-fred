@@ -88,6 +88,8 @@ class Stt:
                 keep = [s for s in segs if not (getattr(s, "no_speech_prob", 0.0) > c.stt_no_speech_prob and getattr(s, "avg_logprob", 0.0) < c.stt_min_logprob)]
                 return " ".join(s.text.strip() for s in keep).strip(), getattr(info, "language", c.whisper_language)
             text, lang = gpu.run("stt", priority, work, timeout=max(30.0, dur * 2 + 20))
+            if is_ghost(text, float(np.max(np.abs(x))), c):
+                text = ""
             t = Transcript(text, lang, dur, int((time.monotonic() - t0) * 1000))
         self.bus.emit("stt", "transcript", text=t.text, final=final, audio_s=round(dur, 2), ms=t.ms)
         if final and not t.silent and c.stt_save_audio:
@@ -111,6 +113,10 @@ class Stt:
                                      "ms": t.ms, "peak": round(float(np.max(np.abs(x))), 3)}) + "\n")
         except Exception as ex:
             self.bus.emit("stt", "save_error", error=repr(ex))
+
+
+def is_ghost(text: str, peak: float, c) -> bool:
+    return text.strip().lower() in c.stt_ghosts and peak < c.stt_ghost_peak
 
 
 class Capture:
@@ -178,6 +184,8 @@ def _selfcheck():
     assert fm.calls[0][1]["language"] == "en" and fm.calls[0][1]["initial_prompt"] == config.get().whisper_prompt and fm.calls[0][1]["condition_on_previous_text"] is False
     assert s.transcribe(loud, prompt="Fred.").text and fm.calls[1][1]["initial_prompt"] == "Fred."
     n = len(fm.calls)
+    c0 = config.get()
+    assert is_ghost("Thank you.", 0.05, c0) and not is_ghost("Thank you.", 0.3, c0) and not is_ghost("Open the file.", 0.05, c0)      # TV noise out, a real thank-you in
     q = s.transcribe(np.zeros(16000, dtype=np.int16))
     assert q.silent and q.text == "" and len(fm.calls) == n                      # silence never reaches Whisper
     assert s.transcribe(np.zeros(0, dtype=np.int16)).silent

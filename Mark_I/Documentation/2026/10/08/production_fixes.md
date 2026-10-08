@@ -31,3 +31,11 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 - `headphones` is never set, so the barge-in cannot tell FRED's own echo from you. A voice-ID match would fix it but voice ID is off.
 - System audio input (loopback) is not built; waiting on your answers to the design questions.
 - Everything above needs a live check: the same hour of use, with the event log read again.
+
+## Added after run 2 (see `live_runs.md`)
+
+| # | Problem | Fix | Setting |
+|---|---------|-----|---------|
+| 9 | Replies became "(interrupted)": a cut-off reply left that placeholder in the history and the 4B model copied it | A turn that was not heard at all is dropped from the history; a partly heard one keeps the words that were heard | none |
+| 10 | TV noise became "Thank you." turns | Whisper ghost phrases are dropped when the utterance was quieter than a real one | `stt_ghosts`, `stt_ghost_peak` 0.1 |
+| 11 | No tray icon or HUD in Mark I | Ported from the old build, rebranded (`ui/tray.py`, `ui/hud_launcher.py`) | `--no-hud` turns both off |

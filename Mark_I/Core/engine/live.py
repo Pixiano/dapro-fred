@@ -1,6 +1,6 @@
 """The voice loop: microphone -> wake/VAD -> turn clock -> Whisper -> engine -> reply printed and spoken (Kokoro, audio/tts.py).
 
-  python engine/live.py [seconds=120] [--memory] [--brain MODEL] [--silent] [--no-pill] [--no-hud] [--no-screen] [--no-presence]
+  python engine/live.py [seconds=120] [--memory] [--brain MODEL] [--silent] [--no-pill] [--no-hud (also no tray)] [--no-screen] [--no-presence]
 Say "Hey FRED, <request>" or hold Left Ctrl + Left Alt and talk. Each turn prints what was heard, FRED's reply and the trace line (route, tools, timings).
 Sockets
   in : build(bus, mic, memory=False, brain=None) -> Runtime     wires Mic/Vad/Wake/Capture/Stt/SmartTurn/VoiceId/TurnController to an Engine
@@ -153,7 +153,10 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             said = speaker.speak(shown)
             h = engine.history
             if " ".join(said.split()) != " ".join(shown.split()) and h and h[-1] == {"role": "assistant", "content": r.text}:
-                h[-1] = {"role": "assistant", "content": said or "(interrupted)"}               # follow-ups must not rely on words the user never heard
+                if said:
+                    h[-1] = {"role": "assistant", "content": said}                # follow-ups must not rely on words the user never heard
+                else:
+                    del h[-2:]                                                  # nothing heard: forget the turn (a placeholder reply was copied by the 4B model, 2026-10-08)
         return r.text
 
     def on_turn(audio, info):
@@ -184,6 +187,7 @@ def main(argv):
             print(f"loading {model} ...")
             pg.load(model, slot=slot)
             loaded.append(slot)
+    stop, restart = threading.Event(), []
     bus = ev.EventBus()
     mic = Mic(bus)
     speaker = None if "--silent" in argv else Speaker(bus)
@@ -203,6 +207,13 @@ def main(argv):
         feed = HudFeed(bus, speaker, on_command=rt.handle_text)
         feed.start()
         rt._closers.append(feed.stop)
+        from ui.hud_launcher import HudLauncher
+        from ui.tray import Tray
+        hud = HudLauncher()
+        hud.start_server()
+        tray = Tray(hud.show, lambda: (restart.append(1), stop.set()), stop.set)           # left click = open the HUD
+        tray.start()
+        rt._closers += [tray.stop, hud.stop]
     from proactive.judge import Judge
     judge = Judge(bus, ev.EventLog(bus), Embedder().embed)                      # shadow mode: logs what it would do, speaks nothing (P6)
     judge.start()
@@ -237,7 +248,7 @@ def main(argv):
     rt._closers.append(rt.scheduler.stop)
     print(f"listening for {secs:.0f} s: say 'Hey FRED, ...' or hold Left Ctrl + Left Alt. Ctrl+C to stop.")
     try:
-        time.sleep(secs)
+        stop.wait(secs)
     except KeyboardInterrupt:
         pass
     hk.stop()
@@ -246,6 +257,7 @@ def main(argv):
     rt.close()
     for s in loaded:
         pg.unload(s)
+    restart and __import__("subprocess").Popen([sys.executable, *sys.argv])         # tray: Restart
     return 0
 
 

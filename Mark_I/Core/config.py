@@ -61,6 +61,8 @@ class Settings:
     whisper_device: str = "cuda"                      # GPU-only rule: change only for an explicit CPU test (FRED_WHISPER_DEVICE=cpu FRED_WHISPER_COMPUTE=int8)
     whisper_compute: str = "float16"
     whisper_prompt: str = "Fred."                       # a longer list of commands came back as the transcript of room noise (2026-10-08 live session)
+    stt_ghosts: tuple = ("thank you.", "thanks for watching.", "i'll see you next time.", "bye.", "you")   # what Whisper writes for faint TV/room noise
+    stt_ghost_peak: float = 0.1                       # ... dropped only when the utterance was this quiet (a real thank-you at the mic is louder)
     stt_no_speech_prob: float = 0.6                   # a Whisper segment this likely to be non-speech AND with low confidence is dropped
     stt_min_logprob: float = -1.0
     stt_min_peak: float = 0.02                        # a buffer whose peak stays under this is silence: no Whisper pass
