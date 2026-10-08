@@ -45,3 +45,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 15 | "sir" missed in 15% of lines | Every line, fillers included; MUST in the prompt of every model | `sir_rate` 1.0 |
 | 16 | "Who am I?" answered by the screen tool | Treated as small talk | none |
 | 17 | No real-world data saved | Central usage store, by component / year / month / day | `usage_clip_cap`, `usage_wake_clip_s` |
+| 18 | A tool call written as text was spoken, and the HUD showed nothing | Such replies become a plain apology, never spoken, shown or remembered | none |

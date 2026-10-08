@@ -75,6 +75,7 @@ class _Turn:
         self.rounds = 0
 
 
+_MARKUP = re.compile(r"<\s*/?\s*(?:function|tool_call|tool|param)\b", re.I)            # a model that writes a tool call as text instead of making it (the HUD page swallowed it as an HTML tag)
 SIR_LINE = "\n\nYou MUST address the user as 'sir' in EVERY reply, with no exception: end each reply with ', sir' (for example: 'It is three o'clock, sir.')."
 
 
@@ -125,6 +126,8 @@ class Engine:
             except Exception as ex:                                                    # the model server down, a bug: the user hears a clean line, the log has the rest
                 log.session("engine_error", error=repr(ex), asked=text[:200])
                 r = Reply("I hit a problem and couldn't finish that.", via="fault")
+            if _MARKUP.search(r.text):
+                r.text, r.via = "Sorry, I couldn't work that one out.", "fault"                   # never spoken, shown or remembered as the model's words
             r.ms = int((time.monotonic() - t0) * 1000)
             private, self._private = self._private, False
             self._since_time = 0 if any(c["name"] == "time" for c in r.calls) else self._since_time + 1
@@ -414,6 +417,8 @@ def _selfcheck():
     e = Engine(FakeChat(["Hello there."]), reg, system="you are fred")
     r = e.run("tell me a joke")
     assert r.text == "Hello there." and r.via == "chat" and r.calls == [] and len(e.history) == 2
+    r = Engine(FakeChat(['Let me do that. <function name="calculator"><param name="expression">1+1</param></function>']), reg).run("tell me a joke")
+    assert "<" not in r.text and r.via == "fault", (r.text, r.via)
     e = Engine(FakeChat([tool_call("get_time")]), reg)
     r = e.run("what time is it")
     assert r.text == "It is 10:00." and r.via == "say" and [c["name"] for c in r.calls] == ["get_time"], r
