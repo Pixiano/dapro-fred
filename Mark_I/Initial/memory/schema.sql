@@ -1,5 +1,5 @@
 -- Mark I memory, Phase 1 foundation (spec: FRED_Memory_Overhaul.md sections 21, 40).
--- Times are ISO-8601 UTC text. valid_to NULL = still true.
+-- Times are ISO-8601 text in India time (+05:30). valid_to NULL = still true.
 CREATE TABLE IF NOT EXISTS sources (          -- provenance: where anything came from
   id INTEGER PRIMARY KEY, kind TEXT NOT NULL, ref TEXT, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS entities (

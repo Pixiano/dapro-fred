@@ -1,7 +1,7 @@
 """Mark I memory, Layer 1: raw archive. Append-only, complete, never edited.
 
 Everything FRED produces is written as one JSON line to <root>/YYYY/MM/DD/<stream>.jsonl
-(UTC day). Streams are free-form names; suggested: conversation, tool_call, session_state, speech,
+(India day). Streams are free-form names; suggested: conversation, tool_call, session_state, speech,
 perception, system, error, generated, import. Files and artifacts go in as content-addressed blobs.
 
 Sockets:
@@ -13,9 +13,10 @@ Sockets:
 """
 import hashlib, json, logging, re, shutil, uuid
 from datetime import datetime, timezone
+from store import IST
 from pathlib import Path
 
-from store import run_hooks, to_utc
+from store import run_hooks, to_local
 
 _SCHEMA = Path(__file__).with_name("schema_archive.sql")
 _STREAM = re.compile(r"^[a-z0-9_]{1,40}$")  # becomes a filename: no separators, no traversal
@@ -35,7 +36,7 @@ def parse_lines(text):
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
 class Archive:
@@ -46,14 +47,14 @@ class Archive:
         store.db.executescript(_SCHEMA.read_text(encoding="utf-8"))
 
     def new_session(self) -> str:
-        sid = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:6]
+        sid = datetime.now(IST).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:6]
         self.write("session_state", {"event": "start"}, session=sid)
         return sid
 
     def write(self, stream, data, session=None, ts=None, source_id=None, kind="live") -> dict:
         if not _STREAM.match(stream):
             raise ValueError(f"bad stream name {stream!r}: use a-z, 0-9, _")
-        ts = to_utc(ts) if ts else _now()   # the folder comes from the parsed UTC date, never from raw text
+        ts = to_local(ts) if ts else _now()   # the folder comes from the parsed India-time date, never from raw text
         rec = {"ts": ts, "stream": stream, "session": session, "kind": kind, "source_id": source_id, "data": data}
         day = ts[:10]
         path = self.root / day[:4] / day[5:7] / day[8:10] / f"{stream}.jsonl"
@@ -159,6 +160,8 @@ if __name__ == "__main__":  # self-check: python archive.py
                 a2.write("conversation", {}, ts=ts); raise SystemExit(f"accepted ts {ts!r}")
             except ValueError:
                 pass
-        a2.write("conversation", {"text": "ist"}, ts="2026-05-02T01:00:00+05:30")             # local time: filed under its UTC day
-        assert a2.read("conversation", "2026-05-01")[-1]["data"]["text"] == "ist"
+        a2.write("conversation", {"text": "ist"}, ts="2026-05-02T01:00:00+05:30")             # filed under its India day
+        a2.write("conversation", {"text": "utc"}, ts="2026-05-02T20:00:00+00:00")        # 01:30 on the 3rd in India
+        assert a2.read("conversation", "2026-05-03")[-1]["data"]["text"] == "utc"
+        assert a2.read("conversation", "2026-05-02")[-1]["data"]["text"] == "ist"
     print("archive ok")

@@ -16,6 +16,7 @@ into the personal model (source "analysis"); the user can correct or remove any 
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
+from store import IST
 from pathlib import Path
 
 from period import Month, Year, _record, _done, _now
@@ -219,7 +220,7 @@ def quarter_end(today):
 
 def run_selfanalysis_pending(mem, llm, index, model="unset", today=None, pm=None):
     """The quarterly report for the latest completed quarter, if not done yet."""
-    t = today or datetime.now(timezone.utc).date()
+    t = today or datetime.now(IST).date()
     return run_selfanalysis(mem, quarter_end(t).isoformat(), llm, index, model, "quarterly", pm)
 
 

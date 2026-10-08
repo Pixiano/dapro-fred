@@ -14,10 +14,11 @@ import json
 import re
 import sqlite3
 from datetime import datetime, timezone
+from store import IST
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from store import ensure_column, to_utc
+from store import ensure_column, to_local
 
 EXCLUSIVE = {"lives_in", "works_at", "status", "partner_of"}  # extend as needed
 AUTO, ASK = 0.85, 0.65  # similarity >= AUTO links as alias, >= ASK queues a question
@@ -26,7 +27,7 @@ _PHON = [("oo", "u"), ("ou", "u"), ("ee", "i"), ("ie", "i"), ("ph", "f"), ("w", 
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
 def norm(name):
@@ -290,7 +291,7 @@ class Graph:
         relation = norm(relation).replace(" ", "_")
         if subject_id == object_id or not relation:
             raise ValueError("a relationship needs two different entities and a relation")
-        ts, s = to_utc(ts) if ts else _now(), self.s
+        ts, s = to_local(ts) if ts else _now(), self.s
         with s.lock:
             open_rows = s.db.execute("SELECT * FROM relationships WHERE subject_id=? AND relation=? AND valid_to IS NULL",
                                      (subject_id, relation)).fetchall()

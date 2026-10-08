@@ -2,11 +2,12 @@
 import json
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
+import config
 from skills.testkit import memory_ctx, skill
 
 
@@ -21,7 +22,7 @@ def _selfcheck():
         rc.model.add("preference", "likes dark mode")
         assert "likes dark mode" in reg.call("recall").data and "not the screen" in reg.call("recall").data
         assert reg.call("recall", {"days": 2}).data == "We haven't talked in that time."
-        mem.archive.write("conversation", {"role": "user", "text": "hello fred"}, ts=datetime.now(timezone.utc).isoformat())
+        mem.archive.write("conversation", {"role": "user", "text": "hello fred"}, ts=datetime.now(config.IST).isoformat())
         assert "You: hello fred" in reg.call("recall", {"days": 2}).data
         mem.store.add_event("note", "the dentist appointment is on Thursday at 4 pm")
         mem.store.add_event("note", "bought tomatoes at the market")

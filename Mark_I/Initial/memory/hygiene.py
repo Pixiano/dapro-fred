@@ -9,6 +9,7 @@ Sockets (all numbers are knobs, to be tuned after a week or more of real use):
 ponytail: entities mentioned once and never again are not cooled yet, add when the entity list gets noisy.
 """
 from datetime import datetime, timedelta, timezone
+from store import IST
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -35,7 +36,7 @@ def is_duplicate(store, day, content) -> bool:
 
 
 def run_hygiene(mem, now=None) -> dict:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(IST)
     iso = lambda d: (now - timedelta(days=d)).isoformat(timespec="seconds")
     s, out = mem.store, {}
     ensure(s)

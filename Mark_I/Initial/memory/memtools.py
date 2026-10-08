@@ -204,7 +204,7 @@ class MemTools:
         n = sum(1 for p in (d.iterdir() if d.is_dir() else []) if _STAMP.fullmatch(p.name))
         if not last:
             return {"backups": n, "last": None, "warning": "no full backup found"}
-        age = (datetime.fromisoformat(self.end + "T23:59:59+00:00") - last).days
+        age = (datetime.fromisoformat(self.end + "T23:59:59+05:30") - last).days
         return {"backups": n, "last": last.isoformat(timespec="minutes"), "age_days": age, **({"warning": "older than 14 days"} if age > 14 else {})}
 
     def t_queue_summary(self):

@@ -55,9 +55,10 @@ def register(reg, recall):
 
     def recent(days: int = 1) -> str:
         from datetime import datetime, timedelta, timezone
+        import config
         lines = []
         for k in range(days - 1, -1, -1):
-            day = (datetime.now(timezone.utc) - timedelta(days=k)).strftime("%Y-%m-%d")
+            day = (datetime.now(config.IST) - timedelta(days=k)).strftime("%Y-%m-%d")
             lines += [f"[{day}] {'You' if r['data'].get('role') == 'user' else 'FRED'}: {r['data'].get('text', '')[:200]}" for r in recall.memory.archive.read("conversation", day)]
         return "\n".join(lines[-24:]) or "We haven't talked in that time."
 
@@ -92,7 +93,8 @@ def _selfcheck():
         assert r.call("correct_memory", {"item_id": 99, "text": "x"}).error_kind == "not_found" and r.call("forget_memory", {"item_id": 99}).error_kind == "not_found"
         assert r.call("recall_recent_conversation").data == "We haven't talked in that time."
         from datetime import datetime, timezone
-        mem.archive.write("conversation", {"role": "user", "text": "hello fred"}, ts=datetime.now(timezone.utc).isoformat())
+        import config
+        mem.archive.write("conversation", {"role": "user", "text": "hello fred"}, ts=datetime.now(config.IST).isoformat())
         assert "You: hello fred" in r.call("recall_recent_conversation", {"days": 2}).data
         assert r.spec("forget_memory").destructive and not r.spec("correct_memory").destructive
         assert r.call("forget_memory", {"item_id": 1}).ok and r.call("show_what_you_know").data == "Nothing yet."

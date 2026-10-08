@@ -16,6 +16,7 @@ Sockets:
 """
 import re
 from datetime import datetime, timezone
+from store import IST
 from pathlib import Path
 
 import faiss
@@ -134,7 +135,7 @@ class SemanticIndex:
 
     def touch(self, event_ids):
         """Mark recalled now; a recalled cold event turns warm again."""
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        now = datetime.now(IST).isoformat(timespec="seconds")
         with self.store.lock:
             for e in event_ids:
                 self.store.db.execute("INSERT OR REPLACE INTO event_recalls VALUES(?,?)", (e, now))

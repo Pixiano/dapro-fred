@@ -19,6 +19,7 @@ ponytail: demotion is by status only (weakened/rejected/outdated inference); a s
 import json
 import logging
 from datetime import datetime, timezone
+from store import IST
 from pathlib import Path
 
 import numpy as np
@@ -53,7 +54,7 @@ CANDIDATES:
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
 class PersonalModel:

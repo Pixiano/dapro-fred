@@ -7,6 +7,7 @@
     "when": {"type": "string", "description": "when the file was made or changed, in the user's words: yesterday, last week, March, 2024, 3 days ago"},
     "folder": {"type": "string", "description": "downloads, desktop, documents, pictures, videos or music, only if the user said where"},
     "action": {"type": "string", "enum": ["find", "open", "show"], "description": "find lists matches (default); open launches the best one; show reveals it in File Explorer"},
+    "reason": {"type": "string", "description": "only when opening a program (.exe, .bat, .msi, shortcut): a few words on why the user wants it run, e.g. 'install the new driver'; it is read out in the yes/no question"},
     "path": {"type": "string", "description": "internal follow-up only, never set it"}}},
   "examples": ["find the invoice pdf I downloaded yesterday", "where is my resume", "open the tax return from last year", "find that photo from March", "show me the spreadsheet in downloads", "where did I save the project proposal", "open my latest screenshot", "find the presentation from last week"],
   "not_for": ["searching inside file contents", "opening an app or a website", "files that are not on this computer", "emails"],

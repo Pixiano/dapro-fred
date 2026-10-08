@@ -37,8 +37,9 @@ Six conservative reviews (P0+P2, P1, P3, P4+P5, P6, P7) were run by Sonnet agent
 | 29 | Notes editing | Every edit turned an LF file into CRLF on Windows | Line endings are kept |
 | 30 | Config | A tuple env var (`FRED_LOCKDOWN_TOOLS=time,calculate`) became single letters; two settings were defined twice | Comma-split; duplicates removed |
 | 31 | Tool log | A failed call wrote its argument values (message text, memory content) to `tools.jsonl` | Argument names only |
-| 32 | Files | `find_files` could open `.exe`, `.bat`, `.lnk` and other programs without a yes | Programs always ask first ("This program will run. Yes or no?"), and the model cannot skip the question by passing the path itself |
-| 33 | Tests | New regression checks: `tests/test_review_fixes.py`, plus new cases in the jobs, tts, scam watch, ask and voice self-checks | 90 of 90 pass |
+| 32 | Files | `find_files` could open `.exe`, `.bat`, `.lnk` and other programs without a yes | Programs always ask first, with the model's short reason read out ("This program will run, to install the driver. Yes or no?"). No reason, no question: the model is told to give one. It cannot skip the question by passing the path itself |
+| 33 | Time | All stored times and day buckets were UTC; you are on IST | Everything is stored and bucketed in India time (`+05:30`) through one door (`to_local`); end-of-day stamps fixed; backup file names stay true UTC. The 57 timestamps in the real memory were converted after a backup (`FRED_Backups\pre_ist_*`) |
+| 34 | Tests | New regression checks: `tests/test_review_fixes.py`, plus new cases in the jobs, tts, scam watch, ask and voice self-checks | 90 of 90 pass |
 
 ## Not changed: your decision, or it needs a measurement
 
@@ -47,7 +48,6 @@ Six conservative reviews (P0+P2, P1, P3, P4+P5, P6, P7) were run by Sonnet agent
 | Privacy | The live event log writes every event to `FRED_DATA/events/*.jsonl` in clear (transcripts, replies, screen events), never pruned. The overview says logs keep kinds and counts only | Switching it off or trimming it changes what you can debug with. Your call: turn off, or keep kinds and counts and add a retention limit |
 | Privacy | `engine/loop.py` logs full `asked` and `reply` for every turn, including locked chat; the note-edit summary carries up to 50 characters of old/new text | Same decision |
 | Presence | Camera presence is still not started in the live program | Keeps the camera on; yours to decide |
-| Timezone | You chose IST. The memory stores every time in UTC and buckets days by `ts[:10]` in about 30 places; the real memory already holds UTC data | Not changed yet: switching means a migration of the stored data. See the question in the hand-off |
 | Voice | The preroll/postroll apply once per utterance at 1.5 s/1.0 s; a real measurement of first-sound latency is still needed | Needs a measurement on your headphones |
 | Voice | `filler_after_s` 0.8 s has no basis; better set from measured first-sound latency | Same |
 | Turn clock | The 0.9 s hard cap cuts off a long thinking pause; no measurement behind the value | Replay the offline clock set with 0.9, 1.2 and 1.5 before changing |

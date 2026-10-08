@@ -47,7 +47,7 @@ def t_recall_changes_the_answer_and_turns_land_in_the_archive():
         assert without.text == "I don't know." and a.text == "Your dentist is on Thursday at 4 pm.", (without.text, a.text)         # recall changed the answer
         b = withmem.run("what time is it", source="voice")                                                                          # a tool turn: tool_call stream
         feed.stop()
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = datetime.now(config.IST).strftime("%Y-%m-%d")
         conv = mem.archive.read("conversation", day)
         assert [(r["data"]["role"], r["data"]["text"][:20]) for r in conv][:2] == [("user", q[:20]), ("assistant", "I don't know.")]
         assert len(conv) == 6 and all(r["session"] == sid for r in conv)                                                              # three turns, two lines each

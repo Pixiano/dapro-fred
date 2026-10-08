@@ -16,6 +16,7 @@ import json
 import random
 import re
 from datetime import datetime, timedelta, timezone
+from store import IST
 
 import maintenance
 from decisionlog import note
@@ -32,7 +33,7 @@ WORDS = {"yes": ("yes", "yeah", "yep", "ok", "sure", "same", "same person", "sam
 
 
 def _day(today):
-    return (today or datetime.now(timezone.utc).date()).isoformat()
+    return (today or datetime.now(IST).date()).isoformat()
 
 
 def _eid(mem, name):
@@ -306,7 +307,7 @@ if __name__ == "__main__":  # self-check: python askqueue.py
         assert s.db.execute("SELECT status FROM review_queue WHERE id=1").fetchone()[0] == "closed"
         assert maintenance.propose(m, "merge", {"from": nitu, "into": nitya}, allow_auto=False).get("error")      # rejected: never proposed again
         assert answer(m, "review:2", "newer")["choice"] == "new" and s.db.execute("SELECT status FROM review_queue WHERE id=2").fetchone()[0] == "closed"
-        assert any("Toffee" in json.dumps(r) for r in m.archive.read("askqueue", datetime.now(timezone.utc).strftime("%Y-%m-%d")))
+        assert any("Toffee" in json.dumps(r) for r in m.archive.read("askqueue", datetime.now(IST).strftime("%Y-%m-%d")))
         # precedents: record answers, earn levels, FRED suggests, then settles, tells, and undo reopens
         import precedents
         def embed(tx, q):

@@ -8,6 +8,7 @@ Sockets
   bind(ctx): needs ctx["recall"] = memory_bridge.turn_recall.MemoryRecall
 """
 from datetime import datetime, timedelta, timezone
+import config
 
 from skills import Unavailable
 
@@ -24,7 +25,7 @@ def bind(ctx):
 def _recent(days: int) -> str:
     lines = []
     for k in range(days - 1, -1, -1):
-        day = (datetime.now(timezone.utc) - timedelta(days=k)).strftime("%Y-%m-%d")
+        day = (datetime.now(config.IST) - timedelta(days=k)).strftime("%Y-%m-%d")
         lines += [f"[{day}] {'You' if r['data'].get('role') == 'user' else 'FRED'}: {r['data'].get('text', '')[:200]}" for r in _rc.memory.archive.read("conversation", day)]
     return "\n".join(lines[-24:]) or "We haven't talked in that time."
 

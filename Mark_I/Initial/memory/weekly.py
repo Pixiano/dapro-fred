@@ -5,7 +5,7 @@ embedding tool router is needed, unlike FRED's ~110 real tools). The model repli
 
 Sockets:
   - llm(messages) -> str: injected chat call (messages = [{"role","content"}]); production = local gpt-oss-20b.
-  - run_weekly(mem, end_day, llm, index, model): the week is the 7 days ending `end_day` (a Sunday, UTC).
+  - run_weekly(mem, end_day, llm, index, model): the week is the 7 days ending `end_day` (a Sunday, India time).
     Idempotent per week ('done' weeks are skipped; failed ones rerun, written inferences are kept).
   - run_weekly_pending(...): every finished Sunday-week with material and no 'done' run (scheduler = timer, integration).
   - Reads only through MemoryStore / Graph / SemanticIndex. Writes only through the create/update/rule/finish tools.
@@ -17,6 +17,7 @@ import sqlite3
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from store import IST
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -79,7 +80,7 @@ Before finish, check every open review item and every active inference. To see w
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
 def _recurs(days):
@@ -286,7 +287,7 @@ class Week(MemTools):
         (x, ex), (y, ey) = self._need_entity(a), self._need_entity(b)
         if ex or ey:
             return ex or ey
-        steps = self.g.path(x[0], y[0], f"{min(date or self.end, self.end)}T23:59:59+00:00")
+        steps = self.g.path(x[0], y[0], f"{min(date or self.end, self.end)}T23:59:59+05:30")
         return {"connected": steps is not None, "steps": steps}
 
     def t_compare_periods(self, from1, to1, from2, to2):
@@ -584,7 +585,7 @@ def run_weekly(mem, end_day, llm, index, model="unset", force=False):
 
 def run_weekly_pending(mem, llm, index, model="unset"):
     """Every Sunday-ending week before today that has events and no finished run."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(IST).date()
     with mem.store.lock:
         days = [r[0] for r in mem.store.db.execute("SELECT DISTINCT substr(ts,1,10) FROM events")]
     ends = {(datetime.fromisoformat(d).date() + timedelta(days=(6 - datetime.fromisoformat(d).weekday()))) for d in days}

@@ -8,6 +8,7 @@ Self-check: python config.py
 """
 import os
 import tempfile
+from datetime import timedelta, timezone
 from dataclasses import dataclass, fields
 from pathlib import Path
 
@@ -126,6 +127,9 @@ class Settings:
     ocr_enabled: bool = True                          # Windows OCR on the changed crop: approved by Vatsal 2026-10-06
     describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model: Qwen3.5-4B, 18/20 on tests/live_vision_hard.py (MiniCPM-V 4.6 scored 9/20 and was deleted, 2026-10-07)
     describe_max_tokens: int = 300
+
+
+IST = timezone(timedelta(hours=5, minutes=30), "IST")                 # every stored time and day bucket is India time (owner decision 2026-10-08)
 
 
 def _coerce(raw: str, like):

@@ -2,7 +2,7 @@
 
 Sockets:
   - llm(prompt) -> str: injected, must return JSON. Production passes the nightly model, tests a fake.
-  - consolidate_day(mem, day, llm, model): reads that UTC day's archive + events, writes extracted events,
+  - consolidate_day(mem, day, llm, model): reads that India day's archive + events, writes extracted events,
     state updates, the daily log and the review queue, all with a 'consolidation' source for provenance.
     Idempotent: a day with status 'done' is skipped, so a nightly rerun never duplicates events.
   - run_pending(mem, llm, model): every day before today that has material and no finished run.
@@ -16,6 +16,7 @@ import json
 import re
 import logging
 from datetime import datetime, timezone
+from store import IST
 from pathlib import Path
 
 import hygiene
@@ -119,7 +120,7 @@ def check_day(mem, day, llm):
     """The second pass alone on a day that is already consolidated (so a different model can do it after a model swap). Returns the verdicts applied."""
     raw = "\n".join(l for l in _material(mem, day).split("\n") if "event/" not in l)   # the archive records only, not the extracted events
     checks = _check(mem, day, raw, llm)
-    _apply_checks(mem.store, checks, day, f"{day}T23:59:59+00:00", mem.store.add_source("consolidation", day))
+    _apply_checks(mem.store, checks, day, f"{day}T23:59:59+05:30", mem.store.add_source("consolidation", day))
     return checks
 
 
@@ -321,7 +322,7 @@ def consolidate_day(mem, day, llm, model="unset", historical=False, embed=None, 
         done = s.db.execute("SELECT 1 FROM consolidation_runs WHERE day=? AND status='done'", (key,)).fetchone()
     if done:
         return False  # nothing is read for a finished day
-    ts = f"{day}T23:59:59+00:00"  # extracted facts belong to the day they describe
+    ts = f"{day}T23:59:59+05:30"  # extracted facts belong to the day they describe
     try:
         material = _material(mem, day, historical)
         if not material:
@@ -356,7 +357,7 @@ def consolidate_day(mem, day, llm, model="unset", historical=False, embed=None, 
         status, detail = "failed", repr(ex)
     with s.lock:
         s.db.execute("INSERT OR REPLACE INTO consolidation_runs VALUES(?,?,?,?,?)",
-                     (key, model, status, detail, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+                     (key, model, status, detail, datetime.now(IST).isoformat(timespec="seconds")))
         s.db.commit()
     return status == "done"
 
@@ -370,7 +371,7 @@ def trust_dates(mem, since, until, note_text=""):
     with mem.store.lock:
         mem.store.db.executescript(_SCHEMA.read_text(encoding="utf-8"))
         cur = mem.store.db.execute("INSERT INTO backfill_trust(since,until,note,at) VALUES(?,?,?,?)",
-                                   (d1.isoformat(), d2.isoformat(), note_text, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+                                   (d1.isoformat(), d2.isoformat(), note_text, datetime.now(IST).isoformat(timespec="seconds")))
         mem.store.db.commit()
     return cur.lastrowid
 
@@ -379,7 +380,7 @@ def backfill_pending(mem, llm, model="unset") -> list:
     """Consolidates imported history, oldest day first, but ONLY days inside a trusted range (trust_dates). Everything else stays raw.
     Returns the days done. Weekly/monthly runs then pick the old weeks and months up like any others (they run oldest first).
     ponytail: one trust range check per day by archive record ts; a per-record dating flag can replace it if imports get messy."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(IST).strftime("%Y-%m-%d")
     with mem.store.lock:
         mem.store.db.executescript(_SCHEMA.read_text(encoding="utf-8"))
         ranges = [(r[0], r[1]) for r in mem.store.db.execute("SELECT since, until FROM backfill_trust")]
@@ -388,7 +389,7 @@ def backfill_pending(mem, llm, model="unset") -> list:
 
 
 def run_pending(mem, llm, model="unset") -> list:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(IST).strftime("%Y-%m-%d")
     with mem.store.lock:
         days = {r[0] for r in mem.store.db.execute("SELECT day FROM archive_files")}
         days |= {r[0] for r in mem.store.db.execute("SELECT DISTINCT substr(ts,1,10) FROM events")}

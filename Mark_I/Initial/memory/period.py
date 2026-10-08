@@ -17,6 +17,7 @@ ponytail: chapters only prevent overlap through the one-open-chapter rule, not f
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
+from store import IST
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -483,7 +484,7 @@ def run_monthly(mem, month, llm, index, model="unset", pm_update=None, force=Fal
 
 
 def run_monthly_pending(mem, llm, index, model="unset", today=None, pm_update=None):
-    this = (today or datetime.now(timezone.utc).date()).strftime("%Y-%m")
+    this = (today or datetime.now(IST).date()).strftime("%Y-%m")
     with mem.store.lock:
         months = sorted({r[0] for r in mem.store.db.execute("SELECT DISTINCT substr(ts,1,7) FROM events")})
     return [m for m in months if m < this and run_monthly(mem, m, llm, index, model, pm_update)]
@@ -533,7 +534,7 @@ def run_yearly_pending(mem, llm, index, model="unset", today=None):
     if not mmdd:
         log.warning("yearly anchor not set; the yearly review waits")
         return None
-    t = today or datetime.now(timezone.utc).date()
+    t = today or datetime.now(IST).date()
     m, d = map(int, mmdd.split("-"))
     def on(y):
         try:

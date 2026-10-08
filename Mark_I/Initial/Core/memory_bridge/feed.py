@@ -15,17 +15,18 @@ clock states, screen changes) is NOT archived: it is the event log's ring (event
 Self-check: python memory_bridge/feed.py
 """
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import config
 import log
 
 
 def _iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+    return datetime.fromtimestamp(ts, config.IST).isoformat()
 
 
 class Feed:
@@ -90,7 +91,7 @@ def _selfcheck():
         bus.emit("clock", "state", state="LISTEN")
         f.stop()
         bus.emit("engine", "turn", text="after stop", reply="ignored", via="chat", calls=[], ms=1)    # unsubscribed
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = datetime.now(config.IST).strftime("%Y-%m-%d")
         rd = lambda s: m.archive.read(s, day)
         conv = rd("conversation")
         assert [(r["data"]["role"], r["data"]["text"]) for r in conv][:2] == [("user", "what time is it"), ("assistant", "It's ten.")] and len(conv) == 4

@@ -15,6 +15,7 @@ import json
 import logging
 import sys
 from datetime import datetime, timedelta, timezone
+from store import IST
 from pathlib import Path
 
 from decisionlog import note
@@ -50,7 +51,7 @@ def ensure(store):
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
 def _name(s, eid):
@@ -280,7 +281,7 @@ def ask_next(mem, limit=2, today=None):
     """What FRED should raise in conversation now: up to `limit` waiting proposals, most confident first, each asked at most MAX_ASKS times and
     at most once a day. Marks them asked. Answer with answer(mem, id, yes)."""
     ensure(mem.store)
-    day = (today or datetime.now(timezone.utc).date()).isoformat()
+    day = (today or datetime.now(IST).date()).isoformat()
     with mem.store.lock:
         rows = [dict(r) for r in mem.store.db.execute(
             "SELECT * FROM proposals WHERE status='proposed' AND asks < ? AND (last_asked IS NULL OR last_asked < ?) ORDER BY confidence DESC, id LIMIT ?",
@@ -374,7 +375,7 @@ def run_maintenance(mem, end_day, llm, index, model="unset"):
 def run_maintenance_pending(mem, llm, index, model="unset", today=None, every_days=7):
     """The timer entry point: a pass when the last finished one is older than every_days. Returns the summary or None."""
     ensure(mem.store)
-    t = today or datetime.now(timezone.utc).date()
+    t = today or datetime.now(IST).date()
     with mem.store.lock:
         last = mem.store.db.execute("SELECT MAX(day) d FROM maintenance_runs WHERE status IN ('done','incomplete')").fetchone()["d"]
     if last and (t - datetime.fromisoformat(last).date()).days < every_days:

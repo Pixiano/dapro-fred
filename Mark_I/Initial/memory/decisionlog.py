@@ -12,6 +12,7 @@ ponytail: unbounded growth (full text kept on purpose while the small models are
 import json
 import logging
 from datetime import datetime, timezone
+from store import IST
 
 log = logging.getLogger("memory")
 _SQL = """CREATE TABLE IF NOT EXISTS decision_log (id INTEGER PRIMARY KEY, at TEXT NOT NULL, agent TEXT NOT NULL, run TEXT,
@@ -23,7 +24,7 @@ def note(store, agent, run, kind, **data):
         with store.lock:
             store.db.execute(_SQL)
             store.db.execute("INSERT INTO decision_log(at,agent,run,kind,data) VALUES(?,?,?,?,?)",
-                             (datetime.now(timezone.utc).isoformat(timespec="seconds"), agent, str(run), kind, json.dumps(data, default=str, ensure_ascii=False)))
+                             (datetime.now(IST).isoformat(timespec="seconds"), agent, str(run), kind, json.dumps(data, default=str, ensure_ascii=False)))
             store.db.commit()
     except Exception:
         log.exception("decision log write failed")

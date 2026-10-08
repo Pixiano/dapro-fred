@@ -280,7 +280,7 @@ def _bump(con, path: str):
     con.commit()
 
 
-def run(query: str = "", kind: str = "any", when: str = "", folder: str = "", action: str = "find", path: str = "") -> str:
+def run(query: str = "", kind: str = "any", when: str = "", folder: str = "", action: str = "find", path: str = "", reason: str = "") -> str:
     if action in ("open", "show") and path:                          # the yes/no follow-up: that exact file
         if action == "open" and Path(path).suffix.lower() in RUNNABLE and path not in _ASKED:
             raise ToolError("denied", "I need your yes before I run a program.", "runnable path given without a confirmation")
@@ -317,13 +317,15 @@ def run(query: str = "", kind: str = "any", when: str = "", folder: str = "", ac
         conf = getattr(_ctx["c"].get("registry"), "confirmer", None)
         best = top[0][1]
         runs = action == "open" and Path(best["path"]).suffix.lower() in RUNNABLE
+        if runs and not reason.strip():
+            raise ToolError("bad_args", "Why should I run it?", f"{best['name']} is a program: give a short reason (what the user wants it for) in `reason`")
         if clear and not runs and (top[0][0] >= 2.0 * max(len(ws), 1) or not ws):
             _launch(best["path"], action)
             _bump(con, best["path"])
             return f"{'Showing' if action == 'show' else 'Opening'} {best['name']}."
         if clear and conf is not None:
             runs and _ASKED.add(best["path"])
-            return conf.ask("find_files", {"action": action, "path": best["path"]}, f"I found {_line(best)}. {'Show' if action == 'show' else 'Open'} it?{' This program will run.' if runs else ''} Yes or no?")
+            return conf.ask("find_files", {"action": action, "path": best["path"]}, f"I found {_line(best)}. {'Show' if action == 'show' else 'Open'} it?{' This program will run, to ' + reason.strip().rstrip('.') + '.' if runs else ''} Yes or no?")
         if runs:
             return f"That is a program, so I won't run it without a yes: {_line(best)}."
         return "Which one: " + "; ".join(f"{i}. {_line(r)}" for i, (_, r) in enumerate(top[:3], 1)) + "? Say more of the name."

@@ -19,6 +19,7 @@ import json
 import math
 import re
 from datetime import datetime, timezone
+from store import IST
 
 from decisionlog import note, traced
 from graph import Graph
@@ -53,7 +54,7 @@ def ensure(store):
 
 
 def _now(today=None):
-    return (today or datetime.now(timezone.utc)).isoformat(timespec="seconds")
+    return (today or datetime.now(IST)).isoformat(timespec="seconds")
 
 
 def _cos(a, b):
@@ -324,9 +325,9 @@ if __name__ == "__main__":  # self-check: python precedents.py
         for i in range(3):
             record(m4, mk(f"K{i}", f"L{i}"), "no", "no, they live in different cities" if i < 2 else "no", sit, embed)
         assert _eligible(m4, mk("Gita", "Hari"), embed)["choice"] == "no"
-        old = datetime.now(timezone.utc) + timedelta(days=365)
+        old = datetime.now(IST) + timedelta(days=365)
         assert _eligible(m4, mk("Gita", "Hari"), embed, today=old) is None                        # a year later three precedents weigh 1.5: ask again
-        assert _eligible(m4, mk("Gita", "Hari"), embed, today=datetime.now(timezone.utc) + timedelta(days=180)) is not None
+        assert _eligible(m4, mk("Gita", "Hari"), embed, today=datetime.now(IST) + timedelta(days=180)) is not None
         # distillation: only an all-agreeing domain with 3+ cases, once, wording checked for names
         from personal_model import PersonalModel
         pm = PersonalModel(m4, embed)

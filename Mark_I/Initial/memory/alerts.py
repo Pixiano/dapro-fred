@@ -23,6 +23,7 @@ import json
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
+from store import IST
 from functools import lru_cache
 from pathlib import Path
 
@@ -44,7 +45,7 @@ CREATE TABLE IF NOT EXISTS alert_log (id INTEGER PRIMARY KEY, alert_id INTEGER N
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
 def _norm(s):
@@ -168,7 +169,7 @@ def run_alerts_pending(mem, fetch, today=None):
     missed), once per year, trying at most once a day. Returns None if nothing was due, else {"year", "status", "added", "changed", "same", "to_ask"}
     (to_ask = unsure or proposed alerts FRED should ask Vatsal about). A failed fetch is recorded, and from 31 January on it also puts a visible
     note in the review queue; the old dates keep working meanwhile."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or datetime.now(IST).date()
     s = _db(mem)
     with s.lock:
         r = s.db.execute("SELECT * FROM alert_refreshes WHERE year=?", (today.year,)).fetchone()
@@ -205,7 +206,7 @@ def _hits(month, day, rule, d):
 def due(mem, today=None, ahead=2):
     """Everything on `today` and the next `ahead` days: personal alerts (active only) and public days. Important ones first within a day.
     Items: {"date", "days_away", "title", "kind", "important", "certain", "note", "age"}. Unsure dates carry certain=False so FRED can say so."""
-    today = today or datetime.now(timezone.utc).date()
+    today = today or datetime.now(IST).date()
     s = _db(mem)
     with s.lock:
         mine = [dict(r) for r in s.db.execute("SELECT * FROM yearly_alerts WHERE status='active'")]

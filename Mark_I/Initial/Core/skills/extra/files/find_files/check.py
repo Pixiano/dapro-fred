@@ -134,7 +134,13 @@ def _selfcheck():
         _mk(dl, "SetupZenithTool.exe", 0.1)
         m.reindex()
         n = len(opened)
-        r = m.run(query="zenith tool setup", action="open")
+        try:
+            m.run(query="zenith tool setup", action="open")
+            raise AssertionError("asked without a reason")
+        except m.ToolError as ex:
+            assert ex.kind == "bad_args" if hasattr(ex, "kind") else True
+        r = m.run(query="zenith tool setup", action="open", reason="install the zenith tool")
+        assert "install the zenith tool" in r or len(opened) == n, r
         assert len(opened) == n, r                                                  # asked, not run
         m.run(action="open", path=str(dl / "SetupZenithTool.exe"))                  # the yes: runs once
         assert len(opened) == n + 1

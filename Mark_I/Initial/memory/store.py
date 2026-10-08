@@ -13,24 +13,25 @@ Stdlib only. Thread-safe: one connection shared across threads, every call under
 import logging
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
 log = logging.getLogger("memory")
+IST = timezone(timedelta(hours=5, minutes=30), "IST")      # every stored time and every day bucket is India time (owner decision 2026-10-08)
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 
-def to_utc(ts):
-    """The one door for times: any ISO timestamp WITH an offset becomes ISO UTC (+00:00); naive or garbage times are refused,
+def to_local(ts):
+    """The one door for times: any ISO timestamp WITH an offset becomes ISO India time (+05:30); naive or garbage times are refused,
     because comparing local and UTC strings silently mis-orders facts and mis-buckets days."""
     dt = datetime.fromisoformat(str(ts).strip().replace("Z", "+00:00"))
     if dt.tzinfo is None:
-        raise ValueError(f"timestamp {ts!r} has no timezone offset: pass UTC (e.g. 2026-01-02T03:04:05+00:00)")
-    return dt.astimezone(timezone.utc).isoformat()
+        raise ValueError(f"timestamp {ts!r} has no timezone offset: pass an offset (e.g. 2026-01-02T03:04:05+05:30)")
+    return dt.astimezone(IST).isoformat()
 
 
 def ensure_column(db, table, column_def):
@@ -81,7 +82,7 @@ class MemoryStore:
 
     def set_state(self, entity_id, field, value, source_id=None, confidence=1.0, ts=None):
         """Close the open row for (entity, field) if the value changed, then open a new one. One transaction."""
-        ts = to_utc(ts) if ts else _now()
+        ts = to_local(ts) if ts else _now()
         with self.lock:
             cur = self.state(entity_id, field)
             if cur is not None and cur["value"] == value:
@@ -143,14 +144,14 @@ class MemoryStore:
     def add_event(self, type, content, entity_id=None, importance=0.5, confidence=1.0, source_id=None, ts=None) -> int:
         with self.lock:
             eid = self._ins("INSERT INTO events(ts,type,entity_id,content,importance,confidence,source_id,created_at) "
-                            "VALUES(?,?,?,?,?,?,?,?)", (to_utc(ts) if ts else _now(), type, entity_id, content, importance, confidence,
+                            "VALUES(?,?,?,?,?,?,?,?)", (to_local(ts) if ts else _now(), type, entity_id, content, importance, confidence,
                                                         source_id, _now()))
             ev = dict(self.db.execute("SELECT * FROM events WHERE id=?", (eid,)).fetchone())
         run_hooks(self.on_event, ev)
         return eid
 
     def events_on(self, day):
-        """Events whose ts starts with YYYY-MM-DD (UTC)."""
+        """Events whose ts starts with YYYY-MM-DD (India day)."""
         with self.lock:
             return self.db.execute("SELECT * FROM events WHERE ts LIKE ? ORDER BY ts, id", (day + "%",)).fetchall()
 
@@ -187,7 +188,7 @@ if __name__ == "__main__":  # self-check: python store.py
     s.set_state(p, "status", "building", src, ts="2026-02-01T00:00:00+00:00")
     h = s.state_history(p, "status")
     assert [r["value"] for r in h] == ["planning", "building"]
-    assert h[0]["valid_to"] == "2026-02-01T00:00:00+00:00" and h[1]["valid_to"] is None
+    assert h[0]["valid_to"] == "2026-02-01T05:30:00+05:30" and h[1]["valid_to"] is None
     assert s.state(p, "status")["value"] == "building"
     s.add_event("note", "hello", p, source_id=src, ts="2026-03-04T10:00:00+00:00")
     assert s.snapshot(p) == {"status": "building"} and [e["name"] for e in s.entities("project")] == ["demo"]
@@ -209,7 +210,7 @@ if __name__ == "__main__":  # self-check: python store.py
     t = threading.Thread(target=lambda: done.append(s.add_event("note", "from thread")))
     t.start(); t.join()
     assert done
-    # review fixes: an older import must not overwrite a value that was confirmed later; times are UTC
+    # review fixes: an older import must not overwrite a value that was confirmed later; times are India time
     x = s.entity("person", "Xavier")
     s.set_state(x, "city", "Pune", ts="2026-01-01T00:00:00+00:00")
     s.set_state(x, "city", "Pune", ts="2026-09-01T00:00:00+00:00")                       # stated again in September
@@ -223,7 +224,7 @@ if __name__ == "__main__":  # self-check: python store.py
     s.db.execute("UPDATE entity_states SET valid_to='2026-09-01T00:00:00+00:00' WHERE entity_id=?", (y,)); s.db.commit()   # closed (as a stale flag does)
     s.set_state(y, "job", "intern", ts="2026-01-01T00:00:00+00:00")                         # an older fact must not become the open current value
     assert s.state(y, "job") is None and [r["value"] for r in s.state_history(y, "job")] == ["intern", "student"]
-    assert s.add_event("note", "ist event", ts="2026-03-05T01:30:00+05:30") and s.events_on("2026-03-04")[-1]["content"] == "ist event"
+    assert s.add_event("note", "ist event", ts="2026-03-05T01:30:00+05:30") and s.events_on("2026-03-05")[-1]["content"] == "ist event" and s.add_event("note", "utc event", ts="2026-03-05T20:00:00+00:00") and s.events_on("2026-03-06")[-1]["content"] == "utc event"
     try:
         s.add_event("note", "naive", ts="2026-03-05T01:30:00"); raise SystemExit("naive time accepted")
     except ValueError:

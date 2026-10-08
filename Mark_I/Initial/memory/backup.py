@@ -51,6 +51,7 @@ import tarfile
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
+from store import IST
 from pathlib import Path
 
 from archive import parse_lines
@@ -70,7 +71,7 @@ _FONTS = {"body": ["arial.ttf", "segoeui.ttf", "DejaVuSans.ttf", "Arial.ttf"], "
 
 
 def _now():
-    return datetime.now(timezone.utc)
+    return datetime.now(IST)
 
 
 def _rows(db, sql, args=()):
@@ -504,7 +505,7 @@ def backup(mem, out_dir=None, parts=None, since=None, until=None, pdf=True, blob
     if bad:
         raise ValueError(f"unknown part or format in formats: {bad}; formats are {sorted(FORMATS)}")
     out = _guard(out_dir or DEFAULT_BACKUP_DIR)
-    stamp = _now().strftime("%Y%m%dT%H%M%SZ")
+    stamp = _now().astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     final = out / f"memory-backup-{stamp}" if parts == list(PARTS) else out / f"memory-backup-{stamp}-{'+'.join(parts)}"
     if password is not None:
         _check_password(password)
