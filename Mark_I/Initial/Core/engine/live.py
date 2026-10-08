@@ -47,6 +47,7 @@ class Runtime:
     bus: ev.EventBus
     replies: list = field(default_factory=list)
     _closers: list = field(default_factory=list)
+    jobs: object = None                         # memory_bridge.jobs.Jobs (memory on and a playground only): main() starts its check
     ask: object = None                          # memory_bridge.ask.AskDelivery (memory on only): offered every turn first, started by main()
     scheduler: object = None                    # proactive.scheduler.Scheduler: main() starts its tick, tests drive tick() themselves
     handle_text: object = None                  # handle_text(text): run a typed message exactly like a spoken turn
@@ -112,6 +113,11 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     rt = Runtime(engine, None, stt, mic, bus, _closers=closers, scheduler=sched)
     if memory:
         from memory_bridge.ask import AskDelivery
+        if playground:
+            from memory_bridge.jobs import Jobs
+            seen = {"p": None}
+            bus.subscribe(lambda e: seen.update(p=e.data.get("present")), kinds=("state",), sources=("presence",))
+            rt.jobs = Jobs(mem, playground, embedder.embed, present=lambda: seen["p"], pm=recall.model, bus=bus)
         rt.ask = AskDelivery(bus, mem, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
@@ -211,6 +217,9 @@ def main(argv):
         return 1
     hk.start()
     rt.scheduler.start()
+    if rt.jobs:
+        rt.jobs.start()
+        rt._closers.append(rt.jobs.stop)
     if rt.ask:
         rt.ask.start()
         rt._closers.append(rt.ask.stop)

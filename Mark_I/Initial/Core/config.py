@@ -29,6 +29,10 @@ class Settings:
     alert_disk_gb: float = 10.0                       # system drive with less free space than this (GB), or under alert_disk_pct percent, is critical
     alert_disk_pct: float = 5.0
     alert_cooldown_s: float = 1800.0                  # one alert per kind this often
+    jobs_enabled: bool = True                         # memory_bridge/jobs.py: nightly/weekly/monthly/yearly runs through the GPU window (memory on only)
+    jobs_check_s: float = 300.0                       # how often it looks whether a run is due
+    jobs_quiet_s: float = 600.0                       # no turn or speech for this long before a run may start, and a turn during a run aborts it
+    jobs_gap_h: float = 4.0                           # at least this long between runs
     judge_threshold: float = 0.6                      # proactive judge: classifier p needed to speak (invented-case sweep: 0.5 P .96 R .77, 0.6 P .97 R .62, 0.7 P 1.0 R .47); retune on the shadow log
     judge_cooldown_s: float = 120.0                   # the judge stays quiet this long after FRED last spoke
     judge_every_s: float = 30.0                       # shadow look interval (also looks at once on a due reminder or a warning)

@@ -23,3 +23,4 @@ Mark I (aka v2) is the clean rebuild of FRED. The predecessor (v1.x, `Core/`) is
 | 2026-10-06 | [Core P3 done](2026/10/06/core_p3_done.md) | Core thinker: tool loop engine, 44 tools, memory bridge, acceptance |
 | 2026-10-07 | [done](2026/10/07/done.md) | Embedder switched to Qwen3-Embedding-0.6B; skills loader and ranking check |
 | 2026-10-07 | [brutal test report](2026/10/07/brutal_test_report.md) | Brutal test of everything built with real usage projected; 4 bugs fixed; voice ID switch |
+| 2026-10-08 | [usage so far](2026/10/08/usage_so_far.md) | What Mark I can do and how it is used (P0 to P7), honest limits |
