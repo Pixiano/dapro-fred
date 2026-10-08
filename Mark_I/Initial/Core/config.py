@@ -25,6 +25,9 @@ class Settings:
     max_calls_per_round: int = 4
     tool_timeout_s: float = 15.0                      # default per tool call
     gpu_default_timeout_s: float = 120.0
+    judge_threshold: float = 0.6                      # proactive judge: classifier p needed to speak (invented-case sweep: 0.5 P .96 R .77, 0.6 P .97 R .62, 0.7 P 1.0 R .47); retune on the shadow log
+    judge_cooldown_s: float = 120.0                   # the judge stays quiet this long after FRED last spoke
+    judge_every_s: float = 30.0                       # shadow look interval (also looks at once on a due reminder or a warning)
     event_ring_s: float = 600.0                       # EventLog in-memory window (~10 min)
     log_max_bytes: int = 20_000_000                   # one jsonl before it rotates
     # --- audio (P1a) ---
@@ -77,6 +80,7 @@ class Settings:
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
+    sir_rate: float = 0.0                             # share of replies, interim and talker lines that end with "sir" (engine/sir.py); the 2-3 word fillers stay bare. OFF until the P8 tuning pass, then 0.85 (Vatsal's target)
     tts_enabled: bool = True                          # False = nothing is spoken (text only)
     kokoro_model: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
     kokoro_voices: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")

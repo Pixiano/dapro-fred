@@ -8,15 +8,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from skills.loader import HERE, load
 from skills.testkit import memory_ctx
+from events import EventBus
+from pathlib import Path
+from proactive.scheduler import Scheduler
 
 
 def _selfcheck():
     with tempfile.TemporaryDirectory() as t:
         mem, ctx = memory_ctx(t)
+        ctx["scheduler"] = Scheduler(EventBus(), Path(t) / "s.json")
         reg, problems = load(HERE, include_extra=False, ctx=ctx)
         assert not problems, problems
         index = reg.call("what_can_you_do").data
-        assert "memory (4): " in index and "self (2): " in index and "system (4): " in index and "math (1): calculate" in index and "what_can_you_do" in index
+        assert "memory (4): " in index and "self (2): " in index and "system (5): " in index and "math (1): calculate" in index and "what_can_you_do" in index
         grp = reg.call("what_can_you_do", {"topic": "memory"}).data
         assert all(f"{n}:" in grp for n in ("recall", "remember", "forget", "correct"))
         one = reg.call("what_can_you_do", {"topic": "forget"}).data

@@ -1,6 +1,6 @@
 """The voice loop: microphone -> wake/VAD -> turn clock -> Whisper -> engine -> reply printed and spoken (Kokoro, audio/tts.py).
 
-  python engine/live.py [seconds=120] [--memory] [--brain MODEL] [--silent] [--no-pill] [--no-hud]
+  python engine/live.py [seconds=120] [--memory] [--brain MODEL] [--silent] [--no-pill] [--no-hud] [--no-screen]
 Say "Hey FRED, <request>" or hold Left Ctrl + Left Alt and talk. Each turn prints what was heard, FRED's reply and the trace line (route, tools, timings).
 Sockets
   in : build(bus, mic, memory=False, brain=None) -> Runtime     wires Mic/Vad/Wake/Capture/Stt/SmartTurn/VoiceId/TurnController to an Engine
@@ -35,6 +35,7 @@ from clock.voice_id import VoiceId
 from engine import prompt
 from engine.cli import trace
 from engine.loop import Engine
+from engine.sir import sirify
 
 
 @dataclass
@@ -46,6 +47,8 @@ class Runtime:
     bus: ev.EventBus
     replies: list = field(default_factory=list)
     _closers: list = field(default_factory=list)
+    ask: object = None                          # memory_bridge.ask.AskDelivery (memory on only): offered every turn first, started by main()
+    scheduler: object = None                    # proactive.scheduler.Scheduler: main() starts its tick, tests drive tick() themselves
     handle_text: object = None                  # handle_text(text): run a typed message exactly like a spoken turn
 
     def close(self):
@@ -77,23 +80,50 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         if playground and talk:
             playground.unload("chat") if locked else playground.load(brain or c.brain, slot="chat")
 
+    from proactive.scheduler import Scheduler
+    sched = Scheduler(bus)
+
+    def due(e):
+        """A reminder or timer came due: say it (with the edge's "sir"); a missed one says so."""
+        t = f"Reminder: {e.data['text']}." if e.data["text"] else "Your timer is up."
+        t = sirify(("Sorry, I missed this one. " if e.data["late"] else "") + t)
+        out(f"FRED (reminder): {t}")
+        speaker and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()
+    bus.subscribe(due, kinds=("due",), sources=("proactive",))
+
+    def warn(e):
+        """The scam watch found a lookalike page: say it (the toast and the pill caption already carry it for a silent room)."""
+        t = sirify(e.data["text"])
+        out(f"FRED (warning): {t}")
+        speaker and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()
+    bus.subscribe(warn, kinds=("warn",), sources=("proactive",))
+
     def say(t):
+        t = sirify(t)
         out(f"FRED (interim): {t}")
         speaker and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()
 
-    engine = Engine(chat, registry or build_skills(recall, mic=mic, bus=bus, embed=embedder.embed), embedder, prompt.build_system(), bus=bus, recall=recall, on_say=say, talk=talk, lock_chat=talk, on_lock=swap)
+    engine = Engine(chat, registry or build_skills(recall, mic=mic, bus=bus, embed=embedder.embed, scheduler=sched), embedder, prompt.build_system(), bus=bus, recall=recall, on_say=say, talk=talk, lock_chat=talk, on_lock=swap)
     if wake:
         WakeDetector(bus).attach(mic)
     vad = Vad(bus)
     vad.attach(mic)
     stt, smart, voice = stt or Stt(bus), smart or SmartTurn(), VoiceId()
-    rt = Runtime(engine, None, stt, mic, bus, _closers=closers)
+    rt = Runtime(engine, None, stt, mic, bus, _closers=closers, scheduler=sched)
+    if memory:
+        from memory_bridge.ask import AskDelivery
+        rt.ask = AskDelivery(bus, mem, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
 
     def handle(text, source="voice"):
         """One turn from text (heard or typed): filler if slow, engine, print, speak."""
         out(f"YOU: {text}")
+        note = rt.ask and not engine.confirm.pending and rt.ask.take(text)       # an answer to the waiting question is not a new turn (a pending yes/no for a tool comes first)
+        if note:
+            out(f"FRED: {sirify(note)}")
+            speaker and speaker.speak(sirify(note))
+            return note
         slow = speaker and threading.Timer(c.filler_after_s, lambda: speaker.speak(pick_filler()))
         slow and slow.start()
         r = engine.run(text, source=source)
@@ -102,12 +132,13 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             out("(cancelled)")
             return ""
         rt.replies.append(r)
-        out(f"FRED: {r.text}")
+        shown = sirify(r.text)                                                     # the edge only: history keeps the model's own words
+        out(f"FRED: {shown}")
         out(trace(r))
         if speaker:
-            said = speaker.speak(r.text)
+            said = speaker.speak(shown)
             h = engine.history
-            if said != r.text.strip() and h and h[-1] == {"role": "assistant", "content": r.text}:
+            if said != shown.strip() and h and h[-1] == {"role": "assistant", "content": r.text}:
                 h[-1] = {"role": "assistant", "content": said or "(interrupted)"}               # follow-ups must not rely on words the user never heard
         return r.text
 
@@ -152,16 +183,34 @@ def main(argv):
         pill = PillController(bus, PillWindow(random_indicator()), speaker=speaker, mic=mic, on_text=rt.handle_text, on_cancel=rt.engine.cancel, speaks=bool(speaker))
         pill.start()
         rt._closers.append(pill.stop)
+        rt.ask and setattr(rt.ask, "show", pill.ask)
     if "--no-hud" not in argv:
         from ui.hud_feed import HudFeed
         feed = HudFeed(bus, speaker, on_command=rt.handle_text)
         feed.start()
         rt._closers.append(feed.stop)
+    from proactive.judge import Judge
+    judge = Judge(bus, ev.EventLog(bus), Embedder().embed)                      # shadow mode: logs what it would do, speaks nothing (P6)
+    judge.start()
+    rt._closers.append(judge.stop)
+    if "--no-screen" not in argv:
+        from proactive.scamwatch import ScamWatch
+        from senses.screen import ScreenSense
+        screen = ScreenSense(bus)
+        watch = ScamWatch(bus, screen)
+        screen.start()
+        watch.start()
+        rt._closers += [watch.stop, screen.stop]
     hk = Hotkey(bus)
     if not mic.start():
         print("could not open the microphone")
         return 1
     hk.start()
+    rt.scheduler.start()
+    if rt.ask:
+        rt.ask.start()
+        rt._closers.append(rt.ask.stop)
+    rt._closers.append(rt.scheduler.stop)
     print(f"listening for {secs:.0f} s: say 'Hey FRED, ...' or hold Left Ctrl + Left Alt. Ctrl+C to stop.")
     try:
         time.sleep(secs)

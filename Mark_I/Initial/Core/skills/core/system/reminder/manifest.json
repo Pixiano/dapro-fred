@@ -1,0 +1,14 @@
+{
+  "name": "reminder",
+  "description": "Set, list or cancel reminders and timers. To set one give either minutes from now (timers, 'in 20 minutes') or an exact local date and time, plus what to remind about. FRED speaks it when it is due, even after a restart.",
+  "args": {"properties": {
+    "action": {"type": "string", "enum": ["set", "list", "cancel"]},
+    "text": {"type": "string", "description": "what to remind about; for a plain timer leave empty"},
+    "minutes": {"type": "number", "description": "minutes from now, for 'in 20 minutes' or 'a 5 minute timer'"},
+    "at": {"type": "string", "description": "clock time of day as 24-hour HH:MM, for 'at 6 pm' (18:00) or 'tomorrow at 9' (09:00); you do not know the date, so never give a date"},
+    "days_ahead": {"type": "integer", "description": "with at: 0 for today (default), 1 for tomorrow, 2 for the day after, 3 for in three days"},
+    "match": {"type": "string", "description": "for cancel: words from the reminder, or 'all'"}}, "required": ["action"]},
+  "examples": ["remind me in 20 minutes to check the oven", "set a timer for 10 minutes", "remind me tomorrow at 9 to call the dentist", "what reminders do I have", "cancel the dentist reminder", "wake me in half an hour"],
+  "not_for": ["telling the time or date", "counting days to a date (use days_until)", "saving a fact to memory"],
+  "flags": {"say": true}
+}

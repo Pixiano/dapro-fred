@@ -50,6 +50,7 @@ def wait(cond, secs=5):
 def main():
     config.set_data_dir(tempfile.mkdtemp())
     config.get().filler_after_s = 0.3
+    config.get().sir_rate = 0.0                                                                # the "sir" edge is tested at the end; the other asserts compare exact words
     bus, lines, sp = ev.EventBus(), [], FakeSpeaker()
     slow = lambda m, t: (time.sleep(0.8), "Slow answer here.")[1]
     chat = FakeChat([slow, "Quick one.", "Half of this long reply was never heard by anyone."])
@@ -98,6 +99,29 @@ def main():
     rt3.engine.cancel()
     third = rt3.handle_text("hello there my friend")
     assert third == "Third.", third                                                # a cancel pressed while idle does not poison the next turn
+    # the "sir" edge: spoken and printed with it, remembered without it, fillers and the interim line rules
+    config.get().sir_rate = 1.0
+    chat.script.append("Plain reply.")
+    rt.handle_text("tell me something")
+    assert sp.said[-1] == "Plain reply, sir." and "FRED: Plain reply, sir." in lines and rt.engine.history[-1]["content"] == "Plain reply."
+    rt.engine._say("Digging deeper.")
+    wait(lambda: sp.said[-1] == "Digging deeper, sir.")
+    from audio.tts import FILLERS
+    assert all("sir" not in f for f in FILLERS)
+    # a reminder coming due is spoken (with the edge's "sir"), a missed one says so, a plain timer has its own line
+    rt.bus.emit("proactive", "due", text="check the oven", what="reminder", late=False)
+    wait(lambda: sp.said[-1] == "Reminder: check the oven, sir.")
+    rt.bus.emit("proactive", "due", text="", what="timer", late=True)
+    wait(lambda: sp.said[-1] == "Sorry, I missed this one. Your timer is up, sir.")
+    # a scam warning is spoken
+    rt.bus.emit("proactive", "warn", scam="phishing", level="high", domain="x", brand="y", reasons=[], title="t", text="Careful, this page looks fake.")
+    wait(lambda: sp.said[-1] == "Careful, this page looks fake, sir.")
+    # the ask queue: an answer to the waiting question is consumed (not a turn); anything else goes on to the engine
+    n = len(rt.engine.history)
+    rt.ask = type("A", (), {"take": lambda s, t: "Noted." if t == "same person" else None})()
+    rt.handle_text("same person")
+    assert sp.said[-1] == "Noted, sir." and len(rt.engine.history) == n
+    config.get().sir_rate = 0.0
     # lockdown swap: engage unloads the brain and the talker answers; release loads the brain back
     class Pg:
         calls = []
