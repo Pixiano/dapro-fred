@@ -17,6 +17,7 @@ import random
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -94,6 +95,7 @@ class Speaker:
         self.bus, self._synth, self._stream = bus, synth or _Kokoro(), stream or _device_stream
         self._cache: dict = {}
         self._cancel = threading.Event()
+        self._last_end = 0.0                                                # when audio last stopped: the Bluetooth lead-in is only needed after a gap
         self.level = 0.0                                                    # 0..1 loudness of the block being played
         self._lock = threading.Lock()                                       # one reply at a time
 
@@ -110,7 +112,8 @@ class Speaker:
     def _emit(self, kind, **d):
         self.bus and self.bus.emit("tts", kind, **d)
 
-    def speak(self, text, cancel=None) -> str:
+    def speak(self, text, cancel=None, quiet=False) -> str:
+        """quiet=True (fillers, interim lines): no tail silence, and the tts events carry quiet=True so the pill and HUD do not treat it as the answer."""
         pieces = [text] if isinstance(text, str) else text
         if not config.get().tts_enabled:
             return "".join(p or "" for p in pieces).strip()
@@ -158,7 +161,7 @@ class Speaker:
 
             threading.Thread(target=producer, daemon=True, name="tts-synth").start()
             c, spoken, stream, rate, natural = config.get(), [], None, None, False
-            self._emit("start")
+            self._emit("start", quiet=quiet)
             try:
                 while not stop():
                     try:
@@ -172,7 +175,7 @@ class Speaker:
                     if stream is None:
                         stream = self._stream(rate)
                         stream.start()
-                        c.tts_preroll_s > 0 and stream.write(np.zeros(int(rate * c.tts_preroll_s), np.float32))
+                        c.tts_preroll_s > 0 and time.monotonic() - self._last_end > c.tts_preroll_gap_s and stream.write(np.zeros(int(rate * c.tts_preroll_s), np.float32))
                     for i in range(0, len(samples), BLOCK):
                         if stop():
                             break
@@ -188,13 +191,14 @@ class Speaker:
                         if stop():
                             stream.abort()
                         else:
-                            natural and c.tts_postroll_s > 0 and stream.write(np.zeros(int(rate * c.tts_postroll_s), np.float32))
+                            natural and not quiet and c.tts_postroll_s > 0 and stream.write(np.zeros(int(rate * c.tts_postroll_s), np.float32))
                             stream.stop()
                         stream.close()
                     except Exception as ex:
                         log.session("tts_error", error=type(ex).__name__)
                 self.level = 0.0
-                self._emit("end", cancelled=not natural)
+                self._last_end = time.monotonic()
+                self._emit("end", cancelled=not natural, quiet=quiet)
             return " ".join(spoken).strip()
 
 
@@ -236,7 +240,15 @@ def _selfcheck():
     assert out == "First sentence is here. Second one follows now. Third and last.", out
     ev_s = Stream.log[-1].events
     assert ev_s[:2] == ["start", 12000] and ev_s[-3:] == [6000, "stop", "close"], ev_s                       # preroll first, postroll after the last word
-    assert seen[0] == ("start", {}) and seen[-1] == ("end", {"cancelled": False})
+    assert seen[0] == ("start", {"quiet": False}) and seen[-1] == ("end", {"cancelled": False, "quiet": False})
+    # a quiet line (filler / interim): events say so, no tail silence; and no lead-in right after other audio (the link is awake)
+    n = len(seen)
+    sp._last_end = time.monotonic()
+    sp.speak("Quick one.", quiet=True)
+    ev_q = Stream.log[-1].events
+    assert ev_q[0] == "start" and ev_q[1] != 12000 and ev_q[-2:] == ["stop", "close"] and 6000 not in ev_q, ev_q
+    assert seen[n] == ("start", {"quiet": True}) and seen[-1] == ("end", {"cancelled": False, "quiet": True})
+    sp._last_end = 0.0
     # streaming input: speech starts at the first complete sentence, before the rest has arrived
     got = []
 
@@ -259,7 +271,7 @@ def _selfcheck():
     threading.Timer(0.15, ev_.set).start()
     t0 = time.time()
     r = sp2.speak("A very long first sentence that never really finishes in time. And another one.", cancel=ev_)
-    assert r == "" and time.time() - t0 < 1.0 and Stream.log[-1].events[-2:] == ["abort", "close"] and seen[-1] == ("end", {"cancelled": True}), (r, Stream.log[-1].events[-3:])
+    assert r == "" and time.time() - t0 < 1.0 and Stream.log[-1].events[-2:] == ["abort", "close"] and seen[-1] == ("end", {"cancelled": True, "quiet": False}), (r, Stream.log[-1].events[-3:])
     c.tts_enabled = False                                                           # off: the text comes back, nothing plays
     n = len(Stream.log)
     assert sp.speak("quiet please") == "quiet please" and len(Stream.log) == n

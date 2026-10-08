@@ -11,7 +11,7 @@ Sockets
        The first model call opens the playground window (live stack unloaded, embedder loaded for the memory index) and the run ends by closing it (live stack reloaded), also when it fails.
        run_once() -> {"nightly": [days], "weekly": [...], ..., "aborted": bool, "error": str}
   when: maybe() runs jobs only if the last turn / speech is older than jobs_quiet_s AND presence is not "present" (no camera reading = only 01:00-06:00), and the last run is older than jobs_gap_h
-        (an aborted or failed run retries after 30 min). If Vatsal comes back or speaks DURING a run, the next model call raises Aborted: the window closes and the live stack returns; the runners are
+        (an aborted or failed run retries after jobs_retry_s (30 min)). If Vatsal comes back or speaks DURING a run, the next model call raises Aborted: the window closes and the live stack returns; the runners are
         resumable, so the unfinished day/week is simply done next time. A single model call (minutes, for the yearly) cannot be cut short.
 Needs memory on (--memory). Alerts' yearly recompute (memory/alerts.run_alerts_pending) is NOT scheduled: it needs a source for the movable festival dates (undecided).
 Self-check: python memory_bridge/jobs.py (fake playground, fake runners)
@@ -30,7 +30,7 @@ import log
 from memory_bridge.link import memory_modules
 
 
-class Aborted(Exception):
+class Aborted(BaseException):                                                # not an Exception: the frozen runners catch Exception per day and would swallow the abort and carry on
     pass
 
 
@@ -39,9 +39,9 @@ class Jobs:
         self.mem, self.pg, self.embed, self.pm, self.now, self.backup_dir = mem, playground, embed, pm, now, backup_dir
         self.present = present or (lambda: None)
         self.mods = mods or self._real_mods()
-        self.last_turn = self.last_run = self.retry_at = 0.0
+        self.last_turn, self.last_run, self.retry_at = now(), 0.0, 0.0                   # FRED just started: not quiet yet
         self._open, self._cur, self._stop = False, None, threading.Event()
-        bus and bus.subscribe(lambda e: setattr(self, "last_turn", e.ts), kinds=("turn", "start", "end"), sources=("engine", "tts"))
+        bus and bus.subscribe(lambda e: setattr(self, "last_turn", e.ts), kinds=("turn", "start", "end", "wake", "state"), sources=("engine", "tts", "audio", "clock"))
 
     @staticmethod
     def _real_mods():
@@ -57,8 +57,8 @@ class Jobs:
             raise Aborted()
         if not self._open:
             self.pg.window_open()
+            self._open = True                                                        # from here the window must be closed, whatever fails next
             self.pg.load(config.get().embedder, slot="embed")
-            self._open = True
         if self._cur != model:
             self.pg.load(model, slot="chat")
             self._cur = model
@@ -99,6 +99,9 @@ class Jobs:
             if self._open:
                 try:
                     self.pg.window_close()
+                except Exception as ex:
+                    out["close_error"] = type(ex).__name__
+                    log.session("jobs_error", stage="window_close", error=type(ex).__name__)
                 finally:
                     self._open, self._cur = False, None
         try:
@@ -106,8 +109,9 @@ class Jobs:
         except Exception as ex:
             out["backup_error"] = type(ex).__name__
             log.session("jobs_error", stage="backup", error=type(ex).__name__)
-        self.last_run = self.now()
-        self.retry_at = self.now() + 1800 if ("aborted" in out or "error" in out) else 0.0
+        failed = "aborted" in out or "error" in out or "close_error" in out
+        self.last_run = 0.0 if failed else self.now()                                 # a failed run is retried after jobs_retry_s, not after the 4 h gap
+        self.retry_at = self.now() + config.get().jobs_retry_s if failed else 0.0
         log.session("jobs", **{k: (len(v) if isinstance(v, list) else bool(v)) for k, v in out.items()})
         return out
 
@@ -130,6 +134,12 @@ class Jobs:
 
     def stop(self):
         self._stop.set()
+        if self._open:                                                              # FRED is closing mid-run: give the live models back
+            try:
+                self.pg.window_close()
+            except Exception:
+                pass
+            self._open = False
 
 
 def _selfcheck():
@@ -159,6 +169,8 @@ def _selfcheck():
             "maintenance": type("M", (), {"run_maintenance_pending": staticmethod(none)}), "period": type("P", (), {"run_monthly_pending": staticmethod(none), "run_yearly_pending": staticmethod(none)}),
             "selfanalysis": type("A", (), {"run_selfanalysis_pending": staticmethod(none)}), "backup": type("B", (), {"run_backup_pending": staticmethod(lambda mem, d: None)})}
     j = Jobs(type("Mem", (), {"store": None})(), PG(), None, present=lambda: state["present"], now=lambda: state["clock"], mods=mods)
+    assert j.last_turn == state["clock"] and j.maybe() is None                      # just started: not quiet yet
+    j.last_turn = 0.0
     # an empty night never touches the GPU
     assert j.run_once() == {"nightly": [], "hygiene": None, "weekly": [], "maintenance": None, "monthly": None, "yearly": None, "selfanalysis": None, "backup": False} and calls == []
     # work: window opens once, qwen for the nightly then gpt for the weekly, window closes
@@ -170,9 +182,30 @@ def _selfcheck():
     calls.clear()
     state["present"] = None
     pending.update(nightly=1, weekly=1)
-    mods["consolidate"].run_pending = staticmethod(lambda mem, llm, model: [llm("x")] and state.update(present=True) or ["d"])
+    def swallowing(mem, llm, model):                                               # like the frozen runners: catches Exception per day and carries on
+        done = []
+        for _ in range(2):
+            try:
+                llm("x")
+                state.update(present=True)
+                done.append("d")
+            except Exception:
+                pass
+        return done
+    mods["consolidate"].run_pending = staticmethod(swallowing)
     r = j.run_once()
-    assert r.get("aborted") and calls[0] == "open" and calls[-1] == "close" and "call weekly" not in calls and j.retry_at == state["clock"] + 1800
+    assert r.get("aborted") and calls[0] == "open" and calls[-1] == "close" and "call weekly" not in calls          # the abort got through the runner's except Exception
+    assert j.retry_at == state["clock"] + 1800 and j.last_run == 0.0                                               # retried after 30 min, not after the 4 h gap
+    # the window closes, and a failing close is reported, not raised
+    calls.clear(); state["present"] = False
+    mods["consolidate"].run_pending = staticmethod(nightly); pending["nightly"] = 1
+    PG.window_close = lambda s: (_ for _ in ()).throw(RuntimeError("reload failed"))
+    r = j.run_once()
+    assert r["close_error"] == "RuntimeError" and j.last_run == 0.0 and j._open is False
+    PG.window_close = lambda s: calls.append("close")
+    # FRED closing mid-run gives the models back
+    j._open = True; calls.clear(); j.stop(); assert calls == ["close"] and not j._open
+    j._stop.clear()
     # a failing stage is reported, the window still closes
     calls.clear(); state["present"] = False; pending["boom"] = True; mods["consolidate"].run_pending = staticmethod(nightly); pending["nightly"] = 0
     r = j.run_once()

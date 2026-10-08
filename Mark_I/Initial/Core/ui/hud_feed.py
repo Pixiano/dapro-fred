@@ -52,9 +52,9 @@ class HudFeed:
                 self._set(s)
             elif e.data.get("state") == "IGNORE" and self.state == "listening":
                 self._set("idle")                                        # a false wake: without this the HUD would stay "listening" (and keep its heartbeat) for ever
-        elif (e.source, e.kind) == ("tts", "start"):
+        elif (e.source, e.kind) == ("tts", "start") and not e.data.get("quiet"):
             self._set("speaking")
-        elif (e.source, e.kind) == ("tts", "end"):
+        elif (e.source, e.kind) == ("tts", "end") and not e.data.get("quiet") and self.state == "speaking":
             self._set("idle")
         elif (e.source, e.kind) == ("proactive", "warn"):
             self._alert_until = time.monotonic() + ALERT_HOLD_S

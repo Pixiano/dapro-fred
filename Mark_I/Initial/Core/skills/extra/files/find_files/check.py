@@ -130,10 +130,25 @@ def _selfcheck():
         assert m.run(action="open", path=str(docs / "Budget.xlsx")) == "Opening Budget.xlsx." and len(opened) == before + 1
         assert m.run(action="open", path=str(docs / "ghost.txt")) == "That file isn't there any more."
 
+        # a program never opens without a yes, and the model cannot skip the question by passing the path itself
+        _mk(dl, "SetupZenithTool.exe", 0.1)
+        m.reindex()
+        n = len(opened)
+        r = m.run(query="zenith tool setup", action="open")
+        assert len(opened) == n, r                                                  # asked, not run
+        m.run(action="open", path=str(dl / "SetupZenithTool.exe"))                  # the yes: runs once
+        assert len(opened) == n + 1
+        try:
+            m.run(action="open", path=str(dl / "SetupZenithTool.exe"))
+            raise AssertionError("ran a program without a yes")
+        except m.ToolError:
+            pass
+        assert len(opened) == n + 1
+
         # incremental reindex: new files appear, deleted ones vanish, nothing else re-read
         (dl / "invoice_zenith_aug.pdf").unlink()
         _mk(dl, "Invoice_Nova_Oct.pdf", 0.1)
-        assert m.reindex() == 12
+        assert m.reindex() == 13
         r = m.run(query="invoice")
         assert "Nova" in r and "zenith" not in r, r
         os.utime(docs / "Budget.xlsx", (time.time() - 2 * 86400,) * 2)

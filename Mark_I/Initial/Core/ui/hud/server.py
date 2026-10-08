@@ -54,6 +54,7 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 try:
     import psutil
@@ -585,6 +586,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
 
+        o = self.headers.get("Origin")                         # a page on another site could otherwise answer FRED's yes/no questions for you
+        if (o and urlparse(o).netloc != self.headers.get("Host")) or not self.headers.get("Content-Type", "").startswith("application/json"):
+            self._send(403, b'{"reply":"refused"}', "application/json")
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             data = json.loads(self.rfile.read(length) or b"{}")

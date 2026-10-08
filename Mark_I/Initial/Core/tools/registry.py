@@ -131,7 +131,7 @@ class Registry:
             clean, errors = coerce(args, spec.schema, base_dir)
             res = Result.fail("bad_args", message="; ".join(errors)) if errors else self._run(spec, clean)
         res.ms = int((time.monotonic() - t0) * 1000)
-        log.tool(name, ok=res.ok, error_kind=res.error_kind, message=res.message[:200], ms=res.ms, args=args if not res.ok else None)
+        log.tool(name, ok=res.ok, error_kind=res.error_kind, message=res.message[:200], ms=res.ms, args=sorted(args or {}) if not res.ok else None)                 # which arguments, never their content
         return res
 
     def _run(self, spec: ToolSpec, args: dict) -> Result:

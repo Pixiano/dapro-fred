@@ -33,7 +33,7 @@ class SystemWatch:
         found = []
         if s["battery"] is not None and not s["plugged"] and s["battery"] <= c.alert_battery_pct:
             found.append(("battery", f"battery at {s['battery']:.0f} percent"))
-        if s["disk_free_gb"] < c.alert_disk_gb or s["disk_free_pct"] < c.alert_disk_pct:
+        if s["disk_free_gb"] < c.alert_disk_gb:
             found.append(("disk", f"system drive nearly full, {s['disk_free_gb']:.0f} GB free"))
         for what, text in found:
             if self.now() - self._last.get(what, -1e12) >= c.alert_cooldown_s:

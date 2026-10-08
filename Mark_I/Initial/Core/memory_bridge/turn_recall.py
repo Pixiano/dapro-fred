@@ -19,6 +19,7 @@ Self-check: python memory_bridge/turn_recall.py (fake embedder + scripted judge,
 import json
 import re
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,7 +54,7 @@ class MemoryRecall:
         self.graph = m["graph"].Graph(memory.store) if graph else None
         self.model = m["personal_model"].PersonalModel(memory, embed, model or "unset")
         self._judged = m["recall"].judged_search
-        self._pending = None                                              # (word, entity_id) awaiting a yes/no from the user
+        self._pending, self._pending_at = None, 0.0                       # (word, entity_id) awaiting a yes/no from the user
 
     def _llm(self, prompt: str) -> str:
         return self.chat.complete([{"role": "user", "content": prompt}], schema=JUDGE_SCHEMA, think=False).text
@@ -78,7 +79,7 @@ class MemoryRecall:
     def _context(self, text: str, say, force: bool = False) -> Recalled:
         if self._pending:
             (word, eid), self._pending = self._pending, None
-            if classify.is_affirmative(text):
+            if classify.is_affirmative(text) and time.time() - self._pending_at < 60:       # an old yes is not an answer
                 self.graph.confirm_alias(word, eid)
                 return Recalled(direct="Got it, I'll remember that.")
             if classify.is_negative(text):
@@ -87,7 +88,7 @@ class MemoryRecall:
         if force or self.wants_search(text):
             r = self._judged(self.index, text, self._llm, k=MAX_EVENTS, say=say, graph=self.graph)
             if r.get("maybe") and not r.get("events") and not r.get("facts"):
-                self._pending = tuple(r["maybe"][0])
+                self._pending, self._pending_at = tuple(r["maybe"][0]), time.time()
                 return Recalled(ask=r["ask"])
             for name, facts in (r.get("facts") or {}).items():
                 lines.append(f"- {name}: " + ", ".join(f"{k} = {v}" for k, v in facts.items()))

@@ -24,7 +24,7 @@ from memory_bridge.link import memory_modules
 
 
 class AskDelivery:
-    def __init__(self, bus, mem, speak, show=None, now=time.time, idle_s=None, ttl_s=300.0, ask=None, answer=None):
+    def __init__(self, bus, mem, speak, show=None, now=time.time, idle_s=None, ttl_s=90.0, ask=None, answer=None):
         if ask is None:
             memory_modules()
             q = importlib.import_module("askqueue")
@@ -33,7 +33,12 @@ class AskDelivery:
         self.turns, self.topic, self.last, self.pending, self.asked_at, self.talking = 0, [], now(), None, 0.0, False
         self._stop = threading.Event()
         bus.subscribe(self._turn, kinds=("turn",), sources=("engine",))
-        bus.subscribe(lambda e: setattr(self, "talking", e.kind == "start"), kinds=("start", "end"), sources=("tts",))
+        bus.subscribe(self._tts, kinds=("start", "end"), sources=("tts",))
+
+    def _tts(self, e):
+        self.talking = e.kind == "start"
+        if e.kind == "end":
+            self.last = self.now()                                                 # the quiet is counted from the last spoken word, not from the reply being ready
 
     def _turn(self, e):
         self.turns, self.last = self.turns + 1, self.now()
@@ -50,12 +55,15 @@ class AskDelivery:
         if not item:
             return
         self.pending, self.asked_at = item, now
-        self.speak(f"{item['text']} " + ", or ".join(o["label"] for o in item["options"]) + "?")
+        opts = ", or ".join(o["label"] for o in item["options"])
+        self.speak(item["text"] if all(o["label"].lower() in item["text"].lower() for o in item["options"]) else f"{item['text']} {opts}?")      # pair items already read their choices
         self.show and self.show(item, lambda i, r: self._answer(self.mem, i, r), lambda r: setattr(self, "pending", None))
 
     def take(self, text: str):
         if not self.pending:
             return None
+        if len(text.split()) > 3:
+            return None                                                             # "yes, set a timer" is a request, not an answer
         r = self._answer(self.mem, self.pending["id"], text)
         if not r.get("ok"):
             return None                                                             # not an answer: a normal turn (the popup stays up)
@@ -83,12 +91,13 @@ def _selfcheck():
     script = [item, None]
     ask = lambda mem, topic, turns: asked.append((topic, turns)) or script.pop(0)
     answer = lambda mem, i, r: {"ok": True, "choice": "yes"} if r == "same" else {"error": "unclear"}
-    d = AskDelivery(bus, "mem", said.append, lambda it, a, done: shown.append((it, a, done)), now=lambda: clock[0], idle_s=10, ttl_s=300, ask=ask, answer=answer)
+    d = AskDelivery(bus, "mem", said.append, lambda it, a, done: shown.append((it, a, done)), now=lambda: clock[0], idle_s=10, ttl_s=90, ask=ask, answer=answer)
     d.tick(); assert not asked                                                      # no conversation yet
     bus.emit("engine", "turn", text="we talked about Rohan"); bus.emit("engine", "turn", text="and the trip")
     clock[0] = 5; d.tick(); assert not asked                                        # still warm
     bus.emit("tts", "start"); clock[0] = 200; d.tick(); assert not asked            # FRED is speaking: wait
-    bus.emit("tts", "end", cancelled=False); d.tick()
+    bus.emit("tts", "end", cancelled=False); d.tick(); assert not asked            # the quiet is counted from the last spoken word
+    clock[0] = 211; d.tick()
     assert asked == [("we talked about Rohan and the trip", 2)] and said == ["Is Rohan the same as Ro? Same person, or Two people?"] and shown[0][0] is item
     d.tick(); assert len(asked) == 1                                                # once per conversation, and not while one waits
     assert d.take("hmm what") is None and d.pending                                 # not an answer: goes to the engine, question stays

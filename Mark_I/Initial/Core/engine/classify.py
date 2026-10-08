@@ -55,7 +55,7 @@ def is_info_question(text: str) -> bool:
 
 def looks_social(text: str) -> bool:
     s = normalise(text)
-    return True if not s else bool(_SOCIAL.match(s) or _ECHO.match(s))
+    return True if not s else bool((len(s.split()) <= 3 and _SOCIAL.match(s)) or _ECHO.match(s))      # "thanks, now open spotify" is a request, not small talk
 
 
 def is_affirmative(text: str) -> bool:

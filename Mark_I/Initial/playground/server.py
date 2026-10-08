@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -137,9 +138,16 @@ def window(action):
                 raise RuntimeError("no window open")
             for s in SLOTS.values():
                 stop(s)
-            saved, STASH = STASH, None
-            for k, (model, ctx, vision) in saved.items():
-                ensure(find(model), ctx, vision, k)
+            failed = []
+            for k, (model, ctx, vision) in list(STASH.items()):                       # keep the stash until every slot is back, so a failed reload can be retried
+                try:
+                    ensure(find(model), ctx, vision, k)
+                    del STASH[k]
+                except Exception:
+                    failed.append(k)
+            if failed:
+                raise RuntimeError("could not reload " + ", ".join(failed))
+            STASH = None
         else:
             raise ValueError("action must be open or close")
 
@@ -169,17 +177,19 @@ class H(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(b)))
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(b)
+
+    def foreign(self):
+        """A browser page on another site (Origin set, not this machine) must not drive the models: no CORS headers are sent, and POSTs from such an Origin are refused."""
+        o = self.headers.get("Origin")
+        return bool(o) and urllib.parse.urlparse(o).hostname not in ("127.0.0.1", "localhost")
 
     def body(self):
         return json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
 
     def do_OPTIONS(self):
         self.send_response(204)
-        for k, v in (("Access-Control-Allow-Origin", "*"), ("Access-Control-Allow-Headers", "*"), ("Access-Control-Allow-Methods", "*")):
-            self.send_header(k, v)
         self.end_headers()
 
     def do_GET(self):
@@ -198,6 +208,8 @@ class H(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, 404)
 
     def do_POST(self):
+        if self.foreign():
+            return self.send_json({"error": "foreign origin"}, 403)
         try:
             b = self.body()
             if self.path == "/api/load":
@@ -251,7 +263,6 @@ class H(BaseHTTPRequestHandler):
             r = c.getresponse()
             self.send_response(r.status)
             self.send_header("Content-Type", r.getheader("Content-Type", "application/json"))
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             while chunk := r.read1(65536):
                 self.wfile.write(chunk)

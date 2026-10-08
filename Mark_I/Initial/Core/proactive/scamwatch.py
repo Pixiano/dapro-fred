@@ -35,12 +35,12 @@ import config
 import log
 
 BRANDS = {
-    "paypal": {"paypal.com"}, "google": {"google.com", "gmail.com", "youtube.com"}, "microsoft": {"microsoft.com", "live.com", "outlook.com", "office.com", "microsoftonline.com"},
-    "amazon": {"amazon.com", "amazon.in", "amazon.co.uk", "amazon.de"}, "apple": {"apple.com", "icloud.com"}, "netflix": {"netflix.com"}, "facebook": {"facebook.com", "fb.com"},
-    "instagram": {"instagram.com"}, "whatsapp": {"whatsapp.com", "whatsapp.net"}, "linkedin": {"linkedin.com"}, "dropbox": {"dropbox.com"}, "github": {"github.com"},
-    "hdfc": {"hdfcbank.com"}, "icici": {"icicibank.com"}, "sbi": {"onlinesbi.sbi", "sbi.co.in"}, "axis": {"axisbank.com"}, "paytm": {"paytm.com"}, "phonepe": {"phonepe.com"},
+    "paypal": {"paypal.com", "paypalobjects.com"}, "google": {"google.com", "google.co.in", "gmail.com", "youtube.com"}, "microsoft": {"microsoft.com", "live.com", "outlook.com", "office.com", "microsoftonline.com"},
+    "amazon": {"amazon.com", "amazon.in", "amazon.co.uk", "amazon.de", "amazonaws.com"}, "apple": {"apple.com", "icloud.com"}, "netflix": {"netflix.com"}, "facebook": {"facebook.com", "fb.com"},
+    "instagram": {"instagram.com"}, "whatsapp": {"whatsapp.com", "whatsapp.net"}, "linkedin": {"linkedin.com"}, "dropbox": {"dropbox.com"}, "github": {"github.com", "github.io", "githubusercontent.com"},
+    "hdfc": {"hdfcbank.com"}, "icici": {"icicibank.com", "icicidirect.com"}, "sbi": {"onlinesbi.sbi", "sbi.co.in"}, "axis": {"axisbank.com"}, "paytm": {"paytm.com"}, "phonepe": {"phonepe.com"},
     "flipkart": {"flipkart.com"}, "irctc": {"irctc.co.in"}, "chase": {"chase.com"}, "wellsfargo": {"wellsfargo.com"}, "coinbase": {"coinbase.com"}, "binance": {"binance.com"},
-    "steam": {"steampowered.com", "steamcommunity.com"}, "discord": {"discord.com", "discord.gg"}, "spotify": {"spotify.com"}, "adobe": {"adobe.com"},
+    "steam": {"steampowered.com", "steamcommunity.com"}, "discord": {"discord.com", "discord.gg", "discordapp.com"}, "spotify": {"spotify.com"}, "adobe": {"adobe.com"},
 }
 SLD = {"co.uk", "co.in", "com.au", "co.jp", "org.uk", "com.br", "co.za", "ac.in", "gov.in", "net.in"}
 ODD_TLD = {"xyz", "top", "click", "zip", "tk", "ml", "ga", "cf", "gq", "icu", "buzz", "rest", "cyou", "monster", "country", "support", "work", "lol", "mov"}
@@ -49,8 +49,8 @@ HOST = re.compile(r"(?<![\w.-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]
 CRED = re.compile(r"\b(password|passcode|pin|otp|cvv|cvc|card number|ssn|social security|one[- ]time (?:password|code)|security code|net ?banking|login id)\b", re.I)
 PRESSURE = re.compile(r"(within \d+ ?(?:hours?|hrs?|minutes?|mins?)|account (?:has been |is |will be )?(?:suspended|limited|locked|closed|restricted|blocked)|verify your (?:account|identity|details|card|information)|"
                       r"confirm your (?:details|account|identity|information)|unusual (?:sign.?in|activity|login)|permanently (?:closed|deleted|blocked)|\burgent\b|act now|final notice)", re.I)
-TECH = re.compile(r"(your (?:computer|pc|device|windows|mac) (?:is|has been|may be) (?:infected|compromised|blocked|at risk)|virus (?:detected|alert)|call (?:microsoft|apple|windows|tech)? ?support|"
-                  r"do not (?:restart|shut ?down|close this)|toll.?free)", re.I)
+TECH = re.compile(r"(your (?:computer|pc|device|windows|mac) (?:is|has been|may be) (?:infected|compromised|blocked|at risk)|virus (?:detected|alert)|call (?:microsoft|apple|windows|tech) support|"
+                  r"do not (?:restart|shut ?down|close this))", re.I)
 LURE = re.compile(r"\.(?:pdf|docx?|xlsx?|jpe?g|png|txt)\.(?:exe|scr|bat|js|vbs|msi|cmd)\b|\b(?:attached|attachment|open|run|download)\b[^\n]{0,40}\.(?:exe|scr|bat|vbs|msi|cmd)\b", re.I)
 GLYPH = str.maketrans({"0": "o", "1": "l", "3": "e", "5": "s", "$": "s", "!": "i", "@": "a"})
 
@@ -102,7 +102,7 @@ def check_host(host: str):
         if legit_prefix and reg not in domains:                                     # paypal.com.verify-login.net
             risk, brand, why = 3, b, [f"{b} is only a label inside another domain"]
             break
-        if b in tokens or (len(b) >= 5 and b in flat) or any(_typo(t, b) for t in flat.split("-") if len(t) >= 5 and len(b) >= 5):
+        if b in tokens or (len(b) >= 6 and b in flat) or any(_typo(t, b) for t in flat.split("-") if len(t) >= 6 and len(b) >= 6):
             risk, brand, why = 3, b, [f"the domain imitates {b}" + (" with look-alike characters" if label.translate(GLYPH) != label else "")]
             break
     tld = reg.split(".")[-1]
@@ -144,13 +144,13 @@ def assess(text: str):
         if risk > best[0]:
             best = (risk, brand, m.group(1).lower(), why)
     risk, brand, host, why = best
-    if risk >= 3 and brand and (cred or pressure):
+    if risk >= 3 and brand and ((cred and pressure) or lure):                       # a lookalike brand needs credentials AND pressure, or a disguised executable
         return Verdict("phishing", "high", registrable(host) if "." in host else host, brand, why + (["asks for credentials"] if cred else []) + (["pressures you to act fast"] if PRESSURE.search(text) else []) + (["an executable disguised as a document"] if lure else []))
     if risk >= 2 and cred and pressure:
         return Verdict("phishing", "medium", registrable(host), brand, why + ["asks for credentials", "pressures you to act fast"])
-    if risk >= 1 and cred and pressure:
+    if risk >= 1 and cred and pressure:                                             # unknown brand, odd site: shown (toast, caption), never spoken
         return Verdict("phishing", "medium", registrable(host), brand, why + ["asks for credentials", "pressures you to act fast"])
-    if tech and (pressure or re.search(r"\b\d[\d\- ()]{8,}\d\b", text)):
+    if tech and (re.search(r"\b\d[\d\- ()]{8,}\d\b", text)):
         return Verdict("scam", "medium", "", "", ["tech-support scam wording"])
     return None
 
@@ -259,6 +259,10 @@ def _selfcheck():
         page("https://shop.example.com/cart", "Your cart: 2 items. Total 1,840. Pay with card number, expiry and CVV. Free delivery within 3 days."),
         page("https://docs.python.org/3/library/re.html", "re - regular expression operations. This module provides regular expression matching operations. Password patterns."),
         "From: Sam <sam@gmail.com>\nSubject: Photos from Sunday\nHi, attached are the report.pdf and the trip photos, open them when you can. See you soon, talk later.",
+        page("https://s3.amazonaws.com/bucket/file", "Files for you. Enter your password or PIN to open. URGENT notice."),               # real CDN / ccTLD / substring look-alikes the reviewer found
+        page("https://purchase-orders.com/login", "Enter your password. URGENT: act now, final notice."),
+        page("https://www.google.co.in/account", "Enter your password. URGENT: verify your account now."),
+        page("https://shop.example.org/support", "Call toll free 1800 123 4567 for help with your order, any day of the week."),
         "tiny text",
         "",
     ]

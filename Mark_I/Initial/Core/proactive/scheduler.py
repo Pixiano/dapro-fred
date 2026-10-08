@@ -55,7 +55,7 @@ class Scheduler:
     def cancel(self, match: str) -> int:
         m = match.lower().split()
         with self._lock:
-            gone = [i for i in self._items if match.strip().lower() == "all" or (m and all(w in i["text"].lower() for w in m))]
+            gone = [i for i in self._items if match.strip().lower() == "all" or (m and all(w in (i["text"] + " " + i["kind"]).lower() for w in m))]
             self._items = [i for i in self._items if i not in gone]
             gone and self._save()
         return len(gone)

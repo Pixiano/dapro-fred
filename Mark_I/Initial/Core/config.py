@@ -21,18 +21,16 @@ class Settings:
     embedder: str = "local/qwen3-embedding-0.6b-q8_0"
     http_timeout_s: float = 600.0                     # one model call, incl. a cold load
     http_retries: int = 1                             # extra tries on a connection error only
-    max_tool_rounds: int = 4                          # P3 loop
-    max_calls_per_round: int = 4
     tool_timeout_s: float = 15.0                      # default per tool call
     gpu_default_timeout_s: float = 120.0
     alert_battery_pct: float = 10.0                   # proactive/alerts.py: unplugged battery at or below this is critical
-    alert_disk_gb: float = 10.0                       # system drive with less free space than this (GB), or under alert_disk_pct percent, is critical
-    alert_disk_pct: float = 5.0
+    alert_disk_gb: float = 10.0                       # system drive with less free space than this (GB) is critical (a percentage would fire on a 2 TB drive with 100 GB free)
     alert_cooldown_s: float = 1800.0                  # one alert per kind this often
     ask_idle_s: float = 10.0                          # memory_bridge/ask.py: a conversation counts as over after this much silence (no turn, FRED not speaking); the ask queue's question comes then
     jobs_enabled: bool = True                         # memory_bridge/jobs.py: nightly/weekly/monthly/yearly runs through the GPU window (memory on only)
     jobs_check_s: float = 300.0                       # how often it looks whether a run is due
     jobs_quiet_s: float = 600.0                       # no turn or speech for this long before a run may start, and a turn during a run aborts it
+    jobs_retry_s: float = 1800.0                      # retry delay after an aborted or failed run
     jobs_gap_h: float = 4.0                           # at least this long between runs
     judge_threshold: float = 0.6                      # proactive judge: classifier p needed to speak (invented-case sweep: 0.5 P .96 R .77, 0.6 P .97 R .62, 0.7 P 1.0 R .47); retune on the shadow log
     judge_cooldown_s: float = 120.0                   # the judge stays quiet this long after FRED last spoke
@@ -96,6 +94,7 @@ class Settings:
     tts_voice: str = "am_michael"                     # the voice Vatsal picked in the old build
     tts_speed: float = 1.0                            # 1x only (Vatsal, 2026-10-07; the old build used 1.2)
     tts_preroll_s: float = 1.5                        # silence written first: a Bluetooth link ramps its volume at the start (measured on Vatsal's headphones); 0 on a wired output
+    tts_preroll_gap_s: float = 3.0                    # the lead-in is skipped when the previous audio ended less than this long ago (a filler right before the answer): the link is still awake
     tts_postroll_s: float = 1.0                       # silence after the last word: the link buffers and would clip the end; 0 on a wired output
     filler_after_s: float = 0.8                       # a reply slower than this gets a 2-3 word spoken filler ("On it.") while the brain works
     talker: str = "openbmb/minicpm5-2b"               # small model for tool-free chat turns and for lockdown (playground slot talk); "" = the brain answers everything
@@ -130,6 +129,8 @@ class Settings:
 
 
 def _coerce(raw: str, like):
+    if isinstance(like, tuple):
+        return tuple(x.strip() for x in raw.split(",") if x.strip())
     return (raw.lower() in ("1", "true", "yes", "on")) if isinstance(like, bool) else type(like)(raw)
 
 

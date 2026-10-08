@@ -86,9 +86,9 @@ class PillController:
         elif k == ("stt", "transcript") and d.get("final") and d.get("text", "").strip():
             text = d["text"].strip()
             self._say(text, _read_s(text, 2.5))
-        elif k == ("tts", "start"):
+        elif k == ("tts", "start") and not d.get("quiet"):
             self._show("speaking")
-        elif k == ("tts", "end"):
+        elif k == ("tts", "end") and not d.get("quiet") and self.state == "speaking":      # a late end after a barge-in must not hide the pill mid-sentence
             self._set("idle")
             self._later_hide(self.linger_s)
         elif k == ("engine", "turn") and d.get("origin") != "proactive":
@@ -99,6 +99,10 @@ class PillController:
                 self._show("idle", ttl)
             elif self.state == "thinking":
                 self._later_hide(5.0)                                          # answered but nothing spoken (empty reply, tts down): tts.start cancels this
+        elif k == ("proactive", "caption"):
+            ttl = _read_s(d.get("text", ""), 6.0)
+            self._say(d.get("text", ""), ttl)
+            self._show("idle", ttl)
         elif k == ("proactive", "warn"):
             self._warn_until = time.time() + WARN_S
             self.win.set_transcript(d.get("title", "Careful"), ttl=WARN_S, warn=True)

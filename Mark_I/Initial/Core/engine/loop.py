@@ -351,7 +351,9 @@ class Engine:
 
     def _post(self, name, args, t: _Turn, res: Result, ran: bool = True):
         key = _canon(name, args)
-        if not res.ok and key not in t.failed:
+        if res.ok:
+            t.failed = {k: v for k, v in t.failed.items() if not k.startswith(name + "{")}          # a corrected retry that worked is not a failure to report
+        elif key not in t.failed:
             t.failed[key] = res
             t.fails[name] = t.fails.get(name, 0) + 1
         s = self.registry.spec(name)

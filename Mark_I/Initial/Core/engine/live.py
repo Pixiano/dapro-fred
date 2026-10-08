@@ -73,7 +73,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         from memory_bridge.link import open_memory
         from memory_bridge.turn_recall import MemoryRecall
         mem = open_memory()
-        recall, feed = MemoryRecall(mem, embedder, chat, c.embedder), Feed(mem, bus)
+        recall, feed = MemoryRecall(mem, embedder, chat, c.embedder), Feed(mem, bus, lambda: engine.locked)
         feed.start()
         closers += [mem.close, feed.stop]
     def swap(locked):
@@ -89,6 +89,8 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         t = f"Reminder: {e.data['text']}." if e.data["text"] else "Your timer is up."
         t = sirify(("Sorry, I missed this one. " if e.data["late"] else "") + t)
         out(f"FRED (reminder): {t}")
+        if not (speaker and c.tts_enabled):
+            bus.emit("proactive", "caption", text=t)                               # a silent setup would otherwise lose the reminder: the pill shows it
         speaker and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()
     bus.subscribe(due, kinds=("due",), sources=("proactive",))
 
@@ -96,13 +98,13 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         """The scam watch found a lookalike page: say it (the toast and the pill caption already carry it for a silent room)."""
         t = sirify(e.data["text"])
         out(f"FRED (warning): {t}")
-        speaker and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()
+        speaker and e.data.get("level") == "high" and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()      # medium: toast and caption only
     bus.subscribe(warn, kinds=("warn",), sources=("proactive",))
 
     def say(t):
         t = sirify(t)
         out(f"FRED (interim): {t}")
-        speaker and threading.Thread(target=speaker.speak, args=(t,), daemon=True).start()
+        speaker and threading.Thread(target=speaker.speak, args=(t,), kwargs={"quiet": True}, daemon=True).start()
 
     engine = Engine(chat, registry or build_skills(recall, mic=mic, bus=bus, embed=embedder.embed, scheduler=sched), embedder, prompt.build_system(), bus=bus, recall=recall, on_say=say, talk=talk, lock_chat=talk, on_lock=swap)
     if wake:
@@ -130,10 +132,12 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             out(f"FRED: {sirify(note)}")
             speaker and speaker.speak(sirify(note))
             return note
-        slow = speaker and threading.Timer(c.filler_after_s, lambda: speaker.speak(pick_filler()))
+        fev = threading.Event()                                                    # the filler's own cancel: set the moment the reply is ready, so it never delays or follows the answer
+        slow = speaker and threading.Timer(c.filler_after_s, lambda: speaker.speak(pick_filler(), cancel=fev, quiet=True))
         slow and slow.start()
         r = engine.run(text, source=source)
         slow and slow.cancel()
+        fev.set()
         if r.via == "cancelled":
             out("(cancelled)")
             return ""
@@ -144,7 +148,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         if speaker:
             said = speaker.speak(shown)
             h = engine.history
-            if said != shown.strip() and h and h[-1] == {"role": "assistant", "content": r.text}:
+            if " ".join(said.split()) != " ".join(shown.split()) and h and h[-1] == {"role": "assistant", "content": r.text}:
                 h[-1] = {"role": "assistant", "content": said or "(interrupted)"}               # follow-ups must not rely on words the user never heard
         return r.text
 

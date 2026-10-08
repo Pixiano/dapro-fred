@@ -257,6 +257,12 @@ def _line(r: dict) -> str:
     return f"{r['name']} ({Path(r['folder']).name}, {d}, {_size(r['size'])})"
 
 
+RUNNABLE = {".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse", ".wsf", ".scr", ".com", ".lnk", ".jar", ".reg", ".hta", ".cpl", ".msc"}      # opening one of these runs code: always a yes first
+
+
+_ASKED: set = set()                                                       # programs a yes was asked for: the model cannot reach the follow-up with a path of its own
+
+
 def _launch(path: str, how: str):
     if LAUNCH:
         return LAUNCH(path, how)
@@ -276,6 +282,9 @@ def _bump(con, path: str):
 
 def run(query: str = "", kind: str = "any", when: str = "", folder: str = "", action: str = "find", path: str = "") -> str:
     if action in ("open", "show") and path:                          # the yes/no follow-up: that exact file
+        if action == "open" and Path(path).suffix.lower() in RUNNABLE and path not in _ASKED:
+            raise ToolError("denied", "I need your yes before I run a program.", "runnable path given without a confirmation")
+        _ASKED.discard(path)
         con = _ready()
         try:
             hit = con.execute("SELECT path FROM files WHERE path=?", (path,)).fetchone()
@@ -307,12 +316,16 @@ def run(query: str = "", kind: str = "any", when: str = "", folder: str = "", ac
         clear = len(top) == 1 or top[0][0] - top[1][0] >= 1.0
         conf = getattr(_ctx["c"].get("registry"), "confirmer", None)
         best = top[0][1]
-        if clear and (top[0][0] >= 2.0 * max(len(ws), 1) or not ws):
+        runs = action == "open" and Path(best["path"]).suffix.lower() in RUNNABLE
+        if clear and not runs and (top[0][0] >= 2.0 * max(len(ws), 1) or not ws):
             _launch(best["path"], action)
             _bump(con, best["path"])
             return f"{'Showing' if action == 'show' else 'Opening'} {best['name']}."
         if clear and conf is not None:
-            return conf.ask("find_files", {"action": action, "path": best["path"]}, f"I found {_line(best)}. {'Show' if action == 'show' else 'Open'} it? Yes or no?")
+            runs and _ASKED.add(best["path"])
+            return conf.ask("find_files", {"action": action, "path": best["path"]}, f"I found {_line(best)}. {'Show' if action == 'show' else 'Open'} it?{' This program will run.' if runs else ''} Yes or no?")
+        if runs:
+            return f"That is a program, so I won't run it without a yes: {_line(best)}."
         return "Which one: " + "; ".join(f"{i}. {_line(r)}" for i, (_, r) in enumerate(top[:3], 1)) + "? Say more of the name."
     finally:
         con.close()

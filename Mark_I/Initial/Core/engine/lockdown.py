@@ -29,7 +29,8 @@ RELEASE = re.compile(r"^\W*(?:unlock|(?:end|lift|disengage|exit|stop)\s+(?:the\s
 
 
 def _norm(s: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", s.lower()))
+    n = " ".join(re.findall(r"[a-z0-9]+", s.lower()))
+    return n.replace(" ", "") if n.replace(" ", "").isdigit() else n                              # a spoken PIN may come back as "1, 2, 3, 4"
 
 
 def _file() -> Path:

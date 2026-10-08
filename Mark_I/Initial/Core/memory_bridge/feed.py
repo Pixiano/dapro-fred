@@ -29,8 +29,8 @@ def _iso(ts: float) -> str:
 
 
 class Feed:
-    def __init__(self, memory, bus):
-        self.memory, self.bus, self.session, self._unsub = memory, bus, None, None
+    def __init__(self, memory, bus, locked=lambda: False):
+        self.memory, self.bus, self.session, self._unsub, self.locked = memory, bus, None, None, locked
 
     def start(self) -> str:
         self.session = self.memory.archive.new_session()
@@ -52,6 +52,8 @@ class Feed:
 
     def _on(self, e):
         d, k, s = e.data, e.kind, e.source
+        if self.locked() and (s, k) in (("stt", "transcript"), ("engine", "tool"), ("screen", "described")):
+            return                                                                  # lockdown: a spoken passphrase, tool results and the screen are not archived
         if (s, k) == ("engine", "turn"):
             self._write("conversation", {"role": "user", "text": d["text"], "origin": d.get("origin")}, e.ts - d.get("ms", 0) / 1000)
             self._write("conversation", {"role": "assistant", "text": d["reply"], "via": d.get("via"), "tools": d.get("calls") or []}, e.ts)

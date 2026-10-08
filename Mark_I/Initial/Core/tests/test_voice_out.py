@@ -31,10 +31,11 @@ class Stt:
 
 
 class FakeSpeaker:
-    def __init__(self): self.said, self.cancelled, self.block = [], 0, None
+    def __init__(self): self.said, self.cancelled, self.block, self.quiet = [], 0, None, []
     def cancel(self): self.cancelled += 1
-    def speak(self, text, cancel=None):
+    def speak(self, text, cancel=None, quiet=False):
         self.said.append(text)
+        quiet and self.quiet.append(text)
         if self.block and text == self.block:
             return "Half of"                                                          # a barge-in cut this reply off after its first words
         return text.strip()
@@ -111,6 +112,12 @@ def main():
     # a reminder coming due is spoken (with the edge's "sir"), a missed one says so, a plain timer has its own line
     rt.bus.emit("proactive", "due", text="check the oven", what="reminder", late=False)
     wait(lambda: sp.said[-1] == "Reminder: check the oven, sir.")
+    config.get().tts_enabled = False
+    caps = []
+    rt.bus.subscribe(lambda e: caps.append(e.data["text"]), kinds=("caption",), sources=("proactive",))
+    rt.bus.emit("proactive", "due", text="silent one", what="reminder", late=False)
+    assert caps and set(caps) == {"Reminder: silent one, sir."}, caps                       # no speech: the pill gets it
+    config.get().tts_enabled = True
     rt.bus.emit("proactive", "due", text="", what="timer", late=True)
     wait(lambda: sp.said[-1] == "Sorry, I missed this one. Your timer is up, sir.")
     # a scam warning is spoken

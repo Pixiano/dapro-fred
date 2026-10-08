@@ -154,9 +154,12 @@ def run(file: str = "", instruction: str = "", apply: str = "") -> str:
             out = out.replace(e["old"], e["new"])
         undo = config.data_dir() / "vault_undo"
         undo.mkdir(parents=True, exist_ok=True)
-        (undo / f"{path.stem}.{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}").write_text(text, encoding="utf-8")
+        nl = "\r\n" if b"\r\n" in path.read_bytes() else "\n"                    # keep the file's own line endings (write_text would turn LF into CRLF on Windows)
+        with open(undo / f"{path.stem}.{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}", "w", encoding="utf-8", newline=nl) as f:
+            f.write(text)
         tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:6]}.tmp")
-        tmp.write_text(out, encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8", newline=nl) as f:
+            f.write(out)
         os.replace(tmp, path)
         log.session("edit_note", file=path.name, edits=len(edits), lines_before=text.count("\n"), lines_after=out.count("\n"))
         return f"Done, {path.stem} is updated."
