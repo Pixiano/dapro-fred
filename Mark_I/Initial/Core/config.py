@@ -25,6 +25,10 @@ class Settings:
     max_calls_per_round: int = 4
     tool_timeout_s: float = 15.0                      # default per tool call
     gpu_default_timeout_s: float = 120.0
+    alert_battery_pct: float = 10.0                   # proactive/alerts.py: unplugged battery at or below this is critical
+    alert_disk_gb: float = 10.0                       # system drive with less free space than this (GB), or under alert_disk_pct percent, is critical
+    alert_disk_pct: float = 5.0
+    alert_cooldown_s: float = 1800.0                  # one alert per kind this often
     judge_threshold: float = 0.6                      # proactive judge: classifier p needed to speak (invented-case sweep: 0.5 P .96 R .77, 0.6 P .97 R .62, 0.7 P 1.0 R .47); retune on the shadow log
     judge_cooldown_s: float = 120.0                   # the judge stays quiet this long after FRED last spoke
     judge_every_s: float = 30.0                       # shadow look interval (also looks at once on a due reminder or a warning)

@@ -192,6 +192,10 @@ def main(argv):
     from proactive.judge import Judge
     judge = Judge(bus, ev.EventLog(bus), Embedder().embed)                      # shadow mode: logs what it would do, speaks nothing (P6)
     judge.start()
+    from proactive.alerts import SystemWatch
+    alerts = SystemWatch(bus)
+    alerts.start()
+    rt._closers.append(alerts.stop)
     rt._closers.append(judge.stop)
     if "--no-screen" not in argv:
         from proactive.scamwatch import ScamWatch
