@@ -17,3 +17,8 @@ One entry per live run of the full system: setup, what the event log and console
 
 ## Tray icon and HUD (also 2026-10-08)
 Ported from the old FRED (`pill_app._start_tray`, `utils/hud_manager.py`) and rebranded "Mark I": `ui/tray.py` (left click Show HUD, Restart Mark I, Quit Mark I) and `ui/hud_launcher.py` (starts the HUD server on :8777 as its own process, opens a kiosk Chrome on click). Both start in `engine/live.py` unless `--no-hud`. `pystray` added to requirements. The HUD page itself still says "FRED" in its title and header; not rebranded yet.
+
+## Run 3 and 4 - 2026-10-08, late (speed 1.17x)
+- Run 3 was ended from the tray (clean exit). Run 4 was killed by hand: with the TV on, background voices still became turns ("What are you doing?" x3 from a 1.4 s clip, "Thank you." and similar). Volume cannot separate them: real phrases and TV clips both peak 0.05 to 0.13.
+- Fix: the voice-ID gate switched on (`voice_id_enabled` True, `voice_threshold` 0.33), enrolled from 11 of Vatsal's own saved lavalier clips (the wake word and plain commands; the file stays in `FRED_Private`, never in the repo). Leave-one-out check on the saved clips: Vatsal 0.39 to 0.62, TV/room noise 0.15 to 0.28.
+- Caveat: the gate only judges clips of 1 s or more (`voice_min_s`); shorter ones pass as "unknown". Eleven clips is a small enrolment; more real speech will make it steadier.
