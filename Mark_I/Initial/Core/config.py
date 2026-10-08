@@ -77,11 +77,21 @@ class Settings:
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
+    tts_enabled: bool = True                          # False = nothing is spoken (text only)
+    kokoro_model: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
+    kokoro_voices: str = str(CORE_DIR.parent.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")
+    tts_voice: str = "am_michael"                     # the voice Vatsal picked in the old build
+    tts_speed: float = 1.0                            # 1x only (Vatsal, 2026-10-07; the old build used 1.2)
+    tts_preroll_s: float = 1.5                        # silence written first: a Bluetooth link ramps its volume at the start (measured on Vatsal's headphones); 0 on a wired output
+    tts_postroll_s: float = 1.0                       # silence after the last word: the link buffers and would clip the end; 0 on a wired output
+    filler_after_s: float = 0.8                       # a reply slower than this gets a 2-3 word spoken filler ("On it.") while the brain works
+    talker: str = "openbmb/minicpm5-2b"               # small model for tool-free chat turns and for lockdown (playground slot talk); "" = the brain answers everything
     gmail_token_path: str = ""                        # OAuth token file of the user's Gmail client; empty = ~/VatsalDaPro/Keys/FRED_Gmail_token.json (outside the repo)
     weather_city: str = ""                            # default city for the weather skill when none is named (set it in your own settings, not in the repo)
     scamwatch_enabled: bool = True                    # warn (toast + bus event) when the screen shows a phishing or scam page; proactive/scamwatch.py
     scamwatch_cooldown_s: float = 1800.0              # the same domain is not warned about again for this long
     scamwatch_max_per_hour: int = 6
+    pill_topmost_every_s: float = 1.0                 # while the pill is visible, re-assert it above other topmost windows (a borderless-fullscreen app or a video player can take the top spot after the pill appeared); 0 = only on show
     talk_max_tokens: int = 200                        # cap on the small talker's replies: spoken answers are short, and a 2B that does not stop must not run for minutes
     ambient_enabled: bool = True                      # skills with an ambient() hook may add a digest (web facts about a named person/event) before the model answers; False = never
     ambient_timeout_s: float = 10.0                   # an ambient digest slower than this is dropped, the answer goes ahead without it

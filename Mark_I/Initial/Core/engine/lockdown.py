@@ -7,7 +7,7 @@ Sockets
        releasing needs the passphrase when one is set ("unlock <phrase>"). With no passphrase set, "end lockdown" releases, and the engage reply says so.
 stash(vector): locked-down chat is kept as an embedding only, in a file apart from the memory graph.
 saved()/save(): the locked flag in <data dir>/lockdown_state.json, so a restart or reboot stays locked (a bad file means unlocked).
-Not here yet: swapping the 4B brain for the 2B talker while locked (the talker model arrives with P4 voice): Engine(lock_chat=...) is the socket, it answers chat turns while locked.
+Model swap: Engine(lock_chat=talker, on_lock=fn) - engine/live.py unloads the 4B chat slot on engage (the 2B talker answers) and loads it back on release (the unlock reply waits for the load).
 Self-check: python engine/lockdown.py
 """
 import hashlib

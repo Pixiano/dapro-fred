@@ -56,6 +56,10 @@ class Reply:
     via: str = "chat"
 
 
+class Cancelled(Exception):
+    """The user cancelled the turn in flight (the pill's cancel button, a typed message replacing it)."""
+
+
 class _Turn:
     """Per-turn state: what failed, how often, what ran, what was read."""
 
@@ -83,11 +87,12 @@ def _text(res: Result) -> str:
 
 
 class Engine:
-    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None, lock_chat=None, talk=None):
+    def __init__(self, chat, registry, embedder=None, system: str = "", bus=None, confirm: gates.Confirmer | None = None, recall=None, on_say=None, lock_chat=None, talk=None, on_lock=None):
         self.chat, self.registry, self.system, self.bus = chat, registry, system, bus
         self.talk = talk                           # optional small talker: answers turns that offer no tools (chit-chat); the brain (chat) picks and runs every tool
         self.recall, self.on_say, self.embedder = recall, on_say, embedder
         self._since_time = 0                       # turns since the model last knew the time (the time tool ran, or the note was shown)
+        self.on_lock = on_lock                          # on_lock(locked): the host swaps models (live.py: 4B out, 2B talker in while locked)
         self.lock_chat, self.locked, self._private = lock_chat, False, False      # lockdown (engine/lockdown.py): lock_chat = the small talker model that answers while locked
         self.router = classify.Router(registry, embedder) if embedder is not None else None
         self.confirm = confirm or gates.Confirmer()
@@ -96,14 +101,24 @@ class Engine:
         self.history: list[dict] = []
         if lockdown.saved():                       # locked before the restart: still locked
             self._set_lockdown(True)
+        self._cancel = threading.Event()      # cancel(): the turn in flight stops at its next model call or tool run and says nothing
         self._lock = threading.Lock()         # one turn at a time: a second utterance waits for the first reply
 
     # ---- public --------------------------------------------------------------------------------------------------------------
+    def cancel(self):
+        """Stop the turn in flight. A model call already running finishes on the server but its answer is dropped; tools that already ran stay done. Before the next turn starts this is a no-op."""
+        self._cancel.set()
+
     def run(self, text: str, source: str = "voice") -> Reply:
         with self._lock:
+            self._cancel.clear()
             t0 = time.monotonic()
             try:
                 r = self._run(text)
+            except Cancelled:
+                self.confirm._p = None
+                log.session("turn_cancelled", source=source, asked=text[:200])
+                return Reply("", via="cancelled")                                      # not remembered, no bus event, nothing to speak
             except Exception as ex:                                                    # the model server down, a bug: the user hears a clean line, the log has the rest
                 log.session("engine_error", error=repr(ex), asked=text[:200])
                 r = Reply("I hit a problem and couldn't finish that.", via="fault")
@@ -126,6 +141,7 @@ class Engine:
     # ---- internals -----------------------------------------------------------------------------------------------------------
     def _set_lockdown(self, on: bool) -> Reply:
         self.locked = on
+        self.on_lock and self.on_lock(on)
         self.registry.only = frozenset(config.get().lockdown_tools) if on else None
         self.history.clear()
         self.confirm._p = None
@@ -172,7 +188,17 @@ class Engine:
         self.history += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
         del self.history[: -2 * config.get().history_turns]
 
+    def _check(self):
+        if self._cancel.is_set():
+            raise Cancelled()
+
     def _complete(self, msgs, tools, force=False, brain=False):
+        self._check()
+        r = self._complete_(msgs, tools, force, brain)
+        self._check()
+        return r
+
+    def _complete_(self, msgs, tools, force=False, brain=False):
         m = self.lock_chat if self.locked and self.lock_chat else self.talk if self.talk and not tools and not brain else self.chat
         return m.complete(list(msgs), tools=tools or None, think=config.get().engine_think, **({"tool_choice": "required"} if force and tools else {}), **({"max_tokens": config.get().talk_max_tokens} if m is self.talk else {}))      # a copy: the loop edits msgs afterwards
 
@@ -338,6 +364,7 @@ class Engine:
 
     def _execute(self, calls, t: _Turn) -> list:
         """Pre-checks in order (they depend on earlier failures), the real calls in parallel, bookkeeping in order."""
+        self._check()
         out: list = [None] * len(calls)
         todo, first = [], {}
         for i, x in enumerate(calls):

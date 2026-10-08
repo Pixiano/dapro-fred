@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FRED · HUD</title>
+<style>
+/* Fonts are local-only on purpose: the page has to work with no network
+   (see server.py's loopback-only bind). Chakra Petch / JetBrains Mono are
+   used when installed and fall back to the closest system faces when not. */
+html,body{margin:0;padding:0;background:#02060a;overflow:hidden;height:100%}
+*{box-sizing:border-box}
+:root{
+  --acc:#7fe9ff; --amber:#ffc466; --good:#8dffb0;
+  --spin-outer:46s; --spin-inner:30s; --coil:160s; --sweep:5.2s; --pulse:3.4s;
+  --glow:.45;   /* 0..1 overall energy, set per state */
+  --lvl:0;      /* live voice amplitude, 0..1, only moves while speaking */
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinR{to{transform:rotate(-360deg)}}
+@keyframes corePulse{0%,100%{opacity:.85;transform:scale(1)}50%{opacity:1;transform:scale(1.045)}}
+@keyframes haloPulse{0%,100%{opacity:.35;transform:scale(1)}50%{opacity:.75;transform:scale(1.12)}}
+@keyframes coilFlick{0%,100%{opacity:1}42%{opacity:.45}47%{opacity:1}}
+@keyframes sweep{to{transform:rotate(360deg)}}
+@keyframes scan{0%{transform:translateY(-200px)}100%{transform:translateY(1000px)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* The ring detaching from the reactor. width/height/border-radius are
+   animated rather than transform:scale because a uniform scale would
+   squash a circle into an ellipse, never a pill — the shape change IS
+   the effect. One-shot on a single absolutely-positioned element, so
+   the layout cost it does carry stays off the steady-state frame
+   budget; nothing here runs while the countdown is just ticking. */
+@keyframes timerEmerge{
+  0%   {width:428px;height:428px;border-radius:50%;transform:translateY(0) rotate(-14deg);opacity:0}
+  22%  {opacity:.85}
+  100% {width:136px;height:30px;border-radius:15px;transform:translateY(-289px) rotate(0deg);opacity:1}
+}
+@keyframes timerRetract{
+  0%   {width:136px;height:30px;border-radius:15px;transform:translateY(-289px);opacity:1}
+  100% {width:428px;height:428px;border-radius:50%;transform:translateY(0);opacity:0}
+}
+@keyframes timerTextIn{0%,58%{opacity:0}100%{opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+#stage{position:absolute;left:50%;top:50%;width:1600px;height:900px;
+  transform:translate(-50%,-50%) scale(var(--hud-scale,1));transform-origin:center center;
+  background:radial-gradient(ellipse 70% 60% at 50% 50%,#06131b 0%,#03080c 55%,#01050700 100%),#02060a;
+  font-family:'Chakra Petch','Segoe UI',system-ui,sans-serif;color:var(--acc);
+  overflow:hidden;user-select:none;
+  /* Alert recolours the entire HUD in one property rather than swapping
+     ~80 hardcoded rgba() values. */
+  transition:filter .45s ease}
+.mono{font-family:'JetBrains Mono',Consolas,'Cascadia Mono',monospace}
+
+.bar{height:7px;background:rgba(127,233,255,.12);border:1px solid rgba(127,233,255,.25)}
+.bar>i{display:block;height:100%;width:0;transition:width .5s ease;
+  background:linear-gradient(90deg,#2ea8d6,#a9f4ff);box-shadow:0 0 12px rgba(120,230,255,.8)}
+.bar.amber>i{background:linear-gradient(90deg,#d69a2e,#ffd79a);box-shadow:0 0 12px rgba(255,190,90,.7)}
+.barrow{display:flex;justify-content:space-between;font:500 11px/1 'JetBrains Mono',Consolas,monospace;
+  letter-spacing:.16em;color:rgba(190,245,255,.8);margin-bottom:5px}
+.tile{border:1px solid rgba(127,233,255,.22);padding:8px 9px;background:rgba(20,60,80,.22)}
+.tile b{display:block;font:400 9px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.2em;
+  color:rgba(127,233,255,.55);font-weight:400}
+.tile s{display:block;text-decoration:none;font:600 17px/1.2 'Chakra Petch','Segoe UI',sans-serif;color:#d8f8ff;margin-top:3px}
+.tile.hot{border-color:rgba(255,190,90,.28);background:rgba(80,55,15,.22)}
+.tile.hot b{color:rgba(255,196,102,.6)} .tile.hot s{color:#ffd79a}
+
+.sysrow{display:flex;align-items:center;gap:12px;
+  font:400 11px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.14em}
+.sysrow .i{width:30px;text-align:left;color:rgba(127,233,255,.4)}
+.sysrow .n{flex:1;text-align:left;color:rgba(200,248,255,.85)}
+.sysrow .v{width:74px;text-align:right;color:#d8f8ff}
+.sysrow .s{width:52px;text-align:right}
+
+#spectrum{display:flex;justify-content:flex-end;align-items:flex-end;gap:4px;height:64px;
+  margin-top:18px;border-bottom:1px solid rgba(127,233,255,.25);padding-bottom:2px}
+#spectrum i{width:9px;height:100%;transform-origin:bottom;transform:scaleY(.06);
+  transition:transform .22s ease;
+  background:linear-gradient(180deg,#a9f4ff,rgba(46,168,214,.15))}
+#spectrum i.pk{background:linear-gradient(180deg,#ffd79a,rgba(214,154,46,.15))}
+
+#muteBtn{width:20px;height:20px;flex:0 0 auto;padding:0;display:grid;place-items:center;
+  border:1px solid rgba(127,233,255,.3);border-radius:50%;background:rgba(20,60,80,.22);
+  color:rgba(127,233,255,.7);cursor:pointer;
+  transition:border-color .2s,box-shadow .2s,color .2s,background-color .2s}
+#muteBtn svg{width:12px;height:12px}
+#muteBtn:hover{border-color:rgba(127,233,255,.65);box-shadow:0 0 10px rgba(127,233,255,.3)}
+#muteBtn.muted{color:rgba(255,140,140,.9);border-color:rgba(255,120,120,.45);background:rgba(80,20,20,.25)}
+#muteBtn.muted:hover{box-shadow:0 0 10px rgba(255,120,120,.35)}
+
+#lockIcon{width:20px;height:20px;flex:0 0 auto;display:grid;place-items:center;
+  border:1px solid rgba(127,233,255,.3);border-radius:50%;background:rgba(20,60,80,.22);
+  color:rgba(127,233,255,.35);transition:border-color .2s,box-shadow .2s,color .2s,background-color .2s}
+#lockIcon svg{width:12px;height:12px}
+#lockIcon.locked{color:rgba(255,190,90,.95);border-color:rgba(255,190,90,.5);background:rgba(90,60,10,.28);
+  box-shadow:0 0 10px rgba(255,190,90,.35)}
+
+#audioMenu{position:relative}
+#deviceDropdown{position:absolute;top:calc(100% + 8px);right:0;width:220px;z-index:20;
+  background:rgba(8,28,40,.92);border:1px solid rgba(127,233,255,.3);box-shadow:0 8px 24px rgba(0,0,0,.5);
+  padding:10px;opacity:0;visibility:hidden;transform:translateY(-4px);
+  transition:opacity .15s ease,transform .15s ease,visibility .15s}
+#audioMenu:hover #deviceDropdown{opacity:1;visibility:visible;transform:translateY(0)}
+.ddSection+.ddSection{margin-top:9px;padding-top:9px;border-top:1px solid rgba(127,233,255,.15)}
+.ddSection b{display:block;font:400 9px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.2em;
+  color:rgba(127,233,255,.5);margin-bottom:6px}
+.ddItem{font:400 11px/1.4 'JetBrains Mono',Consolas,monospace;letter-spacing:.04em;color:rgba(200,248,255,.8);
+  padding:4px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddItem:hover{background:rgba(127,233,255,.12);color:#d8f8ff}
+.ddItem.sel{color:#a9f4ff}
+.ddItem.sel::before{content:"● ";color:#7fe9ff}
+.ddEmpty{font:400 10px/1 'JetBrains Mono',Consolas,monospace;color:rgba(127,233,255,.35);padding:4px 6px}
+
+.blip{position:absolute;width:6px;height:6px;border-radius:50%;margin:-3px 0 0 -3px;
+  background:#a9f4ff;box-shadow:0 0 10px #7fe9ff;transition:opacity .5s ease}
+
+#console{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);width:520px}
+#echo{font:400 10px/1.5 'JetBrains Mono',Consolas,monospace;letter-spacing:.14em;min-height:12px;
+  margin-bottom:7px;text-align:center;color:rgba(127,233,255,.5);opacity:0;transition:opacity .3s ease}
+#echo.on{opacity:1}
+.inwrap{display:flex;align-items:center;gap:9px;padding:8px 14px;
+  border:1px solid rgba(127,233,255,.24);background:rgba(8,28,40,.5);transition:border-color .2s,box-shadow .2s}
+.inwrap:focus-within{border-color:rgba(127,233,255,.6);box-shadow:0 0 18px rgba(127,233,255,.14)}
+#cmd{flex:1;background:transparent;border:0;outline:0;color:#d8f8ff;
+  font:400 12px/1 'JetBrains Mono',Consolas,monospace;letter-spacing:.1em}
+#cmd::placeholder{color:rgba(127,233,255,.3);letter-spacing:.18em}
+
+#fps{position:absolute;left:64px;top:26px;font:400 10px/1 'JetBrains Mono',Consolas,monospace;
+  color:rgba(127,233,255,.55);display:none}
+#fps.on{display:block}
+
+/* ?still — kill every animation and transition so a screenshot is a fair
+   picture of the page. The entry animations use `both` fill mode, which
+   holds their opacity:0 start frame until the delay elapses; headless
+   Chrome never advances them, so without this three whole panels capture
+   as blank. Also lets bars show their real width instead of a half-run
+   transition. */
+body.still *{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(120,230,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,230,255,.05) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(ellipse 60% 60% at 50% 50%,#000 20%,transparent 85%)"></div>
+  <div style="position:absolute;inset:0;background:repeating-linear-gradient(to bottom,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);pointer-events:none;mix-blend-mode:overlay"></div>
+  <div style="position:absolute;left:0;right:0;height:200px;background:linear-gradient(to bottom,rgba(120,230,255,0),rgba(120,230,255,.055),rgba(120,230,255,0));animation:scan 7.5s linear infinite;pointer-events:none"></div>
+  <div style="position:absolute;inset:0;box-shadow:inset 0 0 260px 40px rgba(0,0,0,.9);pointer-events:none"></div>
+
+  <div style="position:absolute;top:26px;left:26px;width:54px;height:54px;border-top:2px solid rgba(127,233,255,.6);border-left:2px solid rgba(127,233,255,.6)"></div>
+  <div style="position:absolute;top:26px;right:26px;width:54px;height:54px;border-top:2px solid rgba(127,233,255,.6);border-right:2px solid rgba(127,233,255,.6)"></div>
+  <div style="position:absolute;bottom:26px;left:26px;width:54px;height:54px;border-bottom:2px solid rgba(127,233,255,.6);border-left:2px solid rgba(127,233,255,.6)"></div>
+  <div style="position:absolute;bottom:26px;right:26px;width:54px;height:54px;border-bottom:2px solid rgba(127,233,255,.6);border-right:2px solid rgba(127,233,255,.6)"></div>
+
+  <!-- ================= CORE ================= -->
+  <!-- 1.1 rather than the mock's 1.2: at 1.2 the core's bottom caption
+       lands on top of the text box that the mock doesn't have. -->
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1.1);width:520px;height:520px;display:grid;place-items:center">
+
+    <div id="halo" style="position:absolute;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(120,230,255,.28) 0%,rgba(120,230,255,.06) 45%,transparent 70%);animation:haloPulse 3.4s ease-in-out infinite;filter:blur(6px)"></div>
+
+    <svg viewBox="0 0 460 460" style="position:absolute;width:460px;height:460px;animation:spin var(--spin-outer) linear infinite;overflow:visible">
+      <circle cx="230" cy="230" r="214" fill="none" stroke="rgba(127,233,255,.55)" stroke-width="1.5" stroke-dasharray="150 26 6 26"></circle>
+      <circle cx="230" cy="230" r="200" fill="none" stroke="rgba(127,233,255,.2)" stroke-width="6" stroke-dasharray="2 14"></circle>
+    </svg>
+
+    <svg viewBox="0 0 380 380" style="position:absolute;width:380px;height:380px;animation:spinR var(--spin-inner) linear infinite;overflow:visible">
+      <circle cx="190" cy="190" r="176" fill="none" stroke="rgba(255,190,90,.5)" stroke-width="1" stroke-dasharray="40 10 4 10"></circle>
+      <circle cx="190" cy="190" r="150" fill="none" stroke="rgba(127,233,255,.35)" stroke-width="10" stroke-dasharray="1 22" stroke-linecap="round"></circle>
+    </svg>
+
+    <div style="position:absolute;width:300px;height:300px;border-radius:50%;border:1px solid rgba(127,233,255,.35);box-shadow:0 0 30px rgba(60,200,255,.25) inset"></div>
+    <div id="coils" style="position:absolute;width:300px;height:300px;animation:spin var(--coil) linear infinite"></div>
+
+    <div style="position:absolute;width:232px;height:232px;border-radius:50%;border:2px solid rgba(150,235,255,.55);box-shadow:0 0 22px rgba(80,220,255,.3)"></div>
+    <div style="position:absolute;width:212px;height:212px;border-radius:50%;border:14px solid rgba(90,180,215,.28);border-style:dashed"></div>
+    <div style="position:absolute;width:186px;height:186px;border-radius:50%;border:6px solid rgba(20,60,80,.9);box-shadow:0 0 40px rgba(80,220,255,.45),0 0 90px rgba(80,220,255,.25) inset"></div>
+    <div style="position:absolute;width:150px;height:150px;border-radius:50%;background:conic-gradient(from 0deg,rgba(150,240,255,.15),rgba(150,240,255,.55),rgba(150,240,255,.15),rgba(150,240,255,.55),rgba(150,240,255,.15));animation:spin 6s linear infinite;filter:blur(3px)"></div>
+
+    <!-- The two innermost layers carry the live voice level: --lvl scales
+         them on top of the idle breathing animation, so a loud syllable
+         visibly punches the core. -->
+    <div id="core" style="position:absolute;width:112px;height:112px;border-radius:50%;background:radial-gradient(circle,#ffffff 0%,#d9fbff 22%,#63d8ff 52%,#0f6d9a 80%,#062c40 100%);box-shadow:0 0 60px 12px rgba(110,225,255,.65);animation:corePulse var(--pulse) ease-in-out infinite"></div>
+    <div id="spark" style="position:absolute;width:44px;height:44px;border-radius:50%;background:#fff;filter:blur(7px);animation:corePulse calc(var(--pulse) * .54) ease-in-out infinite"></div>
+
+    <div id="coreLabel" class="mono" style="position:absolute;bottom:-6px;text-align:center;font-size:11px;font-weight:500;letter-spacing:.34em;color:rgba(180,245,255,.75)">ARC CORE · BOOTING</div>
+    <div id="output" class="mono" style="position:absolute;top:-4px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.3em;color:rgba(255,196,102,.85)">— PTS</div>
+
+    <!-- The timer is a ring of the reactor that detaches: it starts life
+         at r=214, the same radius as the outermost spinning ring above,
+         and the emerge keyframes shrink it into a pill while lifting it
+         clear of the core to sit above the PTS readout. Sized in the
+         same 520px coordinate space as every other layer here, so the
+         --hud-scale fit() applies to it for free. -->
+    <div id="timerPod" class="mono" style="display:none;position:absolute;box-sizing:border-box;
+         align-items:center;justify-content:center;
+         border:1.5px solid rgba(127,233,255,.55);
+         background:rgba(8,28,40,.55);
+         box-shadow:0 0 22px rgba(80,220,255,.25);
+         font-size:12px;font-weight:600;letter-spacing:.22em;white-space:nowrap;
+         color:var(--good);pointer-events:none">
+      <span id="timerText" style="opacity:0">⏱ --:--</span>
+    </div>
+  </div>
+
+  <!-- ================= TOP LEFT ================= -->
+  <div style="position:absolute;top:64px;left:64px;width:360px;animation:rise .6s ease-out both">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid rgba(127,233,255,.35);padding-bottom:6px;margin-bottom:14px">
+      <span style="font:700 15px/1 'Chakra Petch','Segoe UI',sans-serif;letter-spacing:.22em">FRED</span>
+      <span class="mono" style="font-size:10px;letter-spacing:.18em;color:rgba(127,233,255,.5)">MK-VII</span>
+      <span id="nominal" class="mono" style="margin-left:auto;font-size:10px;color:var(--good);letter-spacing:.16em">● NOMINAL</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div><div class="barrow"><span>CPU LOAD</span><span id="cpuTxt">—</span></div><div class="bar"><i id="cpuBar"></i></div></div>
+      <div><div class="barrow"><span>MEMORY</span><span id="ramTxt">—</span></div><div class="bar amber"><i id="ramBar"></i></div></div>
+      <div><div class="barrow"><span>GPU LOAD</span><span id="gpuTxt">—</span></div><div class="bar"><i id="gpuBar"></i></div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px">
+      <div class="tile"><b>CYCLES</b><s id="cycles">—</s></div>
+      <div class="tile"><b>DRAW</b><s id="draw">—</s></div>
+      <div class="tile hot"><b>CORE TEMP</b><s id="temp">—</s></div>
+    </div>
+  </div>
+
+  <!-- ================= TOP RIGHT ================= -->
+  <div style="position:absolute;top:64px;right:64px;width:360px;text-align:right;animation:rise .6s ease-out .12s both">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid rgba(127,233,255,.35);padding-bottom:6px;margin-bottom:14px">
+      <span id="link" class="mono" style="font-size:10px;color:var(--good);letter-spacing:.16em">● LINK —</span>
+      <span class="mono" style="margin-left:auto;font-size:10px;letter-spacing:.18em;color:rgba(127,233,255,.5)">v1.0</span>
+      <span style="font:700 15px/1 'Chakra Petch','Segoe UI',sans-serif;letter-spacing:.22em">SYSTEMS</span>
+    </div>
+    <div id="systems" style="display:flex;flex-direction:column;gap:9px"></div>
+    <div id="spectrum"></div>
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:7px">
+      <span class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.45)">VOICE LEVEL · LAST 12 SAMPLES</span>
+      <div id="lockIcon" title="Lockdown" aria-label="Lockdown status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="11" width="14" height="9" rx="1.5"></rect>
+          <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+        </svg>
+      </div>
+      <div id="audioMenu">
+        <button id="muteBtn" type="button" title="Mute" aria-label="Mute">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor" stroke="none"></path>
+            <path id="muteWaves" d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"></path>
+            <path id="muteX" d="M15.5 9.5l5 5M20.5 9.5l-5 5" style="display:none"></path>
+          </svg>
+        </button>
+        <div id="deviceDropdown">
+          <div class="ddSection"><b>MICROPHONE</b><div id="ddMics"></div></div>
+          <div class="ddSection"><b>SPEAKERS</b><div id="ddSpeakers"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM LEFT: radar ================= -->
+  <div style="position:absolute;bottom:64px;left:64px;width:190px;height:190px;animation:fadeIn .8s ease-out .3s both">
+    <div style="position:absolute;inset:0;border-radius:50%;border:1px solid rgba(127,233,255,.4);background:radial-gradient(circle,rgba(30,120,160,.18),rgba(3,10,14,.6))"></div>
+    <div style="position:absolute;inset:24px;border-radius:50%;border:1px solid rgba(127,233,255,.22)"></div>
+    <div style="position:absolute;inset:56px;border-radius:50%;border:1px solid rgba(127,233,255,.18)"></div>
+    <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:rgba(127,233,255,.2)"></div>
+    <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(127,233,255,.2)"></div>
+    <div style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(rgba(127,233,255,.55),rgba(127,233,255,0) 28%);animation:sweep var(--sweep) linear infinite"></div>
+    <div id="blips" style="position:absolute;inset:0"></div>
+    <div id="contacts" class="mono" style="position:absolute;bottom:-26px;left:0;font-size:9px;letter-spacing:.22em;color:rgba(127,233,255,.5)">ACTIVITY · 0 TURNS</div>
+  </div>
+
+  <!-- ================= BOTTOM RIGHT: log ================= -->
+  <div style="position:absolute;bottom:64px;right:64px;width:400px;text-align:right;animation:fadeIn .8s ease-out .4s both">
+    <div class="mono" style="font-size:9px;letter-spacing:.24em;color:rgba(127,233,255,.5);margin-bottom:9px">DIAGNOSTIC STREAM</div>
+    <div id="log" style="display:flex;flex-direction:column;gap:5px"></div>
+  </div>
+
+  <!-- ================= TEXT BOX ================= -->
+  <div id="console">
+    <div id="echo" class="mono"></div>
+    <div class="inwrap">
+      <span class="mono" style="color:rgba(127,233,255,.6);font-size:13px">&rsaquo;</span>
+      <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder="type here">
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM CENTER ================= -->
+  <div style="position:absolute;bottom:44px;left:50%;transform:translateX(-50%);display:flex;align-items:center;white-space:nowrap;gap:22px;padding:9px 26px;border:1px solid rgba(127,233,255,.28);background:rgba(8,28,40,.55)">
+    <span id="clock" class="mono" style="font-size:11px;font-weight:500;letter-spacing:.2em;color:rgba(200,248,255,.85)">--:--:--</span>
+    <span style="width:1px;height:14px;background:rgba(127,233,255,.3)"></span>
+    <span id="statusMain" class="mono" style="font-size:11px;font-weight:500;letter-spacing:.2em;color:var(--good)">CONNECTING</span>
+    <span style="width:1px;height:14px;background:rgba(127,233,255,.3)"></span>
+    <span id="statusSub" class="mono" style="font-size:11px;font-weight:500;letter-spacing:.2em;color:rgba(255,196,102,.9)">STANDBY</span>
+  </div>
+
+  <div style="position:absolute;left:30px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:9px">
+    <div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:30px;height:1px;background:rgba(255,196,102,.8)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div>
+  </div>
+  <div style="position:absolute;right:30px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-end;gap:9px">
+    <div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:30px;height:1px;background:rgba(255,196,102,.8)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:12px;height:1px;background:rgba(127,233,255,.3)"></div><div style="width:22px;height:1px;background:rgba(127,233,255,.7)"></div>
+  </div>
+
+  <div id="fps" class="mono"></div>
+</div>
+
+<script>
+"use strict";
+const $ = function(id){ return document.getElementById(id); };
+const clamp = function(v,a,b){ return v<a?a:v>b?b:v; };
+const stage = $("stage");
+
+const POLL_MS = 1200;
+const Q = new URLSearchParams(location.search);
+if (Q.has("still")) document.body.classList.add("still");
+// ?mockstate=<state> pins the HUD to one state regardless of the bus, so
+// each look can be captured and compared without waiting for a real turn.
+const MOCKSTATE = Q.get("mockstate");
+const MOCKLEVEL = parseFloat(Q.get("level") || "0.7");
+const BIRTH = new Date(2011,0,24,11,0,0).getTime();   // 24 Jan 2011, 11:00 local
+
+// ---- per-state look. One table drives every animation speed + glow. ----
+const STATES = {
+  idle:      {outer:"46s",inner:"30s",coil:"160s",sweep:"5.2s",pulse:"3.4s",glow:.40,label:"STABLE"},
+  listening: {outer:"24s",inner:"16s",coil:"90s", sweep:"2.4s",pulse:"2.4s",glow:.80,label:"RECEIVING"},
+  thinking:  {outer:"8s", inner:"5s", coil:"32s", sweep:"1.0s",pulse:"1.0s",glow:.70,label:"COMPUTING"},
+  speaking:  {outer:"30s",inner:"20s",coil:"120s",sweep:"4.4s",pulse:"0.9s",glow:1.0,label:"TRANSMITTING"},
+  alert:     {outer:"11s",inner:"7s", coil:"44s", sweep:"0.8s",pulse:"0.7s",glow:1.0,label:"FAULT"},
+};
+const VALID = Object.keys(STATES);
+
+// Six rows: three of FRED's own models, three machine subsystems.
+const SYSROWS = ["LLM","WHISPER","KOKORO","DISK","POWER","PAGEFILE"];
+
+let state = "idle", level = 0, shownState = null;
+let latency = 0, levels = new Array(12).fill(0);
+let timerEnd = 0;      // local-clock ms deadline, 0 = no timer running
+let timerShown = false;  // drives the emerge/retract edge, not per-frame state
+
+// ---------- build the repeated bits once ----------
+(function build(){
+  let coils = "";
+  for (let i = 0; i < 10; i++){
+    coils += '<div style="position:absolute;top:50%;left:50%;width:34px;height:62px;margin:-31px -17px;'
+      + 'transform:rotate(' + (i*36) + 'deg) translateY(-116px);'
+      + 'background:repeating-linear-gradient(90deg,rgba(180,245,255,.95) 0 2px,rgba(40,130,175,.5) 2px 5px);'
+      + 'border:1.5px solid rgba(200,250,255,.85);box-shadow:0 0 14px rgba(110,225,255,.5);'
+      + 'animation:coilFlick 3.1s ease-in-out ' + (i*0.15) + 's infinite"></div>';
+  }
+  $("coils").innerHTML = coils;
+
+  $("spectrum").innerHTML = new Array(12).fill('<i></i>').join("");
+
+  $("systems").innerHTML = SYSROWS.map(function(name,i){
+    const n = String(i+1).padStart(2,"0");
+    return '<div class="sysrow"><span class="i">'+n+'</span><span class="n">'+name+'</span>'
+         + '<span class="v" id="sv'+i+'">—</span><span class="s" id="ss'+i+'">···</span></div>';
+  }).join("");
+})();
+
+function fit(){
+  const w = window.innerWidth, h = window.innerHeight;
+  // A kiosk window can run this before Chrome has actually composited a
+  // frame (innerWidth/innerHeight still 0) — applying that would freeze
+  // --hud-scale at 0 forever, since fullscreen kiosk rarely fires another
+  // resize. Skip and let the next resize/visibility change retry.
+  if (!w || !h) return;
+  stage.style.setProperty("--hud-scale", Math.min(w/1600, h/900).toFixed(4));
+}
+window.addEventListener("resize", fit);
+document.addEventListener("visibilitychange", fit);
+fit();
+
+// ---------- state → look ----------
+function applyState(next){
+  if (next === shownState) return;
+  shownState = next;
+  const cfg = STATES[next] || STATES.idle;
+  const s = stage.style;
+  s.setProperty("--spin-outer", cfg.outer);
+  s.setProperty("--spin-inner", cfg.inner);
+  s.setProperty("--coil",       cfg.coil);
+  s.setProperty("--sweep",      cfg.sweep);
+  s.setProperty("--pulse",      cfg.pulse);
+  s.setProperty("--glow",       cfg.glow);
+  // Cyan sits near 190deg, so this lands the whole HUD on red without
+  // touching any individual colour.
+  // ponytail: blanket hue-rotate, so the few amber/green accents invert
+  // to cyan during an alert. Reads unmistakably as alarm anyway; give
+  // every colour a CSS variable and swap the palette if that bothers you.
+  s.filter = (next === "alert") ? "hue-rotate(158deg) saturate(1.35)" : "none";
+  $("coreLabel").textContent = "ARC CORE · " + cfg.label;
+  $("nominal").textContent = (next === "alert") ? "● FAULT" : "● NOMINAL";
+  $("nominal").style.color = (next === "alert") ? "#ff9c8d" : "var(--good)";
+  $("statusMain").textContent = (next === "alert") ? "FAULT DETECTED" : "ALL SYSTEMS ONLINE";
+  $("statusSub").textContent = next.toUpperCase();
+}
+
+// ---------- formatting ----------
+function pct(v){ return (v==null||isNaN(v)) ? "—" : Math.round(v)+"%"; }
+function wide(v){ return (v==null||isNaN(v)) ? "0%" : clamp(v,0,100)+"%"; }
+
+function setBar(txtId, barId, value){
+  $(txtId).textContent = pct(value);
+  $(barId).style.width = wide(value);
+}
+
+function ageReadout(){
+  // Days alive / 100. Seven decimals so the last digit turns over about
+  // once a second — a static number here would read as a dead panel.
+  const days = (Date.now() - BIRTH) / 86400000;
+  return (days / 100).toFixed(7);
+}
+
+function paintMuteIcon(muted){
+  muteBtn.classList.toggle("muted", muted);
+  muteBtn.title = muted ? "Unmute" : "Mute";
+  muteBtn.setAttribute("aria-label", muted ? "Unmute" : "Mute");
+  $("muteWaves").style.display = muted ? "none" : "";
+  $("muteX").style.display = muted ? "" : "none";
+}
+
+function paintSystems(d){
+  const sub = d.subsystems || {};
+  // Skipped while a click is in flight so the optimistic icon set by the
+  // click handler doesn't flicker back to the old state on the next poll
+  // landing before FRED has actually applied the change.
+  if (!muteBusy && typeof sub.muted === "boolean") paintMuteIcon(sub.muted);
+  if (typeof sub.locked === "boolean") $("lockIcon").classList.toggle("locked", sub.locked);
+  const vram = (d.vram_used_mb && d.vram_total_mb) ? d.vram_used_mb/d.vram_total_mb*100 : null;
+  const power = (d.power_w && d.power_limit_w) ? d.power_w/d.power_limit_w*100 : null;
+  // For the three FRED rows the percentage is readiness, not utilisation:
+  // nothing reports a meaningful "how hard is Whisper working" number, and
+  // inventing one would be worse than a truthful 100/0.
+  const rows = [
+    {on: sub.llm,     val: vram,  act: state==="thinking"},
+    {on: sub.whisper, val: null,  act: state==="listening"},
+    {on: sub.kokoro,  val: null,  act: state==="speaking"},
+    {on: true,        val: d.disk_pct, act: false},
+    {on: true,        val: power,      act: false},
+    {on: true,        val: d.swap_pct, act: false},
+  ];
+  rows.forEach(function(r,i){
+    const v = (r.val != null) ? r.val : (r.on ? 100 : 0);
+    $("sv"+i).textContent = pct(v);
+    const word = r.act ? "ACT" : (r.on ? "RDY" : "IDLE");
+    const el = $("ss"+i);
+    el.textContent = word;
+    el.style.color = word==="ACT" ? "var(--amber)" : word==="RDY" ? "var(--good)" : "rgba(127,233,255,.35)";
+  });
+}
+
+function paintRadar(turns){
+  turns = turns || [];
+  // Angle = how long ago (clockwise from 12), radius = how long the turn
+  // took, clamped so a very slow turn parks at the rim instead of leaving
+  // the scope.
+  $("blips").innerHTML = turns.map(function(t){
+    const frac = clamp(t.ago / 300, 0, 1);
+    const ang  = -Math.PI/2 + frac * Math.PI * 2;
+    const rad  = 14 + clamp(t.duration / 12, 0, 1) * 74;
+    const x = 95 + Math.cos(ang)*rad, y = 95 + Math.sin(ang)*rad;
+    const op = (1 - frac*0.75).toFixed(2);
+    const hot = t.duration >= 6;
+    return '<div class="blip" style="left:'+x.toFixed(1)+'px;top:'+y.toFixed(1)+'px;opacity:'+op
+      + (hot ? ';background:#ffd79a;box-shadow:0 0 10px #ffbe5a' : '') + '"></div>';
+  }).join("");
+  $("contacts").textContent = "ACTIVITY · " + turns.length + " TURN" + (turns.length===1?"":"S");
+}
+
+function paintLog(lines){
+  lines = lines || [];
+  const n = lines.length;
+  $("log").innerHTML = lines.map(function(text,i){
+    const op = (0.35 + 0.65 * ((i+1)/n)).toFixed(2);
+    const col = /error|fail/i.test(text) ? "#ff9c8d" : (i===n-1 ? "#d8f8ff" : "rgba(180,240,255,.8)");
+    return '<div class="mono" style="font-size:11px;line-height:1.35;letter-spacing:.06em;color:'
+         + col + ';opacity:' + op + '">&rsaquo; ' + text.replace(/[<&]/g, "") + '</div>';
+  }).join("");
+}
+
+function paintSpectrum(){
+  const bars = $("spectrum").children;
+  const peak = Math.max.apply(null, levels);
+  for (let i = 0; i < bars.length; i++){
+    const v = levels[i] || 0;
+    bars[i].style.transform = "scaleY(" + Math.max(0.06, v).toFixed(3) + ")";
+    bars[i].classList.toggle("pk", v > 0.05 && v >= peak - 0.02);
+  }
+}
+
+// ---------- poll ----------
+function apply(d){
+  if (MOCKSTATE && VALID.indexOf(MOCKSTATE) >= 0){
+    state = MOCKSTATE;
+    level = (state === "speaking") ? clamp(MOCKLEVEL, 0, 1) : 0;
+  } else {
+    state = VALID.indexOf(d.state) >= 0 ? d.state : "idle";
+    level = clamp(d.level || 0, 0, 1);
+  }
+  applyState(state);
+
+  setBar("cpuTxt","cpuBar", d.cpu);
+  setBar("ramTxt","ramBar", d.ram_pct);
+  setBar("gpuTxt","gpuBar", d.gpu_pct);
+
+  $("cycles").textContent = (d.turns ? d.turns.length : 0);
+  $("draw").textContent   = d.power_w == null ? "—" : Math.round(d.power_w) + " W";
+  $("temp").textContent   = d.gpu_temp_c == null ? "—" : Math.round(d.gpu_temp_c) + "°C";
+
+  paintSystems(d);
+  paintRadar(d.turns);
+  paintLog(d.diagnostics);
+
+  levels.push(level); if (levels.length > 12) levels.shift();
+  paintSpectrum();
+
+  // The server sends seconds REMAINING, not a wall-clock deadline: the
+  // page runs in a browser whose clock need not agree with the server's,
+  // and only the delta is trustworthy. Anchor it to the local clock once
+  // per poll and let tick() count down between polls.
+  timerEnd = (d.timer_s == null) ? 0 : Date.now() + d.timer_s * 1000;
+
+  $("link").textContent = "● LINK " + Math.round(latency) + "ms";
+}
+
+// The emerge animation is a moment, and a moment that plays while the
+// window is still assembling itself is just noise on top of the panels'
+// own rise animation. Hold it until the HUD has visibly settled: a timer
+// already running when the page opens still gets its entrance, just
+// after the reactor is up rather than through it.
+const TIMER_READY_MS = 1600;
+const opened = performance.now();
+
+function setPod(anim, display){
+  const pod = $("timerPod");
+  pod.style.display = display;
+  // Restart rather than resume: assigning the same animation name to an
+  // element that already carries it is a no-op in every engine, and a
+  // timer cancelled and re-set inside one animation would never replay.
+  pod.style.animation = "none";
+  void pod.offsetWidth;
+  pod.style.animation = anim;
+}
+
+function paintTimer(){
+  const left = timerEnd ? (timerEnd - Date.now()) / 1000 : 0;
+  const on = left > 0 && (performance.now() - opened) > TIMER_READY_MS;
+
+  if (on !== timerShown){
+    timerShown = on;
+    if (on){
+      setPod("timerEmerge 1.15s cubic-bezier(.22,.9,.25,1) both", "flex");
+      $("timerText").style.animation = "timerTextIn 1.15s ease-out both";
+    } else {
+      setPod("timerRetract .75s cubic-bezier(.55,0,.75,.3) both", "flex");
+      $("timerText").style.animation = "timerTextIn .3s ease-in reverse both";
+      // Leave nothing behind once it has collapsed back into the core.
+      setTimeout(function(){ if (!timerShown) $("timerPod").style.display = "none"; }, 800);
+    }
+  }
+  if (!on) return;
+
+  const p = function(n){ return String(n).padStart(2,"0"); };
+  const s = Math.ceil(left);
+  // Hours only once there are hours — a 5-minute timer reading 00:05:00
+  // wastes the two most-glanced-at characters on zeroes.
+  const body = s >= 3600
+    ? Math.floor(s/3600) + ":" + p(Math.floor(s/60) % 60) + ":" + p(s % 60)
+    : p(Math.floor(s/60)) + ":" + p(s % 60);
+  $("timerText").textContent = "⏱ " + body;
+  $("timerPod").style.color = s <= 10 ? "var(--amber)" : "var(--good)";
+}
+
+function offline(){
+  state = "idle"; applyState("idle");
+  $("link").textContent = "● LINK LOST";
+  $("statusMain").textContent = "SERVER OFFLINE";
+}
+
+async function poll(){
+  const t0 = performance.now();
+  try {
+    const r = await fetch("/state", {cache:"no-store"});
+    const d = await r.json();
+    latency = performance.now() - t0;
+    apply(d);
+  } catch (e) {
+    offline();
+  } finally {
+    setTimeout(poll, POLL_MS);
+  }
+}
+
+// ---------- per-frame: clock, age readout, live core pulse ----------
+let frames = [], last = 0;
+function tick(now){
+  const dt = last ? (now-last)/1000 : 0.016; last = now;
+
+  const d = new Date(), p = function(n){ return String(n).padStart(2,"0"); };
+  $("clock").textContent = p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+  $("output").textContent = ageReadout() + " PTS";
+  paintTimer();
+
+  // Ease the displayed level so the core swells and settles rather than
+  // snapping between poll samples.
+  const target = (state === "speaking") ? level : 0;
+  const cur = parseFloat(stage.style.getPropertyValue("--lvl") || "0");
+  const eased = cur + (target - cur) * Math.min(1, dt * (target > cur ? 9 : 3.5));
+  stage.style.setProperty("--lvl", eased.toFixed(4));
+  const s = 1 + eased * 0.22;
+  $("core").style.transform  = "scale(" + s.toFixed(3) + ")";
+  $("spark").style.transform = "scale(" + (1 + eased*0.5).toFixed(3) + ")";
+  $("halo").style.opacity    = (0.35 + eased*0.5).toFixed(3);
+
+  frames.push(dt); if (frames.length > 120) frames.shift();
+  if ($("fps").classList.contains("on") && frames.length > 8){
+    const avg = frames.reduce(function(a,b){return a+b;},0)/frames.length;
+    $("fps").textContent = (1/avg).toFixed(1) + " fps · " + state;
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- input ----------
+const cmd = $("cmd"), echo = $("echo"), muteBtn = $("muteBtn");
+let echoTimer = null;
+let muteBusy = false;
+document.addEventListener("keydown", function(e){
+  if (e.target === cmd){ if (e.key === "Escape") cmd.blur(); return; }
+  if (e.key === "f" || e.key === "F") $("fps").classList.toggle("on");
+});
+cmd.addEventListener("keydown", function(e){
+  if (e.key !== "Enter") return;
+  const text = cmd.value.trim();
+  if (!text || cmd.disabled) return;
+  cmd.value = "";
+  cmd.disabled = true;
+
+  echo.textContent = "› " + text;
+  echo.classList.add("on");
+  clearTimeout(echoTimer);
+
+  fetch("/command", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text: text}),
+  })
+    .then(function(res){ return res.json(); })
+    .then(function(data){ echo.textContent = data.reply || "(no reply)"; })
+    .catch(function(){ echo.textContent = "connection lost"; })
+    .finally(function(){
+      cmd.disabled = false;
+      cmd.focus();
+      clearTimeout(echoTimer);
+      echoTimer = setTimeout(function(){ echo.classList.remove("on"); }, 6000);
+    });
+});
+
+// Sends the same "mute"/"unmute" a spoken command would — the deterministic
+// dispatcher (Core/orchestrator/dispatcher.py) routes those instantly, no
+// LLM round trip, so the button feels immediate despite going through the
+// same /command channel as the console. Optimistic: flips the icon right
+// away and reverts only on an actual failure; paintSystems() reconciles it
+// with the real state on the next poll once the request has landed.
+muteBtn.addEventListener("click", function(){
+  if (muteBusy) return;
+  const wantMuted = !muteBtn.classList.contains("muted");
+  muteBusy = true;
+  paintMuteIcon(wantMuted);
+  fetch("/command", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text: wantMuted ? "mute" : "unmute"}),
+  })
+    .catch(function(){ paintMuteIcon(!wantMuted); })
+    .finally(function(){ muteBusy = false; });
+});
+
+// ---------- mic/speaker dropdown ----------
+// Fetched lazily on first hover rather than on load — the list barely
+// ever changes mid-session, so there is no reason to pay the query on
+// every page load whether the user ever opens the menu or not.
+const audioMenu = $("audioMenu");
+let devicesLoaded = false;
+
+function renderDeviceList(containerId, devices, selected, kind){
+  const el = $(containerId);
+  el.innerHTML = "";
+  if (!devices.length){
+    const empty = document.createElement("div");
+    empty.className = "ddEmpty";
+    empty.textContent = "none found";
+    el.appendChild(empty);
+    return;
+  }
+  devices.forEach(function(d){
+    const item = document.createElement("div");
+    item.className = "ddItem" + (d.index === selected ? " sel" : "");
+    item.textContent = d.name;
+    item.title = d.name;
+    item.addEventListener("click", function(){
+      fetch("/command", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({text: "set " + kind + " to " + d.index}),
+      }).then(function(){ devicesLoaded = false; loadDevices(); });
+    });
+    el.appendChild(item);
+  });
+}
+
+function loadDevices(){
+  if (devicesLoaded) return;
+  devicesLoaded = true;
+  fetch("/devices")
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      renderDeviceList("ddMics", data.input || [], data.selected_input, "microphone");
+      renderDeviceList("ddSpeakers", data.output || [], data.selected_output, "speaker");
+    })
+    .catch(function(){ devicesLoaded = false; });
+}
+
+audioMenu.addEventListener("mouseenter", loadDevices);
+
+// ---- keep the display awake while the HUD is up ----
+//
+// The Screen Wake Lock API rather than anything on the Python side: the
+// lock's lifetime is exactly the page's, so closing the HUD releases it
+// with no teardown code to forget, and nothing here touches the power
+// plan or the registry. A Win32 SetThreadExecutionState call in
+// hud/server.py would have kept the screen on forever instead, since the
+// server runs whether or not the HUD window is open.
+//
+// Secure-context only, which 127.0.0.1 satisfies (see server.py's
+// loopback bind). Chrome drops the lock whenever the tab is hidden or
+// the machine suspends, so it is re-acquired on visibilitychange rather
+// than requested once at load.
+let wakeLock = null;
+
+function keepScreenAwake(){
+  if (!("wakeLock" in navigator)) return;          // older Chrome, or non-secure origin
+  if (document.visibilityState !== "visible") return;
+  if (wakeLock) return;
+  navigator.wakeLock.request("screen").then(function(lock){
+    wakeLock = lock;
+    // Fires on tab hide and on system sleep as well as on release().
+    lock.addEventListener("release", function(){ wakeLock = null; });
+  }).catch(function(){
+    // Denied (battery saver, policy) — the HUD is still perfectly
+    // usable, the screen just sleeps as it did before. Not worth an
+    // error state on screen.
+    wakeLock = null;
+  });
+}
+
+document.addEventListener("visibilitychange", keepScreenAwake);
+keepScreenAwake();
+
+applyState("idle");
+poll();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "edit_note",
+  "description": "Change something in one of the user's notes or memory files (profile, project notes, contacts, preferences, daily log): update a fact, add a line to a list or a dated log entry, mark a task done, remove a wrong line, fix a spelling, rename a heading. Pass the file (its name or a few words from it) and what to change, in the user's words. The change is shown as a one-line summary and nothing is written until the user says yes.",
+  "args": {"properties": {
+    "file": {"type": "string", "description": "the note's name or a few words from it, e.g. 'profile', 'project', 'contacts'"},
+    "instruction": {"type": "string", "description": "what to change, in the user's own words, with the exact new text if they gave it"},
+    "apply": {"type": "string", "description": "internal follow-up only, never set it"}}},
+  "examples": ["update my city to Harrowgate in my profile", "add to my project notes that the timber arrived", "mark the groundwork task as done in the project file", "remove the wool allergy line from my preferences", "fix the spelling of Brennok in my profile note", "rename the Facts heading in the project note to Key facts"],
+  "not_for": ["reading or searching notes", "remembering a new fact about a person (use remember)", "files that are not in the notes folder", "deleting a whole note"],
+  "flags": {"say": true},
+  "timeout_s": 60
+}
