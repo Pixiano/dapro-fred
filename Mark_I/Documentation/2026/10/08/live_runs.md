@@ -34,3 +34,9 @@ Ported from the old FRED (`pill_app._start_tray`, `utils/hud_manager.py`) and re
 ## Soak run - started 2026-10-09 00:05 (silent, 5.5 h, voice gate on)
 Idle overnight run (no screen change, no audio) to check stability: process alive, RAM and GPU memory over time, `Data/` growth, the night jobs. Health sampler every 10 minutes (process count, RSS, GPU memory and load, size of `Data/`). The playground server had to be started first (it was down). Result to be added here in the morning.
 - Decision logged the same night: the playground becomes fully independent of FRED at the end of Phase 8 (see `Core/PLAN.md`).
+
+## Soak run findings - 2026-10-09 night (found by the soak, as intended)
+- **Memory leak:** the FRED process grew about 35 MB a minute while idle (56 MB to 4.5 GB in 90 minutes, a straight line). The Python-level profile (tracemalloc) stayed flat at 164 MB, so it was native memory. An A/B of four 11-minute runs showed it: default 35 MB/min, `--no-presence` 0 MB/min. So the camera presence was the leak.
+- **Cause:** every webcam open and close inside the process leaks about 0.6 MB (OpenCV DirectShow), measured at 200 opens in a standalone test; the face detector itself is flat once loaded. Presence opens the camera every 7 s.
+- **Fix:** each snapshot is now grabbed in a short-lived child process (`senses/camera.py`, `_grab_proc`), so the leak dies with the child and the camera is still released at once.
+- **Also seen:** the real webcam (index 1) returned one frozen 640x480 picture at 2 AM and indices 0 and 2 stay frozen, so the PHOCUS was probably unplugged or asleep. Presence then faults and holds its state (by design). Check the USB connection.

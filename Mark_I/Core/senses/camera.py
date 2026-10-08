@@ -30,6 +30,23 @@ class CameraFault(RuntimeError):
     pass
 
 
+_CHILD = 'import sys, cv2, numpy as np\nc = cv2.VideoCapture(int(sys.argv[1]), cv2.CAP_DSHOW)\nif not c.isOpened():\n    sys.exit(3)\np = f = None\nfor _ in range(int(sys.argv[2])):\n    ok, x = c.read()\n    p, f = f, (x if ok else None)\nc.release()\nif f is None:\n    sys.exit(4)\nnp.save(sys.argv[3], np.stack([f if p is None else p, f]))\n'
+
+
+def _grab_proc(index: int, warmup: int):
+    """Open, read `warmup` frames and close the webcam in a child process: OpenCV's DirectShow leaks ~0.6 MB per open inside the process (found by the 2026-10-09 soak: +35 MB/min at one open per 7 s), and a child's leak dies with it. Returns (previous frame, last frame)."""
+    import subprocess
+    import sys
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        out = f"{d}/f.npy"
+        r = subprocess.run([sys.executable, "-c", _CHILD, str(index), str(warmup), out], capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r.returncode:
+            raise CameraFault(f"camera {index} did not open" if r.returncode == 3 else "no frame")
+        prev, f = np.load(out)
+    return prev, f
+
+
 class CvSource:
     def __init__(self, index: int):
         import cv2
@@ -55,9 +72,13 @@ class Camera:
     def __init__(self, bus: ev.EventBus | None = None, source=None):
         self.bus = bus or ev.bus
         self.frozen = False
-        self._open = source if callable(source) else (lambda: source) if source else (lambda: CvSource(config.get().camera_index))
+        self._open = source if callable(source) else (lambda: source) if source else None             # None = the real webcam, read in a child process
 
     def _grab(self):
+        if self._open is None:
+            prev, f = _grab_proc(config.get().camera_index, config.get().camera_warmup)
+            self.frozen = np.array_equal(prev, f)
+            return f
         src = self._open()
         try:
             prev = f = None
@@ -162,6 +183,12 @@ def _selfcheck():
         raise AssertionError("expected CameraFault")
     except CameraFault as ex:
         assert "did not open" in str(ex) and seen[-1][1]["reason"] == "camera 0 did not open"
+    global _grab_proc
+    real, _grab_proc = _grab_proc, lambda i, n: (good, good2)             # the real webcam is read in a child process (the default source)
+    try:
+        assert np.array_equal(Camera(bus).snap(), good2[:, :, ::-1]) and not Camera(bus).frozen
+    finally:
+        _grab_proc = real
     config.reload()
     print("camera ok")
 
