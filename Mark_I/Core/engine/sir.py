@@ -18,6 +18,7 @@ if __name__ == "__main__":
 import config
 
 _SIR = re.compile(r"\bsir\b", re.I)
+_WAKE = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)[\s,]+)?fred\b[\s,.!?:-]*", re.I)
 _END = re.compile(r"^(.*?)([\s.!?…\"')\]]*)$", re.S)
 
 
@@ -30,7 +31,25 @@ def sirify(text: str, rng=random.random) -> str:
     return f"{body.rstrip(',;:')}, sir{tail}{text[len(text.rstrip()):]}"
 
 
+def strip_wake(text: str) -> str:
+    """'Hey Fred, how are you?' -> 'How are you?'. A bare 'Hey Fred.' stays whole (it is the whole message)."""
+    rest = _WAKE.sub("", text, count=1).strip()
+    return rest[:1].upper() + rest[1:] if rest else text
+
+
+def is_echo(text: str, spoken: list[str]) -> bool:
+    """True when the mic heard FRED's own recent words back through the speakers (substring or near match of a line it just said)."""
+    words = lambda s: re.findall(r"[a-z0-9']+", s.lower().replace(".", ""))
+    t = words(text)
+    return len(t) >= 3 and any(sum(w in set(words(s)) for w in t) / len(t) >= 0.8 for s in spoken)      # 3+ words, 80% of them FRED's own (a bare 'yes' to 'yes or no?' is an answer)
+
+
 def _selfcheck():
+    assert strip_wake("Hey Fred, how are you?") == "How are you?" and strip_wake("Fred what's the date") == "What's the date"
+    assert strip_wake("Hey Fred.") == "Hey Fred." and strip_wake("Alfred is here") == "Alfred is here"
+    said = ["It's 6:46 AM on Friday, 9 October 2026, sir.", "I don't have information about that, sir."]
+    assert is_echo("It's 6.46 a.m. on Friday.", said) and is_echo("I don't have information about that sir.", said)
+    assert not is_echo("What's the date?", said) and not is_echo("", said) and not is_echo("yes", ["Yes or no, sir?"])
     config.reload()
     config.get().sir_rate = 0.85
     always = lambda: 0.0

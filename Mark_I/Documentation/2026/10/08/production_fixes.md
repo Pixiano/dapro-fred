@@ -52,3 +52,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 22 | Speaker open crashed when the Rockerz was off (only the hands-free WDM-KS entry left), no reply spoken | Unusable outputs skipped, falls back to the system default each time FRED speaks | `speaker_device` |
 | 23 | Hold-to-talk started no turn if the detector missed the voice | Key-down starts the capture itself | none |
 | 24 | "sir" twice in a reply | Prompt: exactly once, at the end | `sir_rate` |
+| 25 | Own voice from the speakers became turns; wake word sent to the model | Echo filter against FRED's last lines; wake phrase stripped | none |

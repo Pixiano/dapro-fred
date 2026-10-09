@@ -36,7 +36,7 @@ import usage
 from engine import prompt
 from engine.cli import trace
 from engine.loop import Engine
-from engine.sir import sirify
+from engine.sir import is_echo, sirify, strip_wake
 
 
 @dataclass
@@ -129,6 +129,8 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
 
+    spoken = []                                                                    # FRED's last spoken lines, for the echo filter
+
     def handle(text, source="voice"):
         """One turn from text (heard or typed): filler if slow, engine, print, speak."""
         out(f"YOU: {text}")
@@ -150,6 +152,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         shown = sirify(r.text)                                                     # the edge only: history keeps the model's own words
         out(f"FRED: {shown}")
         out(trace(r))
+        spoken[:] = (spoken + [shown])[-4:]
         if speaker:
             said = speaker.speak(shown)
             h = engine.history
@@ -163,8 +166,11 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     def on_turn(audio, info):
         def work():
             heard = stt.transcribe(audio)
-            if not (heard.silent or not heard.text.strip()):
-                handle(heard.text)
+            if heard.silent or not heard.text.strip():
+                return
+            if is_echo(heard.text, spoken):
+                return usage.save_clip("clock", audio, kind="ignored", reason="echo", text=heard.text)      # the mic heard FRED's own voice from the speakers
+            handle(strip_wake(heard.text))
         threading.Thread(target=work, daemon=True).start()
 
     rt.handle_text = lambda text: handle(text, source="typed")                  # returns the reply text (the HUD console shows it)

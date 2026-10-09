@@ -56,3 +56,9 @@ Idle overnight run (no screen change, no audio) to check stability: process aliv
 - Hold-to-talk (Ctrl+Alt) registered but sometimes started no turn: the capture began only when the voice detector heard speech. Key-down now starts it directly, release ends it.
 - The reply often said "sir" twice ("I'm doing well, sir. How can I help you, sir?"): the MUST prompt made the model add it. Prompt now says exactly once, at the end.
 - Voice ID rejected some of the user's own short "Hey Fred" clips (`not_vatsal` right after the wake word) while accepting the follow-up; the threshold 0.33 is borderline for 1 s clips. To retune from the Data clips.
+
+## Run 9 - 2026-10-09 ~06:46 (speakers, headphones off)
+- With the PC speakers as output the mic heard FRED's own replies and some became turns ("It's 6.46 a.m. on Friday.", "That's correct, sir."), followed by garbled answers. Voice ID rejected most echo (scores 0.21 to 0.28) but not all. Fix: a heard line of 3+ words whose words are 80% FRED's own recent lines is dropped as echo (`engine/sir.is_echo`, saved under `Data/clock` as reason "echo").
+- The wake word was sent to the model with the question ("Hey Fred, how are you?"). Now stripped from the start of the text; a bare "Hey Fred." stays.
+- Voice ID also rejected the user's own "What's the date?" at 0.28 (their good clips score 0.41 to 0.43); threshold 0.33 left as is, to retune from the clips.
+- Remaining by design: for 8 s after a reply any speech is treated as a follow-up, so the user talking to someone or something else right after a reply is answered ("provided a prompt"). Candidate: shorten `followup_s` or require voice ID to pass in the window.
