@@ -42,3 +42,11 @@ Idle overnight run (no screen change, no audio) to check stability: process aliv
 - **Also seen:** the real webcam (index 1) returned one frozen 640x480 picture at 2 AM and indices 0 and 2 stay frozen, so the PHOCUS was probably unplugged or asleep. Presence then faults and holds its state (by design). Check the USB connection.
 - **Leak fix confirmed:** the restarted soak stayed flat at 1200 MB (was 2500 MB and climbing at the same point).
 - **Night job failed on a stale window:** the nightly memory job got `HTTP 409: window already open` from the playground, because a previous run that was killed mid-job had left the playground's window open. The job now adopts an open window instead of failing (`memory_bridge/jobs.py`); its stash is the live stack, and closing it restores that.
+
+## Soak result - night of 2026-10-08/09 (final 3 h run, 02:41 to 05:41, silent, voice gate on)
+- **Stability:** ran the full 3 h and ended on its own timer, no crash. Memory stayed at 1.2 to 1.5 GB (+220 MB over 3 h, was +35 MB a minute before the camera fix). GPU 11.7 GB (it touched 15.8 of 16.3 GB while the night job had a larger model loaded; nothing was killed). The nightly memory job ran after the window fix.
+- **Idle behaviour:** 3,537 events. 344 utterances heard, 343 ignored as "not addressed" and 1 as "not Vatsal"; the pill would have shown 3 times. 2 transcripts, no engine turn, no speech out. Almost all utterances came in the last two hours (168 in the 04:00 hour, 163 in the 05:00 hour, against 15 before): a steady background noise or someone's voice in another room starting around 04:00.
+- **Wake word:** 8 wake events overnight (scores 0.38 to 0.90, two of them 0.83 and 0.90) and 9 near-misses, with nobody addressing it. The clips are in `Data/wakeword/`: listen to find out whether these are real "Fred"-like sounds or false triggers. Tuning input for `wakeword_threshold`.
+- **Webcam:** 1,539 camera faults ("frozen frame"), 0 snapshots: the PHOCUS webcam returned one frozen picture all night, so presence never worked. Probably unplugged or asleep; to check on the USB connection.
+- **Screen:** 15 `BitBlt` capture errors (screen locked or asleep); handled, nothing broke.
+- **Data store:** `Data/` holds 392 clips, 15 MB.
