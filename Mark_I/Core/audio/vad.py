@@ -47,6 +47,19 @@ class Vad:
         self._lead = 0               # leaky voiced-frame counter before onset
         self._speech_frames = 0
         self._onset_ts = 0.0
+        self._sos = self._zi = None
+
+    def _highpass(self, chunk: np.ndarray) -> np.ndarray:
+        """Only the detector sees this: mains hum and rumble (50 Hz) read as speech to the GMM after the auto-gain-free night (2026-10-09 soak: 344 false utterances). STT, wake word and voice ID keep the raw audio."""
+        hz = config.get().vad_highpass_hz
+        if not hz:
+            return chunk
+        from scipy.signal import butter, sosfilt
+        if self._sos is None:
+            self._sos = butter(4, hz, "highpass", fs=config.get().sample_rate, output="sos")
+            self._zi = np.zeros((self._sos.shape[0], 2))
+        out, self._zi = sosfilt(self._sos, chunk.astype(np.float32), zi=self._zi)
+        return np.clip(out, -32768, 32767).astype(np.int16)
 
     def attach(self, mic):
         return mic.subscribe(self.on_chunk)
@@ -61,6 +74,7 @@ class Vad:
         c = config.get()
         onset_frames = max(1, c.vad_onset_ms // FRAME_MS)
         hang_frames = max(1, c.vad_hangover_ms // FRAME_MS)
+        chunk = self._highpass(chunk)
         x = np.concatenate([self._carry, chunk]) if len(self._carry) else chunk
         n = len(x) // FRAME
         base = ts - len(self._carry) / c.sample_rate
@@ -95,6 +109,9 @@ class _Pattern:
 
 
 def _selfcheck():
+    t = np.arange(8000) / 16000
+    peak = lambda hz: float(np.abs(Vad(ev.EventBus())._highpass((np.sin(2 * np.pi * hz * t) * 10000).astype(np.int16))[4000:]).max())
+    assert peak(50) < 500 and peak(500) > 9000                     # hum out, speech band in
     b = ev.EventBus()
     got = []
     b.subscribe(lambda e: got.append(dict(e.data)), kinds={"vad"})

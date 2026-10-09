@@ -52,6 +52,7 @@ class Settings:
     agc_max_gain: float = 40.0
     agc_min_peak: float = 0.03                        # quieter than this: hold the gain, do not amplify noise
     agc_smoothing: float = 0.3
+    vad_highpass_hz: int = 200                        # the detector listens above this only (0 = raw); 50 Hz night hum falsely triggered 344 utterances, replayed: 6 onsets -> 0 while real speech stayed 26 of 26
     vad_mode: int = 3                                 # webrtcvad aggressiveness 0-3
     vad_onset_ms: int = 200                           # voiced time needed to call speech started
     vad_hangover_ms: int = 200                        # silence needed to call speech ended (L1 adds Smart Turn on top)
