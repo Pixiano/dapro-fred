@@ -49,3 +49,6 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 19 | Idle memory leak of 35 MB/min (webcam open/close leaks in OpenCV) | Each snapshot is read in a child process | none |
 | 20 | Night job failed (409) after a killed run left the playground window open | An already-open window is adopted | none |
 | 21 | 344 false utterances overnight from 50 Hz hum read as speech | The voice detector only hears above 200 Hz | `vad_highpass_hz` 200 |
+| 22 | Speaker open crashed when the Rockerz was off (only the hands-free WDM-KS entry left), no reply spoken | Unusable outputs skipped, falls back to the system default each time FRED speaks | `speaker_device` |
+| 23 | Hold-to-talk started no turn if the detector missed the voice | Key-down starts the capture itself | none |
+| 24 | "sir" twice in a reply | Prompt: exactly once, at the end | `sir_rate` |

@@ -50,3 +50,9 @@ Idle overnight run (no screen change, no audio) to check stability: process aliv
 - **Webcam:** 1,539 camera faults ("frozen frame"), 0 snapshots: the PHOCUS webcam returned one frozen picture all night, so presence never worked. Probably unplugged or asleep; to check on the USB connection.
 - **Screen:** 15 `BitBlt` capture errors (screen locked or asleep); handled, nothing broke.
 - **Data store:** `Data/` holds 392 clips, 15 MB.
+
+## Run 8 - 2026-10-09 ~06:41 (voice gate on, 200 Hz detector filter, headphones switched off mid-session)
+- Understanding worked ("Hey Fred", "How are you?", hold-to-talk all became turns), but replies were not spoken: opening the speaker crashed (`PortAudioError: Blocking API not supported`, 10 times). The only output matching "Rockerz" was the Bluetooth hands-free phone endpoint (WDM-KS, 8 kHz, mono); the stereo entry was gone because the headphones were off. Fixed: unusable entries (WDM-KS, hands-free) are skipped and FRED falls back to the system default speakers, decided every time it starts speaking. Limit: PortAudio lists devices once when FRED starts, so headphones switched on later are only picked up at the next start; turned off later, the next sentence falls back at once.
+- Hold-to-talk (Ctrl+Alt) registered but sometimes started no turn: the capture began only when the voice detector heard speech. Key-down now starts it directly, release ends it.
+- The reply often said "sir" twice ("I'm doing well, sir. How can I help you, sir?"): the MUST prompt made the model add it. Prompt now says exactly once, at the end.
+- Voice ID rejected some of the user's own short "Hey Fred" clips (`not_vatsal` right after the wake word) while accepting the follow-up; the threshold 0.33 is borderline for 1 s clips. To retune from the Data clips.

@@ -113,6 +113,9 @@ class TurnController:
         self.hotkey = down
         if down and not self.active:
             self.hotkey_turn = True
+            self.active, self.t_start, self.barged, self._announced = True, now, False, False        # hold-to-talk starts the capture itself: it must not depend on the voice detector hearing you
+            self.capture.begin(0.5)
+            self._emit(LISTEN, reason="hotkey")
         if not down and self.active and self.hotkey_turn:
             self._end(now, "chord_release", None)
 
@@ -302,6 +305,13 @@ def _selfcheck():
     t.hotkey_event(False, 403.1)
     assert turns and turns[-1]["reason"] == "chord_release", states
     vo.me = True
+    # 7b. hold-to-talk with the voice detector deaf: key-down alone starts the turn, release ends it
+    states.clear(); turns.clear(); addr.clear()
+    t.hotkey_event(True, 420.0)
+    t.tick(420.1)
+    assert states[0] == (LISTEN, "hotkey") and len(addr) == 1, (states, addr)
+    t.hotkey_event(False, 421.0)
+    assert turns and turns[-1]["reason"] == "chord_release"
     # 8. FRED speaking: a 150 ms "mm-hm" is a BACKCHANNEL; 400 ms of speech is a BARGE_IN (once), then it continues as a turn
     states.clear(); turns.clear()
     bus.emit("tts", "start")

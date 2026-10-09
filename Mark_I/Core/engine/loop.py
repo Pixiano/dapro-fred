@@ -76,7 +76,7 @@ class _Turn:
 
 
 _MARKUP = re.compile(r"<\s*/?\s*(?:function|tool_call|tool|param)\b", re.I)            # a model that writes a tool call as text instead of making it (the HUD page swallowed it as an HTML tag)
-SIR_LINE = "\n\nYou MUST address the user as 'sir' in EVERY reply, with no exception: end each reply with ', sir' (for example: 'It is three o'clock, sir.')."
+SIR_LINE = "\n\nYou MUST address the user as 'sir' in EVERY reply, with no exception: say 'sir' exactly ONCE, at the end of the reply, never twice (for example: 'It is three o'clock, sir.')."
 
 
 def _canon(name: str, args: dict) -> str:

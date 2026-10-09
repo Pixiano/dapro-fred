@@ -85,14 +85,23 @@ class _Kokoro:
         return self._k.create(text, voice=c.tts_voice, speed=c.tts_speed, lang="en-us")
 
 
+def pick_outputs(devices, apis, want: str) -> list:
+    """Indices of the output devices whose name contains `want`. WDM-KS entries (and the Bluetooth hands-free 8 kHz phone endpoint) cannot play through the blocking API: skipped."""
+    if not want:
+        return []
+    ok = [i for i, d in enumerate(devices) if d["max_output_channels"] > 0 and want in d["name"].lower() and "WDM-KS" not in apis[d["hostapi"]] and "hands-free" not in d["name"].lower()]
+    return ok
+
+
 def _device_stream(rate: int):
     import sounddevice as sd
-    want, idx = config.get().speaker_device.lower(), None
-    for i, d in enumerate(sd.query_devices()):
-        if want and d["max_output_channels"] > 0 and want in d["name"].lower():
-            idx = i
-            break
-    return sd.OutputStream(samplerate=rate, channels=1, dtype="float32", device=idx)       # idx None = the system default
+    apis = [a["name"] for a in sd.query_hostapis()]
+    for idx in pick_outputs(sd.query_devices(), apis, config.get().speaker_device.lower()):
+        try:
+            return sd.OutputStream(samplerate=rate, channels=1, dtype="float32", device=idx)
+        except sd.PortAudioError:
+            continue
+    return sd.OutputStream(samplerate=rate, channels=1, dtype="float32")              # the named speaker is not usable right now (Bluetooth profile switch, unplugged): the system default, never silence
 
 
 class Speaker:
@@ -212,6 +221,9 @@ def pick_filler() -> str:
 
 
 def _selfcheck():
+    devs = [{"name": "Speakers (Realtek)", "max_output_channels": 8, "hostapi": 0}, {"name": "Headphones (Rockerz 512)", "max_output_channels": 2, "hostapi": 0},
+            {"name": "Headset (Hands-Free (Rockerz 512))", "max_output_channels": 1, "hostapi": 1}, {"name": "Mic (Rockerz 512)", "max_output_channels": 0, "hostapi": 0}]
+    assert pick_outputs(devs, ["MME", "Windows WDM-KS"], "rockerz") == [1] and pick_outputs(devs, ["MME", "Windows WDM-KS"], "") == []        # WDM-KS and hands-free are skipped
     import time
     import events as ev
     assert clean("See [the report](https://example.com/r) and https://www.example.org/x/y now, 3/4 of **it**, 2 * 3.\n- item [reminder_1_2]") == "See the report and example now, 3 over 4 of it, 2 times 3.\nitem"
