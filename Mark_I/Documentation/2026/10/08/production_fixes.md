@@ -63,3 +63,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 33 | Listening too much (noise and side remarks answered as follow-ups) | Follow-up without the wake word needs voice 0.33; `followup_min_s` 0.6 | `followup_voice_threshold`, `followup_min_s` |
 | 34 | Listening to itself and the TV (unscorable short clips passed); wake word with no detected speech gave no turn | Short unscorable follow-ups ignored unless FRED asked a question; wake word starts or rescues a turn; threshold 0.27 | `wake_grace_s`, `voice_threshold` |
 | 35 | Unread 06:00 news edition is lost when the 18:00 one arrives | Read state per edition; 18:00 read first, then FRED asks about the 06:00 one | none |
+| 36 | "Yes, please read it" after the news offer went to read_own_docs | A yes/no within 40 s of the offer is answered by the news service itself ("Read me the news.") | none |

@@ -7,8 +7,10 @@ Sockets
   out: digest day files; the spoken offer "Good morning, sir. The 06:00 news is ready, 8 stories. Shall I read it?" once per edition, when present
 Self-check: python news/service.py
 """
+import re
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -23,7 +25,7 @@ from news import digest
 class News:
     def __init__(self, chat, embed, memory, bus, speak=None, build=digest.build, tick_s: float = 60.0):
         self.chat, self.embed, self.mem, self.bus, self.speak, self._build, self.tick_s = chat, embed, memory, bus, speak, build, tick_s
-        self.present, self.offered = None, set()
+        self.present, self.offered, self.offer_until = None, set(), 0.0
         self._stop = threading.Event()
         self._t = None
 
@@ -40,8 +42,22 @@ class News:
         greet = "Good morning" if int(ed["at"][:2]) < 12 else "Good evening"
         early = digest.earlier_unread(ed["built"])
         tail = f" The {early['at']} one is still unread: I'll read this first, then ask if you want that too." if early else ""
+        self.offer_until = time.time() + 40
         self.speak(f"{greet}, sir. The {ed['at']} news is ready, {len(ed['items'])} stories.{tail} Shall I read it?")
         return True
+
+    def answer(self, text: str):
+        """The spoken offer is not in the model's history, so a bare 'Yes, please read it' went to the wrong tool (read_own_docs, 2026-10-11): within 40 s of the offer a yes is turned into 'Read me the news.' here."""
+        if time.time() > self.offer_until:
+            return None
+        t = re.sub(r"[^a-z ]", "", text.lower()).strip()
+        if re.match(r"^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|do it|why not)\b", t):
+            self.offer_until = 0.0
+            return "yes"
+        if re.match(r"^(no|nope|not now|later|not yet|skip)\b", t):
+            self.offer_until = 0.0
+            return "no"
+        return None
 
     def tick(self):
         if digest.due():
@@ -99,6 +115,12 @@ def _selfcheck():
         bus.emit("presence", "state", present=True)
         threading.Event().wait(0.2)
         assert len(said) == 1                                          # offered once per edition
+        n.offer_until = time.time() + 40
+        assert n.answer("Yes, please read it.") == "yes" and n.answer("yes") is None        # one answer per offer
+        n.offer_until = time.time() + 40
+        assert n.answer("No, not now") == "no" and n.answer("Novel idea") is None and n.answer("What's the weather") is None
+        n.offer_until = time.time() - 1
+        assert n.answer("yes") is None                                                          # the offer has expired
         n.stop()
     print("news service ok")
 

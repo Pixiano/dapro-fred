@@ -137,6 +137,14 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     def handle(text, source="voice"):
         """One turn from text (heard or typed): filler if slow, engine, print, speak."""
         out(f"YOU: {text}")
+        a = source == "voice" and rt.news.answer(text)
+        if a == "no":
+            note = sirify("Okay. Just ask whenever you want the news.")
+            out(f"FRED: {note}")
+            speaker and speaker.speak(note)
+            return note
+        if a == "yes":
+            text = "Read me the news."
         note = rt.ask and not engine.confirm.pending and rt.ask.take(text)       # an answer to the waiting question is not a new turn (a pending yes/no for a tool comes first)
         if note:
             out(f"FRED: {sirify(note)}")
