@@ -111,6 +111,22 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         speaker and threading.Thread(target=speaker.speak, args=(t,), kwargs={"quiet": True}, daemon=True).start()
 
     engine = Engine(chat, registry or build_skills(recall, mic=mic, bus=bus, embed=embedder.embed, scheduler=sched), embedder, prompt.build_system(), bus=bus, recall=recall, on_say=say, talk=talk, lock_chat=talk, on_lock=swap)
+    def remember(*msgs):
+        """Put lines the engine did not produce into its conversation history: the news offer, a deadline question, a reminder and the user's answer to it. Without this the model never saw the question, so 'Yes, please read it' went to the wrong tool (2026-10-11)."""
+        for m in msgs:
+            h = engine.history
+            if h and h[-1]["role"] == m["role"]:
+                h[-1] = dict(h[-1], content=h[-1]["content"] + " " + m["content"])
+            else:
+                h.append(m)
+        del engine.history[:-2 * c.history_turns]
+
+    def proactive_say(t):
+        remember({"role": "assistant", "content": t})
+        if speaker:
+            threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start()
+
+
     if wake:
         WakeDetector(bus).attach(mic)
     vad = Vad(bus)
@@ -129,7 +145,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             rt.jobs = Jobs(mem, playground, embedder.embed, present=lambda: seen["p"], pm=recall.model, bus=bus, presence=rt.presence)
         rt.ask = AskDelivery(bus, mem, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
     from news.service import News
-    rt.news = News(chat, embedder.embed, mem if memory else None, bus, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
+    rt.news = News(chat, embedder.embed, mem if memory else None, bus, proactive_say)
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
 
@@ -140,12 +156,14 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         out(f"YOU: {text}")
         dl = rt.deadlines and rt.deadlines.answer(text)                            # a yes/no to the screen-deadline question is not a new turn
         if dl:
+            remember({"role": "user", "content": text}, {"role": "assistant", "content": dl})
             out(f"FRED: {sirify(dl)}")
             speaker and speaker.speak(sirify(dl))
             return dl
         a = source == "voice" and rt.news.answer(text)
         if a == "no":
             note = sirify("Okay. Just ask whenever you want the news.")
+            remember({"role": "user", "content": text}, {"role": "assistant", "content": note})
             out(f"FRED: {note}")
             speaker and speaker.speak(note)
             return note
@@ -260,7 +278,7 @@ def main(argv):
         screen = ScreenSense(bus)
         reader = Reader(bus, screen)                                            # reads the foreground window about once a second and feeds the watchers
         watch = ScamWatch(bus, screen, reader=reader)
-        rt.deadlines = DeadlineWatch(bus, reader, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start(), Gate(bus, fullscreen=reader.fullscreen), memory=rt.news.mem)
+        rt.deadlines = DeadlineWatch(bus, reader, proactive_say, Gate(bus, fullscreen=reader.fullscreen), memory=rt.news.mem)
         screen.start()
         reader.start()
         watch.start()
