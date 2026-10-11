@@ -24,3 +24,8 @@ Parakeet-TDT-0.6B-v3 is the speed pick (25 European languages), not an accuracy 
 
 ## Handy's models (screenshot from Vatsal, 2026-10-11)
 Vatsal used two of these in Handy and found them better than FRED's Whisper: Parakeet Unified EN 0.6B (English, streaming), Nemotron Streaming 3.5 (28 languages, streaming), Canary 180M Flash (tiny, 4 languages, translate). All three are NVIDIA NeMo models, not Whisper; they join the bake-off (Parakeet Unified first: English-only, small, fits beside FRED).
+
+## Test results (2026-10-11, 40 recent FRED clips, no ground truth, all on GPU, nothing wired in)
+- Parakeet Unified EN 0.6B, int8 and full precision: same result both ways. 11 to 12 of 40 clips empty (including clean ones like "Thank you very much"), final words dropped ("What's the name?" -> "dame"), no punctuation, numbers as words. "PM Modi" -> "PM Bodhi" (closer in sound than Whisper's "PM1"). "Hey Fred" 2 of 4.
+- Canary 180M Flash (NeMo, 1.4 GB VRAM, 64 to 199 ms per clip): 17 of 40 empty or a literal `<|endoftext|>.` string; "Hey Fred" 2 of 3; "PM Modi" -> "P. M. Body".
+- Observation: both models go empty or drop endings on largely the same clips Whisper handled. That points at the clips (level, start/end clipping of the recorded utterance), not at the model. Next check: peak level and the last 0.5 s of those clips before trying any other model. Canary venv: C:\Users\Dhiraj Vatsal\stt_bakeoff_canary (delete when finished); Parakeet scratch: C:\Users\Dhiraj Vatsal\stt_bakeoff.
