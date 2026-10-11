@@ -76,7 +76,7 @@ class Jobs:
 
     def _llm(self, cfg, stage, effort=None, want_json=False):
         rl = self.mods["run_local"]
-        calls = config.data_dir() / "memory" / "jobs_calls.jsonl"
+        calls = config.memory_root() / "jobs_calls.jsonl"
         calls.parent.mkdir(parents=True, exist_ok=True)
         inner = rl.make_llm(cfg, stage, calls, effort, want_json)
 

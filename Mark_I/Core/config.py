@@ -124,6 +124,7 @@ class Settings:
     history_turns: int = 8                            # user/assistant pairs kept as conversation context
     engine_think: bool = False                        # reasoning on tool/chat turns (off: the thinking cap; arithmetic goes to the calculator tool)
     semantic_floor: float = 0.65                      # embedding similarity at which a tool counts as clearly requested
+    memory_testing: bool = True                       # True: everything memory-related lives in Mark_I/Initial/Testing_Memory (kept clean of the real memory); False (or FRED_MEMORY_TESTING=0): <data_dir>/memory. Vatsal says when to switch back.
     vault_dir: str = ""                               # persona/profile/rules markdown read at start (outside the repo); empty = built-in fallback persona
     glance_mid_s: float = 3.0                         # while the user talks: one extra screen frame per this many seconds
     glance_max_frames: int = 3                        # frames per utterance, start and end included
@@ -167,6 +168,15 @@ def get() -> Settings:
     if _cache is None:
         _cache = _build()
     return _cache
+
+
+def memory_root() -> Path:
+    """Where the memory (sqlite, archive, job log) lives right now."""
+    if get().memory_testing:
+        p = Path(__file__).resolve().parent.parent / "Initial" / "Testing_Memory"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    return data_dir() / "memory"
 
 
 def data_dir() -> Path:

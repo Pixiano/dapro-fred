@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
 import config
 
-MEMORY_DIR = Path(__file__).resolve().parents[2] / "Initial" / "memory"
+MEMORY_DIR = Path(__file__).resolve().parents[2] / "memory"
 
 
 def memory_modules() -> dict:
@@ -27,7 +27,7 @@ def memory_modules() -> dict:
 
 
 def open_memory(root=None):
-    return memory_modules()["manager"].Memory(root or config.data_dir() / "memory")
+    return memory_modules()["manager"].Memory(root or config.memory_root())
 
 
 def _selfcheck():
