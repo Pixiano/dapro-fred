@@ -28,3 +28,8 @@ Goal (Vatsal): when a deadline shows up on the screen, FRED notices and asks abo
 - The question is spoken AND shown as a toast with yes / no buttons.
 - Reminder defaults: the evening before at 18:00, and the morning of at 06:00 (not 08:00); on a weekend the morning one is at 12:00 noon.
 - Timing: this belongs to the NEXT VERSION, not the current build. Nothing is built; the design above stands.
+
+## Screen memory (idea from Vatsal, 2026-10-11, next version, not built)
+- FRED remembers what was on screen: a small visual embedding model turns a screenshot into a vector, stored as a low-weight memory event (type "screen") with timestamp, app/window title and a one-line caption, so "what was I looking at yesterday" and the deadline watch share one store.
+- Model: must run locally on GPU and be small (CLIP/SigLIP-class); the Gemini embedding is cloud and would send screenshots out, so it is out unless Vatsal says otherwise. Not benchmarked.
+- Capture rate, de-duplication (skip near-identical frames), and what to exclude (passwords, banking, the vault) to be decided before building.

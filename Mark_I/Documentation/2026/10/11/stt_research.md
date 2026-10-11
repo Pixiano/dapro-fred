@@ -21,3 +21,6 @@ Parakeet-TDT-0.6B-v3 is the speed pick (25 European languages), not an accuracy 
 - Cheapest wins first (done today): Whisper hotwords and news-derived vocabulary. Next cheap step: the full large-v3 instead of the turbo (more accurate on accents, slower).
 - A fair test needs ground truth: about 30 to 40 sentences read aloud by Vatsal into the lavalier (names: Modi, Manipur, Bihar, CBSE, NCERT, Anthropic, Claude, FRED, "Hey Fred"), then word error rate for Whisper large-v3, large-v3-turbo with hotwords, Cohere Transcribe, Granite Speech 2B and Canary-Qwen on the same clips. Only the winner would be wired in (a model slot behind the existing `Stt.transcribe` socket), and any loser deleted. GPU memory: all fit alongside the current stack only one at a time, so the test runs standalone.
 - Local "Wispr-style" cleanup is already half there: the 4B model can clean a transcript, but fixing a misheard name needs the right audio model, not cleanup.
+
+## Handy's models (screenshot from Vatsal, 2026-10-11)
+Vatsal used two of these in Handy and found them better than FRED's Whisper: Parakeet Unified EN 0.6B (English, streaming), Nemotron Streaming 3.5 (28 languages, streaming), Canary 180M Flash (tiny, 4 languages, translate). All three are NVIDIA NeMo models, not Whisper; they join the bake-off (Parakeet Unified first: English-only, small, fits beside FRED).
