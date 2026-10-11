@@ -179,8 +179,11 @@ class TurnController:
         self.hotkey_turn = False
         if not addressed:
             return self._ignored("not_addressed", audio)
-        if self.voice is not None and not hk and self.voice.is_me(audio) is False:
-            return self._ignored("not_vatsal", audio)
+        if self.voice is not None and not hk:
+            woke = self.wake_ts >= self.t_start - config.get().wake_open_s
+            s = self.voice.score(audio)
+            if s is not None and s < (config.get().voice_threshold if woke else config.get().followup_voice_threshold):
+                return self._ignored("not_vatsal", audio)               # no wake word, only the follow-up window: a stricter voice match, so passing noise and other voices are not answered
         self.counts["turns"] += 1
         self._emit(END_OF_TURN, **info)
         if self.on_turn:
@@ -233,7 +236,7 @@ def _selfcheck():
         def is_me(self, a):
             return self.me
         def score(self, a):
-            return {True: 0.6, False: 0.2, None: None}[self.me]
+            return self.me if isinstance(self.me, float) else {True: 0.6, False: 0.2, None: None}[self.me]
 
     cap, sm, vo = Cap(), Smart(), Voice()
     t = TurnController(bus, cap, sm, vo, on_turn=lambda a, i: turns.append(i))
@@ -378,6 +381,21 @@ def _selfcheck():
     say(720.0, 721.0)                                                 # window long over
     run(721.2, 721.6)
     assert states[-1] == (IGNORE, "not_addressed")
+    # 10b. a middling voice match (0.30): accepted after the wake word, not as a bare follow-up
+    states.clear(); turns.clear()
+    vo.me = 0.30
+    t._now = 730.0
+    bus.emit("tts", "start"); bus.emit("tts", "end")
+    say(733.0, 734.0)
+    run(734.2, 734.6)
+    assert states[-1] == (IGNORE, "not_vatsal"), states
+    states.clear()
+    t.wake_ts = 740.0
+    say(740.0, 741.0)
+    run(741.2, 741.6)
+    assert states[-1][0] == END_OF_TURN, states
+    t.wake_ts = -1e9
+    vo.me = True
     # 11. a failing Smart Turn model must not wedge the clock: the hard cap still ends the turn
     states.clear(); turns.clear()
     sm.prob = lambda a: 1 / 0
