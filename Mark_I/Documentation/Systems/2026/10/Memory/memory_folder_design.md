@@ -36,32 +36,37 @@ Truth lives in files you can read; the SQLite database is the fast index and the
             visits.jsonl            one line per screen visit (app, title, times, caption, <=1000 chars of text, seen count)
           derived\                  what the nightly job produced from that day (replayable, never edits raw)
             events.jsonl            the day's memory events (type, importance, text, entity tags)
-            timeline.jsonl          one line per notable thing in order (news read, deadline asked and answered, tool errors, proactive offers and replies)
             decisions.jsonl         every model prompt/reply/override/refusal of that day's jobs (today the decision_log table)
+            jobs_calls.jsonl        model-call log of the day's jobs (today jobs_calls.jsonl in the memory root)
           news\
             digest-0600.json  digest-1800.json      the editions built that day, with the read/offered flags
           amendments.jsonl          any later correction or late import for this day: appended here, the day's files stay untouched
   signals\                          BULK, short-lived, same year/month/date sharding, own retention
     2026\10\11\
-      audio\{clock,stt,wakeword}\   saved clips + clip metadata jsonl (today Project_FRED\Data)
+      usage\<component>\            clips + usage.jsonl per component: clock, stt, wakeword, audio, tts, camera, presence, screen, engine (today Project_FRED\Data)
       events\noise.jsonl            the event-bus log (VAD flickers, wake scores, clock states): today FRED_Private\events
-      vectors\screen.npy            optional image vectors of the day if they move out of the database
+      logs\session.jsonl  tools.jsonl   live session and tool logs: today FRED_Private\logs (flat files)
   state\                            CURRENT STATE, changes in place, history kept in rows (outside the time tree)
     memory.sqlite                   entities, entity_states (valid_from/to), relationships, event_entities, model_items, proposals,
                                     review_queue, ask_state, yearly_alerts, precedents, screen_visits index, sources
-    people\ places\ ...             (optional later: one readable file per entity if wanted)
+    files_index.sqlite              the file-search index (a state index, not a day record)
   identity\                         WHO VATSAL IS TO FRED (private, never sharded by time)
-    voice_refs.json  face_refs.json  yearly_anchor.json  yearly_alerts_seed.json
+    voice_refs.json (+ .bak)  face_refs.json  yearly_anchor.json  yearly_alerts_seed.json
+    voice_data\index.jsonl         voice-ID training clips and their index (today FRED_Privateoice_data)
   settings\                         small switches and per-module memory of choices
-    screen_paused.flag  deadlines.json  news_offered.json  schedule.json  lockdown.json  apps_index.json  judge_model.json
+    screen_paused.flag  deadlines.json  news_offered.json  schedule.json  reminders.json  agenda.json
+    lockdown.json  lockdown_state.json  lockdown_vectors.jsonl  apps_index.json  app_index.json  apps_usage.json  judge_model.json
+    persona\                        persona files
+  safety\                           undo and discard copies, never auto-cleaned
+    email_drafts\  vault_undo\  trash\
   index\                            DERIVED, rebuildable, safe to delete
     <embed-model-id>\               one folder per embedding model so models never mix
-      faiss.index  vectors.sqlite  fts5 lives in state\memory.sqlite or index\fts.sqlite
+      faiss.index                   only the FAISS cache is a file; vectors and FTS5 stay in memory.sqlite today
   imports\                          raw originals of historical imports, by source (their content is projected into time\ with kind="historical")
   backups\                          backup.py output: manifest.json with SHA-256 per file, one folder per backup date
   tmp\                              scratch, always safe to empty
 ```
-Read it as five kinds of folder: **time** (permanent ledger), **signals** (same shape, expires), **state** (current truth), **identity + settings** (small, personal, never sharded), **index + backups + tmp** (derived or copies).
+Read it as six kinds of folder (safety holds undo copies): **time** (permanent ledger), **signals** (same shape, expires), **state** (current truth), **identity + settings** (small, personal, never sharded), **index + backups + tmp** (derived or copies).
 
 ## What goes where (decision table)
 | Data | Folder | Why |
@@ -76,7 +81,10 @@ Read it as five kinds of folder: **time** (permanent ledger), **signals** (same 
 | voice clips, noise event log | signals\Y\M\D\ | same sharding, but deleted by retention (clips 30 days, noise 14 days, unless flagged) |
 | who knows whom, where Vatsal lives now, what FRED learned about him | state\memory.sqlite | current state with valid_from/valid_to history, changes in place |
 | voice and face references, yearly anchor, alert seed | identity\ | personal, not time-bound, never deleted by retention |
-| deadlines answered, news offered, pause flag, schedule | settings\ | per-module small state |
+| deadlines answered, news offered, pause flag, schedule, reminders, agenda, lockdown, persona | settings\ | per-module small state |
+| voice-ID training clips | identityoice_data\ | who Vatsal sounds like, not a day record |
+| email drafts, vault undo copies, trash | safety\ | reversal copies, never auto-deleted |
+| session and tool logs, per-component usage clips | signals\Y\M\D\logs and usage\ | debug and tuning data, expires |
 | embeddings, FAISS, FTS | index\<model>\ | derived: delete and rebuild |
 | historical chat imports | imports\ then projected into time\ | originals are kept untouched |
 
@@ -107,6 +115,9 @@ Read it as five kinds of folder: **time** (permanent ledger), **signals** (same 
 4. Move news digests, then clips and noise (to `signals\`), then identity and settings files out of the FRED_Private root. Each step keeps a read fallback to the old path until the next version.
 5. Export derived events and decisions to the day's `derived\` and make the database the index of them.
 6. Retention job for `signals\` last.
+
+## Audit changes (2026-10-11)
+Checked against what the code writes today. Added: the other usage components, session and tool logs, voice_data, safety copies, reminders/agenda/lockdown/persona/app-usage settings, files_index, jobs_calls. Removed as speculative or duplicating the database: timeline.jsonl, vectors\screen.npy, people\ and places\ folders, vectors.sqlite and fts.sqlite in index.
 
 ## Open questions for Vatsal
 1. Are voice clips and the noise event log allowed to expire (30 and 14 days proposed) or must they live forever like the ledger?
