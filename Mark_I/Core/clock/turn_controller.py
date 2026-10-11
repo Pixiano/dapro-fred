@@ -157,8 +157,10 @@ class TurnController:
         c = config.get()
         if not (self.headphones or self.level >= c.barge_level):
             return
-        if self.voice is not None and c.voice_id_enabled and self.voice.is_me(self.capture.snapshot()) is not True:
-            return                                                  # not Vatsal, or too short to tell yet: FRED keeps talking (asked again every tick)
+        if self.voice is not None and c.voice_id_enabled and not (self.wake_ts >= self.t_start - c.wake_open_s):
+            s = self.voice.score(self.capture.snapshot())
+            if s is None or s < c.barge_voice_threshold:
+                return                                              # FRED's own voice from the speakers scores up to 0.36: only a clearly strong match, or the wake word, interrupts it (asked again every tick)
         self.barged = True
         self.counts["barge_in"] += 1
         self._emit(BARGE_IN, speech_ms=int((now - self.t_start) * 1000))
@@ -230,6 +232,8 @@ def _selfcheck():
         me = True
         def is_me(self, a):
             return self.me
+        def score(self, a):
+            return {True: 0.6, False: 0.2, None: None}[self.me]
 
     cap, sm, vo = Cap(), Smart(), Voice()
     t = TurnController(bus, cap, sm, vo, on_turn=lambda a, i: turns.append(i))
@@ -353,6 +357,15 @@ def _selfcheck():
         assert (BARGE_IN in [s for s, _ in states]) == cuts, (who, states)
         t.active = t.speaking = False
         bus.emit("tts", "end")
+    vo.me, states[:] = False, []                                  # a foreign-scoring voice that says the wake word still interrupts
+    t.wake_ts = 649.5
+    bus.emit("tts", "start")
+    t.vad(True, 650.0)
+    t.tick(650.7)
+    assert BARGE_IN in [s for s, _ in states], states
+    t.active = t.speaking = False
+    t.wake_ts = -1e9
+    bus.emit("tts", "end")
     vo.me = keep
     # 10. follow-up window: speech within 8 s after FRED spoke needs no wake word
     states.clear(); turns.clear()

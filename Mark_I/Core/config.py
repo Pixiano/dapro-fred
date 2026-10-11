@@ -82,7 +82,8 @@ class Settings:
     faces_dynamic_cap: int = 7                        # face references: FIFO of recent confident matches (static : dynamic = 13 : 7)
     turn_prob_threshold: float = 0.5                  # Smart Turn: at or above = the turn is complete
     voice_id_enabled: bool = True                     # the speaker gate: ON since 2026-10-08, enrolled from 11 real lavalier clips (leave-one-out: Vatsal 0.39-0.62, TV or room noise 0.15-0.28)
-    voice_threshold: float = 0.38                     # cosine similarity at or above = Vatsal. 0.33 sits between the noise (max 0.28) and the quietest real clip (0.39), first guess, tune from the logs
+    barge_voice_threshold: float = 0.45               # voice match needed to interrupt FRED while it speaks (its own echo scores up to 0.36); the wake word interrupts without it
+    voice_threshold: float = 0.25                     # cosine similarity at or above = Vatsal. 0.33 sits between the noise (max 0.28) and the quietest real clip (0.39), first guess, tune from the logs
     voice_min_s: float = 1.0                          # shorter clips are too short to judge (score None); 1 s clips scored median 0.50, 2 s 0.62, 0.6 s 0.40 (tests/voice_eval.py)
     voice_refs_cap: int = 20                          # enrolled voice references kept (most diverse)
     usage_clip_cap: int = 400                         # audio clips kept per component and day (usage.py); events are always kept
