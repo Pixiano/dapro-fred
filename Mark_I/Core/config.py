@@ -150,6 +150,7 @@ class Settings:
     ocr_enabled: bool = True                          # Windows OCR on the changed crop: approved by Vatsal 2026-10-06
     describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model: Qwen3.5-4B, 18/20 on tests/live_vision_hard.py (MiniCPM-V 4.6 scored 9/20 and was deleted, 2026-10-07)
     describe_max_tokens: int = 300
+    vision_shared: bool = True                        # describe_model == brain: ONE copy in the chat slot, loaded with its image projector, serves chat and image description (frees ~4 GB, F10 2026-10-11). False = the separate vision slot as before
     # --- live screen reading, speak gate, deadline watch (2026-10-11) ---
     screen_paused: bool = False                       # pause switch: stops the screen reading for the deadline watch (and later screen memory); the scam watch is exempt. Also: a voice command (screen_watch skill) and the file <data_dir>/screen_paused.flag
     screen_read_s: float = 1.0                        # the foreground window is read about once a second (proactive/screenread.py)
@@ -166,6 +167,14 @@ class Settings:
     deadline_watch_enabled: bool = True               # proactive/deadlines.py
     deadline_urgent_h: float = 12.0                   # a deadline closer than this overrides quiet hours and the caps
     deadline_answer_s: float = 40.0                   # a yes/no within this long of the question goes to the watch, not the model
+    # --- screen memory (2026-10-11): proactive/screenmem.py, senses/imgembed.py ---
+    screen_mem_enabled: bool = True                   # remember what was on screen as low-weight memory events (type "screen"); the pause switch stops it too
+    screen_mem_dwell_s: float = 10.0                  # one visit = a window dwell of at least this long
+    screen_mem_chars: int = 1000                      # OCR text kept per visit
+    screen_mem_dup: float = 0.8                       # same app+title and token overlap at least this = the same visit (merged, not stored again)
+    screen_img_enabled: bool = True                   # Phase B: an image vector per stored visit (SigLIP-class, GPU, lazy); off = text vectors only
+    screen_img_model: str = "google/siglip2-base-patch16-224"
+    screen_img_idle_s: float = 60.0                   # unload the image model after this long without a visit to embed
 
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")                 # every stored time and day bucket is India time (owner decision 2026-10-08)

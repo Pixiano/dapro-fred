@@ -1,0 +1,35 @@
+{
+  "name": "screen_recall",
+  "description": "Search what was on the user's screen earlier, from FRED's screen memory (windows he looked at for at least 10 seconds: time, app, window title and the first lines of text). Use it for 'what was I looking at around 3pm', 'what was I doing yesterday afternoon', 'what was that page about X', 'where did I see Y on my screen'. Not the current screen.",
+  "args": {
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "what the page or window was about, in a few words ('lab report', 'flight prices'); leave out when only a time is asked"
+      },
+      "when": {
+        "type": "string",
+        "description": "when, in the user's words: 'yesterday', 'today at 3pm', 'around 3pm', 'monday', 'last week'; leave out when not said"
+      }
+    }
+  },
+  "examples": [
+    "what was I looking at around 3pm",
+    "what was I looking at yesterday",
+    "what was that page about physics I had open",
+    "where did I see the flight prices on my screen",
+    "what was on my screen this morning",
+    "what was I doing on the computer yesterday evening",
+    "find the page I was reading about the lab report",
+    "which window did I have open around noon"
+  ],
+  "not_for": [
+    "what is on the screen right now (use look_at_screen)",
+    "pausing or resuming the screen reading (use screen_watch)",
+    "searching the web or files"
+  ],
+  "flags": {
+    "reads_untrusted": true
+  },
+  "timeout_s": 25
+}

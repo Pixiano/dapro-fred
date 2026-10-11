@@ -133,13 +133,13 @@ def main():
     class Pg:
         calls = []
         def unload(self, slot): Pg.calls.append(("unload", slot))
-        def load(self, model, slot): Pg.calls.append(("load", slot))
+        def load(self, model, slot, vision=False): Pg.calls.append(("load", slot, vision))
     talker = FakeChat(["Talker here."])
     rt2 = live.build(bus, Mic(bus, device=""), chat=FakeChat(), embedder=FakeEmbedder(), stt=Stt([]), smart=object(), wake=False, out=lines.append, registry=build_registry(), playground=Pg(), talk=talker)
     rt2.engine.run("lockdown", source="voice")
     assert Pg.calls == [("unload", "chat")] and rt2.engine.locked and rt2.engine.lock_chat is talker, Pg.calls
     rt2.engine._set_lockdown(False)
-    assert Pg.calls[-1] == ("load", "chat")
+    assert Pg.calls[-1] == ("load", "chat", config.get().vision_shared and config.get().describe_model == config.get().brain)      # the brain comes back with its image projector when it also describes
     print("voice out ok")
 
 

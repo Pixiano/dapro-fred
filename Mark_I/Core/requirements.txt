@@ -43,3 +43,6 @@ ddgs
 google-auth
 scikit-learn==1.9.1
 pystray==0.19.5
+
+# screen memory Phase B: SigLIP-class image embedder (senses/imgembed.py; torch comes from requirements-torch.txt; model google/siglip2-base-patch16-224 downloads to the HF cache on first use)
+transformers==5.19.0

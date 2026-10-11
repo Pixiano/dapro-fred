@@ -66,7 +66,7 @@ class Runtime:
 
 def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, embedder=None, stt=None, smart=None, wake: bool = True, out=print, registry=None, speaker=None, playground=None, talk=None, presence: bool = False) -> Runtime:
     """`chat`/`embedder`/`stt`/`smart` can be injected (tests); by default the playground's Chat/Embedder, real Whisper and Smart Turn."""
-    from models.client import Chat, Embedder
+    from models.client import Chat, Embedder, vision_slot
     from skills.loader import build as build_skills
     c = config.get()
     chat, embedder = chat or Chat(brain or c.brain), embedder or Embedder()
@@ -83,7 +83,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     def swap(locked):
         """Lockdown: the 4B brain steps out and the small talker is the only model while locked; the brain comes back on release (a few seconds, the unlock reply waits for it)."""
         if playground and talk:
-            playground.unload("chat") if locked else playground.load(brain or c.brain, slot="chat")
+            playground.unload("chat") if locked else playground.load(brain or c.brain, slot="chat", vision=vision_slot(brain) == "chat")
 
     from proactive.scheduler import Scheduler
     sched = Scheduler(bus)
@@ -217,7 +217,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
 
 
 def main(argv):
-    from models.client import Chat, Embedder, Playground
+    from models.client import Chat, Embedder, Playground, vision_slot
     from ui.pill.layered import enable_dpi_awareness
     enable_dpi_awareness()                      # first, before any window or screen capture exists: sharp pill on scaled displays (mss would set it anyway, but later)
     secs = next((float(a) for a in argv if a.replace(".", "").isdigit()), 120.0)
@@ -227,10 +227,11 @@ def main(argv):
         print("the playground is not running (python Mark_I/Initial/playground/server.py)")
         return 1
     for model, slot in ((brain, "chat"), (config.get().embedder, "embed"), *((config.get().talker, "talk"),) * bool(config.get().talker)):
-        if not (pg.status().get("slots") or {}).get(slot):
+        cur, vis = (pg.status().get("slots") or {}).get(slot), slot == "chat" and vision_slot(model) == "chat"
+        if not cur or (vis and not cur.get("vision")):                           # shared layout: the brain carries the image projector (a chat slot loaded without it is reloaded)
             print(f"loading {model} ...")
-            pg.load(model, slot=slot)
-            loaded.append(slot)
+            pg.load(model, slot=slot, vision=vis)
+            cur or loaded.append(slot)
     stop, restart = threading.Event(), []
     usage.use_repo_data()                                                       # live runs keep their usage data in Project_FRED/Data
     bus = ev.EventBus()
@@ -279,6 +280,12 @@ def main(argv):
         reader = Reader(bus, screen)                                            # reads the foreground window about once a second and feeds the watchers
         watch = ScamWatch(bus, screen, reader=reader)
         rt.deadlines = DeadlineWatch(bus, reader, proactive_say, Gate(bus, fullscreen=reader.fullscreen), memory=rt.news.mem)
+        if rt.news.mem is not None and config.get().screen_mem_enabled:        # screen memory: needs --memory; text vectors by the memory's own embedder, image vectors lazily on the GPU
+            from proactive.screenmem import ScreenMemory
+            from senses import imgembed
+            smem = ScreenMemory(reader, screen, rt.news.mem, imgembed.shared() if config.get().screen_img_enabled else None)
+            smem.start()
+            rt._closers += [smem.stop, imgembed.shared().unload]
         screen.start()
         reader.start()
         watch.start()

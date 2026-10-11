@@ -7,6 +7,7 @@ Sockets
        Embedder(model).embed(texts, is_query=False) -> list[vector]
        image_part(path|bytes) -> a message content part, for vision models (messages=[{"role":"user","content":[{"type":"text",...}, image_part(p)]}])
        Playground().status() / healthy() / load(model, slot=None, ctx=None, vision=False) / unload(slot=None) / window_open() / window_close()
+       vision_slot(brain=None) -> "chat" when settings.vision_shared and describe_model is the brain (one copy, loaded with the image projector), else "vision"
   out: ChatResult(text, tool_calls (toolparse.ToolCall list), reasoning, finish_reason, usage); never a raw HTTP error: ModelError(kind, message)
        kinds: unavailable (playground down), timeout, bad_request (4xx), failed (5xx / unreadable reply)
 Same call shapes as models/fake.py (FakeChat, FakeEmbedder), so everything above the model runs unchanged with no GPU.
@@ -56,6 +57,12 @@ def image_part(src, mime: str | None = None) -> dict:
     data = Path(src).read_bytes() if isinstance(src, (str, Path)) else bytes(src)
     mime = mime or (mimetypes.guess_type(str(src))[0] if isinstance(src, (str, Path)) else None) or "image/png"
     return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(data).decode()}"}}
+
+
+def vision_slot(brain: str | None = None) -> str:
+    """Where image requests go. Shared: the chat slot, whose brain is loaded with vision=True (callers: `vision=slot == "chat" and vision_slot(model) == "chat"`)."""
+    c = config.get()
+    return "chat" if c.vision_shared and c.describe_model == (brain or c.brain) else "vision"
 
 
 class _Http:
@@ -280,6 +287,8 @@ def _selfcheck():
         assert ex.kind == "unavailable"
     assert not Playground(url, retries=0).healthy()
     assert image_part(b"\x89PNG")["image_url"]["url"].startswith("data:image/png;base64,")
+    c = config.get()
+    assert vision_slot(c.describe_model) == ("chat" if c.vision_shared else "vision") and vision_slot("some/other-model") == "vision"   # shared only when the model is the describer
     print("client ok")
 
 

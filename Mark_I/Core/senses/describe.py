@@ -12,7 +12,8 @@ Sockets
   out: Description(text, verified, unverified, dropped, ms); bus event screen.described {ms, verified, n_quotes} (never the text or pixels)
        ocr_text given: spans not found in it are replaced by "(unverified text)" in `text` and listed in `dropped`; verified=True
        ocr_text None:  `text` is untouched, verified=False, `unverified` = every quoted span and number-like token (the caller decides how to hedge)
-The vision slot must be loaded with the image projector (Playground().load(model, slot="vision", vision=True)); the launcher owns that, describe() only calls it.
+The slot must be loaded with the image projector (Playground().load(model, slot=vision_slot(), vision=True)); the launcher owns that, describe() only calls it. Shared layout (settings.vision_shared,
+describe_model == brain): that slot is the chat slot, one copy of the brain serves turns and descriptions; llama-server runs one request at a time, so a description (<= describe_max_tokens, no thinking) delays a turn that arrives meanwhile by seconds at most.
 Self-check: python senses/describe.py (scripted model).  Real model on the 12-screenshot set: tests/live_describe.py
 """
 import difflib
@@ -29,7 +30,7 @@ if __name__ == "__main__":
 
 import config
 import events as ev
-from models.client import Chat, image_part
+from models.client import Chat, image_part, vision_slot
 
 GENERIC = ("Describe what is on this screen: the application and the general activity, e.g. 'a code editor with a Python file open'. "
            "If there is an error message, code, a specific number or other text the user is likely looking at, quote it exactly instead of summarising it. "
@@ -102,7 +103,7 @@ def _to_part(image) -> dict:
 class Describer:
     def __init__(self, chat=None, bus: ev.EventBus | None = None):
         c = config.get()
-        self.chat = chat or Chat(c.describe_model, slot="vision", max_tokens=c.describe_max_tokens, temperature=0.2)
+        self.chat = chat or Chat(c.describe_model, slot=vision_slot(), max_tokens=c.describe_max_tokens, temperature=0.2)
         self.bus = bus or ev.bus
 
     def describe(self, image, question: str | None = None, ocr_text: str | None = None, think: bool = False) -> Description:
@@ -149,6 +150,8 @@ def _selfcheck():
     assert chat.calls[1]["messages"][0]["content"][0]["text"].startswith("Describe what is on this screen")
     r = d.describe(b"\x89PNG\r\n\x1a\n")
     assert r.unverified == [] and [e.kind for e in got] == ["described"] * 3 and "text" not in got[0].data
+    shared = config.get().vision_shared and config.get().describe_model == config.get().brain
+    assert Describer(bus=b).chat.slot == ("chat" if shared else "vision") and Describer(bus=b).chat.model == config.get().describe_model     # one copy of the brain: image requests go to the chat slot
     print("describe ok")
 
 

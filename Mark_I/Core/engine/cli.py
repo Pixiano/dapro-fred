@@ -34,22 +34,22 @@ def run_lines(engine: Engine, lines, out=print):
 
 def _ensure(pg, model: str, slot: str, loaded: list, **kw):
     cur = (pg.status().get("slots") or {}).get(slot)
-    if not cur:
+    if not cur or (kw.get("vision") and not cur.get("vision")):                  # a chat slot loaded without the image projector is reloaded with it
         print(f"loading {model} into the {slot} slot ...")
         pg.load(model, slot=slot, **kw)
-        loaded.append(slot)
+        cur or loaded.append(slot)
 
 
 def main(argv):
     from engine import prompt
-    from models.client import Chat, Embedder, Playground
+    from models.client import Chat, Embedder, Playground, vision_slot
     from skills.loader import build
     brain = argv[argv.index("--brain") + 1] if "--brain" in argv else config.get().brain
     pg, loaded = Playground(), []
     if not pg.healthy():
         print("the playground is not running (python Mark_I/Initial/playground/server.py)")
         return 1
-    _ensure(pg, brain, "chat", loaded)
+    _ensure(pg, brain, "chat", loaded, vision=vision_slot(brain) == "chat")
     emb = None
     if "--no-embed" not in argv:
         _ensure(pg, config.get().embedder, "embed", loaded)
