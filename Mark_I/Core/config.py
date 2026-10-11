@@ -61,6 +61,7 @@ class Settings:
     whisper_beam: int = 5
     whisper_device: str = "cuda"                      # GPU-only rule: change only for an explicit CPU test (FRED_WHISPER_DEVICE=cpu FRED_WHISPER_COMPUTE=int8)
     whisper_compute: str = "float16"
+    stt_hotwords: str = "PM Modi, Narendra Modi, CBSE, NCERT, Anthropic, Claude, FRED"   # always-on vocabulary hint for Whisper (names it kept mishearing: Modi came out as PM1, BMW, E.M.O.D.); today's news names are added
     whisper_prompt: str = "Fred."                       # a longer list of commands came back as the transcript of room noise (2026-10-08 live session)
     stt_ghosts: tuple = ("thank you.", "thanks for watching.", "i'll see you next time.", "bye.", "you")   # what Whisper writes for faint TV/room noise
     stt_ghost_peak: float = 0.1                       # ... dropped only when the utterance was this quiet (a real thank-you at the mic is louder)
@@ -82,7 +83,7 @@ class Settings:
     faces_dynamic_cap: int = 7                        # face references: FIFO of recent confident matches (static : dynamic = 13 : 7)
     turn_prob_threshold: float = 0.5                  # Smart Turn: at or above = the turn is complete
     voice_id_enabled: bool = True                     # the speaker gate: ON since 2026-10-08, enrolled from 11 real lavalier clips (leave-one-out: Vatsal 0.39-0.62, TV or room noise 0.15-0.28)
-    barge_voice_threshold: float = 0.45               # voice match needed to interrupt FRED while it speaks (its own echo scores up to 0.36); the wake word interrupts without it
+    barge_voice_threshold: float = 0.33               # voice match needed to interrupt FRED while it speaks (0.33 worked well in the 2026-10-11 morning runs; 0.45 was too strict, the user's own speech scores 0.29 to 0.41, and stopped interruptions); the wake word interrupts without it
     voice_threshold: float = 0.27                     # cosine similarity at or above = Vatsal. 0.33 sits between the noise (max 0.28) and the quietest real clip (0.39), first guess, tune from the logs
     voice_min_s: float = 1.0                          # shorter clips are too short to judge (score None); 1 s clips scored median 0.50, 2 s 0.62, 0.6 s 0.40 (tests/voice_eval.py)
     voice_refs_cap: int = 20                          # enrolled voice references kept (most diverse)

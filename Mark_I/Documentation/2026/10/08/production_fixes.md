@@ -64,3 +64,6 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 34 | Listening to itself and the TV (unscorable short clips passed); wake word with no detected speech gave no turn | Short unscorable follow-ups ignored unless FRED asked a question; wake word starts or rescues a turn; threshold 0.27 | `wake_grace_s`, `voice_threshold` |
 | 35 | Unread 06:00 news edition is lost when the 18:00 one arrives | Read state per edition; 18:00 read first, then FRED asks about the 06:00 one | none |
 | 36 | "Yes, please read it" after the news offer went to read_own_docs | A yes/no within 40 s of the offer is answered by the news service itself ("Read me the news.") | none |
+| 37 | Interruptions stopped working (voice match 0.45 too strict) | `barge_voice_threshold` 0.33 | `barge_voice_threshold` |
+| 38 | STT mishears names (Modi -> PM1 / BMW) | Whisper hotwords: fixed names + names from the newest news digest | `stt_hotwords` |
+| 39 | News read as one blob, stories blended | Digest grouped by section, read one section at a time | none |

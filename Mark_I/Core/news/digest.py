@@ -98,6 +98,21 @@ def earlier_unread(built: str, now=None):
     return next((e for e in reversed(eds[:idx]) if e["built"] not in read), None)
 
 
+_NOT_NAMES = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "The", "This", "That", "These", "Those"}
+
+
+def names(limit: int = 24) -> list:
+    """Capitalised words in the middle of a sentence of the newest edition's stories (headlines are Title Case, so the summaries are used): people, places, companies."""
+    ed = latest()
+    seen, out = set(), []
+    for it in (ed or {}).get("items", []):
+        for w in re.findall(r"(?<=[a-z,] )[A-Z][A-Za-z]{2,}(?: [A-Z][A-Za-z]{2,})?", it["short"] + " " + it["detail"]):
+            if w.lower() not in seen and w not in _NOT_NAMES:
+                seen.add(w.lower())
+                out.append(w)
+    return out[:limit]
+
+
 def _unit(m):
     m = np.asarray(m, dtype=np.float32)
     return m / (np.linalg.norm(m, axis=-1, keepdims=True) + 1e-9)
@@ -201,9 +216,10 @@ def _selfcheck():
         assert latest(now)["items"][0]["detail"] == "A long paragraph." and len(events) == 8 and events[0][1]["importance"] == 0.2
         assert "source: Src" in events[0][0][1]
         morning = ed
-        later = dict(ed, at="18:00", built=ed["built"] + "x")
+        later = dict(ed, at="18:00", built=ed["built"] + "x", items=[dict(ed["items"][0], short="Talks held.", detail="Talks between Narendra Modi and Joe Biden in Delhi on Friday, said Anthropic.")])
         day = _load(_day(now)); day["editions"].append(later); _day(now).write_text(json.dumps(day), encoding="utf-8")
         assert earlier_unread(later["built"], now)["built"] == morning["built"]                 # the 06:00 one was never read
+        assert names() == ["Narendra Modi", "Joe Biden", "Delhi", "Anthropic"], names()          # names for the Whisper hint; weekdays are not names
         mark_read(morning["built"], now)
         assert earlier_unread(later["built"], now) is None and earlier_unread(morning["built"], now) is None
     print("news digest ok")

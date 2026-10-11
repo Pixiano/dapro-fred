@@ -83,7 +83,7 @@ class Stt:
             t0 = time.monotonic()
 
             def work():
-                segs, info = self._load().transcribe(x, language=c.whisper_language, beam_size=c.whisper_beam, initial_prompt=prompt or c.whisper_prompt,
+                segs, info = self._load().transcribe(x, language=c.whisper_language, beam_size=c.whisper_beam, initial_prompt=prompt or c.whisper_prompt, hotwords=_hot() or None,
                                                      condition_on_previous_text=False, vad_filter=False)
                 keep = [s for s in segs if not (getattr(s, "no_speech_prob", 0.0) > c.stt_no_speech_prob and getattr(s, "avg_logprob", 0.0) < c.stt_min_logprob)]
                 return " ".join(s.text.strip() for s in keep).strip(), getattr(info, "language", c.whisper_language)
@@ -98,6 +98,17 @@ class Stt:
 
     def _save(self, x: np.ndarray, t: Transcript):
         usage.save_clip("stt", x, text=t.text, ms=t.ms)                              # the central usage store (usage.py): never raises
+
+def _hot() -> str:
+    """Fixed names plus the proper nouns of the newest news digest, so a name FRED just read out is a name it can hear."""
+    c = config.get()
+    try:
+        from news import digest
+        extra = digest.names()
+    except Exception:
+        extra = []
+    return ", ".join([w.strip() for w in c.stt_hotwords.split(",") if w.strip()] + extra)
+
 
 def is_ghost(text: str, peak: float, c) -> bool:
     return text.strip().lower() in c.stt_ghosts and peak < c.stt_ghost_peak

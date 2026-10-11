@@ -18,8 +18,8 @@ def _selfcheck():
     marked = []
     m.LATEST, m.MARK, m.EARLIER = (lambda: ed), marked.append, (lambda built: None)
     out = m.run()
-    assert "1. [ai] Short one. (source: Hugging Face blog)" in out and "2. [boards]" in out and "Untrusted" in out
-    assert m.run("boards").count("[boards]") == 1 and "[ai]" not in m.run("boards")
+    assert "== AI news ==\n1. Short one. (source: Hugging Face blog)" in out and "== Boards (CBSE and NCERT) ==\n2. CBSE dates out." in out and "one section at a time" in out and out.index("== AI news") < out.index("== Boards")
+    assert m.run("boards").count("CBSE dates out.") == 1 and "Short one" not in m.run("boards")
     assert "Detailed paragraph one." in m.run(number=1) and "http://x/1" in m.run(number=1) and "Source: The Hindu" in m.run(number=2)
     assert "nothing under world" in m.run("world")
     try:
