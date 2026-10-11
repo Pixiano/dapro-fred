@@ -56,3 +56,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 26 | Memory data and code layout | Data moved to `Initial/Testing_Memory` (gitignored, `memory_testing` True); memory code moved out of Initial to `Mark_I/memory`, next to Core | `memory_testing` |
 | 27 | Presence dead: webcam index moved after replug (real camera 0, index 1 now a frozen virtual one) | `camera_index` 0 | `camera_index` |
 | 28 | Own short phrases rejected by voice ID (0.26 to 0.33) | 9 real-use clips added to the enrolment, threshold 0.38 | `voice_threshold` |
+| 29 | FRED answered the user talking to someone else right after a reply | Follow-up window 8 s -> 5 s (voice ID already gates it) | `followup_s` |

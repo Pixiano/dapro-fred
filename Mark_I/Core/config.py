@@ -95,7 +95,7 @@ class Settings:
     barge_level: float = 1500.0                       # mic RMS (int16 units) needed to barge in when not on headphones
     listen_show_s: float = 0.3                        # an addressed utterance must last this long before the pill shows "listening"
     followup_min_s: float = 0.4                       # speech must last this long inside the follow-up window to count as an answer
-    followup_s: float = 8.0                           # open-mic window after FRED speaks
+    followup_s: float = 5.0                           # open-mic window after FRED speaks
     wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
