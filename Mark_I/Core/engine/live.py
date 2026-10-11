@@ -157,6 +157,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         out(trace(r))
         spoken[:] = (spoken + [shown])[-4:]
         if speaker:
+            rt.controller.expect_short = shown.rstrip().endswith("?")
             said = speaker.speak(shown)
             h = engine.history
             if " ".join(said.split()) != " ".join(shown.split()) and h and h[-1] == {"role": "assistant", "content": r.text}:

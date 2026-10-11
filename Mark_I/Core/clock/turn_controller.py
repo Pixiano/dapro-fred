@@ -66,6 +66,8 @@ class TurnController:
         self.open_until = -1e9
         self.barged = False
         self.level = 0.0
+        self._pending = None
+        self.expect_short = False                             # set by the speaker side when FRED's last line was a question: a short yes/no then needs no voice check
 
     # ---- inputs -------------------------------------------------------
     def _on_event(self, e):
@@ -76,6 +78,7 @@ class TurnController:
                 self.vad(bool(d["speaking"]), d.get("ts", self._now))
             elif k == ("audio", "wake"):
                 self.wake_ts = self._now
+                self._on_wake(self._now)
             elif k == ("audio", "hotkey"):
                 self.hotkey_event(bool(d["down"]), self._now)
             elif k == ("tts", "start"):
@@ -83,6 +86,20 @@ class TurnController:
             elif k == ("tts", "end"):
                 self.tts_on = False
                 self.open_until = self._now + config.get().followup_s
+
+    def _on_wake(self, now: float):
+        """The wake word is also a turn starter. The wake model fires about a second after the word; the voice detector sometimes never fires at all (quiet 'Hey Fred'),
+        or ended before the wake arrived (2026-10-11: 2 of 3 wake events produced no turn). So: speech that just ended unaddressed is rescued, and with nothing running the wake word opens the turn itself."""
+        if self._pending is not None and now - self._pending[1] <= config.get().wake_grace_s:
+            audio, _, info, t0 = self._pending
+            self._pending = None
+            self.t_start = t0
+            return self._deliver(audio, info, False)
+        if not self.active:
+            self.active, self.t_start, self.barged, self._announced, self.t_voice = True, now - 1.0, False, False, now
+            self.hotkey_turn = False
+            self.capture.begin(1.5)
+            self._emit(LISTEN, reason="wake")
 
     def _on_chunk(self, chunk, ts):
         with self._lock:
@@ -122,6 +139,10 @@ class TurnController:
     def tick(self, now: float):
         with self._lock:
             self._now = max(self._now, now)
+            if self._pending is not None and now - self._pending[1] > config.get().wake_grace_s:
+                audio, _, _, _ = self._pending
+                self._pending = None
+                self._ignored("not_addressed", audio)
             if not self.active:
                 return
             c = config.get()
@@ -178,10 +199,18 @@ class TurnController:
         self.active = self.speaking = False
         self.hotkey_turn = False
         if not addressed:
-            return self._ignored("not_addressed", audio)
+            if self._pending is not None:
+                self._ignored("not_addressed", self._pending[0])
+            self._pending = (audio, now, info, self.t_start)                  # not final yet: a wake word within wake_grace_s still rescues it
+            return
+        return self._deliver(audio, info, hk)
+
+    def _deliver(self, audio, info, hk):
         if self.voice is not None and not hk:
             woke = self.wake_ts >= self.t_start - config.get().wake_open_s
             s = self.voice.score(audio)
+            if s is None and not woke and config.get().voice_id_enabled and not self.expect_short:
+                return self._ignored("too_short", audio)               # "Yeah." from the TV or FRED's own echo: cannot be verified, so only a question just asked (yes/no) accepts it
             if s is not None and s < (config.get().voice_threshold if woke else config.get().followup_voice_threshold):
                 return self._ignored("not_vatsal", audio)               # no wake word, only the follow-up window: a stricter voice match, so passing noise and other voices are not answered
         self.counts["turns"] += 1
@@ -281,6 +310,7 @@ def _selfcheck():
     states.clear(); turns.clear(); addr.clear()
     say(100.0, 101.0)
     run(101.2, 101.6)
+    run(101.8, 104.0)                                                  # the wake grace (2 s) passes: only then is it final
     assert states[-1] == (IGNORE, "not_addressed") and not turns and not addr          # an ignored utterance never announces itself (the pill stays hidden)
     # 5. wake word 3 s BEFORE the speech starts still addresses it
     states.clear(); turns.clear(); addr.clear()
@@ -379,7 +409,7 @@ def _selfcheck():
     assert states[-1][0] == END_OF_TURN, states
     states.clear()
     say(720.0, 721.0)                                                 # window long over
-    run(721.2, 721.6)
+    run(721.2, 724.0)
     assert states[-1] == (IGNORE, "not_addressed")
     # 10b. a middling voice match (0.30): accepted after the wake word, not as a bare follow-up
     states.clear(); turns.clear()
@@ -396,6 +426,36 @@ def _selfcheck():
     assert states[-1][0] == END_OF_TURN, states
     t.wake_ts = -1e9
     vo.me = True
+    # 10c. the wake word arrives AFTER the speech ended (the wake model lags ~1 s): the held clip is rescued
+    states.clear(); turns.clear(); t.wake_ts = -1e9
+    say(900.0, 901.0)
+    run(901.2, 901.6)
+    assert not turns and states[-1][0] != IGNORE, states          # held, not yet final
+    bus.emit("audio", "wake")
+    t._now = 902.0
+    t._on_wake(902.0)
+    assert turns and turns[-1]["reason"] == "silence+smart_turn", (states, turns)
+    # 10d. the voice detector never fired at all but the wake word did: it opens the turn itself and a pause ends it
+    states.clear(); turns.clear(); t.active = t.speaking = False
+    t.wake_ts = 950.0
+    t._on_wake(950.0)
+    assert states[-1] == (LISTEN, "wake"), states
+    run(950.2, 952.0)
+    assert turns, states
+    # 10e. a one-word follow-up too short to voice-check is ignored, unless FRED just asked a question
+    states.clear(); turns.clear(); t.wake_ts = -1e9; vo.me = None
+    t._now = 1000.0
+    bus.emit("tts", "start"); bus.emit("tts", "end")
+    say(1002.0, 1002.8)
+    run(1003.0, 1006.0)
+    assert states[-1] == (IGNORE, "too_short") and not turns, states
+    states.clear(); t.expect_short = True
+    t._now = 1010.0
+    bus.emit("tts", "start"); bus.emit("tts", "end")
+    say(1012.0, 1012.8)
+    run(1013.0, 1014.0)
+    assert turns, states
+    t.expect_short = False; vo.me = True
     # 11. a failing Smart Turn model must not wedge the clock: the hard cap still ends the turn
     states.clear(); turns.clear()
     sm.prob = lambda a: 1 / 0

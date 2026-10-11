@@ -61,3 +61,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 31 | New: daily news digest (06:00 and 18:00) in Core | `Core/news/` + `news` tool, stored short + detailed per story, low-weight memory events | `news_hours` |
 | 32 | User speech rejected as not_vatsal (real scores 0.29 to 0.41) and echo able to interrupt itself | `voice_threshold` 0.25; interrupt needs wake word or `barge_voice_threshold` 0.45 | both |
 | 33 | Listening too much (noise and side remarks answered as follow-ups) | Follow-up without the wake word needs voice 0.33; `followup_min_s` 0.6 | `followup_voice_threshold`, `followup_min_s` |
+| 34 | Listening to itself and the TV (unscorable short clips passed); wake word with no detected speech gave no turn | Short unscorable follow-ups ignored unless FRED asked a question; wake word starts or rescues a turn; threshold 0.27 | `wake_grace_s`, `voice_threshold` |
