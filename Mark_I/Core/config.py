@@ -54,6 +54,8 @@ class Settings:
     agc_smoothing: float = 0.3
     vad_highpass_hz: int = 200                        # the detector listens above this only (0 = raw); 50 Hz night hum falsely triggered 344 utterances, replayed: 6 onsets -> 0 while real speech stayed 26 of 26
     vad_mode: int = 3                                 # webrtcvad aggressiveness 0-3
+    vad_engine: str = "silero"                        # silero | webrtc. webrtc fired on hum, room noise and gate clicks (2026-10-11 audit: 279 of 390 daytime and 368 of 386 night clips it opened hold no speech per Silero) and cut speech into pieces
+    silero_threshold: float = 0.35                    # speech probability that counts as a voiced frame (0.35 on the 2026-10-11 clips: 48 of 60 junk clips below 10% voiced, 3 of 40 real clips; 0.5 lost 5 real ones)
     vad_onset_ms: int = 200                           # voiced time needed to call speech started
     vad_hangover_ms: int = 200                        # silence needed to call speech ended (L1 adds Smart Turn on top)
     whisper_model: str = "large-v3-turbo"
@@ -100,7 +102,10 @@ class Settings:
     followup_min_s: float = 0.6                       # speech must last this long inside the follow-up window to count as an answer
     followup_s: float = 5.0                           # open-mic window after FRED speaks
     wake_grace_s: float = 2.0                         # unaddressed speech waits this long for a late wake word before it is ignored (the wake model fires about 1 s after the word)
-    wake_open_s: float = 8.0                          # a wake word this long before (or during) speech addresses it
+    wake_min_speech_ms: int = 300                     # a wake event needs this much voiced audio in the wake_speech_window_s before it, else it is dropped (2026-10-11: 27 of 48 wake events had no speech at all; all 13 real ones did)
+    wake_speech_window_s: float = 1.5
+    wake_barge_s: float = 2.0                         # only this long after a wake may speech interrupt FRED without a voice check
+    wake_open_s: float = 4.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
     sir_rate: float = 1.0                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); fillers too. 1.0 = every line (Vatsal, 2026-10-08, was 0.85); 0 turns it off
@@ -144,6 +149,23 @@ class Settings:
     ocr_enabled: bool = True                          # Windows OCR on the changed crop: approved by Vatsal 2026-10-06
     describe_model: str = "unsloth/qwen3.5-4b"        # vision slot model: Qwen3.5-4B, 18/20 on tests/live_vision_hard.py (MiniCPM-V 4.6 scored 9/20 and was deleted, 2026-10-07)
     describe_max_tokens: int = 300
+    # --- live screen reading, speak gate, deadline watch (2026-10-11) ---
+    screen_paused: bool = False                       # pause switch: stops the screen reading for the deadline watch (and later screen memory); the scam watch is exempt. Also: a voice command (screen_watch skill) and the file <data_dir>/screen_paused.flag
+    screen_read_s: float = 1.0                        # the foreground window is read about once a second (proactive/screenread.py)
+    screen_reread_s: float = 10.0                     # a window with only tiny changes (<= screen_noise_tiles) is still re-read this often
+    screen_noise_tiles: int = 2                       # a screen.change of this many tiles or fewer (caret, clock) does not count as a change for the reader
+    gate_after_fred_s: float = 120.0                  # no spoken offer within this long of FRED speaking
+    gate_turn_s: float = 45.0                         # a turn that was addressed counts as "mid-turn" this long at most
+    gate_away_s: float = 120.0                        # user counts as away when presence says absent
+    quiet_start: str = "23:30"                        # quiet hours: proactive offers are toasts only
+    quiet_end: str = "06:00"
+    quiet_latest: str = "01:00"                       # quiet hours start later (up to this) when the user was active in the last quiet_active_min
+    quiet_active_min: float = 20.0
+    offer_gap_s: float = 600.0                        # at most one spoken proactive offer per this many seconds
+    offers_per_day: int = 10
+    deadline_watch_enabled: bool = True               # proactive/deadlines.py
+    deadline_urgent_h: float = 12.0                   # a deadline closer than this overrides quiet hours and the caps
+    deadline_answer_s: float = 40.0                   # a yes/no within this long of the question goes to the watch, not the model
 
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")                 # every stored time and day bucket is India time (owner decision 2026-10-08)

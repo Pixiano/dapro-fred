@@ -19,6 +19,7 @@ import config
 
 _SIR = re.compile(r"\bsir\b", re.I)
 _WAKE = re.compile(r"^\s*(?:(?:hey|hi|ok|okay|yo)[\s,]+)?fred\b[\s,.!?:-]*", re.I)
+_YESNO = re.compile(r"^(?:.*[.!]\s+)?(?:shall|should|would|will|do|does|did|can|could|may|is|are|was|were|want|have|has)\b[^?]*\?\s*$|^(?:.*[.!]\s+)?(?:want me to|would you like|do you want|shall i|should i|is that right|are you sure)\b[^?]*\?\s*$", re.I)
 _END = re.compile(r"^(.*?)([\s.!?…\"')\]]*)$", re.S)
 
 
@@ -29,6 +30,12 @@ def sirify(text: str, rng=random.random) -> str:
     if not body:
         return text
     return f"{body.rstrip(',;:')}, sir{tail}{text[len(text.rstrip()):]}"
+
+
+def is_yes_no_question(text: str) -> bool:
+    """True when the last sentence of a reply asks something a bare 'yes' or 'no' answers ('Shall I read it?'), false for open questions ('How can I help you, sir?'): only then is a short unscorable reply accepted without a voice check (audit F5, 2026-10-11)."""
+    last = re.split(r"(?<=[.!?])\s+", text.strip())[-1] if text.strip() else ""
+    return bool(_YESNO.match(last))
 
 
 def strip_wake(text: str) -> str:
@@ -45,6 +52,8 @@ def is_echo(text: str, spoken: list[str]) -> bool:
 
 
 def _selfcheck():
+    assert is_yes_no_question("The news is ready. Shall I read it?") and is_yes_no_question("Do you want me to open it, sir?") and is_yes_no_question("Is that right?")
+    assert not is_yes_no_question("How can I help you, sir?") and not is_yes_no_question("What would you like to know?") and not is_yes_no_question("It is 6 PM, sir.")
     assert strip_wake("Hey Fred, how are you?") == "How are you?" and strip_wake("Fred what's the date") == "What's the date"
     assert strip_wake("Hey Fred.") == "Hey Fred." and strip_wake("Alfred is here") == "Alfred is here"
     said = ["It's 6:46 AM on Friday, 9 October 2026, sir.", "I don't have information about that, sir."]

@@ -13,6 +13,7 @@ Frame timestamps advance 20 ms inside a chunk, so replayed recordings produce th
 Self-check: python audio/vad.py
 """
 import sys
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +37,41 @@ class WebrtcModel:
         return self._v.is_speech(frame.tobytes(), config.get().sample_rate)
 
 
+class SileroModel:
+    """Streaming Silero VAD (the ONNX that ships with faster-whisper), CPU: 512-sample windows with a 64-sample context and the LSTM state carried across windows.
+    is_speech() takes the 20 ms frames the Vad feeds and answers with the newest window's verdict; `prob` is its speech probability (logged per utterance)."""
+
+    WIN, CTX = 512, 64
+
+    def __init__(self, threshold: float | None = None):
+        import onnxruntime
+        import faster_whisper
+        opts = onnxruntime.SessionOptions()
+        opts.inter_op_num_threads = opts.intra_op_num_threads = 1
+        opts.log_severity_level = 4
+        path = Path(faster_whisper.__file__).parent / "assets" / "silero_vad_v6.onnx"
+        self._s = onnxruntime.InferenceSession(str(path), providers=["CPUExecutionProvider"], sess_options=opts)
+        self.threshold = config.get().silero_threshold if threshold is None else threshold
+        self.prob = 0.0
+        self._buf = np.zeros(0, dtype=np.float32)
+        self._ctx = np.zeros(self.CTX, dtype=np.float32)
+        self._h = np.zeros((1, 1, 128), dtype=np.float32)
+        self._c = np.zeros((1, 1, 128), dtype=np.float32)
+
+    def is_speech(self, frame: np.ndarray) -> bool:
+        self._buf = np.concatenate([self._buf, frame.astype(np.float32) / 32768.0])
+        while len(self._buf) >= self.WIN:
+            win, self._buf = self._buf[:self.WIN], self._buf[self.WIN:]
+            x = np.concatenate([self._ctx, win])[None, :]
+            out, self._h, self._c = self._s.run(None, {"input": x, "h": self._h, "c": self._c})
+            self.prob, self._ctx = float(out.reshape(-1)[0]), win[-self.CTX:]
+        return self.prob >= self.threshold
+
+
+def make_model():
+    return SileroModel() if config.get().vad_engine == "silero" else WebrtcModel()
+
+
 class Vad:
     def __init__(self, bus: ev.EventBus | None = None, model=None):
         self.bus = bus or ev.bus
@@ -48,6 +84,11 @@ class Vad:
         self._speech_frames = 0
         self._onset_ts = 0.0
         self._sos = self._zi = None
+        self._voiced_ts = deque(maxlen=250)           # timestamps of the latest voiced frames (5 s): speech evidence for the wake check
+
+    def voiced_ms(self, window_s: float, now: float) -> int:
+        """Voiced time in the `window_s` seconds before `now`: a wake word with no speech behind it is not a wake word (audit F2)."""
+        return sum(FRAME_MS for t in self._voiced_ts if now - window_s <= t <= now)
 
     def _highpass(self, chunk: np.ndarray) -> np.ndarray:
         """Only the detector sees this: mains hum and rumble (50 Hz) read as speech to the GMM after the auto-gain-free night (2026-10-09 soak: 344 false utterances). STT, wake word and voice ID keep the raw audio."""
@@ -70,7 +111,7 @@ class Vad:
 
     def on_chunk(self, chunk: np.ndarray, ts: float):
         if self._model is None:
-            self._model = WebrtcModel()
+            self._model = make_model()
         c = config.get()
         onset_frames = max(1, c.vad_onset_ms // FRAME_MS)
         hang_frames = max(1, c.vad_hangover_ms // FRAME_MS)
@@ -83,6 +124,7 @@ class Vad:
             voiced = bool(self._model.is_speech(x[i * FRAME:(i + 1) * FRAME]))
             if voiced:
                 self.silence_ms, self.last_voice_ts = 0, t
+                self._voiced_ts.append(t)
             else:
                 self.silence_ms += FRAME_MS
             if not self.speaking:
@@ -109,6 +151,9 @@ class _Pattern:
 
 
 def _selfcheck():
+    sm = SileroModel()
+    quiet = np.zeros(320, dtype=np.int16)
+    assert not any(sm.is_speech(quiet) for _ in range(50)) and sm.prob < 0.1          # silence is not speech; the model file loads and runs
     t = np.arange(8000) / 16000
     peak = lambda hz: float(np.abs(Vad(ev.EventBus())._highpass((np.sin(2 * np.pi * hz * t) * 10000).astype(np.int16))[4000:]).max())
     assert peak(50) < 500 and peak(500) > 9000                     # hum out, speech band in

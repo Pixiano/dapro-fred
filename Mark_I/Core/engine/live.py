@@ -36,7 +36,7 @@ import usage
 from engine import prompt
 from engine.cli import trace
 from engine.loop import Engine
-from engine.sir import is_echo, sirify, strip_wake
+from engine.sir import is_echo, is_yes_no_question, sirify, strip_wake
 
 
 @dataclass
@@ -165,7 +165,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         out(trace(r))
         spoken[:] = (spoken + [shown])[-4:]
         if speaker:
-            rt.controller.expect_short = shown.rstrip().endswith("?")
+            rt.controller.expect_short = is_yes_no_question(shown)
             said = speaker.speak(shown)
             h = engine.history
             if " ".join(said.split()) != " ".join(shown.split()) and h and h[-1] == {"role": "assistant", "content": r.text}:

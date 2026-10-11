@@ -67,3 +67,7 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 37 | Interruptions stopped working (voice match 0.45 too strict) | `barge_voice_threshold` 0.33 | `barge_voice_threshold` |
 | 38 | STT mishears names (Modi -> PM1 / BMW) | Whisper hotwords: fixed names + names from the newest news digest | `stt_hotwords` |
 | 39 | News read as one blob, stories blended | Digest grouped by section, read one section at a time | none |
+| 40 | Wake word fired on silence (27 of 48 events had no speech) and then opened the voice-check bypass | A wake event needs >= 300 ms of voiced audio in the 1.5 s before it, else `clock.wake_rejected` and nothing happens (replay: 15 of 48 events pass, the 13 real ones among them per the audit) | `wake_min_speech_ms`, `wake_speech_window_s` |
+| 41 | The 8 s wake window skipped voice ID | Window 4 s; only 2 s after a confirmed wake may speech interrupt FRED without a voice check | `wake_open_s`, `wake_barge_s` |
+| 42 | webrtc VAD fired on hum, noise and gate clicks and split speech | Silero (the ONNX that ships with faster-whisper), threshold 0.35: of 60 junk clips 48 fall under 10% voiced (webrtc: 23), of 40 real clips 3 (webrtc: 0) | `vad_engine`, `silero_threshold` |
+| 43 | Any reply ending in "?" let short unscorable clips through ("How can I help you, sir?") | Only a real yes/no question does (`engine/sir.is_yes_no_question`) | none |

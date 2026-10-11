@@ -77,6 +77,11 @@ class TurnController:
             if k == ("audio", "vad"):
                 self.vad(bool(d["speaking"]), d.get("ts", self._now))
             elif k == ("audio", "wake"):
+                c = config.get()
+                ve = getattr(self._vad_src, "voiced_ms", None)
+                if ve is not None and ve(c.wake_speech_window_s, self._now) < c.wake_min_speech_ms:
+                    self.bus.emit("clock", "wake_rejected", voiced_ms=ve(c.wake_speech_window_s, self._now), score=d.get("score"))     # the wake model fired on silence or noise
+                    return
                 self.wake_ts = self._now
                 self._on_wake(self._now)
             elif k == ("audio", "hotkey"):
@@ -178,7 +183,7 @@ class TurnController:
         c = config.get()
         if not (self.headphones or self.level >= c.barge_level):
             return
-        if self.voice is not None and c.voice_id_enabled and not (self.wake_ts >= self.t_start - c.wake_open_s):
+        if self.voice is not None and c.voice_id_enabled and not (now - self.wake_ts <= c.wake_barge_s):
             s = self.voice.score(self.capture.snapshot())
             if s is None or s < c.barge_voice_threshold:
                 return                                              # FRED's own voice from the speakers scores up to 0.36: only a clearly strong match, or the wake word, interrupts it (asked again every tick)
@@ -463,6 +468,22 @@ def _selfcheck():
     say(800.0, 801.0)
     run(801.2, 802.4)
     assert turns and turns[-1]["reason"] == "hard_cap", (states, turns)
+    # 10f. a wake event with no speech behind it is dropped (the wake model fires on silence); with speech it counts
+    class FakeVad:
+        last_voice_ts = 0.0
+        ms = 0
+        def voiced_ms(self, window, now):
+            return self.ms
+    fv = FakeVad()
+    t._vad_src, t.wake_ts, t._now = fv, -1e9, 1000.0
+    rej = []
+    bus.subscribe(lambda e: rej.append(e.data), kinds={"wake_rejected"})
+    bus.emit("audio", "wake", score=1.0)
+    assert t.wake_ts == -1e9 and rej and rej[-1]["voiced_ms"] == 0, (t.wake_ts, rej)
+    fv.ms = 400
+    bus.emit("audio", "wake", score=0.9)
+    assert t.wake_ts == 1000.0
+    t._vad_src = None
     config.reload()
     print("turn_controller ok")
 
