@@ -24,3 +24,10 @@ A task FRED does every day: find and read the news. Eight stories, in fixed slot
 - Ready time 06:30, spoken offer on first presence, one to two lines per story.
 - Do the stories go into FRED's memory? Default no (it is a feed, not what Vatsal said).
 - Which GitHub signal: trending repos, or releases of named repos? Default: skip until asked.
+
+## Update (same day): APIs allowed, and the newsletter source
+- Vatsal allows any method, not only RSS: APIs are fine.
+- **Primary AI source: the "AI Snacks" email from "Humans at Magica"** (sender `humans@mail.galaxy.ai`, subject lines like "GPT-6 gets a glow-up"). Read once on 2026-10-11: 8 issues between 09-30 and 10-10, so near-daily on weekdays, not every day. Each issue: a short intro, a sponsor block ("Magica is the ONLY autonomous AI super agent...") to strip, then 5-8 items each with an emoji headline and 2-3 bullets (OpenAI revenue, lab firings, AI-powered hackers hitting banks, Anthropic cyber mission...). Cheap to parse: split on the emoji-headline lines, drop everything before the first item and any "sponsored"/"Join millions"/"Magica" block, and the unsubscribe footer.
+  - Read through the existing Gmail transport (`tools/gmail`, read-only); the issue text is untrusted, summarised by the tool-less model only.
+  - Rule: use the newest issue from the last 2 days; if none, the AI slot falls back to the feeds/APIs below. Never read the same issue twice (remember its message id in the day file).
+- **API options added** (no key unless stated): Hugging Face daily papers JSON (`huggingface.co/api/daily_papers`, reachable), Hacker News via Algolia search API (AI keywords, points threshold), GitHub search API for newly created high-star AI repos and the releases of a short list of repos (unauthenticated limit is 60 requests/hour, plenty), GDELT for world and India headlines. A paid news API (NewsAPI, GNews) only if the free sources prove thin; needs a key from Vatsal.
