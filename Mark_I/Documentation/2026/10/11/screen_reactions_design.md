@@ -22,3 +22,9 @@ Goal (Vatsal): when a deadline shows up on the screen, FRED notices and asks abo
 - Voice or silent: spoken question, or only a toast with a yes/no button? Default: spoken (it asked "ask me about it").
 - Reminder defaults: evening before at 18:00 and the morning of at 08:00?
 - Privacy line: OK to OCR the whole screen continuously? (The scam watch already does.)
+
+## Decisions (Vatsal, 2026-10-11)
+- Which screens: everything. Continuous OCR of the whole screen is fine (already how the scam watch works).
+- The question is spoken AND shown as a toast with yes / no buttons.
+- Reminder defaults: the evening before at 18:00, and the morning of at 06:00 (not 08:00); on a weekend the morning one is at 12:00 noon.
+- Timing: this belongs to the NEXT VERSION, not the current build. Nothing is built; the design above stands.

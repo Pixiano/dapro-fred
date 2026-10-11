@@ -15,7 +15,8 @@ def _selfcheck():
     ed = {"at": "06:00", "built": "2026-10-11T06:00:00", "items": [
         {"n": 1, "slot": "ai", "title": "T1", "short": "Short one.", "detail": "Detailed paragraph one.", "source": "Hugging Face blog", "url": "http://x/1"},
         {"n": 2, "slot": "boards", "title": "T2", "short": "CBSE dates out.", "detail": "Detail two.", "source": "The Hindu", "url": ""}]}
-    m.LATEST = lambda: ed
+    marked = []
+    m.LATEST, m.MARK, m.EARLIER = (lambda: ed), marked.append, (lambda built: None)
     out = m.run()
     assert "1. [ai] Short one. (source: Hugging Face blog)" in out and "2. [boards]" in out and "Untrusted" in out
     assert m.run("boards").count("[boards]") == 1 and "[ai]" not in m.run("boards")
@@ -26,6 +27,12 @@ def _selfcheck():
         raise AssertionError("bad number accepted")
     except m.ToolError:
         pass
+    assert marked and marked[0] == "2026-10-11T06:00:00"                                   # reading marks the edition read
+    old = {"at": "06:00", "built": "b0", "items": [{"n": 1}] * 5}
+    m.EARLIER = lambda built: old
+    assert "also want the 06:00 edition (5 stories)" in m.run() and "also want" not in m.run(number=1)
+    m.EARLIER = lambda built: None
+    assert m.run(edition="earlier") == "There is no earlier unread edition."
     m.LATEST = lambda: None
     assert m.run() == "I have no news digest yet."
     print("news ok")

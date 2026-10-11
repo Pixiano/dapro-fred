@@ -38,7 +38,9 @@ class News:
             return False
         self.offered.add(ed["built"])
         greet = "Good morning" if int(ed["at"][:2]) < 12 else "Good evening"
-        self.speak(f"{greet}, sir. The {ed['at']} news is ready, {len(ed['items'])} stories. Shall I read it?")
+        early = digest.earlier_unread(ed["built"])
+        tail = f" The {early['at']} one is still unread: I'll read this first, then ask if you want that too." if early else ""
+        self.speak(f"{greet}, sir. The {ed['at']} news is ready, {len(ed['items'])} stories.{tail} Shall I read it?")
         return True
 
     def tick(self):

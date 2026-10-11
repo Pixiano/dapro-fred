@@ -74,6 +74,30 @@ def latest(now=None):
     return None
 
 
+def _chrono(now=None) -> list:
+    """Editions of yesterday and today, oldest first."""
+    now = now or datetime.now(config.IST)
+    return [e for d in (now.replace(day=max(1, now.day - 1)), now) for e in _load(_day(d))["editions"]] if now.day > 1 else _load(_day(now))["editions"]
+
+
+def mark_read(built: str, now=None):
+    now = now or datetime.now(config.IST)
+    for d in (now, now.replace(day=max(1, now.day - 1))):
+        day = _load(_day(d))
+        if any(e["built"] == built for e in day["editions"]) and built not in day.get("read", []):
+            day["read"] = day.get("read", []) + [built]
+            _day(d).write_text(json.dumps(day, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def earlier_unread(built: str, now=None):
+    """The newest edition before `built` (yesterday or today) that was never read, else None."""
+    now = now or datetime.now(config.IST)
+    read = {b for d in (now, now.replace(day=max(1, now.day - 1))) for b in _load(_day(d)).get("read", [])}
+    eds = _chrono(now)
+    idx = next((i for i, e in enumerate(eds) if e["built"] == built), 0)
+    return next((e for e in reversed(eds[:idx]) if e["built"] not in read), None)
+
+
 def _unit(m):
     m = np.asarray(m, dtype=np.float32)
     return m / (np.linalg.norm(m, axis=-1, keepdims=True) + 1e-9)
@@ -176,6 +200,12 @@ def _selfcheck():
         assert ed["at"] == "18:00" and len(ed["items"]) == 8 and ed["items"][0]["n"] == 1 and due(now) is None
         assert latest(now)["items"][0]["detail"] == "A long paragraph." and len(events) == 8 and events[0][1]["importance"] == 0.2
         assert "source: Src" in events[0][0][1]
+        morning = ed
+        later = dict(ed, at="18:00", built=ed["built"] + "x")
+        day = _load(_day(now)); day["editions"].append(later); _day(now).write_text(json.dumps(day), encoding="utf-8")
+        assert earlier_unread(later["built"], now)["built"] == morning["built"]                 # the 06:00 one was never read
+        mark_read(morning["built"], now)
+        assert earlier_unread(later["built"], now) is None and earlier_unread(morning["built"], now) is None
     print("news digest ok")
 
 
