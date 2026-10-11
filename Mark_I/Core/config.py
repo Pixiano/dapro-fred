@@ -70,7 +70,7 @@ class Settings:
     max_utterance_s: float = 60.0
     # --- screen (P1b) ---
     screen_interval_s: float = 0.2                    # capture period; bench_screen.py compares 0.1 / 0.2 / 0.5 / 0.7 / 1.0 / 1.2 (0.2: 2.7% of a core, every flash >= 0.2 s seen)
-    camera_index: int = 1                             # cv2 index; the real 2K webcam (PHOCUS 40A) is 1, indices 0 and 2 are frozen virtual cameras; --probe in senses/camera.py checks
+    camera_index: int = 0                             # cv2 index; the real 2K webcam (PHOCUS 40A) is 0 since 2026-10-11 (it was 1 before the replug; index 1 is now a frozen virtual camera). Indices move on replug: re-check with a frame-diff probe; --probe in senses/camera.py checks
     camera_warmup: int = 6                            # frames read and thrown away before the real one
     camera_black_p99: float = 16.0                    # 99th-percentile brightness below this = dead frame
     camera_flat_std: float = 2.0                      # pixel std below this = dead (flat placeholder / covered lens)

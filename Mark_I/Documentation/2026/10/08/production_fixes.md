@@ -54,3 +54,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 24 | "sir" twice in a reply | Prompt: exactly once, at the end | `sir_rate` |
 | 25 | Own voice from the speakers became turns; wake word sent to the model | Echo filter against FRED's last lines; wake phrase stripped | none |
 | 26 | Memory data and code layout | Data moved to `Initial/Testing_Memory` (gitignored, `memory_testing` True); memory code moved out of Initial to `Mark_I/memory`, next to Core | `memory_testing` |
+| 27 | Presence dead: webcam index moved after replug (real camera 0, index 1 now a frozen virtual one) | `camera_index` 0 | `camera_index` |
