@@ -1,9 +1,39 @@
 {
   "name": "calculate",
-  "description": "Work out arithmetic exactly and convert units: sums, percentages, multiplication, division, powers, square and cube roots, and conversions between SI and common units (length, weight, volume, area, speed, time, temperature, data size, energy, pressure) including lakh and crore. Use it for any calculation or conversion instead of working it out in your head.",
-  "args": {"required": ["expression"], "properties": {
-    "expression": {"type": "string", "description": "plain arithmetic such as 17 * 300 / 100, 17 percent of 300 or sqrt(144) + 2 ^ 5; or a conversion written as a number, a unit and a target such as 5 km in miles, 98.6 F to C or 2.5 crore to million (leave the target out to get a few alternatives)"}}},
-  "examples": ["what is 12 times 8", "calculate 17 percent of 300", "how much is 45 plus 38", "what is the square root of 144", "divide 1200 by 7", "what is 2 to the power of 10", "convert 5 kilometres to miles", "how many pounds is 70 kg", "what is 98.6 fahrenheit in celsius", "how many millions is 3 crore"],
-  "not_for": ["counting days between dates (use days_until)", "currency conversion (needs live rates)", "anything that is not arithmetic"],
+  "description": "Work out arithmetic exactly and convert units: sums, percentages, multiplication, division, powers, square and cube roots, and conversions between SI and common units (length, weight, volume, area, speed, time, temperature, data size, energy, pressure) including lakh and crore. Use it for any calculation or conversion instead of working it out in your head. For a maths problem with several steps (an equation to solve, a word problem), break it into plain arithmetic steps and call this once per step, using each result in the next: for a quadratic ax^2 + bx + c = 0 first read off a, b and c, then work out the discriminant b^2 - 4*a*c, then (-b + sqrt(disc)) / (2*a) and (-b - sqrt(disc)) / (2*a). Never work the numbers out in your head.",
+  "args": {
+    "required": [
+      "expression"
+    ],
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "plain arithmetic such as 17 * 300 / 100, 17 percent of 300 or sqrt(144) + 2 ^ 5; or a conversion written as a number, a unit and a target such as 5 km in miles, 98.6 F to C or 2.5 crore to million (leave the target out to get a few alternatives)"
+      }
+    }
+  },
+  "examples": [
+    "what is 12 times 8",
+    "calculate 17 percent of 300",
+    "how much is 45 plus 38",
+    "what is the square root of 144",
+    "divide 1200 by 7",
+    "what is 2 to the power of 10",
+    "convert 5 kilometres to miles",
+    "how many pounds is 70 kg",
+    "what is 98.6 fahrenheit in celsius",
+    "how many millions is 3 crore",
+    "solve x squared plus 4x plus 4 equals 0 for x",
+    "what are the roots of 2x squared minus 8x plus 6",
+    "find x if 3x plus 7 equals 25",
+    "a car goes 150 km in 2.5 hours and then 90 km in 1.5 hours, what is the average speed",
+    "what is the discriminant of x squared minus 5x plus 6",
+    "what is the area of a circle with radius 7"
+  ],
+  "not_for": [
+    "counting days between dates (use days_until)",
+    "currency conversion (needs live rates)",
+    "questions that are not about numbers"
+  ],
   "flags": {}
 }
