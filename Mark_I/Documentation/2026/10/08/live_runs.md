@@ -62,3 +62,10 @@ Idle overnight run (no screen change, no audio) to check stability: process aliv
 - The wake word was sent to the model with the question ("Hey Fred, how are you?"). Now stripped from the start of the text; a bare "Hey Fred." stays.
 - Voice ID also rejected the user's own "What's the date?" at 0.28 (their good clips score 0.41 to 0.43); threshold 0.33 left as is, to retune from the clips.
 - Remaining by design: for 8 s after a reply any speech is treated as a follow-up, so the user talking to someone or something else right after a reply is answered ("provided a prompt"). Candidate: shorten `followup_s` or require voice ID to pass in the window.
+
+## Voice ID retune - 2026-10-11 (from the saved clips of runs 8 and 9)
+- Method: scored every saved clip of 1 s or more, transcribed it, and labelled FRED's own voice by matching its spoken lines.
+- Before: the user's own speech scored 0.26 to 0.58 (several rejected under 0.33); FRED's voice from the speakers 0.21 to 0.36; TV/mumbles 0.14 to 0.37.
+- Change: 9 more of the user's real-use clips added to the enrolment (11 clips picked by text; garbled echo such as "912,000." was left out on purpose, enrolling FRED's own voice would make it pass). References 11 -> 20 (`voice_refs.json`, outside the repo, backup `.bak` beside it). FRED's own voice still scores 0.21 to 0.36, unchanged.
+- After: the user's previously rejected clips now score 0.47 to 0.63; everything else stays at or under 0.37. Threshold 0.33 -> 0.38 (`voice_threshold`) to use the new gap. Takes effect at the next start.
+- Not done yet: the follow-up window (`followup_s`) decision, waiting for the user's pick.
