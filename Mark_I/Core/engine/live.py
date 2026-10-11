@@ -49,6 +49,7 @@ class Runtime:
     replies: list = field(default_factory=list)
     _closers: list = field(default_factory=list)
     news: object = None                         # news.service.News: main() starts it (the daily digest at 06:00 and 18:00)
+    deadlines: object = None                    # proactive.deadlines.DeadlineWatch: main() builds and starts it (needs the screen); its answer() is checked first in handle()
     presence: object = None                     # senses.presence.Presence: main() starts it (--no-presence skips); Jobs pauses it during a night run
     jobs: object = None                         # memory_bridge.jobs.Jobs (memory on and a playground only): main() starts its check
     ask: object = None                          # memory_bridge.ask.AskDelivery (memory on only): offered every turn first, started by main()
@@ -137,6 +138,11 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
     def handle(text, source="voice"):
         """One turn from text (heard or typed): filler if slow, engine, print, speak."""
         out(f"YOU: {text}")
+        dl = rt.deadlines and rt.deadlines.answer(text)                            # a yes/no to the screen-deadline question is not a new turn
+        if dl:
+            out(f"FRED: {sirify(dl)}")
+            speaker and speaker.speak(sirify(dl))
+            return dl
         a = source == "voice" and rt.news.answer(text)
         if a == "no":
             note = sirify("Okay. Just ask whenever you want the news.")
@@ -248,11 +254,18 @@ def main(argv):
     if "--no-screen" not in argv:
         from proactive.scamwatch import ScamWatch
         from senses.screen import ScreenSense
+        from proactive.deadlines import DeadlineWatch
+        from proactive.gate import Gate
+        from proactive.screenread import Reader
         screen = ScreenSense(bus)
-        watch = ScamWatch(bus, screen)
+        reader = Reader(bus, screen)                                            # reads the foreground window about once a second and feeds the watchers
+        watch = ScamWatch(bus, screen, reader=reader)
+        rt.deadlines = DeadlineWatch(bus, reader, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start(), Gate(bus, fullscreen=reader.fullscreen), memory=rt.news.mem)
         screen.start()
+        reader.start()
         watch.start()
-        rt._closers += [watch.stop, screen.stop]
+        rt.deadlines.start()
+        rt._closers += [rt.deadlines.stop, watch.stop, reader.stop, screen.stop]
     hk = Hotkey(bus)
     if not mic.start():
         print("could not open the microphone")

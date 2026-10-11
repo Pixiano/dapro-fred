@@ -1,0 +1,28 @@
+{
+  "name": "screen_watch",
+  "description": "Pause or resume FRED's reading of the screen for deadlines (and proactive questions about what is on screen), or say whether it is paused. The scam watch is not affected and keeps protecting. Use it when the user says to stop watching the screen, stop looking at the screen, pause the screen reading, or to start watching again.",
+  "args": {
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["pause", "resume", "status"],
+        "description": "pause = stop reading the screen for deadlines; resume = read it again; status = say which"
+      }
+    },
+    "required": ["action"]
+  },
+  "examples": [
+    "stop watching my screen",
+    "pause the screen reading",
+    "stop looking at the screen",
+    "start watching the screen again",
+    "resume screen watching",
+    "are you watching my screen",
+    "don't read my screen for a while"
+  ],
+  "not_for": [
+    "describing what is on the screen (use look_at_screen)",
+    "turning the scam watch off"
+  ],
+  "timeout_s": 5
+}

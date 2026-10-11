@@ -15,6 +15,7 @@ Sockets
        ScamWatch(bus, screen, ocr_read=None, notify=None, clock=None).start() / stop() / check_once(frame=None)
          bus event screen.settled (not duplicate) -> the latest frame is OCR'd on one worker thread (the screen thread is never blocked) and assessed
          ocr_read(rgb) -> str | None   (default senses.ocr.read);  notify(title, text) -> bool   (default ui.toast.show)
+       ScamWatch(..., reader=proactive.screenread.Reader): instead of its own settled-event OCR the watch is fed the foreground window's text (check_text) every time it changes; the pause switch does not stop it
   out: bus event proactive.warn {scam: "phishing"|"scam", level, domain, reasons}; a Windows toast; log.session("scam_warning", domain, reasons)
        cooldown per domain / page kind (scamwatch_cooldown_s, 30 min) and at most scamwatch_max_per_hour warnings; config.scamwatch_enabled turns it off
        engine/live.py speaks a HIGH warning aloud itself (medium: toast and pill caption only); the shadow judge only logs.
@@ -156,8 +157,8 @@ def assess(text: str):
 
 
 class ScamWatch:
-    def __init__(self, bus, screen, ocr_read=None, notify=None, clock=None):
-        self.bus, self.screen = bus, screen
+    def __init__(self, bus, screen, ocr_read=None, notify=None, clock=None, reader=None):
+        self.bus, self.screen, self.reader = bus, screen, reader
         self._ocr, self._notify, self._clock = ocr_read, notify, clock or time.time
         self._seen: dict = {}
         self._sent: list = []
@@ -166,6 +167,9 @@ class ScamWatch:
 
     def start(self):
         if not config.get().scamwatch_enabled or self._thread:
+            return
+        if self.reader:                                                 # fed by the once-a-second foreground-window reader; it reads for us even while the screen pause switch is on
+            self.reader.add(lambda text, info: self.check_text(text), always=True)
             return
         self._unsub = self.bus.subscribe(self._on_event, kinds=("settled",), sources=("screen",))
         self._stop.clear()
@@ -206,7 +210,10 @@ class ScamWatch:
         if self._ocr is None:
             from senses import ocr
             self._ocr = ocr.read
-        v = assess(self._ocr(frame) or "")
+        return self.check_text(self._ocr(frame) or "")
+
+    def check_text(self, text: str):
+        v = assess(text)
         return self._warn(v) if v else None
 
     def _warn(self, v: Verdict):
@@ -303,6 +310,13 @@ def _selfcheck():
         time.sleep(0.05)
     w2.stop()
     assert len(calls) == n + 1 and calls[-1][0] == "Possible phishing page"
+    fed = []                                                                                                                                   # reader mode: the text is pushed in
+    w4 = ScamWatch(bus, None, notify=lambda t, x: calls.append((t, x)) or True, clock=lambda: now[0] + 999999, reader=type("R", (), {"add": lambda self, fn, always=False: fed.append((fn, always))})())
+    w4.start()
+    assert len(fed) == 1 and fed[0][1] is True and w4._thread is None
+    n = len(calls)
+    fed[0][0](pos[2][0], {})
+    assert len(calls) == n + 1
     config.get().scamwatch_enabled = False
     w3 = ScamWatch(bus, None)
     w3.start()
