@@ -16,6 +16,7 @@ Rules: the model runs ONLY through gpu.run (one in-process GPU user at a time) a
 Self-check: python audio/stt.py (fake model, no GPU).  Real model on recordings: tests/live_stt.py
 """
 import json
+import re
 import sys
 import time
 import wave
@@ -88,8 +89,8 @@ class Stt:
                 keep = [s for s in segs if not (getattr(s, "no_speech_prob", 0.0) > c.stt_no_speech_prob and getattr(s, "avg_logprob", 0.0) < c.stt_min_logprob)]
                 return " ".join(s.text.strip() for s in keep).strip(), getattr(info, "language", c.whisper_language)
             text, lang = gpu.run("stt", priority, work, timeout=max(30.0, dur * 2 + 20))
-            if is_ghost(text, float(np.max(np.abs(x))), c):
-                text = ""
+            if is_ghost(text, float(np.max(np.abs(x))), c) or only_hotwords(text):
+                text = ""                                           # near-silence makes Whisper echo its hint words back (2026-10-11: 'Narendra Modi.', 'Apoio, Narendra Modi, CBSE')
             t = Transcript(text, lang, dur, int((time.monotonic() - t0) * 1000))
         self.bus.emit("stt", "transcript", text=t.text, final=final, audio_s=round(dur, 2), ms=t.ms)
         if final and not t.silent and c.stt_save_audio:
@@ -108,6 +109,13 @@ def _hot() -> str:
     except Exception:
         extra = []
     return ", ".join([w.strip() for w in c.stt_hotwords.split(",") if w.strip()] + extra)
+
+
+def only_hotwords(text: str) -> bool:
+    """True when the transcript is nothing but words from the hint list: Whisper repeating its own hotwords on noise, never a real utterance."""
+    hot = {w for h in _hot().split(",") for w in re.findall(r"[a-z0-9']+", h.lower())}
+    words = re.findall(r"[a-z0-9']+", text.lower())
+    return bool(words) and all(w in hot for w in words)
 
 
 def is_ghost(text: str, peak: float, c) -> bool:
@@ -166,6 +174,7 @@ class _FakeWhisper:
 
 def _selfcheck():
     import tempfile
+    assert only_hotwords("Narendra Modi.") and only_hotwords("Apoio, Narendra Modi, CBSE") is False and not only_hotwords("Tell me about Narendra Modi") and not only_hotwords("")
     from audio.mic import CHUNK, Mic
     tmp = tempfile.TemporaryDirectory()
     config.set_data_dir(tmp.name)                                                 # saved utterances must never reach the real voice_data

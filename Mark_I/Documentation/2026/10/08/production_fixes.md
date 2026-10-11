@@ -71,3 +71,7 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 41 | The 8 s wake window skipped voice ID | Window 4 s; only 2 s after a confirmed wake may speech interrupt FRED without a voice check | `wake_open_s`, `wake_barge_s` |
 | 42 | webrtc VAD fired on hum, noise and gate clicks and split speech | Silero (the ONNX that ships with faster-whisper), threshold 0.35: of 60 junk clips 48 fall under 10% voiced (webrtc: 23), of 40 real clips 3 (webrtc: 0) | `vad_engine`, `silero_threshold` |
 | 43 | Any reply ending in "?" let short unscorable clips through ("How can I help you, sir?") | Only a real yes/no question does (`engine/sir.is_yes_no_question`) | none |
+| 44 | Whisper hotwords repeated back on near-silence ("Narendra Modi.") | A transcript made only of hint words is dropped (`stt.only_hotwords`) | none |
+| 45 | News offer repeated after every restart | Offered editions are remembered on disk; not offered again for 2 h, and never once read | `news_offer_hold_s` |
+| 46 | Lavalier opened through the MME entry (resampled, own gain path) | WASAPI entry preferred among the name matches; live check: opens, 37 chunks in 3 s, 5% exact zeros | `mic_device` |
+| 47 | The logs could not show why an utterance was accepted or ignored | `clock.decision` per utterance (accepted, gate, voice score, threshold, wake/follow-up/tts/headphones state, peak, rms) and `clock.barge_check` with the score of every interrupt attempt; `audio.mic_state stream_status` on input overflow | none |

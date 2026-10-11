@@ -44,6 +44,7 @@ class Mic:
         self._carry = np.zeros(0, dtype=np.int16)
         self.level = 0.0
         self.errors = 0
+        self._status_ts = 0.0
 
     # --- fan-out -------------------------------------------------------
     def subscribe(self, fn):
@@ -93,13 +94,19 @@ class Mic:
             return None
         import sounddevice as sd
         want = self.device.lower()
-        for i, d in enumerate(sd.query_devices()):
-            if d["max_input_channels"] > 0 and want in d["name"].lower():
+        hits = [i for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0 and want in d["name"].lower()]
+        for i in hits:                                   # WASAPI first: the MME entry (the first name match) resamples to 44.1 kHz and has its own gain path (audit F7, 2026-10-11)
+            if sd.query_hostapis(sd.query_devices(i)["hostapi"])["name"] == "Windows WASAPI":
                 return i
+        if hits:
+            return hits[0]
         raise RuntimeError(f"no input device matching {self.device!r}")
 
     def _callback(self, indata, frames, time_info, status):
         try:
+            if status and time.time() - self._status_ts > 10:
+                self._status_ts = time.time()
+                self.bus.emit("audio", "mic_state", state="stream_status", status=str(status))      # input overflow = dropped audio, invisible before
             x = np.clip(indata[:, 0] * 32767.0, -32768, 32767).astype(np.int16)
             self._carry = np.concatenate([self._carry, x])
             while len(self._carry) >= CHUNK:

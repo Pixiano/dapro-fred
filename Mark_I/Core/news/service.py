@@ -7,6 +7,7 @@ Sockets
   out: digest day files; the spoken offer "Good morning, sir. The 06:00 news is ready, 8 stories. Shall I read it?" once per edition, when present
 Self-check: python news/service.py
 """
+import json
 import re
 import sys
 import threading
@@ -25,7 +26,12 @@ from news import digest
 class News:
     def __init__(self, chat, embed, memory, bus, speak=None, build=digest.build, tick_s: float = 60.0):
         self.chat, self.embed, self.mem, self.bus, self.speak, self._build, self.tick_s = chat, embed, memory, bus, speak, build, tick_s
-        self.present, self.offered, self.offer_until = None, set(), 0.0
+        self.present, self.offer_until = None, 0.0
+        self._file = config.data_dir() / "news_offered.json"
+        try:
+            self.offered = json.loads(self._file.read_text(encoding="utf-8"))          # {edition: time it was offered}: survives a restart
+        except (OSError, ValueError):
+            self.offered = {}
         self._stop = threading.Event()
         self._t = None
 
@@ -36,9 +42,15 @@ class News:
 
     def offer(self):
         ed = digest.latest()
-        if not ed or not ed["items"] or ed["built"] in self.offered or not self.speak:
+        if not ed or not ed["items"] or not self.speak or digest.is_read(ed["built"]):
             return False
-        self.offered.add(ed["built"])
+        if time.time() - self.offered.get(ed["built"], 0.0) < config.get().news_offer_hold_s:
+            return False
+        self.offered[ed["built"]] = time.time()
+        try:
+            self._file.write_text(json.dumps(self.offered), encoding="utf-8")
+        except OSError:
+            pass
         greet = "Good morning" if int(ed["at"][:2]) < 12 else "Good evening"
         early = digest.earlier_unread(ed["built"])
         tail = f" The {early['at']} one is still unread: I'll read this first, then ask if you want that too." if early else ""
@@ -121,6 +133,13 @@ def _selfcheck():
         assert n.answer("No, not now") == "no" and n.answer("Novel idea") is None and n.answer("What's the weather") is None
         n.offer_until = time.time() - 1
         assert n.answer("yes") is None                                                          # the offer has expired
+        n2 = News(None, None, None, bus, speak=said.append, build=fake_build)           # a restart: the offer is remembered
+        assert n2.offer() is False and len(said) == 1
+        n2.offered = {k: v - config.get().news_offer_hold_s - 1 for k, v in n2.offered.items()}
+        assert n2.offer() is True and len(said) == 2                                     # held for 2 h, then offered again while unread
+        digest.mark_read("b1", now)
+        n2.offered = {}
+        assert n2.offer() is False                                                          # never once it was read
         n.stop()
     print("news service ok")
 

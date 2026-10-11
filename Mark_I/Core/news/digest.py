@@ -89,6 +89,11 @@ def mark_read(built: str, now=None):
             _day(d).write_text(json.dumps(day, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+def is_read(built: str, now=None) -> bool:
+    now = now or datetime.now(config.IST)
+    return any(built in _load(_day(d)).get("read", []) for d in (now, now.replace(day=max(1, now.day - 1))))
+
+
 def earlier_unread(built: str, now=None):
     """The newest edition before `built` (yesterday or today) that was never read, else None."""
     now = now or datetime.now(config.IST)

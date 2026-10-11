@@ -67,6 +67,7 @@ class TurnController:
         self.barged = False
         self.level = 0.0
         self._pending = None
+        self._why = {}
         self.expect_short = False                             # set by the speaker side when FRED's last line was a question: a short yes/no then needs no voice check
 
     # ---- inputs -------------------------------------------------------
@@ -185,6 +186,7 @@ class TurnController:
             return
         if self.voice is not None and c.voice_id_enabled and not (now - self.wake_ts <= c.wake_barge_s):
             s = self.voice.score(self.capture.snapshot())
+            self.bus.emit("clock", "barge_check", score=None if s is None else round(float(s), 3), threshold=c.barge_voice_threshold, passed=s is not None and s >= c.barge_voice_threshold)
             if s is None or s < c.barge_voice_threshold:
                 return                                              # FRED's own voice from the speakers scores up to 0.36: only a clearly strong match, or the wake word, interrupts it (asked again every tick)
         self.barged = True
@@ -214,20 +216,33 @@ class TurnController:
         if self.voice is not None and not hk:
             woke = self.wake_ts >= self.t_start - config.get().wake_open_s
             s = self.voice.score(audio)
+            self._why = {"score": None if s is None else round(float(s), 3), "woke": woke, "threshold": config.get().voice_threshold if woke else config.get().followup_voice_threshold, "expect_short": self.expect_short}
             if s is None and not woke and config.get().voice_id_enabled and not self.expect_short:
                 return self._ignored("too_short", audio)               # "Yeah." from the TV or FRED's own echo: cannot be verified, so only a question just asked (yes/no) accepts it
             if s is not None and s < (config.get().voice_threshold if woke else config.get().followup_voice_threshold):
                 return self._ignored("not_vatsal", audio)               # no wake word, only the follow-up window: a stricter voice match, so passing noise and other voices are not answered
         self.counts["turns"] += 1
+        self._decision(True, "accepted", audio, info)
         self._emit(END_OF_TURN, **info)
         if self.on_turn:
             self.on_turn(audio, info)
 
     def _ignored(self, reason: str, audio=None):
         self.counts["ignored"] += 1
+        self._decision(False, reason, audio)
         if self.on_ignored and audio is not None:
             self.on_ignored(audio, reason)
         self._emit(IGNORE, reason=reason)
+
+    def _decision(self, accepted: bool, gate: str, audio=None, info=None):
+        """One event per utterance with what the gates saw (audit L1): the numbers that were only recoverable by re-scoring the wav."""
+        c = config.get()
+        a = None if audio is None else np.asarray(audio, dtype=np.float32)
+        why, self._why = self._why, {}
+        self.bus.emit("clock", "decision", accepted=accepted, gate=gate, audio_s=None if a is None else round(len(a) / c.sample_rate, 2),
+                      peak=None if a is None or not len(a) else int(np.abs(a).max()), rms=None if a is None or not len(a) else int(np.sqrt(np.mean(a ** 2))),
+                      since_wake_s=round(self._now - self.wake_ts, 2) if self.wake_ts > 0 else None, followup_open=self._now <= self.open_until, tts_on=self.tts_on,
+                      headphones=self.headphones, hotkey=bool(self.hotkey_turn), turn_prob=None if info is None else info.get("turn_prob"), **why)
 
     def _finish_silently(self, state: str, reason: str, count: str):
         self.capture.end()
@@ -468,6 +483,16 @@ def _selfcheck():
     say(800.0, 801.0)
     run(801.2, 802.4)
     assert turns and turns[-1]["reason"] == "hard_cap", (states, turns)
+    # 10g. every utterance leaves one decision event with the score, the threshold and the gate
+    dec = []
+    bus.subscribe(lambda e: dec.append(dict(e.data)), kinds={"decision"})
+    states.clear(); turns.clear(); t.wake_ts = -1e9; vo.me = False
+    t.open_until = 1100.0
+    say(1090.0, 1091.5)
+    run(1091.7, 1093.2)
+    assert dec and dec[-1]["accepted"] is False and dec[-1]["gate"] == "not_vatsal" and dec[-1]["score"] == 0.2 and dec[-1]["threshold"] == config.get().followup_voice_threshold, dec
+    vo.me = True
+    t.open_until = -1e9
     # 10f. a wake event with no speech behind it is dropped (the wake model fires on silence); with speech it counts
     class FakeVad:
         last_voice_ts = 0.0
