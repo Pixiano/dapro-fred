@@ -1,0 +1,116 @@
+# Memory folder system, revamp design (2026-10-11)
+
+Status: DESIGN ONLY. Nothing moved, nothing coded. Vatsal will build it.
+Asked for: granularity year / month / date, a daily log inside each date folder, some things outside the time granularity and some inside, designed with logic and modularity.
+
+## What exists today (so the revamp starts from facts)
+- `memory_root()` (config.py) is `Mark_I\Initial\Testing_Memory` while `memory_testing` is on, else `FRED_Private\memory`. It holds `memory.sqlite` (the whole database), `archive\YYYY\MM\DD\<stream>.jsonl` (already year/month/day, streams conversation, tool_call, speech, perception, error, system, session_state) and `jobs_calls.jsonl`.
+- The same year/month/day idea is repeated, differently, in other places: `FRED_Private\events\YYYY-MM-DD.jsonl` (flat), `FRED_Private\news\YYYY\MM\DD.json`, `Project_FRED\Data\{clock,stt,wakeword}\YYYY\MM\DD\` (clips), `FRED_Private\voice_data`, `logs`, `usage`.
+- Everything derived (diary, events, facts, decisions, screen visits) lives only inside `memory.sqlite`, so there is no day folder you can open and read, copy, back up or delete on its own.
+- Personal state that is not about a day (voice_refs, face_refs, schedule, lockdown, apps_index, yearly_alerts_seed, deadlines, news_offered) is scattered in the FRED_Private root.
+
+## The principle that decides every case
+Ask one question of a piece of data: **"is it a record of something that happened at a time, or is it the current state of something?"**
+- Happened at a time, never changes afterwards -> goes in the **time tree**, in the folder of its day.
+- Current state that changes in place, or a global index over everything -> goes **outside** the time tree, in its own module folder.
+- Derived from the time tree and rebuildable (indexes, embeddings, caches) -> outside, and safe to delete.
+Truth lives in files you can read; the SQLite database is the fast index and the home of state history, and it can be rebuilt from the day folders. (Today the database is the only copy of the derived data; the revamp makes the day folder the source of truth for the day's records.)
+
+## The layout (root = `memory_root()`)
+```
+<root>\
+  layout.json                       version of this layout + the lane registry (see "Modularity")
+  README.md                         one page: the rules below
+  time\                             THE LEDGER: sharded by year / month / date, India day (IST)
+    2026\
+      year.md                       yearly review (written once a year)
+      01\ ... 10\
+        month.md                    monthly review (written on the 1st for the month before)
+        weeks\W41.md                weekly analysis, filed in the month in which the week ENDS
+        11\                         one folder per day
+          daily-log.md              the daily log: the readable diary of the day (written by the nightly editor, short on boring days)
+          day.json                  manifest: counts per file, sha256 per file, sealed true/false, sealed_at, model/versions used
+          raw\                      the shoebox, append-only, never edited
+            conversation.jsonl  tool_call.jsonl  speech.jsonl  perception.jsonl  error.jsonl  system.jsonl  session_state.jsonl
+          screen\
+            visits.jsonl            one line per screen visit (app, title, times, caption, <=1000 chars of text, seen count)
+          derived\                  what the nightly job produced from that day (replayable, never edits raw)
+            events.jsonl            the day's memory events (type, importance, text, entity tags)
+            timeline.jsonl          one line per notable thing in order (news read, deadline asked and answered, tool errors, proactive offers and replies)
+            decisions.jsonl         every model prompt/reply/override/refusal of that day's jobs (today the decision_log table)
+          news\
+            digest-0600.json  digest-1800.json      the editions built that day, with the read/offered flags
+          amendments.jsonl          any later correction or late import for this day: appended here, the day's files stay untouched
+  signals\                          BULK, short-lived, same year/month/date sharding, own retention
+    2026\10\11\
+      audio\{clock,stt,wakeword}\   saved clips + clip metadata jsonl (today Project_FRED\Data)
+      events\noise.jsonl            the event-bus log (VAD flickers, wake scores, clock states): today FRED_Private\events
+      vectors\screen.npy            optional image vectors of the day if they move out of the database
+  state\                            CURRENT STATE, changes in place, history kept in rows (outside the time tree)
+    memory.sqlite                   entities, entity_states (valid_from/to), relationships, event_entities, model_items, proposals,
+                                    review_queue, ask_state, yearly_alerts, precedents, screen_visits index, sources
+    people\ places\ ...             (optional later: one readable file per entity if wanted)
+  identity\                         WHO VATSAL IS TO FRED (private, never sharded by time)
+    voice_refs.json  face_refs.json  yearly_anchor.json  yearly_alerts_seed.json
+  settings\                         small switches and per-module memory of choices
+    screen_paused.flag  deadlines.json  news_offered.json  schedule.json  lockdown.json  apps_index.json  judge_model.json
+  index\                            DERIVED, rebuildable, safe to delete
+    <embed-model-id>\               one folder per embedding model so models never mix
+      faiss.index  vectors.sqlite  fts5 lives in state\memory.sqlite or index\fts.sqlite
+  imports\                          raw originals of historical imports, by source (their content is projected into time\ with kind="historical")
+  backups\                          backup.py output: manifest.json with SHA-256 per file, one folder per backup date
+  tmp\                              scratch, always safe to empty
+```
+Read it as five kinds of folder: **time** (permanent ledger), **signals** (same shape, expires), **state** (current truth), **identity + settings** (small, personal, never sharded), **index + backups + tmp** (derived or copies).
+
+## What goes where (decision table)
+| Data | Folder | Why |
+|---|---|---|
+| a conversation turn, tool call, transcript, presence change, error | time\Y\M\D\raw\ | it happened at a time and never changes |
+| screen visit text | time\Y\M\D\screen\visits.jsonl | a record of a time (text only; no pixels ever) |
+| the diary of a day | time\Y\M\D\daily-log.md | derived from that day, readable |
+| memory events of a day | time\Y\M\D\derived\events.jsonl (+ the database rows) | derived from that day |
+| model prompts/replies of the nightly job | time\Y\M\D\derived\decisions.jsonl | audit of that day's decisions |
+| news digest of a day | time\Y\M\D\news\ | an edition belongs to a day |
+| weekly / monthly / yearly review | time\Y\M\weeks, month.md, year.md | belongs to a period, not a day |
+| voice clips, noise event log | signals\Y\M\D\ | same sharding, but deleted by retention (clips 30 days, noise 14 days, unless flagged) |
+| who knows whom, where Vatsal lives now, what FRED learned about him | state\memory.sqlite | current state with valid_from/valid_to history, changes in place |
+| voice and face references, yearly anchor, alert seed | identity\ | personal, not time-bound, never deleted by retention |
+| deadlines answered, news offered, pause flag, schedule | settings\ | per-module small state |
+| embeddings, FAISS, FTS | index\<model>\ | derived: delete and rebuild |
+| historical chat imports | imports\ then projected into time\ | originals are kept untouched |
+
+## The daily log (what you find in the 11th folder)
+- `daily-log.md`: the readable diary. Header with date, weekday, and counts (turns, tool calls, screen visits, news read); the nightly editor's diary text; key events; deadlines seen and answered; open questions queued for you. A busy day is longer, a quiet day is two lines.
+- `day.json`: machine manifest so a day can be verified, sealed and copied on its own.
+- Until the nightly job runs the folder already has `raw\` and `screen\`, so "today" is browsable live; `daily-log.md` appears after consolidation and `sealed` flips to true.
+- **Sealing:** after consolidation a day is sealed (hashes in day.json). A sealed day is never edited; corrections and late imports go to `amendments.jsonl` in that day and the next consolidation reads them.
+
+## Rules (the logic)
+1. **One clock:** the day is the India day (IST), as the archive already does. A session that crosses midnight writes each record into the day of its own timestamp.
+2. **Append-only in `time\`**: files are only appended, repaired on a torn last line, or sealed. No module deletes from `time\`.
+3. **Retention lives only in `signals\`** (and `tmp\`). The ledger is permanent. This is why clips and noise are NOT inside `time\`: their lifetime differs, so they get a sibling tree with the same shape.
+4. **Rebuildability:** `index\` can always be rebuilt from `time\` + `state\`. `state\memory.sqlite` can be rebuilt as far as events go from `time\...\derived\events.jsonl` (entity states carry their own history and are backed up).
+5. **Personal data never in the repo:** `memory_root()` stays outside git (as today: Testing_Memory is gitignored).
+6. **Folder names are zero-padded** (2026, 10, 11) so plain sorting is chronological.
+
+## Modularity: one place knows the paths
+- A single module `layout.py` (socket) is the only code that builds paths: `day_dir(ts)`, `raw_file(ts, stream)`, `screen_file(ts)`, `derived_file(ts, name)`, `signals_dir(ts, kind)`, `period_file(kind, ts)`, `state_dir()`, `identity_file(name)`, `settings_file(name)`, `index_dir(model_id)`. Nothing else concatenates path strings.
+- Each module declares a **lane** in `layout.json`: `{name, scope: day|period|state|identity|settings|index, path template, retention, writer, sealed_by}`. Adding a feature (for example a "health" log) means adding one lane, not touching the others.
+- Every writer calls `layout`; readers ask `layout` plus a date range ("all raw conversation between two dates", "the daily logs of October"). Backup, verify and export work per lane.
+- `layout.json` carries a `version`; a migration is a small idempotent script per version.
+
+## Migration plan (when you build it)
+1. Write `layout.py` and `layout.json`; point the current writers at it with the OLD paths first (no behaviour change, tests green).
+2. Move `archive\YYYY\MM\DD\<stream>.jsonl` to `time\YYYY\MM\DD\raw\` (same files, one rename per day; `archive.verify()` before and after).
+3. Add `day.json` and `daily-log.md` writers to the nightly job; add `screen\visits.jsonl` next to the database write.
+4. Move news digests, then clips and noise (to `signals\`), then identity and settings files out of the FRED_Private root. Each step keeps a read fallback to the old path until the next version.
+5. Export derived events and decisions to the day's `derived\` and make the database the index of them.
+6. Retention job for `signals\` last.
+
+## Open questions for Vatsal
+1. Are voice clips and the noise event log allowed to expire (30 and 14 days proposed) or must they live forever like the ledger?
+2. Should the live screen text be a file (`screen\visits.jsonl`, proposed) as well as a database row, or database only?
+3. Weekly files: filed in the month where the week ENDS (proposed) or starts?
+4. Do you want one readable file per person/place under `state\` (easy to browse) or database only?
+5. Should `daily-log.md` be created at midnight with live counts (proposed) or only after the nightly job?
