@@ -51,8 +51,8 @@
 - Open design decision for Vatsal (the audit's evidence now makes this less urgent: the guard fixed most wrong closings): the weekly/monthly agent wrongly closes real contradictions. Option: contradiction items can only be closed by the user (always listed under "Please check"), at the cost of a list that can fill with false alarms.
 - Still open: reruns of yearly with the critic fixes, chapters (nothing forces them), pattern finding at weekly/monthly level, a decision on the analyst model (see comparison).
 
-## New division added: Pulse (daily news feed)
-Vatsal asked for a daily news feed as the other FRED division besides memory. Placeholder only: `Mark_I/Initial/pulse/README.md` lists the open questions (sources, topics, delivery, storage, model). Nothing is designed or built; it waits for the memory pipeline to be frozen and for Vatsal's answers.
+## New feature: daily news digest (in Core)
+Vatsal asked for a daily news digest. It is built inside Core, not as a separate division (see `2026/10/11/news_design.md`).
 
 ## Weakness fixes round (agent run, 2026-10-05, invented "Arin" data only)
 1. **Scorer** (`run_synthetic.score(m, truth, until)`, b4a43d3): counts only what is reachable in the days run: aliases and corrections are counted only if the word was said in a run day, fact values only if dated within the run, "latest value" is the latest within the run, and a field is matched by value when its key name is absent (`close()`: same wording or half of the key's words). Oracle full year still 10/10 checks (aliases 8/8, timelines 6/6, separate 3/3). Oracle on 01-05..01-18 now reads aliases 4/4, timelines 5/5 (before, the same slice was scored against the whole year). `run_local.py` passes the last day.

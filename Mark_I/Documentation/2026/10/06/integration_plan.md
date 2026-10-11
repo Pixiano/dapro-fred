@@ -1,7 +1,7 @@
 # Memory freeze and FRED integration plan (2026-10-06)
 
 ## Freeze
-The Mark I memory pipeline is frozen as of 2026-10-06 (commit `6eb1b54`): no new features, only fixes for bugs the integration finds. State: all self-checks pass; precedents, ask queue and two-project recall built and tested on invented chats (gpt-oss low, Qwen3-8B, Gemma); the nightly/weekly/monthly roles are chosen (see `2026/10/05/done.md`). Not part of the freeze: Pulse (news feed, placeholder), real-history dry run (ask Vatsal first), known review gaps M1, H4, M3, M4, L3, L4, L6, L8.
+The Mark I memory pipeline is frozen as of 2026-10-06 (commit `6eb1b54`): no new features, only fixes for bugs the integration finds. State: all self-checks pass; precedents, ask queue and two-project recall built and tested on invented chats (gpt-oss low, Qwen3-8B, Gemma); the nightly/weekly/monthly roles are chosen (see `2026/10/05/done.md`). Not part of the freeze: the daily news digest (Core, `news`, designed 2026-10-11), real-history dry run (ask Vatsal first), known review gaps M1, H4, M3, M4, L3, L4, L6, L8.
 
 ## Integration (FRED current code stays untouched until each step is agreed; one step at a time, tested before the next)
 Every item below is a socket the memory side already exposes. What FRED's side looks like has to be read from FRED's own code first (not done yet): do that before step 1.

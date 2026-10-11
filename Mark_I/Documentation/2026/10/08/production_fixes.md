@@ -58,3 +58,4 @@ If the pill still flickers: raise `agc_min_peak` or `listen_show_s`. If "Hey FRE
 | 28 | Own short phrases rejected by voice ID (0.26 to 0.33) | 9 real-use clips added to the enrolment, threshold 0.38 | `voice_threshold` |
 | 29 | FRED answered the user talking to someone else right after a reply | Follow-up window 8 s -> 5 s (voice ID already gates it) | `followup_s` |
 | 30 | Equations and word problems answered in the model's head, no calculator | `calculate` description tells it to decompose into steps + 6 examples for routing | none |
+| 31 | New: daily news digest (06:00 and 18:00) in Core | `Core/news/` + `news` tool, stored short + detailed per story, low-weight memory events | `news_hours` |

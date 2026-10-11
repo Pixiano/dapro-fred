@@ -1,0 +1,11 @@
+{
+  "name": "news",
+  "description": "Read the daily news digest FRED builds at 6 am and 6 pm: AI news from around the world, major Indian news, CBSE and NCERT board news, world events and one general story. Gives a short two-line summary of each story with its source, or the full detailed paragraph of one story when a number is given. Use it for any question about the news, headlines, what happened today, or more detail on a story from the digest.",
+  "args": {"properties": {
+    "topic": {"type": "string", "enum": ["all", "ai", "india", "boards", "world", "general"], "description": "which part of the digest: ai, india, boards (CBSE/NCERT), world, general; all for everything"},
+    "number": {"type": "integer", "description": "the story number from the list to read in full; leave out (or 0) for the short list"}}},
+  "examples": ["what's the news", "read me the news", "any AI news today", "what's happening in India", "any CBSE news", "tell me more about number three", "what's going on in the world", "give me the headlines", "more on the second story", "what happened in AI today"],
+  "not_for": ["searching the web for a specific topic (use web_search)", "weather", "the user's emails"],
+  "flags": {"reads_untrusted": true},
+  "timeout_s": 20
+}

@@ -48,6 +48,7 @@ class Runtime:
     bus: ev.EventBus
     replies: list = field(default_factory=list)
     _closers: list = field(default_factory=list)
+    news: object = None                         # news.service.News: main() starts it (the daily digest at 06:00 and 18:00)
     presence: object = None                     # senses.presence.Presence: main() starts it (--no-presence skips); Jobs pauses it during a night run
     jobs: object = None                         # memory_bridge.jobs.Jobs (memory on and a playground only): main() starts its check
     ask: object = None                          # memory_bridge.ask.AskDelivery (memory on only): offered every turn first, started by main()
@@ -126,6 +127,8 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             bus.subscribe(lambda e: seen.update(p=e.data.get("present")), kinds=("state",), sources=("presence",))
             rt.jobs = Jobs(mem, playground, embedder.embed, present=lambda: seen["p"], pm=recall.model, bus=bus, presence=rt.presence)
         rt.ask = AskDelivery(bus, mem, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
+    from news.service import News
+    rt.news = News(chat, embedder.embed, mem if memory else None, bus, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
 
@@ -256,6 +259,8 @@ def main(argv):
     if rt.ask:
         rt.ask.start()
         rt._closers.append(rt.ask.stop)
+    rt.news.start()                                                              # the 06:00 and 18:00 news digest
+    rt._closers.append(rt.news.stop)
     rt._closers.append(rt.scheduler.stop)
     print(f"listening for {secs:.0f} s: say 'Hey FRED, ...' or hold Left Ctrl + Left Alt. Ctrl+C to stop.")
     try:
