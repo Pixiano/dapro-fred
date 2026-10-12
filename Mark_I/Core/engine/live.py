@@ -301,6 +301,14 @@ def main(argv):
     rt.scheduler.start()
     if rt.presence:
         rt.presence.start()                                                      # always on; the night jobs pause it themselves
+        from proactive.gate import Gate as _G
+        _wg = _G(bus)
+        def _welcome(e):                                                         # present again after welcome_after_s away: one short welcome (gate: quiet hours, mid-turn, caps)
+            away = e.data.get("since_s") or 0
+            if e.data.get("present") and away >= config.get().welcome_after_s and _wg.decide() == "speak":
+                _wg.note_spoken()
+                rt.proactive_say(f"Welcome back, sir. You were away {away // 60} minutes.")
+        bus.subscribe(_welcome, kinds=("state",), sources=("presence",))
         rt._closers.append(rt.presence.stop)
     if rt.jobs:
         rt.jobs.start()
