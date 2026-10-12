@@ -214,7 +214,7 @@ class DeadlineWatch:
                     self.cur, self.cur_until = c, now + config.get().deadline_answer_s
                     self._save()
                     q = f"I see a deadline on your screen: {c.line}. That is {_say(c.due)}. Shall I remind you?"
-                    log.session("deadline_offer", key=c.key, how=act)
+                    log.session("deadline_offer", key=c.key, how=act, line=c.line[:100])    # the line is spoken and toasted anyway: logged so a wrong offer can be traced
                     self.toast("Deadline on screen", f"{c.line[:120]}\n{_say(c.due)}. Say yes to be reminded.")
                     if act == "speak":
                         self.gate.note_spoken()
