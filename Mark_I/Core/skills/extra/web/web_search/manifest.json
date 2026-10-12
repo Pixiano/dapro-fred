@@ -4,7 +4,7 @@
   "args": {"required": ["query"], "properties": {
     "query": {"type": "string", "description": "just the subject to look up, a few words (for example 'Arijit Singh new album'), never the whole sentence and nothing personal"},
     "kind": {"type": "string", "enum": ["auto", "news", "web"], "description": "auto (default) uses news sources for latest/today/score wording; news forces them; web forces ordinary search"}}},
-  "examples": ["search the web for the new iPhone price", "look up Arijit Singh on the internet", "what is the latest news about the election", "who won the match last night", "google when the next Marvel movie comes out", "find out how old Shah Rukh Khan is", "what is in the news today"],
+  "examples": ["search the web for the new iPhone price", "look up Arijit Singh on the internet", "what is the latest news about the election", "who won the match last night", "google when the next Marvel movie comes out", "find out how old Shah Rukh Khan is", "what is in the news today", "search online for the grade 10 board exam dates", "search for the exam date sheet online", "look it up online", "search the internet for this", "find the dates for this online"],
   "not_for": ["the weather (use the weather tool)", "anything about the user or their files", "arithmetic or unit conversion", "opening a website or an app"],
   "flags": {"reads_untrusted": true},
   "timeout_s": 25
