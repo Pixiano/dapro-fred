@@ -109,7 +109,7 @@ class Settings:
     wake_open_s: float = 4.0                          # a wake word this long before (or during) speech addresses it
     max_tool_rounds: int = 4                          # model <-> tool round trips per turn
     max_calls_per_round: int = 4                      # tool calls executed from one model message
-    sir_rate: float = 1.0                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); fillers too. 1.0 = every line (Vatsal, 2026-10-08, was 0.85); 0 turns it off
+    sir_rate: float = 0.3                            # share of replies, interim and talker lines that end with "sir" (engine/sir.py); fillers too. 1.0 = every line (Vatsal, 2026-10-08, was 0.85); 0 turns it off
     tts_enabled: bool = True                          # False = nothing is spoken (text only)
     kokoro_model: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "kokoro-v1.0.onnx")      # read in place, never copied
     kokoro_voices: str = str(CORE_DIR.parent.parent / "Old" / "Core" / "models" / "kokoro" / "voices-v1.0.bin")

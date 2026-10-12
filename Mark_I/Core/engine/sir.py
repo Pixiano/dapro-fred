@@ -24,7 +24,7 @@ _END = re.compile(r"^(.*?)([\s.!?…\"')\]]*)$", re.S)
 
 
 def sirify(text: str, rng=random.random) -> str:
-    if not text or not text.strip() or _SIR.search(text) or rng() >= config.get().sir_rate:
+    if not text or not text.strip() or _SIR.search(text) or len(text.split()) > 14 or rng() >= config.get().sir_rate:       # long answers never end with a tacked-on ', sir'
         return text
     body, tail = _END.match(text.rstrip()).groups()
     if not body:
