@@ -38,6 +38,8 @@ IST = config.IST
 MONTHS = {m: i for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split(), 1)}
 DAYS = "monday tuesday wednesday thursday friday saturday sunday".split()
 _MON = lambda n: rf"(?P<{n}>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+DEV = re.compile(r"claude|powershell|terminal|command prompt|git bash|cmd\.exe|visual studio|vs ?code|pycharm|cursor|FRED", re.I)     # windows full of code and FRED's own lines: never deadlines
+ECHO = re.compile(r"deadline on your screen|shall i remind", re.I)                                                                      # FRED's own offer, seen again on screen
 CUE = re.compile(r"\b(due|deadline|submit(?:ted)?(?: by)?|submission|hand[- ]?in|last date|closes?|closing|ends?|expires?|exams?|tests?|quiz|midterm|assignment|before)\b", re.I)
 DATE = re.compile(
     rf"(?P<iso>\b(?P<iy>\d{{4}})-(?P<im>\d\d)-(?P<id>\d\d)\b)"
@@ -107,7 +109,7 @@ def _date(m, now):
 
 def find_deadlines(text: str, now: datetime) -> list:
     out, seen = [], set()
-    lines = [l.strip() for l in (text or "")[:6000].split("\n") if l.strip()]
+    lines = [l.strip() for l in (text or "")[:6000].split("\n") if l.strip() and not ECHO.search(l)]
     for i, line in enumerate(lines):
         for scope in (line, line + " " + lines[i + 1] if i + 1 < len(lines) and CUE.search(line) and not DATE.search(line) else None):      # a cue line without a date may take its date from the next line
             if not scope:
@@ -186,7 +188,7 @@ class DeadlineWatch:
             log.session("deadline_toast_error", error=type(ex).__name__)
 
     def on_reading(self, text, info=None):
-        if not config.get().deadline_watch_enabled:
+        if not config.get().deadline_watch_enabled or DEV.search((info or {}).get("title") or ""):
             return
         with self._lock:
             for c in find_deadlines(text, self._now()):
@@ -390,11 +392,11 @@ def _selfcheck():
     w6.state["reminders"] = []
     w6.on_reading("Art project due Mon 2 Nov", {})
     assert len(said) == 5 and len(toasts) >= 5
-    clk[0] += 41                                                                            # (one question at a time: the toast-only one expired)
+    clk[0] += 91                                                                            # (one question at a time: the toast-only one expired)
     w6.on_reading("Maths paper due tomorrow 8 am", {})
     assert len(said) == 6 and "Maths paper" in said[5]
     # the answer window closes
-    clk[0] += 41
+    clk[0] += 91
     assert w6.answer("yes") is None
     config.reload()
     print("deadlines ok")

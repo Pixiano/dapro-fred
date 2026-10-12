@@ -94,6 +94,10 @@ def shared() -> ImageEmbedder:
     """The one process-wide instance (the screen memory and the screen_recall skill share one loaded model)."""
     global _shared
     if _shared is None:
+        try:
+            from transformers import AutoModel, AutoProcessor   # noqa: F401  import once on the main thread: done first on a worker thread while torch loads elsewhere it fails
+        except Exception:
+            pass
         _shared = ImageEmbedder()
     return _shared
 
