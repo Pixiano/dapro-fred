@@ -206,7 +206,7 @@ class ScreenMemory:
                     st.db.commit()
                 self.n["images"] += 1
             except Exception as ex:                             # the visit stays text-only
-                log.session("screenmem_image_error", error=type(ex).__name__)
+                log.session("screenmem_image_error", error=type(ex).__name__, msg=str(ex)[:160])
 
     def _work(self):
         while True:

@@ -167,7 +167,7 @@ class Settings:
     offers_per_day: int = 10
     deadline_watch_enabled: bool = True               # proactive/deadlines.py
     deadline_urgent_h: float = 12.0                   # a deadline closer than this overrides quiet hours and the caps
-    deadline_answer_s: float = 40.0                   # a yes/no within this long of the question goes to the watch, not the model
+    deadline_answer_s: float = 90.0                   # a yes/no within this long of the question goes to the watch, not the model
     # --- screen memory (2026-10-11): proactive/screenmem.py, senses/imgembed.py ---
     screen_mem_enabled: bool = True                   # remember what was on screen as low-weight memory events (type "screen"); the pause switch stops it too
     screen_mem_dwell_s: float = 10.0                  # one visit = a window dwell of at least this long
