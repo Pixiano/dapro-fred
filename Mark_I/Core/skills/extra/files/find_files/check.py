@@ -61,7 +61,7 @@ def _selfcheck():
         _mk(docs, "Tax Return 2024.pdf", 600)
         _mk(docs, "Budget.xlsx", 3)
         _mk(docs, "resume final v2.docx", 20)
-        _mk(pics, "IMG_2231.jpg", 2, 50000)
+        _mk(pics, "IMG_2231.jpg", 0, 50000)
         _mk(pics, "Holiday Goa 2025.png", 90)
         _mk(docs, "node_modules/pkg/Invoice_hidden.pdf", 1)
         _mk(docs, ".git/Invoice_git.pdf", 1)

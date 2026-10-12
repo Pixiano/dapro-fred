@@ -54,6 +54,7 @@ class Runtime:
     jobs: object = None                         # memory_bridge.jobs.Jobs (memory on and a playground only): main() starts its check
     ask: object = None                          # memory_bridge.ask.AskDelivery (memory on only): offered every turn first, started by main()
     scheduler: object = None                    # proactive.scheduler.Scheduler: main() starts its tick, tests drive tick() themselves
+    proactive_say: object = None                # proactive_say(text): speak a line FRED starts itself and remember it (main() hands it to the deadline watch)
     handle_text: object = None                  # handle_text(text): run a typed message exactly like a spoken turn
 
     def close(self):
@@ -146,6 +147,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         rt.ask = AskDelivery(bus, mem, lambda t: speaker and threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start())
     from news.service import News
     rt.news = News(chat, embedder.embed, mem if memory else None, bus, proactive_say)
+    rt.proactive_say = proactive_say
     if speaker:
         bus.subscribe(lambda e: e.data.get("state") == "BARGE_IN" and speaker.cancel(), kinds=("state",), sources=("clock",))
 
@@ -279,7 +281,7 @@ def main(argv):
         screen = ScreenSense(bus)
         reader = Reader(bus, screen)                                            # reads the foreground window about once a second and feeds the watchers
         watch = ScamWatch(bus, screen, reader=reader)
-        rt.deadlines = DeadlineWatch(bus, reader, proactive_say, Gate(bus, fullscreen=reader.fullscreen), memory=rt.news.mem)
+        rt.deadlines = DeadlineWatch(bus, reader, rt.proactive_say, Gate(bus, fullscreen=reader.fullscreen), memory=rt.news.mem)
         if rt.news.mem is not None and config.get().screen_mem_enabled:        # screen memory: needs --memory; text vectors by the memory's own embedder, image vectors lazily on the GPU
             from proactive.screenmem import ScreenMemory
             from senses import imgembed

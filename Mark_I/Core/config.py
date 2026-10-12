@@ -125,6 +125,7 @@ class Settings:
     scamwatch_cooldown_s: float = 1800.0              # the same domain is not warned about again for this long
     scamwatch_max_per_hour: int = 6
     pill_topmost_every_s: float = 1.0                 # while the pill is visible, re-assert it above other topmost windows (a borderless-fullscreen app or a video player can take the top spot after the pill appeared); 0 = only on show
+    brain_max_tokens: int = 1200                      # cap on the brain's replies: a live run once rambled 62,000 characters for 190 s with no cap; news read-outs fit well inside this
     talk_max_tokens: int = 200                        # cap on the small talker's replies: spoken answers are short, and a 2B that does not stop must not run for minutes
     ambient_enabled: bool = True                      # skills with an ambient() hook may add a digest (web facts about a named person/event) before the model answers; False = never
     ambient_timeout_s: float = 10.0                   # an ambient digest slower than this is dropped, the answer goes ahead without it
