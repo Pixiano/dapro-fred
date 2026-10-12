@@ -162,7 +162,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
             out(f"FRED: {sirify(dl)}")
             speaker and speaker.speak(sirify(dl))
             return dl
-        a = source == "voice" and rt.news.answer(text)
+        a = rt.news.answer(text)                                                    # typed or spoken: a typed yes to the news offer went to the model and it parroted the offer back
         if a == "no":
             note = sirify("Okay. Just ask whenever you want the news.")
             remember({"role": "user", "content": text}, {"role": "assistant", "content": note})
