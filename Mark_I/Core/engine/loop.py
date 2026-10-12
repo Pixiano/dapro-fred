@@ -103,6 +103,7 @@ class Engine:
         registry.brain, registry.talk, registry.say = chat, talk or chat, self._say      # skills that write (email_draft) use the brain; the talker fills the wait with a spoken line
         registry.confirmer = self.confirm          # skills may ask a yes/no of their own (audio_device: "Do you mean X?"); the next turn's yes runs the call they stored
         self.history: list[dict] = []
+        self.notices: list = []                       # (time, text): lines FRED said unprompted (news offer, deadline question); shown as a background note, never as an assistant turn
         if lockdown.saved():                       # locked before the restart: still locked
             self._set_lockdown(True)
         self._cancel = threading.Event()      # cancel(): the turn in flight stops at its next model call or tool run and says nothing
@@ -219,8 +220,16 @@ class Engine:
         except Exception as ex:
             log.session("say_error", error=repr(ex))
 
+    def notice(self, text: str):
+        """A line FRED spoke on its own. As a raw assistant turn the 4B parroted it back for every short input (2026-10-12: 'SUP?' and 'Hello.' both got the deadline question), so it goes into the system prompt instead."""
+        self.notices = (self.notices + [(time.time(), text)])[-3:]
+
+    def _notices(self) -> str:
+        cur = [t for ts, t in self.notices if time.time() - ts < 900]
+        return ("Things I said unprompted a moment ago (the user may be answering them; never repeat them or treat them as the user's words):\n" + "\n".join(f"- {t}" for t in cur)) if cur else ""
+
     def _messages(self, text: str, memory: str = "") -> list:
-        note = self._time_note()
+        note = "\n\n".join(x for x in (self._time_note(), self._notices()) if x)
         system = (self.system + ("\n\n---\n\n" + memory if memory else "") + ("\n\n---\n\n" + note if note else "")).strip()
         return ([{"role": "system", "content": system}] if system else []) + self.history + [{"role": "user", "content": text}]
 

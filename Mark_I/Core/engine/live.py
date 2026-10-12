@@ -123,7 +123,7 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
         del engine.history[:-2 * c.history_turns]
 
     def proactive_say(t):
-        remember({"role": "assistant", "content": t})
+        engine.notice(t)
         if speaker:
             threading.Thread(target=speaker.speak, args=(sirify(t),), daemon=True).start()
 
