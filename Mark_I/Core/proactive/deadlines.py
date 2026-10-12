@@ -39,6 +39,8 @@ MONTHS = {m: i for i, m in enumerate("jan feb mar apr may jun jul aug sep oct no
 DAYS = "monday tuesday wednesday thursday friday saturday sunday".split()
 _MON = lambda n: rf"(?P<{n}>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
 DEV = re.compile(r"claude|powershell|terminal|command prompt|git bash|cmd\.exe|visual studio|vs ?code|pycharm|cursor|FRED", re.I)     # windows full of code and FRED's own lines: never deadlines
+TESTPAGE = re.compile(r"\b(exam|test|quiz|assessment|proctored?)\b.{0,40}\b(window|guidelines|instructions|page|portal)\b|disqualif|time remaining|question \d+ (of|/) \d+|mark for review|submit (test|exam|quiz)", re.I)     # a test or exam being taken: never deadlines (Vatsal, 2026-10-12)
+TESTTITLE = re.compile(r"\b(exam|test|quiz|assessment)\b", re.I)
 ECHO = re.compile(r"deadline on your screen|shall i remind", re.I)                                                                      # FRED's own offer, seen again on screen
 CUE = re.compile(r"\b(due|deadline|submit(?:ted)?(?: by)?|submission|hand[- ]?in|last date|closes?|closing|ends?|expires?|exams?|tests?|quiz|midterm|assignment|before)\b", re.I)
 DATE = re.compile(
@@ -188,7 +190,7 @@ class DeadlineWatch:
             log.session("deadline_toast_error", error=type(ex).__name__)
 
     def on_reading(self, text, info=None):
-        if not config.get().deadline_watch_enabled or DEV.search((info or {}).get("title") or ""):
+        if not config.get().deadline_watch_enabled or DEV.search((info or {}).get("title") or "") or TESTTITLE.search((info or {}).get("title") or "") or TESTPAGE.search((text or "")[:6000]):
             return
         with self._lock:
             for c in find_deadlines(text, self._now()):
@@ -395,6 +397,9 @@ def _selfcheck():
     clk[0] += 91                                                                            # (one question at a time: the toast-only one expired)
     w6.on_reading("Maths paper due tomorrow 8 am", {})
     assert len(said) == 6 and "Maths paper" in said[5]
+    w6.on_reading("I have read and understood the instructions. I agree that if I do not adhere to the exam guidelines I will be disqualified. Submit by Fri 17 Oct", {})
+    w6.on_reading("Physics lab due Sat 17 Oct 11:59 pm", {"title": "Unit Test 3 - Chrome"})
+    assert len(w6.pending) == 0, w6.pending                                                  # exam and test pages never make offers
     # the answer window closes
     clk[0] += 91
     assert w6.answer("yes") is None
