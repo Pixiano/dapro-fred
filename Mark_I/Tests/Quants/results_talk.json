@@ -1,0 +1,365 @@
+{
+ "Q8_0 (live)": {
+  "facts": {
+   "avg_words": 25.8,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": 120.0,
+   "facts_correct": "8/8"
+  },
+  "chat": {
+   "avg_words": 18.9,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": 119.7
+  },
+  "detail": [
+   {
+    "q": "What is the capital of Japan?",
+    "a": "The capital of Japan is Tokyo. It's a large, lively city. If you're looking for something quieter, you might prefer a neighborhood nearby.",
+    "words": 23,
+    "finish": "stop",
+    "tok": 31,
+    "s": 0.3
+   },
+   {
+    "q": "Who wrote Hamlet?",
+    "a": "Hamlet was written by William Shakespeare. It's a famous play, but it's also a reminder that great ideas can feel big. Would you like to know more about it?",
+    "words": 29,
+    "finish": "stop",
+    "tok": 37,
+    "s": 0.3
+   },
+   {
+    "q": "What is the chemical symbol for gold?",
+    "a": "The chemical symbol for gold is Au.",
+    "words": 7,
+    "finish": "stop",
+    "tok": 9,
+    "s": 0.11
+   },
+   {
+    "q": "Which planet is the largest in our solar system?",
+    "a": "Jupiter is the largest planet in our solar system. It's so big that you could fit many of Earths inside it. Did you know that?",
+    "words": 25,
+    "finish": "stop",
+    "tok": 32,
+    "s": 0.28
+   },
+   {
+    "q": "What does CPU stand for?",
+    "a": "CPU stands for Central Processing Unit. It's the main component that handles instructions in a computer. Without it, the computer can't do anything.",
+    "words": 23,
+    "finish": "stop",
+    "tok": 30,
+    "s": 0.27
+   },
+   {
+    "q": "How many days are in a leap year?",
+    "a": "A leap year has 366 days. This happens because a normal year has 365 days. The extra day is added to the calendar to keep our seasons in sync. Do you need more detail on how leap years work?",
+    "words": 39,
+    "finish": "stop",
+    "tok": 46,
+    "s": 0.38
+   },
+   {
+    "q": "At what Celsius temperature does water boil at sea level?",
+    "a": "Water boils at 100 degrees Celsius at sea level. If you need it to boil at a different temperature, you can change the pressure. Would you like to know more about that?",
+    "words": 32,
+    "finish": "stop",
+    "tok": 38,
+    "s": 0.32
+   },
+   {
+    "q": "What is the powerhouse of the cell?",
+    "a": "The powerhouse of the cell is the mitochondria. It's often called the cell's power plant because it makes energy from food. If you need more detail, just ask.",
+    "words": 28,
+    "finish": "stop",
+    "tok": 36,
+    "s": 0.3
+   },
+   {
+    "q": "Hello.",
+    "a": "Hello! How can I help you today?",
+    "words": 7,
+    "finish": "stop",
+    "tok": 10,
+    "s": 0.11
+   },
+   {
+    "q": "How are you?",
+    "a": "I'm doing fine. How can I help you today?",
+    "words": 9,
+    "finish": "stop",
+    "tok": 13,
+    "s": 0.14
+   },
+   {
+    "q": "Got it.",
+    "a": "Got it. How can I help you today?",
+    "words": 8,
+    "finish": "stop",
+    "tok": 11,
+    "s": 0.12
+   },
+   {
+    "q": "Thanks a lot.",
+    "a": "You're welcome. How can I help you today?",
+    "words": 8,
+    "finish": "stop",
+    "tok": 12,
+    "s": 0.14
+   },
+   {
+    "q": "Tell me something interesting about octopuses.",
+    "a": "Octopuses can change the color of their skin instantly. They also have three hearts, which stop beating when they swim. That's a pretty cool fact.",
+    "words": 25,
+    "finish": "stop",
+    "tok": 33,
+    "s": 0.3
+   },
+   {
+    "q": "Differentiate between accuracy and error in AI.",
+    "a": "Accuracy is how often an AI gets things right. Error is what goes wrong. Error can be a small mistake or a big one. If you want to improve accuracy, you need to understand where the errors come from.",
+    "words": 39,
+    "finish": "stop",
+    "tok": 45,
+    "s": 0.38
+   },
+   {
+    "q": "What is the better metric if you had to choose one, accuracy or F1?",
+    "a": "It depends on your goal. Accuracy favors correct predictions but can ignore false positives. F1 balances precision and recall. Which matters more to you?",
+    "words": 24,
+    "finish": "stop",
+    "tok": 30,
+    "s": 0.27
+   },
+   {
+    "q": "Explain what a neural network is, simply.",
+    "a": "A neural network is like a pattern recognizer. It looks at small examples, learns to spot patterns, and then gets better at it. Think of it as a brain that doesn't think, but notices what looks similar.",
+    "words": 37,
+    "finish": "stop",
+    "tok": 46,
+    "s": 0.38
+   },
+   {
+    "q": "I am tired but I have to finish my homework. Any advice?",
+    "a": "Take a few deep breaths. Break the homework into small steps. One step at a time.",
+    "words": 16,
+    "finish": "stop",
+    "tok": 20,
+    "s": 0.19
+   },
+   {
+    "q": "Give me a one line summary of how photosynthesis works.",
+    "a": "Plants use sunlight, water, and carbon dioxide to create oxygen and sugar.",
+    "words": 12,
+    "finish": "stop",
+    "tok": 16,
+    "s": 0.17
+   },
+   {
+    "q": "Should I learn Python or C first? Pick one.",
+    "a": "Pick Python. It's easier to start with, and it grows into more useful skills. C is powerful but steeper to begin with. What's your goal?",
+    "words": 25,
+    "finish": "stop",
+    "tok": 33,
+    "s": 0.29
+   },
+   {
+    "q": "What can you do?",
+    "a": "I can help with tasks like answering questions, writing, and calculations. I can't do anything beyond that.",
+    "words": 17,
+    "finish": "stop",
+    "tok": 23,
+    "s": 0.19
+   }
+  ]
+ },
+ "q4_vram_mb": 1873,
+ "Q4_K_M": {
+  "facts": {
+   "avg_words": 25.5,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": null,
+   "facts_correct": "8/8"
+  },
+  "chat": {
+   "avg_words": 21.4,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": null
+  },
+  "detail": [
+   {
+    "q": "What is the capital of Japan?",
+    "a": "The capital of Japan is Tokyo. It's a large city with lots of culture and technology. If you're ever in Japan, visiting Tokyo is a great idea.",
+    "words": 27,
+    "finish": "stop",
+    "tok": 34,
+    "s": 0.24
+   },
+   {
+    "q": "Who wrote Hamlet?",
+    "a": "Hamlet was written by William Shakespeare. It's one of his most famous plays. If you've read it, you might have noticed how it feels.",
+    "words": 24,
+    "finish": "stop",
+    "tok": 32,
+    "s": 0.19
+   },
+   {
+    "q": "What is the chemical symbol for gold?",
+    "a": "The chemical symbol for gold is Au. It comes from the Latin word \"aurum.\" Gold is a precious metal known for its rarity and value.",
+    "words": 25,
+    "finish": "stop",
+    "tok": 31,
+    "s": 0.18
+   },
+   {
+    "q": "Which planet is the largest in our solar system?",
+    "a": "The largest planet is Jupiter. It's so big that all the other planets could fit inside it. That's a fun way to put it.",
+    "words": 24,
+    "finish": "stop",
+    "tok": 30,
+    "s": 0.16
+   },
+   {
+    "q": "What does CPU stand for?",
+    "a": "CPU stands for Central Processing Unit. It's the main chip in a computer that handles all the calculations and instructions.",
+    "words": 20,
+    "finish": "stop",
+    "tok": 24,
+    "s": 0.15
+   },
+   {
+    "q": "How many days are in a leap year?",
+    "a": "A leap year has 366 days. The extra day is added in February. Not all years are leap years.",
+    "words": 19,
+    "finish": "stop",
+    "tok": 24,
+    "s": 0.15
+   },
+   {
+    "q": "At what Celsius temperature does water boil at sea level?",
+    "a": "Water boils at 100 degrees Celsius at sea level. If you're at a lower altitude, it boils at a lower temperature. If you're at a higher altitude, it boils at a higher temperature.",
+    "words": 33,
+    "finish": "stop",
+    "tok": 42,
+    "s": 0.22
+   },
+   {
+    "q": "What is the powerhouse of the cell?",
+    "a": "The powerhouse of the cell is the mitochondria. It's often called the powerhouse because it generates energy through cellular respiration. Without it, cells can't produce the energy needed for most life processes.",
+    "words": 32,
+    "finish": "stop",
+    "tok": 41,
+    "s": 0.22
+   },
+   {
+    "q": "Hello.",
+    "a": "Hello! How can I help you today?",
+    "words": 7,
+    "finish": "stop",
+    "tok": 10,
+    "s": 0.06
+   },
+   {
+    "q": "How are you?",
+    "a": "I'm doing fine. If you need help, just ask.",
+    "words": 9,
+    "finish": "stop",
+    "tok": 14,
+    "s": 0.08
+   },
+   {
+    "q": "Got it.",
+    "a": "Got it. How can I help you today?",
+    "words": 8,
+    "finish": "stop",
+    "tok": 11,
+    "s": 0.07
+   },
+   {
+    "q": "Thanks a lot.",
+    "a": "You're welcome. How can I help you today?",
+    "words": 8,
+    "finish": "stop",
+    "tok": 12,
+    "s": 0.07
+   },
+   {
+    "q": "Tell me something interesting about octopuses.",
+    "a": "Octopuses have three hearts. When you're swimming, the larger one stops beating. That's why they prefer to crawl. Also, they can change the color of their skin instantly, which helps them blend into the water.",
+    "words": 35,
+    "finish": "stop",
+    "tok": 47,
+    "s": 0.24
+   },
+   {
+    "q": "Differentiate between accuracy and error in AI.",
+    "a": "Accuracy is how often an AI gets things right. Error is the gap between what it says and what's actually true. Accuracy is the goal; error is what happens when you don't hit it.",
+    "words": 34,
+    "finish": "stop",
+    "tok": 41,
+    "s": 0.22
+   },
+   {
+    "q": "What is the better metric if you had to choose one, accuracy or F1?",
+    "a": "It depends on your goal. Accuracy is better when you only care about correct predictions and don't mind many false positives. F1 is better when you want to balance precision and recall, especially for imbalanced data.",
+    "words": 36,
+    "finish": "stop",
+    "tok": 43,
+    "s": 0.22
+   },
+   {
+    "q": "Explain what a neural network is, simply.",
+    "a": "A neural network is a way to learn patterns by making many small predictions and then adjusting them. It's like giving a computer a bunch of tiny guesses and then teaching it to get better at guessing.",
+    "words": 37,
+    "finish": "stop",
+    "tok": 41,
+    "s": 0.22
+   },
+   {
+    "q": "I am tired but I have to finish my homework. Any advice?",
+    "a": "Finish it. Tired doesn't mean you can't do it. Take one small step at a time.",
+    "words": 16,
+    "finish": "stop",
+    "tok": 23,
+    "s": 0.13
+   },
+   {
+    "q": "Give me a one line summary of how photosynthesis works.",
+    "a": "Photosynthesis uses sunlight to convert carbon dioxide and water into oxygen and sugar.",
+    "words": 13,
+    "finish": "stop",
+    "tok": 16,
+    "s": 0.1
+   },
+   {
+    "q": "Should I learn Python or C first? Pick one.",
+    "a": "Pick Python. It's gentler to start with, and the same syntax helps you learn other languages later. C is faster for low-level stuff, but Python's readability makes it easier to build habits.",
+    "words": 32,
+    "finish": "stop",
+    "tok": 42,
+    "s": 0.23
+   },
+   {
+    "q": "What can you do?",
+    "a": "I can answer questions, help with tasks you give me, and keep things straightforward. I don't have any special powers beyond that.",
+    "words": 22,
+    "finish": "stop",
+    "tok": 28,
+    "s": 0.17
+   }
+  ]
+ }
+}

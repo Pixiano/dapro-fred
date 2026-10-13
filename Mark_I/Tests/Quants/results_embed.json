@@ -1,0 +1,24 @@
+{
+ "examples": 173,
+ "Q8_0 (live)": {
+  "dim": 1024,
+  "seconds_for_all_texts": 2.0,
+  "skill_examples_ranked_own_first": "173/173",
+  "losers": [],
+  "recall@1": "15/15",
+  "recall@3": "15/15"
+ },
+ "q4_vram_mb": 1714,
+ "Q4_K_M": {
+  "dim": 1024,
+  "seconds_for_all_texts": 1.8,
+  "skill_examples_ranked_own_first": "173/173",
+  "losers": [],
+  "recall@1": "15/15",
+  "recall@3": "15/15"
+ },
+ "mean_cosine_q8_vs_q4_same_text": 0.619,
+ "min_cosine_q8_vs_q4_same_text": 0.1223,
+ "top5_neighbour_overlap_q8_vs_q4": 0.464,
+ "note": "the memory index and judge_model.json are built on Q8 vectors: a different embedder (any quant) means re-embedding the memory and retraining the judge"
+}

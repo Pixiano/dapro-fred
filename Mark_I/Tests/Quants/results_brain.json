@@ -1,0 +1,474 @@
+{
+ "tool_cases": 173,
+ "Q6_K (live)": {
+  "tool_call_correct": "154/173 (cases whose skill the router put in its top 5)",
+  "tool_seconds": 144.1,
+  "first_misses": [
+   [
+    "calculate",
+    "what is the square root of 144",
+    null
+   ],
+   [
+    "calculate",
+    "what is 2 to the power of 10",
+    null
+   ],
+   [
+    "calculate",
+    "what is the discriminant of x squared minus 5x plus 6",
+    null
+   ],
+   [
+    "correct",
+    "you got that wrong about my favourite food",
+    "recall"
+   ],
+   [
+    "forget",
+    "delete what you know about my gym routine",
+    "recall"
+   ],
+   [
+    "forget",
+    "erase that from your memory",
+    null
+   ],
+   [
+    "what_can_you_do",
+    "what skills do you have",
+    null
+   ],
+   [
+    "what_can_you_do",
+    "what are your abilities",
+    null
+   ],
+   [
+    "what_can_you_do",
+    "can you control the volume",
+    null
+   ],
+   [
+    "system_stats",
+    "how is my computer doing",
+    null
+   ]
+  ],
+  "facts": {
+   "avg_words": 27.5,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": 74.1,
+   "facts_correct": "8/8"
+  },
+  "chat": {
+   "avg_words": 30.2,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": 79.8
+  },
+  "detail": [
+   {
+    "q": "What is the capital of Japan?",
+    "a": "The capital of Japan is Tokyo. It is the nation's largest city and a major global hub for finance and culture.",
+    "words": 21,
+    "finish": "stop",
+    "tok": 25,
+    "s": 0.44
+   },
+   {
+    "q": "Who wrote Hamlet?",
+    "a": "William Shakespeare wrote Hamlet. He is widely considered the greatest playwright in English history. The play explores themes of revenge, madness, and mortality.",
+    "words": 23,
+    "finish": "stop",
+    "tok": 30,
+    "s": 0.41
+   },
+   {
+    "q": "What is the chemical symbol for gold?",
+    "a": "The chemical symbol for gold is Au. It comes from the Latin word for gold, which means \"shining.\" Gold is a precious metal with atomic number 79.",
+    "words": 27,
+    "finish": "stop",
+    "tok": 36,
+    "s": 0.47
+   },
+   {
+    "q": "Which planet is the largest in our solar system?",
+    "a": "Jupiter is the largest planet in our solar system. It is massive enough to hold all the other planets inside it. Its size makes it the most prominent feature in the night sky.",
+    "words": 33,
+    "finish": "stop",
+    "tok": 38,
+    "s": 0.5
+   },
+   {
+    "q": "What does CPU stand for?",
+    "a": "CPU stands for Central Processing Unit. It is the brain of your computer that handles all the calculations and instructions. Without it, your machine would just be a slow, empty shell.",
+    "words": 31,
+    "finish": "stop",
+    "tok": 37,
+    "s": 0.47
+   },
+   {
+    "q": "How many days are in a leap year?",
+    "a": "A leap year has 366 days. The extra day is added to February to keep our calendar in sync with the Earth's orbit around the sun.",
+    "words": 26,
+    "finish": "stop",
+    "tok": 33,
+    "s": 0.44
+   },
+   {
+    "q": "At what Celsius temperature does water boil at sea level?",
+    "a": "Water boils at 100 degrees Celsius at sea level. This is the standard temperature where liquid water turns to steam under normal atmospheric pressure.",
+    "words": 24,
+    "finish": "stop",
+    "tok": 30,
+    "s": 0.41
+   },
+   {
+    "q": "What is the powerhouse of the cell?",
+    "a": "The powerhouse of the cell is the mitochondria. It generates most of the cell's supply of adenosine triphosphate (ATP), used as a source of chemical energy. Without it, cells would struggle to perform essential functions.",
+    "words": 35,
+    "finish": "stop",
+    "tok": 49,
+    "s": 0.61
+   },
+   {
+    "q": "Hello.",
+    "a": "Hello, Vatsal. Ready to help with anything on your computer. What would you like to do today?",
+    "words": 17,
+    "finish": "stop",
+    "tok": 24,
+    "s": 0.34
+   },
+   {
+    "q": "How are you?",
+    "a": "I'm doing well, ready to help. How about you?",
+    "words": 9,
+    "finish": "stop",
+    "tok": 14,
+    "s": 0.23
+   },
+   {
+    "q": "Got it.",
+    "a": "Understood. I'm ready to help. What would you like to do?",
+    "words": 11,
+    "finish": "stop",
+    "tok": 17,
+    "s": 0.25
+   },
+   {
+    "q": "Thanks a lot.",
+    "a": "You're welcome, Vatsal. Anything else I can help you with today?",
+    "words": 11,
+    "finish": "stop",
+    "tok": 18,
+    "s": 0.28
+   },
+   {
+    "q": "Tell me something interesting about octopuses.",
+    "a": "Octopuses have three hearts and blue blood, which helps them survive in cold ocean waters. They can also change color instantly to blend into their surroundings or communicate with other octopuses. Their intelligence is remarkable, as they can solve puzzles and even use tools. Would you like to know more about their unique abilities?",
+    "words": 54,
+    "finish": "stop",
+    "tok": 65,
+    "s": 0.77
+   },
+   {
+    "q": "Differentiate between accuracy and error in AI.",
+    "a": "Accuracy measures how often an AI gets the right answer, while error is the opposite: the count of wrong predictions. High accuracy means low error, but they are just two sides of the same coin. Think of accuracy as a score and error as the mistakes subtracted from that total.",
+    "words": 50,
+    "finish": "stop",
+    "tok": 58,
+    "s": 0.69
+   },
+   {
+    "q": "What is the better metric if you had to choose one, accuracy or F1?",
+    "a": "F1 is usually better because it balances precision and recall, whereas accuracy can be misleading on imbalanced datasets. If your data has many negative examples, accuracy might be high even if your model fails to catch important positives. F1 ensures you aren't ignoring the minority class that matters most.",
+    "words": 49,
+    "finish": "stop",
+    "tok": 59,
+    "s": 0.73
+   },
+   {
+    "q": "Explain what a neural network is, simply.",
+    "a": "A neural network is a computer system inspired by the human brain. It uses many connected units to learn patterns from data. Think of it as a digital brain that gets smarter the more it practices.",
+    "words": 36,
+    "finish": "stop",
+    "tok": 40,
+    "s": 0.49
+   },
+   {
+    "q": "I am tired but I have to finish my homework. Any advice?",
+    "a": "Take a quick sip of water and stretch your arms. Set a timer for twenty minutes and focus only on that one task. If you get stuck, write down the problem and come back to it later.",
+    "words": 37,
+    "finish": "stop",
+    "tok": 42,
+    "s": 0.55
+   },
+   {
+    "q": "Give me a one line summary of how photosynthesis works.",
+    "a": "Photosynthesis is how plants use sunlight to turn carbon dioxide and water into sugar and oxygen.",
+    "words": 16,
+    "finish": "stop",
+    "tok": 19,
+    "s": 0.28
+   },
+   {
+    "q": "Should I learn Python or C first? Pick one.",
+    "a": "Start with Python because its simple syntax lets you focus on logic rather than syntax. C is powerful but requires mastering memory management before you can build anything useful. Python gets you coding quickly, which is the best way to learn.",
+    "words": 41,
+    "finish": "stop",
+    "tok": 46,
+    "s": 0.59
+   },
+   {
+    "q": "What can you do?",
+    "a": "I can answer questions, do simple math with a calculator, and help you find information. I cannot browse the live web or control your computer directly. What would you like to do?",
+    "words": 32,
+    "finish": "stop",
+    "tok": 38,
+    "s": 0.5
+   }
+  ]
+ },
+ "q4_vram_mb": 3385,
+ "Q4_K_M": {
+  "tool_call_correct": "111/173 (cases whose skill the router put in its top 5)",
+  "tool_seconds": 122.4,
+  "first_misses": [
+   [
+    "calculate",
+    "what is 12 times 8",
+    null
+   ],
+   [
+    "calculate",
+    "calculate 17 percent of 300",
+    null
+   ],
+   [
+    "calculate",
+    "how much is 45 plus 38",
+    null
+   ],
+   [
+    "calculate",
+    "what is the square root of 144",
+    null
+   ],
+   [
+    "calculate",
+    "divide 1200 by 7",
+    null
+   ],
+   [
+    "calculate",
+    "what is 2 to the power of 10",
+    null
+   ],
+   [
+    "calculate",
+    "convert 5 kilometres to miles",
+    null
+   ],
+   [
+    "calculate",
+    "how many pounds is 70 kg",
+    null
+   ],
+   [
+    "calculate",
+    "what is 98.6 fahrenheit in celsius",
+    null
+   ],
+   [
+    "calculate",
+    "how many millions is 3 crore",
+    null
+   ]
+  ],
+  "facts": {
+   "avg_words": 26.2,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": 88.8,
+   "facts_correct": "8/8"
+  },
+  "chat": {
+   "avg_words": 31.2,
+   "empty": 0,
+   "cut_by_length": 0,
+   "tool_markup_in_text": 0,
+   "mentions_no_tools_or_cant": 0,
+   "tok_per_s": 97.0
+  },
+  "detail": [
+   {
+    "q": "What is the capital of Japan?",
+    "a": "The capital of Japan is Tokyo. It is the country's largest city and the nation's political, economic, and cultural center.",
+    "words": 20,
+    "finish": "stop",
+    "tok": 27,
+    "s": 0.39
+   },
+   {
+    "q": "Who wrote Hamlet?",
+    "a": "William Shakespeare wrote Hamlet. It is one of his most famous tragedies, first performed around 1601.",
+    "words": 16,
+    "finish": "stop",
+    "tok": 25,
+    "s": 0.28
+   },
+   {
+    "q": "What is the chemical symbol for gold?",
+    "a": "The chemical symbol for gold is Au. It comes from the Latin word for gold, which is aurum.",
+    "words": 18,
+    "finish": "stop",
+    "tok": 23,
+    "s": 0.27
+   },
+   {
+    "q": "Which planet is the largest in our solar system?",
+    "a": "Jupiter is the largest planet in our solar system. It is a gas giant that is more than twice as massive as all the other planets combined. Its diameter is so large that you could fit Earth inside it more than a hundred times.",
+    "words": 44,
+    "finish": "stop",
+    "tok": 49,
+    "s": 0.52
+   },
+   {
+    "q": "What does CPU stand for?",
+    "a": "CPU stands for Central Processing Unit. It is the brain of your computer that handles all the calculations and instructions. Without it, your machine would just be a box with no ability to think or work.",
+    "words": 36,
+    "finish": "stop",
+    "tok": 41,
+    "s": 0.43
+   },
+   {
+    "q": "How many days are in a leap year?",
+    "a": "A leap year has 366 days. That's because February gets an extra day to keep the calendar in sync with Earth's orbit around the sun.",
+    "words": 25,
+    "finish": "stop",
+    "tok": 33,
+    "s": 0.38
+   },
+   {
+    "q": "At what Celsius temperature does water boil at sea level?",
+    "a": "Water boils at 100 degrees Celsius at sea level. That is the standard temperature under normal atmospheric pressure.",
+    "words": 18,
+    "finish": "stop",
+    "tok": 24,
+    "s": 0.29
+   },
+   {
+    "q": "What is the powerhouse of the cell?",
+    "a": "The powerhouse of the cell is the mitochondrion. It generates most of the cell's supply of adenosine triphosphate (ATP), used as a source of chemical energy. Without it, cellular functions would quickly stop.",
+    "words": 33,
+    "finish": "stop",
+    "tok": 48,
+    "s": 0.51
+   },
+   {
+    "q": "Hello.",
+    "a": "Hello, Vatsal. Ready to help you with whatever you need today.",
+    "words": 11,
+    "finish": "stop",
+    "tok": 17,
+    "s": 0.23
+   },
+   {
+    "q": "How are you?",
+    "a": "I'm doing well, Vatsal. Just here and ready to help. How about you?",
+    "words": 13,
+    "finish": "stop",
+    "tok": 21,
+    "s": 0.24
+   },
+   {
+    "q": "Got it.",
+    "a": "Ready when you are, Vatsal. What would you like to do?",
+    "words": 11,
+    "finish": "stop",
+    "tok": 17,
+    "s": 0.22
+   },
+   {
+    "q": "Thanks a lot.",
+    "a": "You're welcome, Vatsal. Anything else you need help with today?",
+    "words": 10,
+    "finish": "stop",
+    "tok": 17,
+    "s": 0.22
+   },
+   {
+    "q": "Tell me something interesting about octopuses.",
+    "a": "Octopuses have three hearts and blue blood, which helps them survive in cold ocean waters. They can change their skin color and texture to blend into their surroundings perfectly. Their intelligence is also remarkable, as they can solve puzzles and even use tools.",
+    "words": 43,
+    "finish": "stop",
+    "tok": 51,
+    "s": 0.53
+   },
+   {
+    "q": "Differentiate between accuracy and error in AI.",
+    "a": "Accuracy means how often an AI gets the right answer, while error is the opposite: the times it gets it wrong. High accuracy implies low error, but a model can be accurate on easy tasks and still make big mistakes on hard ones. Think of accuracy as a score and error as the gaps between the prediction and the truth.",
+    "words": 60,
+    "finish": "stop",
+    "tok": 67,
+    "s": 0.66
+   },
+   {
+    "q": "What is the better metric if you had to choose one, accuracy or F1?",
+    "a": "F1 is usually better because it balances precision and recall, whereas accuracy can be misleading on imbalanced datasets. If your data has many negative examples, accuracy might be high even if the model misses all the important positives. F1 forces you to care about both false positives and false negatives equally.",
+    "words": 51,
+    "finish": "stop",
+    "tok": 60,
+    "s": 0.6
+   },
+   {
+    "q": "Explain what a neural network is, simply.",
+    "a": "A neural network is a computer program inspired by the human brain. It learns from data by adjusting internal connections to find patterns. Think of it as a system that gets smarter the more it sees examples.",
+    "words": 37,
+    "finish": "stop",
+    "tok": 41,
+    "s": 0.44
+   },
+   {
+    "q": "I am tired but I have to finish my homework. Any advice?",
+    "a": "Take a quick sip of water and stretch your legs for thirty seconds. Then, just open your homework and tackle the easiest part first to build momentum. If you get stuck, write down what you don't understand and come back to it later. You've got this.",
+    "words": 46,
+    "finish": "stop",
+    "tok": 55,
+    "s": 0.56
+   },
+   {
+    "q": "Give me a one line summary of how photosynthesis works.",
+    "a": "Photosynthesis is how plants use sunlight to turn carbon dioxide and water into sugar and oxygen.",
+    "words": 16,
+    "finish": "stop",
+    "tok": 19,
+    "s": 0.24
+   },
+   {
+    "q": "Should I learn Python or C first? Pick one.",
+    "a": "Start with Python because it is easier to learn and widely used for data science and automation. C is powerful but requires more patience with its strict rules. Python gets you writing and understanding code faster while still teaching core programming concepts.",
+    "words": 42,
+    "finish": "stop",
+    "tok": 46,
+    "s": 0.49
+   },
+   {
+    "q": "What can you do?",
+    "a": "I can answer questions, do simple math, and help you find information. I can't browse the web or access your files unless you give me a link or file name. Just ask me something.",
+    "words": 34,
+    "finish": "stop",
+    "tok": 41,
+    "s": 0.44
+   }
+  ]
+ }
+}
