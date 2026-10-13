@@ -106,9 +106,9 @@ def earlier_unread(built: str, now=None):
 _NOT_NAMES = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "The", "This", "That", "These", "Those"}
 
 
-def names(limit: int = 24) -> list:
+def names(limit: int = 24, now=None) -> list:
     """Capitalised words in the middle of a sentence of the newest edition's stories (headlines are Title Case, so the summaries are used): people, places, companies."""
-    ed = latest()
+    ed = latest(now)
     seen, out = set(), []
     for it in (ed or {}).get("items", []):
         for w in re.findall(r"(?<=[a-z,] )[A-Z][A-Za-z]{2,}(?: [A-Z][A-Za-z]{2,})?", it["short"] + " " + it["detail"]):
@@ -224,7 +224,7 @@ def _selfcheck():
         later = dict(ed, at="18:00", built=ed["built"] + "x", items=[dict(ed["items"][0], short="Talks held.", detail="Talks between Narendra Modi and Joe Biden in Delhi on Friday, said Anthropic.")])
         day = _load(_day(now)); day["editions"].append(later); _day(now).write_text(json.dumps(day), encoding="utf-8")
         assert earlier_unread(later["built"], now)["built"] == morning["built"]                 # the 06:00 one was never read
-        assert names() == ["Narendra Modi", "Joe Biden", "Delhi", "Anthropic"], names()          # names for the Whisper hint; weekdays are not names
+        assert names(now=now) == ["Narendra Modi", "Joe Biden", "Delhi", "Anthropic"], names(now=now)          # names for the Whisper hint; weekdays are not names
         mark_read(morning["built"], now)
         assert earlier_unread(later["built"], now) is None and earlier_unread(morning["built"], now) is None
     print("news digest ok")
