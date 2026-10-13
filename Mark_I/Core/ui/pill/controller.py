@@ -41,6 +41,7 @@ class PillController:
     def __init__(self, bus, window, speaker=None, mic=None, on_text=None, speaks=True, linger_s=1.0, popup=None, on_cancel=None):
         self.bus, self.win, self.speaker, self.mic, self.on_text, self.speaks, self.linger_s = bus, window, speaker, mic, on_text, speaks, linger_s
         self.cancel_turn = on_cancel                                           # on_cancel(): stop the turn in flight (engine.cancel), not only the speech
+        self._talking = False
         self.state, self._hide_at, self._stop, self._thread, self.popup = "idle", 0.0, threading.Event(), None, popup
         self._warn_until, self._lk = 0.0, threading.RLock()                    # bus threads, the tick thread and the button callbacks all decide state: one lock (the window calls under it only post, never block)
         self._unsub = bus.subscribe(self._on, sources=("clock", "stt", "tts", "engine", "proactive"))
@@ -81,14 +82,19 @@ class PillController:
             elif s == "END_OF_TURN":
                 self._show("thinking", THINK_MAX_S)
             elif s == "IGNORE" and self.state == "listening":
-                self._set("idle")
-                self._later_hide(0.3)
+                if self._talking:                                              # a barge-in that was ignored (noise) must not hide the pill under a sentence still playing
+                    self._set("speaking")
+                    self._hide_at = 0.0
+                else:
+                    self._set("idle")
+                    self._later_hide(0.3)
         elif k == ("stt", "transcript") and d.get("final") and d.get("text", "").strip():
             text = d["text"].strip()
             self._say(text, _read_s(text, 2.5))
         elif k == ("tts", "start") and not d.get("quiet"):
+            self._talking = True
             self._show("speaking")
-        elif k == ("tts", "end") and not d.get("quiet") and self.state == "speaking":      # a late end after a barge-in must not hide the pill mid-sentence
+        elif k == ("tts", "end") and not d.get("quiet") and (setattr(self, "_talking", False) or self.state == "speaking"):      # a late end after a barge-in must not hide the pill mid-sentence
             self._set("idle")
             self._later_hide(self.linger_s)
         elif k == ("engine", "turn") and d.get("origin") != "proactive":
@@ -102,7 +108,7 @@ class PillController:
         elif k == ("proactive", "caption"):
             ttl = _read_s(d.get("text", ""), 6.0)
             self._say(d.get("text", ""), ttl)
-            self._show("idle", ttl)
+            self._talking or self._show("idle", ttl)                           # a caption during speech must not turn the speaking pill idle and hide it
         elif k == ("proactive", "warn"):
             self._warn_until = time.time() + WARN_S
             self.win.set_transcript(d.get("title", "Careful"), ttl=WARN_S, warn=True)
@@ -332,6 +338,14 @@ def _selfcheck():
     p.on_text = lambda t: 1 / 0
     p._submit("boom")
     until(lambda: ("set_transcript", "Something went wrong", 4.0) in w.calls and p.state == "idle")   # a failing turn does not leave the pill thinking
+    bus.emit("tts", "start")                                                                           # an ignored barge-in during speech leaves the pill speaking and visible
+    bus.emit("clock", "state", state="BARGE_IN")
+    bus.emit("clock", "state", state="IGNORE")
+    assert p.state == "speaking" and p._hide_at == 0.0
+    bus.emit("proactive", "caption", text="a caption during speech")
+    assert p.state == "speaking" and p._hide_at == 0.0
+    bus.emit("tts", "end")
+    p._set("idle"); p._hide_at = 0.0
     # a turn that never answers is hidden by the watchdog
     bus.emit("clock", "state", state="END_OF_TURN")
     assert 50 < p._hide_at - time.time() <= THINK_MAX_S
