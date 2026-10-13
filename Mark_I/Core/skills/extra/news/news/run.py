@@ -15,7 +15,7 @@ EARLIER = None
 MARK = None
 
 
-def run(topic: str = "all", number: int = 0, edition: str = "latest") -> str:
+def run(topic: str = "all", number: int = 0, edition: str = "latest", detail: bool = False) -> str:
     ed = (LATEST or digest.latest)()
     if not ed or not ed.get("items"):
         return "I have no news digest yet."
@@ -37,6 +37,8 @@ def run(topic: str = "all", number: int = 0, edition: str = "latest") -> str:
         items = [i for i in items if i["slot"] == topic] or items[:0]
         if not items:
             return f"The {ed['at']} digest has nothing under {topic}."
+    if detail:                                                       # "get more on the boards news": the full paragraph of every story in that section
+        return ("\n\n").join(f"Story {i['n']} [{i['slot']}] {i['title']}\n{i['detail']}\nSource: {i['source']}" for i in items[:4])
     parts = []
     for slot in LABEL:
         mine = [i for i in items if i["slot"] == slot]

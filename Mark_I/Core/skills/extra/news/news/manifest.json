@@ -19,6 +19,10 @@
         "type": "integer",
         "description": "the story number from the list to read in full; leave out (or 0) for the short list"
       },
+      "detail": {
+        "type": "boolean",
+        "description": "true to get the full paragraphs of the stories in the chosen topic (when the user wants more on a part of the news without naming a number)"
+      },
       "edition": {
         "type": "string",
         "enum": [
@@ -42,7 +46,14 @@
     "what happened in AI today",
     "yes read the morning one too",
     "what was in the morning news",
-    "read the earlier news as well"
+    "read the earlier news as well",
+    "get more on the boards news",
+    "dig deeper into the CBSE board dates story",
+    "tell me more about the India news",
+    "more detail on the AI story",
+    "get more on the boards dates",
+    "get more on that story you just read",
+    "is the timetable in the boards news too"
   ],
   "not_for": [
     "searching the web for a specific topic (use web_search)",
