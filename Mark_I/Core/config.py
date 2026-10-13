@@ -134,7 +134,7 @@ class Settings:
     lockdown_tools: tuple = ("time", "days_until", "calculate")   # the only tools that exist while locked down
     history_turns: int = 8                            # user/assistant pairs kept as conversation context
     engine_think: bool = False                        # reasoning on tool/chat turns (off: the thinking cap; arithmetic goes to the calculator tool)
-    semantic_floor: float = 0.65                      # embedding similarity at which a tool counts as clearly requested
+    semantic_floor: float = 0.64                      # embedding similarity at which a tool counts as clearly requested
     news_offer_hold_s: float = 7200.0                 # an offered edition is not offered again for 2 h, restarts included (long enough for a study block and a restart or two; short enough that an unread morning edition is offered again at lunch)
     news_hours: str = "6,18"                         # local hours at which a news digest is built (06:00 and 18:00)
     memory_testing: bool = True                       # True: everything memory-related lives in Mark_I/Initial/Testing_Memory (kept clean of the real memory); False (or FRED_MEMORY_TESTING=0): <data_dir>/memory. Vatsal says when to switch back.
