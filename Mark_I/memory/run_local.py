@@ -26,7 +26,7 @@ NIGHTLY["model"] = os.environ.get("NIGHTLY_MODEL", NIGHTLY["model"])   # model c
 GPT["model"] = os.environ.get("ANALYST_MODEL", GPT["model"])   # high effort thinks long
 CRITIC = os.environ.get("CRITIC_MODEL")   # monthly/yearly: a different model for the critic pass (period.Critic); default = ANALYST_MODEL
 EFFORT = {"weekly": "medium", "monthly": "high", "yearly": "high"}    # production levels (Vatsal, 2026-10-04)
-EMB = "local/qwen3-embedding-0.6b-q8_0"
+EMB = "local/qwen3-embedding-0.6b-q4_k_m"
 QPREFIX = "Instruct: Given a search query, retrieve relevant memory notes\nQuery: "
 
 

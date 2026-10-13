@@ -9,8 +9,8 @@
     {"id": "google/gemma-4-12b-it-qat", "path": "lmstudio-community/gemma-4-12B-it-QAT-GGUF/gemma-4-12B-it-QAT-Q4_0.gguf", "ctx": 16000, "kind": "chat",
      "mmproj": "lmstudio-community/gemma-4-12B-it-QAT-GGUF/mmproj-gemma-4-12B-it-QAT-BF16.gguf"},
     {"id": "unsloth/qwen3.5-4b", "path": "unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q6_K.gguf", "ctx": 16000, "kind": "chat", "mmproj": "unsloth/Qwen3.5-4B-GGUF/mmproj-BF16.gguf"},
-    {"id": "openbmb/minicpm5-2b", "path": "openbmb/MiniCPM5-2B-GGUF/MiniCPM5-2B-Q8_0.gguf", "ctx": 8192, "kind": "chat", "note": "2B talker/judge (tool calling, on-device)"},
+    {"id": "openbmb/minicpm5-2b", "path": "openbmb/MiniCPM5-2B-GGUF/MiniCPM5-2B-Q4_K_M.gguf", "ctx": 8192, "kind": "chat", "note": "2B talker/judge (tool calling, on-device)"},
     {"id": "bonsai-27b", "path": "lmstudio-community/Bonsai-27B-GGUF/Bonsai-27B-Q1_0.gguf", "ctx": 8192, "kind": "chat", "mmproj": "lmstudio-community/Bonsai-27B-GGUF/mmproj-Bonsai-27B-BF16.gguf"},
-    {"id": "local/qwen3-embedding-0.6b-q8_0", "path": "Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf", "ctx": 8192, "kind": "embed", "args": ["--embedding", "--pooling", "last"]}
+    {"id": "local/qwen3-embedding-0.6b-q4_k_m", "path": "Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q4_K_M.gguf", "ctx": 8192, "kind": "embed", "args": ["--embedding", "--pooling", "last"]}
   ]
 }
