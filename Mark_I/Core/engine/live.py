@@ -219,6 +219,8 @@ def build(bus, mic, memory: bool = False, brain: str | None = None, chat=None, e
 
 
 def main(argv):
+    for f in (sys.stdout, sys.stderr):
+        f and f.reconfigure(encoding="utf-8", errors="replace")        # a cp1252 console choked on a rupee sign in a reply and killed the turn (2026-10-14)
     from models.client import Chat, Embedder, Playground, vision_slot
     from ui.pill.layered import enable_dpi_awareness
     enable_dpi_awareness()                      # first, before any window or screen capture exists: sharp pill on scaled displays (mss would set it anyway, but later)
