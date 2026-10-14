@@ -28,7 +28,7 @@ import config
 import log
 from news import sources
 
-QUOTA = {"ai": 3, "india": 2, "boards": 1, "world": 2, "general": 1}
+QUOTA = {"ai": 5, "india": 2, "boards": 1, "world": 2, "general": 1}
 TOPIC = {"ai": "major AI news: new models, benchmarks, product launches and new features, research breakthroughs, controversies",
          "india": "major Indian news: national politics, deaths of well-known people, serious crimes, new laws and policy affecting prices",
          "boards": "CBSE and NCERT board exams: dates, syllabus, results, rules",
@@ -199,10 +199,10 @@ def _selfcheck():
         assert due(now) == "18:00" and due(now.replace(hour=5)) is None and hours() == [6, 18]
         t0 = now.timestamp()
         items = [{"slot": s, "title": f"{s[:2]} story {k}", "snippet": f"{s[:2]} text", "source": "Src", "url": "", "ts": t0 - k * 60}
-                 for s in QUOTA for k in range(4)] + [{"slot": "boards", "title": "Unrelated", "snippet": "none", "source": "Src", "url": "", "ts": t0}]
+                 for s in QUOTA for k in range(6)] + [{"slot": "boards", "title": "Unrelated", "snippet": "none", "source": "Src", "url": "", "ts": t0}]
         got = pick(items, None, {"ai story 0"}, t0)
         by = {s: [i["title"] for i in got if i["slot"] == s] for s in QUOTA}
-        assert [len(by[s]) for s in QUOTA] == [3, 2, 0, 2, 1], by          # quotas; boards has no CBSE title -> none
+        assert [len(by[s]) for s in QUOTA] == [5, 2, 0, 2, 1], by          # quotas; boards has no CBSE title -> none
         assert "ai story 0" not in by["ai"] and "Unrelated" not in by["boards"]
         boards_items = pick([dict(items[8], title="CBSE sets dates")], None, (), t0)
         assert [i["title"] for i in boards_items] == ["CBSE sets dates"]
@@ -217,8 +217,8 @@ def _selfcheck():
         sources.collect = lambda fetch=None: items
         ed = build(chat, None, mem, now)
         sources.collect = orig
-        assert ed["at"] == "18:00" and len(ed["items"]) == 8 and ed["items"][0]["n"] == 1 and due(now) is None
-        assert latest(now)["items"][0]["detail"] == "A long paragraph." and len(events) == 8 and events[0][1]["importance"] == 0.2
+        assert ed["at"] == "18:00" and len(ed["items"]) == 10 and ed["items"][0]["n"] == 1 and due(now) is None
+        assert latest(now)["items"][0]["detail"] == "A long paragraph." and len(events) == 10 and events[0][1]["importance"] == 0.2
         assert "source: Src" in events[0][0][1]
         morning = ed
         later = dict(ed, at="18:00", built=ed["built"] + "x", items=[dict(ed["items"][0], short="Talks held.", detail="Talks between Narendra Modi and Joe Biden in Delhi on Friday, said Anthropic.")])
