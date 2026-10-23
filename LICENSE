@@ -1,0 +1,45 @@
+FRED Permission License (source-available, permission required)
+
+Copyright (c) 2025-2026 VatsalDaPro. All rights reserved.
+
+1. WHAT THIS COVERS
+   "The Software" is the original source code, scripts, prompts, documentation and
+   other original material in this repository, written by VatsalDaPro ("the Author").
+   It does NOT include third-party material (see section 5).
+
+2. WHAT YOU MAY DO WITHOUT ASKING
+   You may read the Software and run it privately for personal, non-commercial
+   learning and evaluation. Viewing and forking on GitHub is allowed to the extent
+   GitHub's Terms of Service require.
+
+3. WHAT NEEDS THE AUTHOR'S WRITTEN PERMISSION
+   Anything else, including: using the Software in a product, service or project
+   (commercial or not) beyond private evaluation; copying, modifying, merging or
+   redistributing it, in whole or in part; publishing derivative works; and using
+   the Author's name, channel or branding to promote anything.
+   To ask, contact the Author through the channel https://www.youtube.com/@VatsalDaPro.
+   Permission is valid only if it is given in writing by the Author, and only for the
+   scope, purpose and time stated in it.
+
+4. CONDITIONS WHEN PERMISSION IS GIVEN
+   Unless the written permission says otherwise: keep this notice and the copyright
+   line in every copy, and give visible credit to VatsalDaPro.
+
+5. THIRD-PARTY MATERIAL IS NOT COVERED
+   This repository uses or refers to material the Author does not own and cannot
+   license, such as model weights (for example Qwen, MiniCPM, Kokoro, Whisper and
+   others), llama.cpp, Python packages and any recordings, data or names belonging to
+   other people. Each keeps its own owner and its own license. Permission from the
+   Author gives you no rights in them; you must get those from their owners and follow
+   their terms. Personal data, memory contents, voice and face references are not part
+   of this repository and are never licensed by it.
+
+6. NO WARRANTY, NO LIABILITY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IT CONTROLS A
+   MICROPHONE, CAMERA, SCREEN AND FILES; YOU USE IT AT YOUR OWN RISK. TO THE FULLEST
+   EXTENT THE LAW ALLOWS, THE AUTHOR IS NOT LIABLE FOR ANY CLAIM OR DAMAGE ARISING FROM
+   THE SOFTWARE OR ITS USE.
+
+7. TERMINATION
+   Using the Software outside this license ends your rights under it. The Author may
+   withdraw any permission going forward in writing.

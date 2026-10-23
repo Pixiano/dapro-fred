@@ -107,6 +107,10 @@ Tests: `python tests\run_all.py` runs every module's self-check with fake models
 
 Active, daily-driven, and opinionated. Mark I is the rebuilt FRED; Mark II is being planned. Expect rough edges, honest changelogs and the occasional "why did it say *that*" that turns out to be speech recognition hearing "UP Board" as "UPSC".
 
+## License
+
+Source-available, **permission required**: read it and run it privately to learn, but any other use (products, copies, modified versions, redistribution) needs the author's written permission. Third-party parts (model weights, llama.cpp, packages) are not the author's to license and keep their own terms. Full text in [LICENSE](LICENSE).
+
 ## Watch, follow, heckle
 
 If you want to see FRED think out loud, break, and get fixed on camera, that is what the channel is for:
